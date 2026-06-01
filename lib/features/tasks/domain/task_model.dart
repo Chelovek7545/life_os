@@ -1,3 +1,7 @@
+import 'package:drift/drift.dart';
+import 'package:life_os/core/database/database.dart';
+import 'package:uuid/uuid.dart';
+
 enum TaskStatus { open, inProgress, done }
 
 class Task {
@@ -29,7 +33,7 @@ class Task {
 
   factory Task.blank() {
     return Task(
-      id: '', // или можно генерировать UUID
+      id: const Uuid().v4(), // или можно генерировать UUID
       title: 'Untitled',
       description: '',
       status: TaskStatus.open,
@@ -39,6 +43,59 @@ class Task {
       effortWeight: 0.0,
     );
   }
+
+    // Фабрика для создания из Drift TaskData
+  factory Task.fromDrift(TaskModel data) {
+    return Task(
+      id: data.id,
+      title: data.title,
+      description: data.description,
+      status: data.status,
+      isCompleted: data.isCompleted,
+      createdAt: data.createdAt,
+      dueDate: data.dueDate,
+      projectId: data.projectId,
+      space: data.space,
+      timerSeconds: data.timerSeconds,
+      effortWeight: data.effortWeight,
+    );
+  }
+
+  // Конвертация в TasksCompanion для вставки/обновления
+  TasksCompanion toDriftCompanion() {
+    return TasksCompanion(
+      id: Value(id),
+      title: Value(title),
+      description: Value(description),
+      status: Value(status),
+      isCompleted: Value(isCompleted),
+      createdAt: Value(createdAt),
+      dueDate: Value(dueDate),
+      projectId: Value(projectId),
+      space: Value(space),
+      timerSeconds: Value(timerSeconds),
+      effortWeight: Value(effortWeight),
+    );
+  }
+
+  // Для частичного обновления
+  TasksCompanion toUpdateCompanion() {
+    return TasksCompanion(
+      id: Value(id),
+      title: Value(title),
+      description: Value(description),
+      status: Value(status),
+      isCompleted: Value(isCompleted),
+      createdAt: Value(createdAt),
+      dueDate: Value(dueDate),
+      projectId: Value(projectId),
+      space: Value(space),
+      timerSeconds: Value(timerSeconds),
+      effortWeight: Value(effortWeight),
+    );
+  }
+
+
 
   Task copyWith({
     String? id,
@@ -67,6 +124,8 @@ class Task {
       effortWeight: effortWeight ?? this.effortWeight,
     );
   }
+
+  
 }
 
 TaskStatus taskStatusFromStorage(String value) {
@@ -74,4 +133,7 @@ TaskStatus taskStatusFromStorage(String value) {
     (TaskStatus status) => status.name == value,
     orElse: () => TaskStatus.open,
   );
+
+
+
 }

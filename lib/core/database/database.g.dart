@@ -3,7 +3,7 @@
 part of 'database.dart';
 
 // ignore_for_file: type=lint
-class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
+class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
@@ -145,7 +145,7 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
   static const String $name = 'tasks';
   @override
   VerificationContext validateIntegrity(
-    Insertable<Task> instance, {
+    Insertable<TaskModel> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -239,9 +239,9 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  Task map(Map<String, dynamic> data, {String? tablePrefix}) {
+  TaskModel map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return Task(
+    return TaskModel(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -300,7 +300,7 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, Task> {
       const EnumIndexConverter<TaskStatus>(TaskStatus.values);
 }
 
-class Task extends DataClass implements Insertable<Task> {
+class TaskModel extends DataClass implements Insertable<TaskModel> {
   final String id;
   final String title;
   final String description;
@@ -312,7 +312,7 @@ class Task extends DataClass implements Insertable<Task> {
   final String? space;
   final int timerSeconds;
   final double effortWeight;
-  const Task({
+  const TaskModel({
     required this.id,
     required this.title,
     required this.description,
@@ -372,12 +372,12 @@ class Task extends DataClass implements Insertable<Task> {
     );
   }
 
-  factory Task.fromJson(
+  factory TaskModel.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return Task(
+    return TaskModel(
       id: serializer.fromJson<String>(json['id']),
       title: serializer.fromJson<String>(json['title']),
       description: serializer.fromJson<String>(json['description']),
@@ -413,7 +413,7 @@ class Task extends DataClass implements Insertable<Task> {
     };
   }
 
-  Task copyWith({
+  TaskModel copyWith({
     String? id,
     String? title,
     String? description,
@@ -425,7 +425,7 @@ class Task extends DataClass implements Insertable<Task> {
     Value<String?> space = const Value.absent(),
     int? timerSeconds,
     double? effortWeight,
-  }) => Task(
+  }) => TaskModel(
     id: id ?? this.id,
     title: title ?? this.title,
     description: description ?? this.description,
@@ -438,8 +438,8 @@ class Task extends DataClass implements Insertable<Task> {
     timerSeconds: timerSeconds ?? this.timerSeconds,
     effortWeight: effortWeight ?? this.effortWeight,
   );
-  Task copyWithCompanion(TasksCompanion data) {
-    return Task(
+  TaskModel copyWithCompanion(TasksCompanion data) {
+    return TaskModel(
       id: data.id.present ? data.id.value : this.id,
       title: data.title.present ? data.title.value : this.title,
       description: data.description.present
@@ -464,7 +464,7 @@ class Task extends DataClass implements Insertable<Task> {
 
   @override
   String toString() {
-    return (StringBuffer('Task(')
+    return (StringBuffer('TaskModel(')
           ..write('id: $id, ')
           ..write('title: $title, ')
           ..write('description: $description, ')
@@ -497,7 +497,7 @@ class Task extends DataClass implements Insertable<Task> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is Task &&
+      (other is TaskModel &&
           other.id == this.id &&
           other.title == this.title &&
           other.description == this.description &&
@@ -511,7 +511,7 @@ class Task extends DataClass implements Insertable<Task> {
           other.effortWeight == this.effortWeight);
 }
 
-class TasksCompanion extends UpdateCompanion<Task> {
+class TasksCompanion extends UpdateCompanion<TaskModel> {
   final Value<String> id;
   final Value<String> title;
   final Value<String> description;
@@ -559,7 +559,7 @@ class TasksCompanion extends UpdateCompanion<Task> {
        createdAt = Value(createdAt),
        timerSeconds = Value(timerSeconds),
        effortWeight = Value(effortWeight);
-  static Insertable<Task> custom({
+  static Insertable<TaskModel> custom({
     Expression<String>? id,
     Expression<String>? title,
     Expression<String>? description,
@@ -911,14 +911,14 @@ class $$TasksTableTableManager
         RootTableManager<
           _$AppDatabase,
           $TasksTable,
-          Task,
+          TaskModel,
           $$TasksTableFilterComposer,
           $$TasksTableOrderingComposer,
           $$TasksTableAnnotationComposer,
           $$TasksTableCreateCompanionBuilder,
           $$TasksTableUpdateCompanionBuilder,
-          (Task, BaseReferences<_$AppDatabase, $TasksTable, Task>),
-          Task,
+          (TaskModel, BaseReferences<_$AppDatabase, $TasksTable, TaskModel>),
+          TaskModel,
           PrefetchHooks Function()
         > {
   $$TasksTableTableManager(_$AppDatabase db, $TasksTable table)
@@ -1000,14 +1000,14 @@ typedef $$TasksTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
       $TasksTable,
-      Task,
+      TaskModel,
       $$TasksTableFilterComposer,
       $$TasksTableOrderingComposer,
       $$TasksTableAnnotationComposer,
       $$TasksTableCreateCompanionBuilder,
       $$TasksTableUpdateCompanionBuilder,
-      (Task, BaseReferences<_$AppDatabase, $TasksTable, Task>),
-      Task,
+      (TaskModel, BaseReferences<_$AppDatabase, $TasksTable, TaskModel>),
+      TaskModel,
       PrefetchHooks Function()
     >;
 

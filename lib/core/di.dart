@@ -1,4 +1,5 @@
 // core/di/dependency_container.dart
+import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
@@ -9,7 +10,7 @@ class DependencyContainer {
   DependencyContainer._internal();
 
   late final TasksDao tasksDAO;
-  // late final LocalDatabase localDatabase;
+  late final AppDatabase database;
   // late final ApiClient apiClient;
   // late final SyncService syncService;
   
@@ -24,8 +25,8 @@ class DependencyContainer {
   // late final AiCoachViewModel aiCoachViewModel;
 
   void init() {
-    tasksDAO = TasksDao();
-    // localDatabase = LocalDatabase();
+    database = AppDatabase();
+    tasksDAO = TasksDao(database);
     // apiClient = ApiClient('https://api.motivator.com');
     // syncService = SyncService(apiClient, localDatabase);
     

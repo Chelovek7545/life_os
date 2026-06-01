@@ -17,13 +17,13 @@ class TasksRepository {
 
   final TasksDao _dao;
 
-  Stream<List<Task>> watchTasks() => _dao.watchAll();
+  Stream<List<Task>> watchTasks() => _dao.watchAllTasks().asyncMap((tasks) => tasks.map((e) => Task.fromDrift(e)).toList());
 
-  Future<Task?> getById(String id) => _dao.getById(id);
+  Future<Task?> getById(String id) => _dao.getById(id).then((v) => v == null ? null : Task.fromDrift(v));
 
   Future<void> addTask(Task task) async {
     try {
-      await _dao.insert(task);
+      await _dao.insert(task.toDriftCompanion());
     } catch (error) {
       throw StorageException('Failed to save task.', error);
     }
@@ -31,7 +31,7 @@ class TasksRepository {
 
   Future<void> updateTask(Task task) async {
     try {
-      await _dao.update(task);
+      await _dao.updateTask(task.toDriftCompanion());
     } catch (error) {
       throw StorageException('Failed to update task.', error);
     }
@@ -39,7 +39,7 @@ class TasksRepository {
 
   Future<void> deleteTask(String id) async {
     try {
-      await _dao.delete(id);
+      await _dao.deleteTask(id);
     } catch (error) {
       throw StorageException('Failed to delete task.', error);
     }

@@ -7,6 +7,7 @@ import 'dart:io';
 
 part 'database.g.dart';
 
+@DataClassName('TaskModel')
 class Tasks extends Table {
   TextColumn get id => text()(); // UUID
   TextColumn get title => text()();
