@@ -11,13 +11,21 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Life OS',
+//      themeMode: ThemeMode.dark,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        
+        colorScheme: ColorScheme.fromSeed(
+          brightness: Brightness.dark,
+          seedColor:   Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: MainScreen(diContainer: diContainer,),
+      // darkTheme: ThemeData(
+      //   brightness: Brightness.dark,
+      //   primaryColor: Colors.black,
+      //   scaffoldBackgroundColor: Colors.black,
+      //   colorScheme: const ColorScheme.dark(primary: Colors.indigo),
+      // ),
+      home: MainScreen(diContainer: diContainer),
     );
   }
 }
-
-

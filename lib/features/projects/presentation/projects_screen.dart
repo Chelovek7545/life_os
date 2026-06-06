@@ -1,14 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:life_os/features/projects/presentation/projects_state.dart';
+import 'package:life_os/features/projects/presentation/projects_view_model.dart';
 
 class ProjectsScreen extends StatelessWidget {
-  const ProjectsScreen({super.key});
+  const ProjectsScreen({super.key, required this.viewModel});
+
+  final ProjectsViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(16.0),
-      child: ListView(
+      child: Column(
         children: [
+          ElevatedButton(
+            onPressed: () => viewModel.addProjects(Project.create(name: 'new')),
+            child: Text("new"),
+          ),
           const Text(
             'Projects & Routines',
             style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
@@ -19,25 +28,45 @@ class ProjectsScreen extends StatelessWidget {
             style: TextStyle(fontSize: 16, color: Colors.black87),
           ),
           const SizedBox(height: 24),
-          _ProjectCard(
-            title: 'Morning Routine',
-            description: 'Wake up, meditate, review the day.',
-            progress: 0.7,
-          ),
-          _ProjectCard(
-            title: 'Product Launch',
-            description: 'Finalize milestones and sprint tasks.',
-            progress: 0.45,
-          ),
-          _ProjectCard(
-            title: 'Weekly Review',
-            description: 'Reflect, plan, and adjust your goals.',
-            progress: 0.8,
-          ),
-          _ProjectCard(
-            title: 'Side Project',
-            description: 'Design new app screens and workflow.',
-            progress: 0.3,
+
+          Expanded(
+            child: StreamBuilder<ProjectsScreenState>(
+              stream: viewModel.state,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return CircularProgressIndicator();
+                }
+                return snapshot.data!.when(
+                  loading: () => Center(child: CircularProgressIndicator()),
+                  empty: (_) => Text("empty"),
+                  error: (e) => Text(e),
+                  loaded: (projects, _, curProject) {
+                    if (projects.isEmpty) {
+                      return const Center(
+                        child: Text(
+                          'No tasks available yet.',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      );
+                    }
+            
+                    return ListView.separated(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: projects.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final project = projects[index];
+                        return _ProjectCard(
+                          title: project.name,
+                          description: project.description,
+                          progress: 0.3,
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),

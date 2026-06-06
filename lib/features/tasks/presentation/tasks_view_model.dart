@@ -14,6 +14,14 @@ class TasksViewModel {
       BehaviorSubject<TaskScreenState>.seeded(const TasksLoading());
   Stream<TaskScreenState> get state => _uiStateController.stream;
 
+
+  //Видимость формы
+  final BehaviorSubject<bool> _isFormVisibleController =
+      BehaviorSubject<bool>.seeded(false);
+  Stream<bool> get isFormVisible => _isFormVisibleController.stream;
+  void showForm() => _isFormVisibleController.add(true);
+  void hideForm() => _isFormVisibleController.add(false);
+
   StreamSubscription<List<Task>>? _taskSubscription;
   //Stream<List<Task>> watchTasks() => _taskSubscription.;
 
@@ -47,7 +55,9 @@ class TasksViewModel {
   }
 
   Future<void> addTask(Task task) async {
-    await _repository.addTask(task);
+    await _repository.addTask(task.copyWith(
+      createdAt: DateTime.now()
+    ));
     await _emitUiState();
   }
 
@@ -68,5 +78,6 @@ class TasksViewModel {
   void dispose() {
     _taskSubscription?.cancel();
     _uiStateController.close();
+    _isFormVisibleController.close();
   }
 }

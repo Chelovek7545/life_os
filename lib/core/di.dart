@@ -1,5 +1,8 @@
 // core/di/dependency_container.dart
 import 'package:life_os/core/database/database.dart';
+import 'package:life_os/features/projects/data/projects_dao.dart';
+import 'package:life_os/features/projects/data/projects_repository.dart';
+import 'package:life_os/features/projects/presentation/projects_view_model.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
@@ -9,24 +12,26 @@ class DependencyContainer {
   factory DependencyContainer() => _instance;
   DependencyContainer._internal();
 
-  late final TasksDao tasksDAO;
   late final AppDatabase database;
+  late final TasksDao tasksDAO;
+late final ProjectsDao projectsDao;  
   // late final ApiClient apiClient;
   // late final SyncService syncService;
   
   late final TasksRepository tasksRepository;
   // late final MoodRepository moodRepository;
-  // late final ProjectRepository projectRepository;
+  late final ProjectsRepository projectsRepository;
   // late final AiCoachRepository aiRepository;
   
   late final TasksViewModel tasksViewModel;
   // late final MoodViewModel moodViewModel;
-  // late final ProjectViewModel projectViewModel;
+  late final ProjectsViewModel projectViewModel;
   // late final AiCoachViewModel aiCoachViewModel;
 
   void init() {
     database = AppDatabase();
     tasksDAO = TasksDao(database);
+    projectsDao = ProjectsDao(database);
     // apiClient = ApiClient('https://api.motivator.com');
     // syncService = SyncService(apiClient, localDatabase);
     
@@ -36,7 +41,9 @@ class DependencyContainer {
       // apiClient,
       // syncService,
     );
-    
+    projectsRepository = ProjectsRepository(
+      projectsDao
+    );
     // moodRepository = MoodRepository(
     //   MoodLocalDS(localDatabase),
     //   apiClient,
@@ -46,6 +53,9 @@ class DependencyContainer {
     
     tasksViewModel = TasksViewModel(tasksRepository);
     tasksViewModel.initialize();
+    
+    projectViewModel = ProjectsViewModel(projectsRepository);
+    projectViewModel.initialize();
     // moodViewModel = MoodViewModel(moodRepository, AiMoodAnalyzer(apiClient));
     // aiCoachViewModel = AiCoachViewModel(aiRepository);
   }

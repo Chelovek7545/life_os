@@ -29,12 +29,12 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_titles[_selectedIndex]), centerTitle: false),
+      appBar: AppBar(toolbarHeight: 0,),
       body: IndexedStack(
         index: _selectedIndex,
         children: [
           TasksScreen(viewModel: widget.diContainer.tasksViewModel),
-          ProjectsScreen(),
+          ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
           TimerScreen(),
           ResourcesScreen(),
         ],

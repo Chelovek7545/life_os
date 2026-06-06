@@ -1,4 +1,5 @@
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
+import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 
 import '../domain/task_model.dart';
 
@@ -17,21 +18,29 @@ class TasksRepository {
 
   final TasksDao _dao;
 
-  Stream<List<Task>> watchTasks() => _dao.watchAllTasks().asyncMap((tasks) => tasks.map((e) => Task.fromDrift(e)).toList());
+  Stream<List<Task>> watchTasks() => _dao.watchAllTasksWithTags();
 
-  Future<Task?> getById(String id) => _dao.getById(id).then((v) => v == null ? null : Task.fromDrift(v));
+
+  Future<Task?> getById(String id) => _dao.getById(id).then((v) => v == null ? null : v.toDomain());
 
   Future<void> addTask(Task task) async {
     try {
-      await _dao.insert(task.toDriftCompanion());
+      await _dao.insertTaskWithTags(task.toDrift(), task.tags.map((e) => e.name).toList());
     } catch (error) {
       throw StorageException('Failed to save task.', error);
     }
   }
 
+
   Future<void> updateTask(Task task) async {
     try {
-      await _dao.updateTask(task.toDriftCompanion());
+      final companion = task.toDrift();
+  
+      // Собираем плоский список ID тегов, которые сейчас привязаны к задаче
+      final tagNames = task.tags.map((tag) => tag.name).toList();
+
+      // Вызываем наш обновленный метод из DAO
+      _dao.updateTaskWithTags(companion, tagNames);
     } catch (error) {
       throw StorageException('Failed to update task.', error);
     }

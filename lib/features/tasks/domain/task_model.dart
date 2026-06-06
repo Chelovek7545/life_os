@@ -1,6 +1,5 @@
-import 'package:drift/drift.dart';
-import 'package:life_os/core/database/database.dart';
 import 'package:uuid/uuid.dart';
+import 'package:life_os/features/tasks/domain/tag_model.dart';
 
 enum TaskStatus { open, inProgress, done }
 
@@ -14,6 +13,7 @@ class Task {
     required this.createdAt,
     required this.timerSeconds,
     required this.effortWeight,
+    required this.tags,
     this.dueDate,
     this.projectId,
     this.space,
@@ -30,10 +30,11 @@ class Task {
   final String? space;
   final int timerSeconds;
   final double effortWeight;
+  final List<Tag> tags;
 
   factory Task.blank() {
     return Task(
-      id: const Uuid().v4(), // или можно генерировать UUID
+      id: const Uuid().v4(), // или можно генирировать UUID
       title: 'Untitled',
       description: '',
       status: TaskStatus.open,
@@ -41,61 +42,9 @@ class Task {
       createdAt: DateTime.now(),
       timerSeconds: 0,
       effortWeight: 0.0,
+      tags: const [],
     );
   }
-
-    // Фабрика для создания из Drift TaskData
-  factory Task.fromDrift(TaskModel data) {
-    return Task(
-      id: data.id,
-      title: data.title,
-      description: data.description,
-      status: data.status,
-      isCompleted: data.isCompleted,
-      createdAt: data.createdAt,
-      dueDate: data.dueDate,
-      projectId: data.projectId,
-      space: data.space,
-      timerSeconds: data.timerSeconds,
-      effortWeight: data.effortWeight,
-    );
-  }
-
-  // Конвертация в TasksCompanion для вставки/обновления
-  TasksCompanion toDriftCompanion() {
-    return TasksCompanion(
-      id: Value(id),
-      title: Value(title),
-      description: Value(description),
-      status: Value(status),
-      isCompleted: Value(isCompleted),
-      createdAt: Value(createdAt),
-      dueDate: Value(dueDate),
-      projectId: Value(projectId),
-      space: Value(space),
-      timerSeconds: Value(timerSeconds),
-      effortWeight: Value(effortWeight),
-    );
-  }
-
-  // Для частичного обновления
-  TasksCompanion toUpdateCompanion() {
-    return TasksCompanion(
-      id: Value(id),
-      title: Value(title),
-      description: Value(description),
-      status: Value(status),
-      isCompleted: Value(isCompleted),
-      createdAt: Value(createdAt),
-      dueDate: Value(dueDate),
-      projectId: Value(projectId),
-      space: Value(space),
-      timerSeconds: Value(timerSeconds),
-      effortWeight: Value(effortWeight),
-    );
-  }
-
-
 
   Task copyWith({
     String? id,
@@ -109,6 +58,7 @@ class Task {
     String? space,
     int? timerSeconds,
     double? effortWeight,
+    List<Tag>? tags,
   }) {
     return Task(
       id: id ?? this.id,
@@ -122,6 +72,7 @@ class Task {
       space: space ?? this.space,
       timerSeconds: timerSeconds ?? this.timerSeconds,
       effortWeight: effortWeight ?? this.effortWeight,
+      tags: tags ?? this.tags,
     );
   }
 

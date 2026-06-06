@@ -25,8 +25,29 @@ class Tasks extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('ProjectModel')
+class Projects extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get description => text()();
+  TextColumn get color => text()(); // Hex color, например "#FF5733"
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  BoolColumn get isArchived => boolean().withDefault(const Constant(false))();
+  
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('TagModel')
+class Tags extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text().withLength(min: 1, max: 20)();
+  IntColumn get colorHex => integer()(); // Цвет тега
+}
+
 // Часть 2: Определение базы данных
-@DriftDatabase(tables: [Tasks])
+@DriftDatabase(tables: [Tasks, Projects, Tags, TaskTagEntries])
 class AppDatabase extends _$AppDatabase {
   // Конструктор
   AppDatabase() : super(_openConnection());
@@ -34,12 +55,30 @@ class AppDatabase extends _$AppDatabase {
   // Версия схемы базы данных
   @override
   int get schemaVersion => 1;
+
+ 
+}
+
+class TaskTagEntries extends Table {
+  TextColumn get taskId => text().references(Tasks, #id, onDelete: KeyAction.cascade)();
+  IntColumn get tagId => integer().references(Tags, #id, onDelete: KeyAction.cascade)();
+  
+  @override
+  Set<Column> get primaryKey => {taskId, tagId}; // Составной первичный ключ
 }
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'tasks.sqlite'));
+
+
+
+    //ТОЛЬКО В РАЗРАБОТКЕ
+    if (await file.exists()) {
+      await file.delete();
+    }
+
     return NativeDatabase(file);
   });
 }
