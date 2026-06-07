@@ -1,3 +1,5 @@
+import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
+
 import '../domain/task_model.dart';
 
 sealed class TaskScreenState {
@@ -6,7 +8,7 @@ sealed class TaskScreenState {
   R when<R>({
     required R Function() loading,
     required R Function(String? aiSuggestion, bool isProcessing) empty,
-    required R Function(List<Task> tasks, bool isProcessing, Task? curTask) loaded,
+    required R Function(List<TaskWithProject> tasks, bool isProcessing, Task? curTask) loaded,
     required R Function(String message) error,
   }) {
     return switch (this) {
@@ -23,7 +25,7 @@ sealed class TaskScreenState {
   R? maybeWhen<R>({
     R Function()? loading,
     R Function(String? aiSuggestion, bool isProcessing)? empty,
-    R Function(List<Task> tasks, bool isProcessing, Task? curTask)? loaded,
+    R Function(List<TaskWithProject> tasks, bool isProcessing, Task? curTask)? loaded,
     R Function(String message)? error,
     required R Function() orElse,
   }) {
@@ -63,7 +65,7 @@ final class TasksLoaded extends TaskScreenState {
     this.curTask,
   });
 
-  final List<Task> tasks;
+  final List<TaskWithProject> tasks;
   final Task? curTask;
   final bool isProcessing;
 }

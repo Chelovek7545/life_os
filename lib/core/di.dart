@@ -5,6 +5,7 @@ import 'package:life_os/features/projects/data/projects_repository.dart';
 import 'package:life_os/features/projects/presentation/projects_view_model.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
+import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
 
 class DependencyContainer {
@@ -27,6 +28,7 @@ late final ProjectsDao projectsDao;
   // late final MoodViewModel moodViewModel;
   late final ProjectsViewModel projectViewModel;
   // late final AiCoachViewModel aiCoachViewModel;
+  late final GetTasksWithProjectsUseCase taskWithPrjct; 
 
   void init() {
     database = AppDatabase();
@@ -34,7 +36,6 @@ late final ProjectsDao projectsDao;
     projectsDao = ProjectsDao(database);
     // apiClient = ApiClient('https://api.motivator.com');
     // syncService = SyncService(apiClient, localDatabase);
-    
     tasksRepository = TasksRepository(
       tasksDAO
       //TaskLocalDS(localDatabase),
@@ -49,9 +50,13 @@ late final ProjectsDao projectsDao;
     //   apiClient,
     // );
     
+    taskWithPrjct = GetTasksWithProjectsUseCase(tasksRepository, projectsRepository);
+    
+
+
     // aiRepository = AiCoachRepository(apiClient);
     
-    tasksViewModel = TasksViewModel(tasksRepository);
+    tasksViewModel = TasksViewModel(tasksRepository, taskWithPrjct, projectsRepository);
     tasksViewModel.initialize();
     
     projectViewModel = ProjectsViewModel(projectsRepository);

@@ -63,8 +63,8 @@ class TasksScreen extends StatelessWidget {
                                 Center(child: CircularProgressIndicator()),
                             empty: (_, __) => Text("empty"),
                             error: (e) => Text(e),
-                            loaded: (tasks, _, curTask) {
-                              if (tasks.isEmpty) {
+                            loaded: (items, _, curTask) {
+                              if (items.isEmpty) {
                                 return const Center(
                                   child: Text(
                                     'No tasks available yet.',
@@ -77,19 +77,21 @@ class TasksScreen extends StatelessWidget {
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 8,
                                 ),
-                                itemCount: tasks.length,
+                                itemCount: items.length,
                                 separatorBuilder: (_, __) =>
                                     const SizedBox(height: 10),
                                 itemBuilder: (context, index) {
-                                  final task = tasks[index];
+                                  final item = items[index];
                                   return TaskCard(
-                                    tags: task.tags,
-                                    title: task.title,
+                                    tags: item.task.tags,
+                                    title: item.task.title,
                                     dueDate: DateTime.now(),
-                                    completed: task.isCompleted,
+                                    completed: item.task.isCompleted,
                                     onCheckChanged: () async {
-                                      await viewModel.toggleTask(task);
+                                      await viewModel.toggleTask(item.task);
+                                      
                                     },
+                                    projectTitle: item.project?.name,
                                     onSelected: () {},
                                     onTap: () {},
                                   );
@@ -112,6 +114,7 @@ class TasksScreen extends StatelessWidget {
                 height: isFormVisible ? _kFormExpandedHeight : 0,
                 child: isFormVisible
                     ? CollapsibleTaskForm(
+                        projects: viewModel.watchProjects(),
                         onSubmit: (Task task) {
                           viewModel.addTask(
                             task.copyWith(

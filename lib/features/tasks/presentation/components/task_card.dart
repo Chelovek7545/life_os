@@ -6,6 +6,7 @@ import 'package:life_os/features/tasks/domain/tag_model.dart';
 class TaskCard extends StatelessWidget {
   final String title;
   final DateTime? dueDate;
+  final String? projectTitle;
   final List<Tag> tags;
   final bool completed;
   final bool selected;
@@ -17,6 +18,7 @@ class TaskCard extends StatelessWidget {
     super.key,
     required this.title,
     required this.dueDate,
+    this.projectTitle,
     required this.tags,
     this.completed = false,
     this.selected = true,
@@ -98,6 +100,17 @@ class TaskCard extends StatelessWidget {
                           ),
                         ],
                       ),
+
+                      if (projectTitle != null) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          projectTitle!,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Colors.white.withOpacity(0.7),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
 
                       if (tags.isNotEmpty) ...[
                         const SizedBox(height: 4),
