@@ -1,19 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 typedef OnTaskSubmit = void Function(Task task);
 
+
+//НЕ РАБОТАЕТ
 class CollapsibleTaskForm extends StatefulWidget {
-  const CollapsibleTaskForm({
+  CollapsibleTaskForm({
     super.key,
+    Task? task, // Делаем параметр nullable только в конструкторе для удобства вызова
     required this.onSubmit,
     required this.projects,
-  });
+    required this.isEditMode
+  }) : task = task ?? Task.blank();
 
   final OnTaskSubmit onSubmit;
   final Stream<List<Project>> projects;
-
+  final Task task;
+    final bool isEditMode;
+  
   @override
   State<CollapsibleTaskForm> createState() => _CollapsibleTaskFormState();
 }
@@ -22,16 +29,54 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm>
     with SingleTickerProviderStateMixin {
   bool _isExpanded = true;
 
+
   // Контроллеры для полей формы
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
   String? _selectedProjectId;
-
+  DateTime? _dueDate;
   // Высота видимой части в свернутом состоянии
   static const double _collapsedHeight = 20.0;
 
   // Общая высота формы (подбери под свой дизайн)
-  static const double _expandedHeight = 350.0;
+  static const double _expandedHeight = 450.0;
+  
+  bool get isEditMode => widget.isEditMode;
+
+  @override
+  void initState() {
+    super.initState();
+    // Инициализируем поля данными, если мы редактируем задачу
+    _initFields();
+  }
+
+  // Жизненный цикл, который сработает, если во время открытой формы 
+  // пользователь выберет другую задачу для редактирования
+  @override
+  void didUpdateWidget(covariant CollapsibleTaskForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.task.id != oldWidget.task.id) {
+      _initFields();
+    }
+  }
+
+void _initFields() {
+    // Если у таски из конструктора title не пустой (или id совпадает с существующей в базе)
+    // В local-first приложениях самый надежный способ понять, новая ли таска — 
+    // проверить, пустой ли заголовок или была ли она передана извне.
+    // Но так как у нас теперь всегда есть объект, мы можем определить режим по тому, 
+    // пустой ли заголовок при инициализации:
+    //_isEditMode = widget.task.title == 'Untitled';
+
+    _titleController.text = widget.task.title;
+    _descController.text = widget.task.description;
+    _selectedProjectId = widget.task.projectId;
+    _dueDate = widget.task.dueDate;
+
+    if (isEditMode) {
+      _isExpanded = true;
+    }
+  }
 
   @override
   void dispose() {
@@ -46,22 +91,33 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm>
     });
   }
 
-  void _submitTask() {
+void _submitTask() {
     final title = _titleController.text.trim();
-    if (title.isEmpty) return;
-    final task = Task.blank().copyWith(
-      title: title,
+    
+    // С помощью copyWith обновляем данные. 
+    // Если это была новая задача — у неё сохранится сгенерированный в Task.blank() UUID.
+    // If это редактирование — сохранится старый UUID.
+    final updatedTask = widget.task.copyWith(
+      title: title.isEmpty ? 'Untitled' : title,
       description: _descController.text.trim(),
-      projectId: _selectedProjectId,
+      projectId: Wrapped(_selectedProjectId),
+      dueDate: Wrapped(_dueDate),
     );
-    widget.onSubmit(task);
-    _titleController.clear();
-    _descController.clear();
+
+    widget.onSubmit(updatedTask);
+    
+    // Если это было создание — очищаем переменные стейта для следующей новой задачи
+    if (!isEditMode) {
+      _titleController.clear();
+      _descController.clear();
+      _selectedProjectId = null;
+      _dueDate = null;
+    }
+
     setState(() {
       _isExpanded = false;
     });
   }
-
   @override
   Widget build(BuildContext context) {
     return Align(
@@ -114,7 +170,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm>
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(
-                          'Новая задача',
+                          isEditMode ? 'Редактирование задачи' : 'Новая задача',
                           style: Theme.of(context).textTheme.titleSmall
                               ?.copyWith(color: Theme.of(context).primaryColor),
                         ),
@@ -144,7 +200,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm>
                           controller: _titleController,
                           decoration: const InputDecoration(
                             labelText: 'Название задачи',
-                            hintText: 'untitled',
+                            
                             border: OutlineInputBorder(),
                             prefixIcon: Icon(Icons.task_alt),
                           ),
@@ -220,9 +276,23 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm>
                           children: [
                             Expanded(
                               child: OutlinedButton.icon(
-                                onPressed: () {}, // Выбор даты
+                                onPressed: () async {
+                                  _dueDate = await showDatePicker(
+                                    context: context,
+                                    initialDate: DateTime.now(),
+                                    firstDate: DateTime(2000),
+                                    lastDate: DateTime(2040),
+                                  );
+                                  if (_dueDate != null) {
+                                    setState(() {});
+                                  }
+                                }, // Выбор даты
                                 icon: const Icon(Icons.calendar_today),
-                                label: const Text('Сегодня'),
+                                label: Text(
+                                  _dueDate == null
+                                      ? 'Choose date'
+                                      : formatDate(_dueDate!),
+                                ),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -241,7 +311,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm>
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
-                          child: const Text('Добавить задачу'),
+                          child: Text(isEditMode ? 'Сохранить изменения' : 'Добавить задачу'),
                         ),
                       ],
                     ),

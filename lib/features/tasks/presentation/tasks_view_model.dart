@@ -27,8 +27,15 @@ class TasksViewModel {
       BehaviorSubject<bool>.seeded(false);
   Stream<bool> get isFormVisible => _isFormVisibleController.stream;
   
+  TaskWithProject? activeTaskWithProject;
+
   void showForm() => _isFormVisibleController.add(true);
-  void hideForm() => _isFormVisibleController.add(false);
+  void hideForm() {
+        
+    _isFormVisibleController.add(false);
+    activeTaskWithProject = null;}
+  
+  //Для формы редактирования задач
 
   // 3. Текущий фильтр отображения (день/неделя/месяц)
   final BehaviorSubject<TaskFilterView> _currentViewController = 

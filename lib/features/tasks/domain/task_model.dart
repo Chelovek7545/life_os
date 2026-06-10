@@ -3,6 +3,11 @@ import 'package:life_os/features/tasks/domain/tag_model.dart';
 
 enum TaskStatus { open, inProgress, done }
 
+class Wrapped<T> {
+  final T value;
+  const Wrapped(this.value);
+}
+
 class Task {
   const Task({
     required this.id,
@@ -53,9 +58,9 @@ class Task {
     TaskStatus? status,
     bool? isCompleted,
     DateTime? createdAt,
-    DateTime? dueDate,
-    String? projectId,
-    String? space,
+    Wrapped<DateTime?>? dueDate,
+    Wrapped<String?>? projectId,
+    Wrapped<String?>? space,
     int? timerSeconds,
     double? effortWeight,
     List<Tag>? tags,
@@ -67,16 +72,14 @@ class Task {
       status: status ?? this.status,
       isCompleted: isCompleted ?? this.isCompleted,
       createdAt: createdAt ?? this.createdAt,
-      dueDate: dueDate ?? this.dueDate,
-      projectId: projectId ?? this.projectId,
-      space: space ?? this.space,
+      dueDate: dueDate != null ? dueDate.value : this.dueDate,
+      projectId: projectId != null ? projectId.value : this.projectId,
+      space: space != null ? space.value : this.space,
       timerSeconds: timerSeconds ?? this.timerSeconds,
       effortWeight: effortWeight ?? this.effortWeight,
       tags: tags ?? this.tags,
     );
   }
-
-  
 }
 
 TaskStatus taskStatusFromStorage(String value) {
@@ -84,7 +87,4 @@ TaskStatus taskStatusFromStorage(String value) {
     (TaskStatus status) => status.name == value,
     orElse: () => TaskStatus.open,
   );
-
-
-
 }

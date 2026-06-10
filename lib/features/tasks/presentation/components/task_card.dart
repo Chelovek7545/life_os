@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
 
 class TaskCard extends StatelessWidget {
@@ -13,6 +14,8 @@ class TaskCard extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onCheckChanged;
   final VoidCallback? onSelected;
+  final VoidCallback? onLongPress;
+
 
   const TaskCard({
     super.key,
@@ -23,13 +26,15 @@ class TaskCard extends StatelessWidget {
     this.completed = false,
     this.selected = true,
     this.onTap,
+    this.onLongPress,
     this.onCheckChanged,
     this.onSelected,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return GestureDetector(      
+      onLongPress: onLongPress,
       onTap: onTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(32),
@@ -89,7 +94,7 @@ class TaskCard extends StatelessWidget {
                           const SizedBox(width: 10),
 
                           if (dueDate != null) Text(
-                            _formatDate(dueDate!),
+                            formatDate(dueDate!),
                             style: Theme.of(context).textTheme.titleSmall!.copyWith(
                               color: Colors.white
                                   .withOpacity(0.7),
@@ -172,11 +177,7 @@ class TaskCard extends StatelessWidget {
     );
   }
 
-  String _formatDate(DateTime date) {
-    return '${date.day.toString().padLeft(2, '0')}.'
-        '${date.month.toString().padLeft(2, '0')}.'
-        '${date.year}';
-  }
+
 }
 
 class _CompletionButton extends StatelessWidget {

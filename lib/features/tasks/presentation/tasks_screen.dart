@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
 import 'package:life_os/features/tasks/presentation/components/task_card.dart';
 import 'package:life_os/features/tasks/presentation/task_state.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
 
-const double _kFormExpandedHeight = 350.0;
+const double _kFormExpandedHeight = 1000.0;
 
 class TasksScreen extends StatelessWidget {
   const TasksScreen({super.key, required this.viewModel});
@@ -14,6 +15,7 @@ class TasksScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+
     const bgColor = Color(0xFF12141A);
     return StreamBuilder<bool>(
       stream: viewModel.isFormVisible,
@@ -38,11 +40,39 @@ class TasksScreen extends StatelessWidget {
                     _buildHeader(),
                     Row(
                       children: [
-                        _segmentButton("День", true),
-                        const SizedBox(width: 8),
-                        _segmentButton("Неделя", false),
-                        const SizedBox(width: 8),
-                        _segmentButton("Месяц", false),
+                        StreamBuilder(
+                          stream: viewModel.currentView,
+                          builder: (_, snapshot) {
+                            return Row(
+                              children: [
+                                _segmentButton(
+                                  text: "Day",
+                                  selected: snapshot.data == TaskFilterView.day,
+                                  onTap: () =>
+                                      viewModel.changeView(TaskFilterView.day),
+                                ),
+                                const SizedBox(width: 8),
+                                _segmentButton(
+                                  text: "Week",
+                                  selected:
+                                      snapshot.data == TaskFilterView.week,
+                                  onTap: () =>
+                                      viewModel.changeView(TaskFilterView.week),
+                                ),
+                                const SizedBox(width: 8),
+                                _segmentButton(
+                                  text: "Month",
+                                  selected:
+                                      snapshot.data == TaskFilterView.month,
+                                  onTap: () => viewModel.changeView(
+                                    TaskFilterView.month,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+
                         const Spacer(),
                         const Icon(
                           Icons.calendar_month_outlined,
@@ -85,12 +115,14 @@ class TasksScreen extends StatelessWidget {
                                   return TaskCard(
                                     tags: item.task.tags,
                                     title: item.task.title,
-                                    dueDate: DateTime.now(),
+                                    dueDate: item.task.dueDate,
                                     completed: item.task.isCompleted,
                                     onCheckChanged: () async {
                                       await viewModel.toggleTask(item.task);
-                                      
                                     },
+                                    onLongPress: () {
+                                      viewModel.activeTaskWithProject = item;
+                                      viewModel.showForm();},
                                     projectTitle: item.project?.name,
                                     onSelected: () {},
                                     onTap: () {},
@@ -114,15 +146,16 @@ class TasksScreen extends StatelessWidget {
                 height: isFormVisible ? _kFormExpandedHeight : 0,
                 child: isFormVisible
                     ? CollapsibleTaskForm(
+                        task: viewModel.activeTaskWithProject?.task,
                         projects: viewModel.watchProjects(),
+                        isEditMode: viewModel.activeTaskWithProject != null,
                         onSubmit: (Task task) {
-                          viewModel.addTask(
-                            task.copyWith(
-                              tags: [
-                                Tag(id: 1, name: 'name', colorHex: 123123),
-                              ],
-                            ),
-                          );
+                          if (viewModel.activeTaskWithProject != null) {
+                            print("update");
+                            viewModel.updateTask(task);
+                          } else {
+                            viewModel.addTask(task);
+                          }
                           viewModel.hideForm();
                         },
                       )
@@ -158,18 +191,25 @@ Widget _buildHeader() {
   );
 }
 
-Widget _segmentButton(String text, bool selected) {
-  return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-    decoration: BoxDecoration(
-      color: selected ? const Color(0xFF2A2E39) : const Color(0xFF1C2028),
-      borderRadius: BorderRadius.circular(14),
-    ),
-    child: Text(
-      text,
-      style: TextStyle(
-        color: selected ? Colors.white : Colors.white70,
-        fontWeight: FontWeight.w600,
+Widget _segmentButton({
+  required String text,
+  required bool selected,
+  required GestureTapCallback? onTap,
+}) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      decoration: BoxDecoration(
+        color: selected ? const Color(0xFF2A2E39) : const Color(0xFF1C2028),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     ),
   );
