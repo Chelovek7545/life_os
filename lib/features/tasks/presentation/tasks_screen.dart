@@ -93,7 +93,7 @@ class TasksScreen extends StatelessWidget {
                                 Center(child: CircularProgressIndicator()),
                             empty: (_, __) => Text("empty"),
                             error: (e) => Text(e),
-                            loaded: (items, _, curTask) {
+                            loaded: (items, selectedTasks, _, curTask) {
                               if (items.isEmpty) {
                                 return const Center(
                                   child: Text(
@@ -124,7 +124,8 @@ class TasksScreen extends StatelessWidget {
                                       viewModel.activeTaskWithProject = item;
                                       viewModel.showForm();},
                                     projectTitle: item.project?.name,
-                                    onSelected: () {},
+                                    isSelected: selectedTasks.any((t) => t.id == item.task.id),
+                                    onSelected: () => viewModel.toggleTaskSelection(item.task),
                                     onTap: () {},
                                   );
                                 },

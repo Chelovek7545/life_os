@@ -40,7 +40,7 @@ class TasksRepository {
       final tagNames = task.tags.map((tag) => tag.name).toList();
 
       // Вызываем наш обновленный метод из DAO
-      _dao.updateTaskWithTags(companion, tagNames);
+      await _dao.updateTaskWithTags(companion, tagNames);
     } catch (error) {
       throw StorageException('Failed to update task.', error);
     }

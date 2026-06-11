@@ -10,7 +10,7 @@ class TaskCard extends StatelessWidget {
   final String? projectTitle;
   final List<Tag> tags;
   final bool completed;
-  final bool selected;
+  final bool isSelected;
   final VoidCallback? onTap;
   final VoidCallback? onCheckChanged;
   final VoidCallback? onSelected;
@@ -24,7 +24,7 @@ class TaskCard extends StatelessWidget {
     this.projectTitle,
     required this.tags,
     this.completed = false,
-    this.selected = true,
+    this.isSelected = false,
     this.onTap,
     this.onLongPress,
     this.onCheckChanged,
@@ -49,7 +49,7 @@ class TaskCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(32),
               color: Colors.white.withOpacity(0.08),
               border: Border.all(
-                color: selected ? Color(0xFFB8FF63).withOpacity(0.4) : Colors.white.withOpacity(0.12),
+                color: isSelected ? Color(0xFFB8FF63).withOpacity(0.4) : Colors.white.withOpacity(0.12),
               ),
               boxShadow: [
                 BoxShadow(
@@ -149,18 +149,18 @@ class TaskCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       borderRadius:
                           BorderRadius.circular(6),
-                      color: selected
+                      color: isSelected
                           ? const Color(0xFFB8FF63)
                           : Colors.transparent,
                       border: Border.all(
-                        color: selected
+                        color: isSelected
                             ? const Color(0xFFB8FF63)
                             : Colors.white
                                 .withOpacity(0.4),
                         width: 2,
                       ),
                     ),
-                    child: selected
+                    child: isSelected
                         ? const Icon(
                             Icons.check,
                             size: 11,
