@@ -12,7 +12,7 @@ class ProjectsRepository {
 
   Future<List<Project>> getAllProjects() => _dao.getAllProjects();
 
-  Future<Project?> getProjectById(String id) => _dao.getProjectById(id).then((v) => v == null ? null : v.toDomain());
+  Future<Project?> getProjectById(String id) => _dao.getProjectById(id).then((v) => v?.toDomain());
 
   Future<void> addProject(Project project) async {
     try {

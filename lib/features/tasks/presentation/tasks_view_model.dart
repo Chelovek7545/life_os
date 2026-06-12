@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
@@ -8,7 +9,33 @@ import 'package:life_os/features/tasks/presentation/task_state.dart';
 import 'package:rxdart/rxdart.dart';
 
 // Нам нужен этот enum для переключения видов (день/неделя/месяц)
-enum TaskFilterView { day, week, month }
+//enum TaskFilterView { day, week, month }
+
+sealed class TaskFilter {
+  const TaskFilter();
+
+  const factory TaskFilter.day(DateTime date) = TaskDayFilter;
+  const factory TaskFilter.week(DateTime anchorDate) = TaskWeekFilter; 
+  const factory TaskFilter.month(DateTime anchorDate) = TaskMonthFilter;
+}
+
+// Переносим конкретную дату внутри объекта дня
+class TaskDayFilter extends TaskFilter {
+  final DateTime date;
+  const TaskDayFilter(this.date);
+}
+
+// Переносим дату, которая находится внутри нужной недели
+class TaskWeekFilter extends TaskFilter {
+  final DateTime anchorDate;
+  const TaskWeekFilter(this.anchorDate);
+}
+
+class TaskMonthFilter extends TaskFilter {
+  final DateTime anchorDate;
+  const TaskMonthFilter(this.anchorDate);
+}
+
 
 class TasksViewModel {
   final TasksRepository _repository;
@@ -42,9 +69,9 @@ class TasksViewModel {
   //Для формы редактирования задач
 
   // 3. Текущий фильтр отображения (день/неделя/месяц)
-  final BehaviorSubject<TaskFilterView> _currentViewController =
-      BehaviorSubject<TaskFilterView>.seeded(TaskFilterView.day);
-  Stream<TaskFilterView> get currentView => _currentViewController.stream;
+  final BehaviorSubject<TaskFilter> _currentViewController =
+      BehaviorSubject<TaskFilter>.seeded(TaskFilter.day(DateTime.now()));
+  Stream<TaskFilter> get currentView => _currentViewController.stream;
 
   StreamSubscription<dynamic>? _combineSubscription;
 
@@ -58,7 +85,7 @@ class TasksViewModel {
     // Используем Rx.combineLatest2, чтобы пересчитывать отфильтрованный список задач
     // каждый раз, когда меняются либо данные в БД, либо пользователь переключает вкладку (день/неделя/месяц)
     _combineSubscription =
-        Rx.combineLatest2<List<TaskWithProject>, TaskFilterView, void>(
+        Rx.combineLatest2<List<TaskWithProject>, TaskFilter, void>(
           _taskWithProjectUseCase
               .call(), // Слушаем Use Case со склеенными проектами
           _currentViewController.stream,
@@ -74,7 +101,7 @@ class TasksViewModel {
   }
 
   // Логика фильтрации и отправки состояния в UI
-  void _handleDataUpdate(List<TaskWithProject> tasks, TaskFilterView filter) {
+  void _handleDataUpdate(List<TaskWithProject> tasks, TaskFilter filter) {
     if (tasks.isEmpty) {
       _uiStateController.add(TasksEmpty());
       return;
@@ -82,20 +109,19 @@ class TasksViewModel {
 
     // Фильтруем задачи в зависимости от выбранного режима
     final filteredTasks = tasks.where((item) {
-      final now = DateTime.now();
+      //final now = DateTime.now();
       final taskDate = item.task.dueDate;
       if (taskDate == null) return true; // Если даты нет, показываем везде
 
       switch (filter) {
-        case TaskFilterView.day:
-          return taskDate.year == now.year &&
-              taskDate.month == now.month &&
-              taskDate.day == now.day;
-        case TaskFilterView.week:
-          final difference = taskDate.difference(now).inDays;
-          return difference >= 0 && difference <= 7;
-        case TaskFilterView.month:
-          return taskDate.year == now.year && taskDate.month == now.month;
+        case TaskDayFilter():
+          return taskDate.year == filter.date.year &&
+              taskDate.month == filter.date.month &&
+              taskDate.day == filter.date.day;
+        case TaskWeekFilter():
+          return isDateInSameWeek(taskDate, filter.anchorDate);
+        case TaskMonthFilter():
+          return taskDate.year == filter.anchorDate.year && taskDate.month == filter.anchorDate.month;
       }
     }).toList();
 
@@ -141,7 +167,7 @@ class TasksViewModel {
 }
 
   // Изменение режима отображения (вызывается по нажатию на табы на экране)
-  void changeView(TaskFilterView view) {
+  void changeView(TaskFilter view) {
     _currentViewController.add(view);
   }
 

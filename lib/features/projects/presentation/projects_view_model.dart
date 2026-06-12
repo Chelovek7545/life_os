@@ -1,6 +1,4 @@
 import 'dart:async';
-
-import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/projects/presentation/projects_state.dart';
@@ -33,11 +31,11 @@ class ProjectsViewModel {
   }
 
   Future<void> addProjects(Project project) async {
-    final projectWithId = project.copyWith(
-      //id: id,
-      createdAt: DateTime.now(),
-      updatedAt: DateTime.now(),
-    );
+    // final projectWithId = project.copyWith(
+    //   //id: id,
+    //   createdAt: DateTime.now(),
+    //   updatedAt: DateTime.now(),
+    // );
     await _repository.addProject(project);
     await _emitUiState();
   }

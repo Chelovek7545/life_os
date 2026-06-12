@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:life_os/features/tasks/domain/tag_model.dart';
+import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
-import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
+import 'package:life_os/features/tasks/presentation/components/day_calendar.dart';
 import 'package:life_os/features/tasks/presentation/components/task_card.dart';
 import 'package:life_os/features/tasks/presentation/task_state.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
@@ -13,15 +14,17 @@ class TasksScreen extends StatelessWidget {
   const TasksScreen({super.key, required this.viewModel});
   final TasksViewModel viewModel;
 
+  // int dayIndex = 0;
+
   @override
   Widget build(BuildContext context) {
-
     const bgColor = Color(0xFF12141A);
     return StreamBuilder<bool>(
       stream: viewModel.isFormVisible,
       initialData: false,
       builder: (context, snap) {
         final isFormVisible = snap.data ?? false;
+
         return Scaffold(
           //appBar: AppBar(title: const Text('Tasks')),
           floatingActionButton: FloatingActionButton(
@@ -38,48 +41,67 @@ class TasksScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     _buildHeader(),
-                    Row(
-                      children: [
-                        StreamBuilder(
-                          stream: viewModel.currentView,
-                          builder: (_, snapshot) {
-                            return Row(
+                    StreamBuilder(
+                      stream: viewModel.currentView,
+                      builder: (_, snapshot) {
+                        final currentFilter =
+                            snapshot.data ?? TaskFilter.day(DateTime.now());
+
+                        // Извлекаем "опорную" дату из текущего фильтра для сохранения контекста
+                        final DateTime anchorDate = switch (currentFilter) {
+                          TaskDayFilter(date: final d) => d,
+                          TaskWeekFilter(anchorDate: final d) => d,
+                          TaskMonthFilter(anchorDate: final d) =>
+                            d,
+                        };
+
+                        return Column(
+                          children: [
+                            Row(
                               children: [
                                 _segmentButton(
                                   text: "Day",
-                                  selected: snapshot.data == TaskFilterView.day,
-                                  onTap: () =>
-                                      viewModel.changeView(TaskFilterView.day),
+                                  selected: snapshot.data is TaskDayFilter,
+                                  onTap: () => viewModel.changeView(
+                                    TaskFilter.day(anchorDate),
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 _segmentButton(
                                   text: "Week",
-                                  selected:
-                                      snapshot.data == TaskFilterView.week,
-                                  onTap: () =>
-                                      viewModel.changeView(TaskFilterView.week),
+                                  selected: snapshot.data is TaskWeekFilter,
+                                  onTap: () => viewModel.changeView(
+                                    TaskFilter.week(anchorDate),
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 _segmentButton(
                                   text: "Month",
-                                  selected:
-                                      snapshot.data == TaskFilterView.month,
+                                  selected: snapshot.data is TaskMonthFilter,
                                   onTap: () => viewModel.changeView(
-                                    TaskFilterView.month,
+                                    TaskFilter.month(
+                                      anchorDate,
+                                    ),
                                   ),
                                 ),
+                                const Spacer(),
+                                const Icon(
+                                  Icons.calendar_month_outlined,
+                                  color: Colors.white,
+                                ),
                               ],
-                            );
-                          },
-                        ),
-
-                        const Spacer(),
-                        const Icon(
-                          Icons.calendar_month_outlined,
-                          color: Colors.white,
-                        ),
-                      ],
+                            ),
+                            CalendarRow(
+                              selectedDate: anchorDate,
+                              onDaySelected: (date) {
+                                viewModel.changeView(TaskFilter.day(date));
+                              },
+                            ),
+                          ],
+                        );
+                      },
                     ),
+
                     Expanded(
                       child: StreamBuilder<TaskScreenState>(
                         stream: viewModel.state,
@@ -91,7 +113,7 @@ class TasksScreen extends StatelessWidget {
                           return snapshot.data!.when(
                             loading: () =>
                                 Center(child: CircularProgressIndicator()),
-                            empty: (_, __) => Text("empty"),
+                            empty: (_, _) => Text("empty"),
                             error: (e) => Text(e),
                             loaded: (items, selectedTasks, _, curTask) {
                               if (items.isEmpty) {
@@ -108,7 +130,7 @@ class TasksScreen extends StatelessWidget {
                                   vertical: 8,
                                 ),
                                 itemCount: items.length,
-                                separatorBuilder: (_, __) =>
+                                separatorBuilder: (_, _) =>
                                     const SizedBox(height: 10),
                                 itemBuilder: (context, index) {
                                   final item = items[index];
@@ -122,10 +144,14 @@ class TasksScreen extends StatelessWidget {
                                     },
                                     onLongPress: () {
                                       viewModel.activeTaskWithProject = item;
-                                      viewModel.showForm();},
+                                      viewModel.showForm();
+                                    },
                                     projectTitle: item.project?.name,
-                                    isSelected: selectedTasks.any((t) => t.id == item.task.id),
-                                    onSelected: () => viewModel.toggleTaskSelection(item.task),
+                                    isSelected: selectedTasks.any(
+                                      (t) => t.id == item.task.id,
+                                    ),
+                                    onSelected: () => viewModel
+                                        .toggleTaskSelection(item.task),
                                     onTap: () {},
                                   );
                                 },
@@ -214,6 +240,46 @@ Widget _segmentButton({
       ),
     ),
   );
+}
+
+class CalendarRow extends StatelessWidget {
+  final DateTime selectedDate;
+  final void Function(DateTime date) onDaySelected;
+
+  const CalendarRow({
+    super.key,
+    required this.selectedDate,
+    required this.onDaySelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final List<DateTime> weekDates = getDatesForWeek(selectedDate);
+
+    return Container(
+      height: 88,
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: 7,
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final date = weekDates[index];
+          final isSelected =
+              date.year == selectedDate.year &&
+              date.month == selectedDate.month &&
+              date.day == selectedDate.day;
+
+          return DateTimelineCard(
+            weekday: getWeekDayName(date.weekday),
+            day: "${date.day}",
+            isSelected: isSelected,
+            onTap: () => onDaySelected(date),
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _TaskTile extends StatelessWidget {

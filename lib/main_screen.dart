@@ -16,7 +16,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
 
-  static const _titles = ['Main', 'Projects & Routines', 'Timer', 'Ресурсы'];
+  //static const _titles = ['Main', 'Projects & Routines', 'Timer', 'Ресурсы'];
 
   //final List<Widget> _screens =
 

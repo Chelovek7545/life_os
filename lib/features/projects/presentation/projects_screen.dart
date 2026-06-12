@@ -53,7 +53,7 @@ class ProjectsScreen extends StatelessWidget {
                     return ListView.separated(
                       padding: const EdgeInsets.symmetric(vertical: 8),
                       itemCount: projects.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      separatorBuilder: (_, _) => const SizedBox(height: 10),
                       itemBuilder: (context, index) {
                         final project = projects[index];
                         return _ProjectCard(

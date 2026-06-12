@@ -1,8 +1,42 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
+
+@Preview()
+Widget newPreview() => MaterialApp(
+      theme: ThemeData.light(),
+      home: TaskCard(
+        title: "Sample Task",
+        dueDate: DateTime.now(),
+        tags: [Tag(id: 1, name: "new", colorHex: 91823918)],
+      ),
+    );
+
+@Preview()
+Widget completedPreview() => MaterialApp(
+      theme: ThemeData.light(),
+      home: TaskCard(
+        title: "Sample Task",
+        dueDate: DateTime.now(),
+        completed: true,
+        tags: [Tag(id: 1, name: "new", colorHex: 91823918)],
+      ),
+    );
+
+@Preview()
+Widget completedSelectedPreview() => MaterialApp(
+      theme: ThemeData.light(),
+      home: TaskCard(
+        title: "Sample Task",
+        dueDate: DateTime.now(),
+        isSelected: true,
+        completed: true,
+        tags: [Tag(id: 1, name: "new", colorHex: 91823918)],
+      ),
+    );
 
 class TaskCard extends StatelessWidget {
   final String title;
@@ -17,6 +51,7 @@ class TaskCard extends StatelessWidget {
   final VoidCallback? onLongPress;
 
 
+  
   const TaskCard({
     super.key,
     required this.title,
@@ -47,13 +82,13 @@ class TaskCard extends StatelessWidget {
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(32),
-              color: Colors.white.withOpacity(0.08),
+              color: Colors.white.withValues(alpha: 0.08),
               border: Border.all(
-                color: isSelected ? Color(0xFFB8FF63).withOpacity(0.4) : Colors.white.withOpacity(0.12),
+                color: isSelected ? Color(0xFFB8FF63).withValues(alpha: 0.4) : Colors.white.withOpacity(0.12),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.25),
+                  color: Colors.black.withValues(alpha: 0.25),
                   blurRadius: 30,
                   offset: const Offset(0, 16),
                 ),
@@ -70,69 +105,72 @@ class TaskCard extends StatelessWidget {
                 const SizedBox(width: 10),
 
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        
-                        children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow:
-                                TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           
-                              color: Colors.white,
-                              fontWeight:
-                                  FontWeight.w700,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow:
+                                  TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             
-                            )
-                          ),
-
-                          const SizedBox(width: 10),
-
-                          if (dueDate != null) Text(
-                            formatDate(dueDate!),
-                            style: Theme.of(context).textTheme.titleSmall!.copyWith(
-                              color: Colors.white
-                                  .withOpacity(0.7),
+                                color: Colors.white,
+                                fontWeight:
+                                    FontWeight.w700,
                               
-                              fontWeight:
-                                  FontWeight.w500,
+                              )
+                            ),
+                    
+                            const SizedBox(width: 10),
+                    
+                            if (dueDate != null) Text(
+                              formatDate(dueDate!),
+                              style: Theme.of(context).textTheme.titleSmall!.copyWith(
+                                color: Colors.white
+                                    .withOpacity(0.7),
+                                
+                                fontWeight:
+                                    FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                    
+                        if (projectTitle != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            projectTitle!,
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.white.withOpacity(0.7),
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
-                      ),
-
-                      if (projectTitle != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          projectTitle!,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.white.withOpacity(0.7),
-                            fontWeight: FontWeight.w500,
+                    
+                        if (tags.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                    
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 8,
+                            children: tags
+                                .map(
+                                  (link) => _LinkChip(
+                                    title: link.name,
+                                  ),
+                                )
+                                .toList(),
                           ),
-                        ),
+                        ],
                       ],
-
-                      if (tags.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 8,
-                          children: tags
-                              .map(
-                                (link) => _LinkChip(
-                                  title: link.name,
-                                ),
-                              )
-                              .toList(),
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
                 ),
 
@@ -210,7 +248,7 @@ class _CompletionButton extends StatelessWidget {
                   BoxShadow(
                     color: const Color(
                       0xFFB8FF63,
-                    ).withOpacity(0.35),
+                    ).withValues(alpha: 0.35),
                     blurRadius: 24,
                   ),
                 ]

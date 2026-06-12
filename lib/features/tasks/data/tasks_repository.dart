@@ -21,7 +21,7 @@ class TasksRepository {
   Stream<List<Task>> watchTasks() => _dao.watchAllTasksWithTags();
 
 
-  Future<Task?> getById(String id) => _dao.getById(id).then((v) => v == null ? null : v.toDomain());
+  Future<Task?> getById(String id) => _dao.getById(id).then((v) => v?.toDomain());
 
   Future<void> addTask(Task task) async {
     try {

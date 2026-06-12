@@ -145,7 +145,7 @@ void _submitTask() {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 10,
                   offset: const Offset(0, -5),
                 ),
@@ -222,8 +222,9 @@ void _submitTask() {
                           stream: widget.projects,
                           builder: (_, snapshot) {
                             if (snapshot.connectionState ==
-                                ConnectionState.waiting)
+                                ConnectionState.waiting) {
                               return CircularProgressIndicator();
+                            }
                             final projectsAsync = snapshot.data;
                             return DropdownButtonFormField<String?>(
                               initialValue: _selectedProjectId,
