@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/di.dart';
+import 'package:life_os/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:life_os/features/projects/presentation/projects_screen.dart';
 import 'package:life_os/features/resources/presentation/resources_screen.dart';
 import 'package:life_os/features/tasks/presentation/tasks_screen.dart';
@@ -33,9 +34,9 @@ class _MainScreenState extends State<MainScreen> {
       body: IndexedStack(
         index: _selectedIndex,
         children: [
+          DashboardScreen(viewModel: widget.diContainer.dashboardViewModel),
           TasksScreen(viewModel: widget.diContainer.tasksViewModel),
           ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
-          TimerScreen(),
           ResourcesScreen(),
         ],
       ),
@@ -43,12 +44,12 @@ class _MainScreenState extends State<MainScreen> {
         selectedIndex: _selectedIndex,
         onDestinationSelected: _onItemTapped,
         destinations: [
+          NavigationDestination(icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
           NavigationDestination(icon: Icon(Icons.task), label: 'Tasks'),
           NavigationDestination(
             icon: Icon(Icons.table_rows_rounded),
             label: 'Projects',
           ),
-          NavigationDestination(icon: Icon(Icons.timer), label: 'Timer'),
           NavigationDestination(
             icon: Icon(Icons.bookmarks),
             label: 'Resources',

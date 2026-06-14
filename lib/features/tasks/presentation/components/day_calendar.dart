@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 
-@Preview(group: "DateTimelineCard")
-Widget newPreview() => MaterialApp(
-  debugShowCheckedModeBanner: false,
-  theme: ThemeData.light(),
-  home: DateTimelineCard(day: "20", isSelected: true, weekday: 'mon'),
-);
+// @Preview(group: "DateTimelineCard")
+// Widget newPreview() => MaterialApp(
+//   debugShowCheckedModeBanner: false,
+//   theme: ThemeData.light(),
+//   home: DateTimelineCard(day: "20", isSelected: true, weekday: 'mon'),
+// );
 
 class DateTimelineCard extends StatelessWidget {
   final bool isSelected;

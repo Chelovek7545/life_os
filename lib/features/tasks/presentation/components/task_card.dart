@@ -5,38 +5,38 @@ import 'package:flutter/widget_previews.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
 
-@Preview()
-Widget newPreview() => MaterialApp(
-      theme: ThemeData.light(),
-      home: TaskCard(
-        title: "Sample Task",
-        dueDate: DateTime.now(),
-        tags: [Tag(id: 1, name: "new", colorHex: 91823918)],
-      ),
-    );
+// @Preview()
+// Widget newPreview() => MaterialApp(
+//       theme: ThemeData.light(),
+//       home: TaskCard(
+//         title: "Sample Task",
+//         dueDate: DateTime.now(),
+//         tags: [Tag(id: 1, name: "new", colorHex: 91823918)],
+//       ),
+//     );
 
-@Preview()
-Widget completedPreview() => MaterialApp(
-      theme: ThemeData.light(),
-      home: TaskCard(
-        title: "Sample Task",
-        dueDate: DateTime.now(),
-        completed: true,
-        tags: [Tag(id: 1, name: "new", colorHex: 91823918)],
-      ),
-    );
+// @Preview()
+// Widget completedPreview() => MaterialApp(
+//       theme: ThemeData.light(),
+//       home: TaskCard(
+//         title: "Sample Task",
+//         dueDate: DateTime.now(),
+//         completed: true,
+//         tags: [Tag(id: 1, name: "new", colorHex: 91823918)],
+//       ),
+//     );
 
-@Preview()
-Widget completedSelectedPreview() => MaterialApp(
-      theme: ThemeData.light(),
-      home: TaskCard(
-        title: "Sample Task",
-        dueDate: DateTime.now(),
-        isSelected: true,
-        completed: true,
-        tags: [Tag(id: 1, name: "new", colorHex: 91823918)],
-      ),
-    );
+// @Preview()
+// Widget completedSelectedPreview() => MaterialApp(
+//       theme: ThemeData.light(),
+//       home: TaskCard(
+//         title: "Sample Task",
+//         dueDate: DateTime.now(),
+//         isSelected: true,
+//         completed: true,
+//         tags: [Tag(id: 1, name: "new", colorHex: 91823918)],
+//       ),
+//     );
 
 class TaskCard extends StatelessWidget {
   final String title;

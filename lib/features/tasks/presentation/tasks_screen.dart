@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
+import 'package:life_os/features/tasks/domain/task_filter_config.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
 import 'package:life_os/features/tasks/presentation/components/day_calendar.dart';
@@ -42,18 +43,13 @@ class TasksScreen extends StatelessWidget {
                   children: [
                     _buildHeader(),
                     StreamBuilder(
-                      stream: viewModel.currentView,
+                      stream: viewModel.currentFilter,
                       builder: (_, snapshot) {
                         final currentFilter =
-                            snapshot.data ?? TaskFilter.day(DateTime.now());
+                            snapshot.data ?? TaskFilterConfig(anchorDate: DateTime.now());
 
                         // Извлекаем "опорную" дату из текущего фильтра для сохранения контекста
-                        final DateTime anchorDate = switch (currentFilter) {
-                          TaskDayFilter(date: final d) => d,
-                          TaskWeekFilter(anchorDate: final d) => d,
-                          TaskMonthFilter(anchorDate: final d) =>
-                            d,
-                        };
+                        final DateTime anchorDate = currentFilter.anchorDate;
 
                         return Column(
                           children: [
@@ -61,27 +57,25 @@ class TasksScreen extends StatelessWidget {
                               children: [
                                 _segmentButton(
                                   text: "Day",
-                                  selected: snapshot.data is TaskDayFilter,
-                                  onTap: () => viewModel.changeView(
-                                    TaskFilter.day(anchorDate),
+                                  selected: currentFilter.period == DatePeriod.day,
+                                  onTap: () => viewModel.updateFilter(
+                                    (old) => old.copyWith(period: DatePeriod.day),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 _segmentButton(
                                   text: "Week",
-                                  selected: snapshot.data is TaskWeekFilter,
-                                  onTap: () => viewModel.changeView(
-                                    TaskFilter.week(anchorDate),
+                                  selected: currentFilter.period == DatePeriod.week,
+                                  onTap: () => viewModel.updateFilter(
+                                    (old) => old.copyWith(period: DatePeriod.week),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 _segmentButton(
                                   text: "Month",
-                                  selected: snapshot.data is TaskMonthFilter,
-                                  onTap: () => viewModel.changeView(
-                                    TaskFilter.month(
-                                      anchorDate,
-                                    ),
+                                  selected: currentFilter.period == DatePeriod.month,
+                                  onTap: () => viewModel.updateFilter(
+                                    (old) => old.copyWith(period: DatePeriod.month),
                                   ),
                                 ),
                                 const Spacer(),
@@ -91,10 +85,13 @@ class TasksScreen extends StatelessWidget {
                                 ),
                               ],
                             ),
+                            if(currentFilter.period == DatePeriod.day)
                             CalendarRow(
                               selectedDate: anchorDate,
                               onDaySelected: (date) {
-                                viewModel.changeView(TaskFilter.day(date));
+                                viewModel.updateFilter(
+                                  (old) => old.copyWith(anchorDate: date),
+                                );
                               },
                             ),
                           ],

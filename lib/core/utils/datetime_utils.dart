@@ -18,3 +18,8 @@ List<DateTime> getDatesForWeek(DateTime anchorDate) {
   final weekStart = getWeekStart(anchorDate);
   return List.generate(7, (index) => weekStart.add(Duration(days: index)));
 }
+
+extension DateTimeStartOfDay on DateTime {
+  // Возвращает дату в начале дня (00:00:00), чтобы сравнивать только дни
+  DateTime get startOfDay => DateTime(year, month, day);
+}
