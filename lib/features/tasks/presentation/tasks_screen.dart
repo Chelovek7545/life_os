@@ -140,7 +140,7 @@ class TasksScreen extends StatelessWidget {
                                       await viewModel.toggleTask(item.task);
                                     },
                                     onLongPress: () {
-                                      viewModel.activeTaskWithProject = item;
+                                      viewModel.startEditingTask(item);
                                       viewModel.showForm();
                                     },
                                     projectTitle: item.project?.name,

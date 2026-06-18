@@ -207,6 +207,15 @@ class TasksViewModel {
     }
   }
 
+
+  // ---UI ЛОГИКА ---
+  void startEditingTask(TaskWithProject item){
+    activeTaskWithProject = item;
+  }
+
+
+
+
   // --- Бизнес-логика (CUD операции) ---
   // ВАЖНО: Мы убрали ручной вызов _emitUiState() из этих методов.
   // Так как репозиторий реактивный, вызов addTask/deleteTask изменит базу данных,

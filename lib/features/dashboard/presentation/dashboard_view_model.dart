@@ -26,13 +26,19 @@ class DashboardViewModel {
   void initialize() {
     // Используем Rx.combineLatest2, чтобы пересчитывать отфильтрованный список задач
     // каждый раз, когда меняются либо данные в БД, либо пользователь переключает вкладку (день/неделя/месяц)
-    _combineSubscription = Rx.combineLatest2<List<Task>, List<Project>, void>(
-      _taskRepository.watchTasks(),
-      _projectsRepository.watchAllProjects(),
-      (tasks, projects) {
-        _handleDataUpdate(tasks, projects);
-      },
-    ).listen((_) {}, onError: (Object error) {});
+    _combineSubscription =
+        Rx.combineLatest2<List<Task>, List<Project>, void>(
+          _taskRepository.watchTasks(),
+          _projectsRepository.watchAllProjects(),
+          (tasks, projects) {
+            _handleDataUpdate(tasks, projects);
+          },
+        ).listen(
+          (_) {},
+          onError: (Object error) {
+            _uiStateController.add(DashboardScreenError(error.toString()));
+          },
+        );
   }
 
   void _handleDataUpdate(List<Task> tasks, List<Project> projects) {

@@ -93,7 +93,7 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
   }
 
   Future<TaskModel?> getById(String id) async {
-    return (select(tasks)..where((t) => t.id.equals(id))).getSingle();
+    return (select(tasks)..where((t) => t.id.equals(id))).getSingleOrNull();
   }
 
   Stream<List<TaskModel>> watchAllTasks() {
