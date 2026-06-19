@@ -170,6 +170,7 @@ class TasksScreen extends StatelessWidget {
                 height: isFormVisible ? _kFormExpandedHeight : 0,
                 child: isFormVisible
                     ? CollapsibleTaskForm(
+                      height: MediaQuery.sizeOf(context).height * 0.8,
                         task: viewModel.activeTaskWithProject?.task,
                         projects: viewModel.watchProjects(),
                         isEditMode: viewModel.activeTaskWithProject != null,
