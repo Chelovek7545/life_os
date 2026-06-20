@@ -13,25 +13,35 @@ import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
 
 const double _kFormExpandedHeight = 1000.0;
 
-class TasksScreen extends StatelessWidget {
+class TasksScreen extends StatefulWidget {
   const TasksScreen({super.key, required this.viewModel});
   final TasksViewModel viewModel;
 
-  // int dayIndex = 0;
+  @override
+  State<TasksScreen> createState() => _TasksScreenState();
+}
 
+class _TasksScreenState extends State<TasksScreen> {
+  // int dayIndex = 0;
+  bool _shouldRenderForm = false;
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<bool>(
-      stream: viewModel.isFormVisible,
+      stream: widget.viewModel.isFormVisible,
       initialData: false,
       builder: (context, snap) {
         final isFormVisible = snap.data ?? false;
 
+        if (isFormVisible) {
+          _shouldRenderForm = true;
+        }
+
         return Scaffold(
           //appBar: AppBar(title: const Text('Tasks')),
           floatingActionButton: FloatingActionButton(
-            onPressed: () =>
-                isFormVisible ? viewModel.hideForm() : viewModel.showForm(),
+            onPressed: () => isFormVisible
+                ? widget.viewModel.hideForm()
+                : widget.viewModel.showForm(),
             tooltip: 'Новая задача',
             child: Icon(isFormVisible ? Icons.close : Icons.add),
           ),
@@ -44,10 +54,11 @@ class TasksScreen extends StatelessWidget {
                   children: [
                     _buildHeader(),
                     StreamBuilder(
-                      stream: viewModel.currentFilter,
+                      stream: widget.viewModel.currentFilter,
                       builder: (_, snapshot) {
                         final currentFilter =
-                            snapshot.data ?? TaskFilterConfig(anchorDate: DateTime.now());
+                            snapshot.data ??
+                            TaskFilterConfig(anchorDate: DateTime.now());
 
                         // Извлекаем "опорную" дату из текущего фильтра для сохранения контекста
                         final DateTime anchorDate = currentFilter.anchorDate;
@@ -56,11 +67,16 @@ class TasksScreen extends StatelessWidget {
                           children: [
                             Row(
                               children: [
-                                SegmentedPillControl(tabs: [
-                                  "Day", "Week", "Month"
-                                ], onTabChanged: (index) {
-                                  viewModel.updateFilter((old) => old.copyWith(period: DatePeriod.values[index]));
-                                }),
+                                SegmentedPillControl(
+                                  tabs: ["Day", "Week", "Month"],
+                                  onTabChanged: (index) {
+                                    widget.viewModel.updateFilter(
+                                      (old) => old.copyWith(
+                                        period: DatePeriod.values[index],
+                                      ),
+                                    );
+                                  },
+                                ),
                                 const Spacer(),
                                 const Icon(
                                   Icons.calendar_month_outlined,
@@ -68,15 +84,15 @@ class TasksScreen extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            if(currentFilter.period == DatePeriod.day)
-                            CalendarRow(
-                              selectedDate: anchorDate,
-                              onDaySelected: (date) {
-                                viewModel.updateFilter(
-                                  (old) => old.copyWith(anchorDate: date),
-                                );
-                              },
-                            ),
+                            if (currentFilter.period == DatePeriod.day)
+                              CalendarRow(
+                                selectedDate: anchorDate,
+                                onDaySelected: (date) {
+                                  widget.viewModel.updateFilter(
+                                    (old) => old.copyWith(anchorDate: date),
+                                  );
+                                },
+                              ),
                           ],
                         );
                       },
@@ -84,7 +100,7 @@ class TasksScreen extends StatelessWidget {
 
                     Expanded(
                       child: StreamBuilder<TaskScreenState>(
-                        stream: viewModel.state,
+                        stream: widget.viewModel.state,
                         builder: (context, snapshot) {
                           if (snapshot.connectionState ==
                               ConnectionState.waiting) {
@@ -120,17 +136,19 @@ class TasksScreen extends StatelessWidget {
                                     dueDate: item.task.dueDate,
                                     isCompleted: item.task.isCompleted,
                                     onCheckChanged: () async {
-                                      await viewModel.toggleTask(item.task);
+                                      await widget.viewModel.toggleTask(
+                                        item.task,
+                                      );
                                     },
                                     onLongPress: () {
-                                      viewModel.startEditingTask(item);
-                                      viewModel.showForm();
+                                      widget.viewModel.startEditingTask(item);
+                                      widget.viewModel.showForm();
                                     },
                                     projectTitle: item.project?.name,
                                     isSelected: selectedTasks.any(
                                       (t) => t.id == item.task.id,
                                     ),
-                                    onSelected: () => viewModel
+                                    onSelected: () => widget.viewModel
                                         .toggleTaskSelection(item.task),
                                     onTap: () {},
                                   );
@@ -150,22 +168,34 @@ class TasksScreen extends StatelessWidget {
                 left: 0,
                 right: 0,
                 bottom: isFormVisible ? 0 : -_kFormExpandedHeight,
-                height:  _kFormExpandedHeight,
-                child: CollapsibleTaskForm(
-                      height: MediaQuery.sizeOf(context).height * 0.8,
-                        task: viewModel.activeTaskWithProject?.task ?? viewModel.draftTask,
-                        projects: viewModel.watchProjects(),
-                        isEditMode: viewModel.activeTaskWithProject != null,
+                height: _kFormExpandedHeight,
+                onEnd: () {
+                  if (!isFormVisible) {
+                    setState(() {
+                      _shouldRenderForm = false;
+                    });
+                  }
+                },
+                child: _shouldRenderForm
+                    ? CollapsibleTaskForm(
+                        height: MediaQuery.sizeOf(context).height * 0.8,
+                        task:
+                            widget.viewModel.activeTaskWithProject?.task ??
+                            widget.viewModel.draftTask,
+                        projects: widget.viewModel.watchProjects(),
+                        isEditMode:
+                            widget.viewModel.activeTaskWithProject != null,
                         onSubmit: (Task task) {
-                          if (viewModel.activeTaskWithProject != null) {
+                          if (widget.viewModel.activeTaskWithProject != null) {
                             print("update");
-                            viewModel.updateTask(task);
+                            widget.viewModel.updateTask(task);
                           } else {
-                            viewModel.addTask(task);
+                            widget.viewModel.addTask(task);
                           }
-                          viewModel.hideForm();
+                          widget.viewModel.hideForm();
                         },
                       )
+                    : const SizedBox.shrink(),
               ),
             ],
           ),

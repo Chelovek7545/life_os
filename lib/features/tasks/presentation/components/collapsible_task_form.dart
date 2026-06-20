@@ -130,6 +130,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     setState(() {
       _currentHeight = _minHeight;
     });
+    
   }
 
   @override
