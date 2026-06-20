@@ -1,21 +1,20 @@
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/utils/date_format.dart';
-import 'package:life_os/core/utils/my_math.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 typedef OnTaskSubmit = void Function(Task task);
 
 class CollapsibleTaskForm extends StatefulWidget {
-  CollapsibleTaskForm({
+  const CollapsibleTaskForm({
     super.key,
-    Task? task,
+    required this.task,
     required this.height,
     required this.onSubmit,
     required this.projects,
     required this.isEditMode,
-  }) : task = task ?? Task.blank();
+  });
 
   final OnTaskSubmit onSubmit;
   final Stream<List<Project>> projects;
@@ -47,6 +46,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   void initState() {
     super.initState();
     _maxHeight = widget.height;
+    
     // Стартуем сразу в развернутом виде, если это редактирование, либо на минимуме
     _currentHeight = widget.isEditMode ? _maxHeight : _midHeight;
     _initFields();
@@ -57,10 +57,12 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     super.didUpdateWidget(oldWidget);
     if (widget.task.id != oldWidget.task.id) {
       _initFields();
+      print("${widget.task.id} != ${oldWidget.task.id}");
     }
   }
 
   void _initFields() {
+    
     _titleController.text = widget.task.title;
     _descController.text = widget.task.description;
     _selectedProjectId = widget.task.projectId;
@@ -104,6 +106,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
       }
     });
   }
+
+  
 
   void _submitTask() {
     final title = _titleController.text.trim();
@@ -162,10 +166,11 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
         height: _currentHeight,
         child: Container(
           decoration: BoxDecoration(
+            border: Border.all( color: AppColors.borderGlass, strokeAlign: BorderSide.strokeAlignOutside),
             // Динамический цвет: становится темнее и премиальнее при полном раскрытии
             color: Color.lerp(
-              const Color(0xFF1C2028),
-              Theme.of(context).primaryColor,
+              Theme.of(context).scaffoldBackgroundColor,
+              Theme.of(context).cardColor,
               maxProgress,
             ), // Пример: меняем цвет фона от высоты
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -178,7 +183,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
             ],
           ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            //mainAxisSize: MainAxisSize.min,
             children: [
               // ЗОНА ДЛЯ ПЕРЕТАСКИВАНИЯ (ХЭНДЛ)
               GestureDetector(
@@ -191,6 +196,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                       _minHeight,
                       _maxHeight,
                     );
+                    
                   });
                 },
                 onVerticalDragEnd: (details) {
@@ -247,6 +253,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                       : const NeverScrollableScrollPhysics(), // Блокируем скролл контента, если форма не на максимуме
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Opacity(
                         opacity: midProgress,
@@ -267,7 +274,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                       ),
 
                       // 2. БЛОК ДОПОЛНИТЕЛЬНЫХ ПОЛЕЙ — плавно проявляется ТОЛЬКО при переходе от Mid к Ma
-                      if (_currentHeight > _midHeight - 50)
+                      if (_currentHeight > _midHeight-50)
                         Opacity(
                           opacity: maxProgress,
                           child: Column(

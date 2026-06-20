@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/di.dart';
+import 'package:life_os/core/theme/app_theme.dart';
 import 'package:life_os/main_screen.dart';
 
 class MyApp extends StatelessWidget {
@@ -12,13 +13,14 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Life OS',
 //      themeMode: ThemeMode.dark,
-      theme: ThemeData(
+      theme: AppTheme.darkTheme,
+      // ThemeData(
         
-        colorScheme: ColorScheme.fromSeed(
-          brightness: Brightness.dark,
-          seedColor:   Colors.deepPurple),
-        useMaterial3: true,
-      ),
+      //   colorScheme: ColorScheme.fromSeed(
+      //     brightness: Brightness.dark,
+      //     seedColor:   Colors.deepPurple),
+      //   useMaterial3: true,
+      // ),
       // darkTheme: ThemeData(
       //   brightness: Brightness.dark,
       //   primaryColor: Colors.black,

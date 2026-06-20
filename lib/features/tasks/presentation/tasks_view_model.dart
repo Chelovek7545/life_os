@@ -59,12 +59,23 @@ class TasksViewModel {
   Stream<bool> get isFormVisible => _isFormVisibleController.stream;
 
   TaskWithProject? activeTaskWithProject;
+  Task draftTask = Task.blank();
 
-  void showForm() => _isFormVisibleController.add(true);
+  void showForm() {
+    _isFormVisibleController.add(true);
+  }
+
   void hideForm() {
     _isFormVisibleController.add(false);
     activeTaskWithProject = null;
+    draftTask = Task.blank();
   }
+
+  void toggleForm() {
+    shouldRenderForm = !shouldRenderForm;
+  }
+
+  bool shouldRenderForm = true;
 
   //Для формы редактирования задач
 

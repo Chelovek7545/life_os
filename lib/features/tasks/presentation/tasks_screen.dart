@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/ui/segmented_pill_controller.dart';
+import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/tasks/domain/task_filter_config.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
 import 'package:life_os/features/tasks/presentation/components/day_calendar.dart';
-import 'package:life_os/features/tasks/presentation/components/task_card.dart';
 import 'package:life_os/features/tasks/presentation/task_state.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
 
@@ -19,7 +21,6 @@ class TasksScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const bgColor = Color(0xFF12141A);
     return StreamBuilder<bool>(
       stream: viewModel.isFormVisible,
       initialData: false,
@@ -34,7 +35,7 @@ class TasksScreen extends StatelessWidget {
             tooltip: 'Новая задача',
             child: Icon(isFormVisible ? Icons.close : Icons.add),
           ),
-          backgroundColor: bgColor,
+          backgroundColor: AppColors.surfaceGlass,
           body: Stack(
             children: [
               Padding(
@@ -55,29 +56,11 @@ class TasksScreen extends StatelessWidget {
                           children: [
                             Row(
                               children: [
-                                _segmentButton(
-                                  text: "Day",
-                                  selected: currentFilter.period == DatePeriod.day,
-                                  onTap: () => viewModel.updateFilter(
-                                    (old) => old.copyWith(period: DatePeriod.day),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                _segmentButton(
-                                  text: "Week",
-                                  selected: currentFilter.period == DatePeriod.week,
-                                  onTap: () => viewModel.updateFilter(
-                                    (old) => old.copyWith(period: DatePeriod.week),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                _segmentButton(
-                                  text: "Month",
-                                  selected: currentFilter.period == DatePeriod.month,
-                                  onTap: () => viewModel.updateFilter(
-                                    (old) => old.copyWith(period: DatePeriod.month),
-                                  ),
-                                ),
+                                SegmentedPillControl(tabs: [
+                                  "Day", "Week", "Month"
+                                ], onTabChanged: (index) {
+                                  viewModel.updateFilter((old) => old.copyWith(period: DatePeriod.values[index]));
+                                }),
                                 const Spacer(),
                                 const Icon(
                                   Icons.calendar_month_outlined,
@@ -135,7 +118,7 @@ class TasksScreen extends StatelessWidget {
                                     tags: item.task.tags,
                                     title: item.task.title,
                                     dueDate: item.task.dueDate,
-                                    completed: item.task.isCompleted,
+                                    isCompleted: item.task.isCompleted,
                                     onCheckChanged: () async {
                                       await viewModel.toggleTask(item.task);
                                     },
@@ -162,16 +145,15 @@ class TasksScreen extends StatelessWidget {
                 ),
               ),
               AnimatedPositioned(
-                duration: const Duration(milliseconds: 350),
-                curve: Curves.easeOut,
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeInOut,
                 left: 0,
                 right: 0,
                 bottom: isFormVisible ? 0 : -_kFormExpandedHeight,
-                height: isFormVisible ? _kFormExpandedHeight : 0,
-                child: isFormVisible
-                    ? CollapsibleTaskForm(
+                height:  _kFormExpandedHeight,
+                child: CollapsibleTaskForm(
                       height: MediaQuery.sizeOf(context).height * 0.8,
-                        task: viewModel.activeTaskWithProject?.task,
+                        task: viewModel.activeTaskWithProject?.task ?? viewModel.draftTask,
                         projects: viewModel.watchProjects(),
                         isEditMode: viewModel.activeTaskWithProject != null,
                         onSubmit: (Task task) {
@@ -184,7 +166,6 @@ class TasksScreen extends StatelessWidget {
                           viewModel.hideForm();
                         },
                       )
-                    : const SizedBox.shrink(),
               ),
             ],
           ),
@@ -255,7 +236,7 @@ class CalendarRow extends StatelessWidget {
     final List<DateTime> weekDates = getDatesForWeek(selectedDate);
 
     return Container(
-      height: 88,
+      height: 90,
       margin: const EdgeInsets.symmetric(vertical: 12),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,

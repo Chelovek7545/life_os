@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
+import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/theme/app_theme.dart';
 
 // @Preview(group: "DateTimelineCard")
 // Widget newPreview() => MaterialApp(
@@ -30,19 +32,19 @@ class DateTimelineCard extends StatelessWidget {
         //curve: Curves.easeOut,
         width: 64,
         decoration: BoxDecoration(
+          border: Border.all(color: AppColors.borderGlass),
           borderRadius: BorderRadius.circular(24),
-          // gradient: isSelected
-          //     ? const LinearGradient(
-          //         begin: Alignment.topCenter,
-          //         end: Alignment.bottomCenter,
-          //         colors: [Color(0xFF6D88FF), Color(0xFF4C6FFF)],
-          //       )
-          //     : null,
+          
+          gradient: isSelected
+              ? const LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color.fromARGB(255, 255, 97, 23), Color.fromARGB(255, 255, 124, 30)],
+                )
+              : null,
           color: isSelected
-              ? Color(0xFF6D88FF)
-              : Theme.of(
-                  context,
-                ).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+              ? Color.fromARGB(255, 255, 105, 35)
+              : AppColors.surfaceContainerLow,
           // boxShadow: isSelected
           //     ? [
           //         BoxShadow(
