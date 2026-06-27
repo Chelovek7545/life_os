@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/theme/app_spacing.dart';
+import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/empty_placeholder.dart';
 import 'package:life_os/core/ui/segmented_pill_controller.dart';
 import 'package:life_os/core/ui/task_card.dart';
@@ -8,6 +10,7 @@ import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/tasks/domain/task_filter_config.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
+//import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
 import 'package:life_os/features/tasks/presentation/components/day_calendar.dart';
 import 'package:life_os/features/tasks/presentation/task_state.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
@@ -28,7 +31,7 @@ class _TasksScreenState extends State<TasksScreen> {
 
   @override
   void dispose() {
-    widget.viewModel.dispose();    
+    widget.viewModel.dispose();
     super.dispose();
   }
 
@@ -46,13 +49,13 @@ class _TasksScreenState extends State<TasksScreen> {
 
         return Scaffold(
           //appBar: AppBar(title: const Text('Tasks')),
-          floatingActionButton: FloatingActionButton(
-            onPressed: () => isFormVisible
-                ? widget.viewModel.hideForm()
-                : widget.viewModel.showForm(),
-            tooltip: 'Новая задача',
-            child: Icon(isFormVisible ? Icons.close : Icons.add),
-          ),
+          // floatingActionButton: FloatingActionButton(
+          //   onPressed: () => isFormVisible
+          //       ? widget.viewModel.hideForm()
+          //       : widget.viewModel.showForm(),
+          //   tooltip: 'Новая задача',
+          //   child: Icon(isFormVisible ? Icons.close : Icons.add),
+          // ),
           backgroundColor: AppColors.surfaceGlass,
           body: Stack(
             children: [
@@ -60,7 +63,12 @@ class _TasksScreenState extends State<TasksScreen> {
                 padding: const EdgeInsets.all(8.0),
                 child: Column(
                   children: [
-                    _buildHeader(),
+                    _buildHeader(
+                      () => isFormVisible
+                          ? widget.viewModel.hideForm()
+                          : widget.viewModel.showForm(),
+                      context
+                    ),
                     StreamBuilder(
                       stream: widget.viewModel.currentFilter,
                       builder: (_, snapshot) {
@@ -74,20 +82,16 @@ class _TasksScreenState extends State<TasksScreen> {
                         return Column(
                           children: [
                             Align(
-
-                              child: 
-                                SegmentedPillControl(
-                                  tabs: ["Day", "Week", "Month"],
-                                  onTabChanged: (index) {
-                                    widget.viewModel.updateFilter(
-                                      (old) => old.copyWith(
-                                        period: DatePeriod.values[index],
-                                      ),
-                                    );
-                                  },
-                                ),
-                                
-                              
+                              child: SegmentedPillControl(
+                                tabs: ["Day", "Week", "Month"],
+                                onTabChanged: (index) {
+                                  widget.viewModel.updateFilter(
+                                    (old) => old.copyWith(
+                                      period: DatePeriod.values[index],
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
                             if (currentFilter.period == DatePeriod.day)
                               CalendarRow(
@@ -203,6 +207,25 @@ class _TasksScreenState extends State<TasksScreen> {
                       )
                     : const SizedBox.shrink(),
               ),
+              // CollapsibleTaskForm(
+              //   isVisible: isFormVisible,
+              //   task:
+              //       widget.viewModel.activeTaskWithProject?.task ??
+              //       widget.viewModel.draftTask,
+              //   height: MediaQuery.sizeOf(context).height * 0.8,
+              //   onSubmit: (Task task) {
+              //     if (widget.viewModel.activeTaskWithProject != null) {
+              //       print("update");
+              //       widget.viewModel.updateTask(task);
+              //     } else {
+              //       widget.viewModel.addTask(task);
+              //     }
+              //     widget.viewModel.hideForm();
+              //   },
+              //   onCancel: () => widget.viewModel.hideForm(),
+              //   projects: widget.viewModel.watchProjects(),
+              //   isEditMode: widget.viewModel.activeTaskWithProject != null,
+              // ),
             ],
           ),
         );
@@ -211,23 +234,35 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 }
 
-Widget _buildHeader() {
+Widget _buildHeader(VoidCallback onPressed, BuildContext context) {
   return Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
-      const Icon(Icons.dashboard_outlined, color: Colors.white),
-      const SizedBox(width: 8),
-      const Text(
-        'Главная',
-        style: TextStyle(
-          color: Colors.white,
-          fontSize: 28,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      const Spacer(),
       IconButton(
         onPressed: () {},
         icon: const Icon(Icons.settings_outlined, color: Colors.white),
+      ),
+      //const Icon(Icons.dashboard_outlined, color: Colors.white),
+      //const SizedBox(width: 8),
+      Text(
+        'Main',
+        style: Theme.of(context).textTheme.headlineLarge  
+      ),
+      ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          padding: EdgeInsets.all(5),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+              AppRadius.full,
+            ), // 👈 Радиус скругления
+          ),
+          //fixedSize: Size(30, 30),
+          //minimumSize: Size.zero,
+          //tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
+        onPressed: onPressed,
+        child: Icon(Icons.add),
       ),
     ],
   );
@@ -292,90 +327,6 @@ class CalendarRow extends StatelessWidget {
             onTap: () => onDaySelected(date),
           );
         },
-      ),
-    );
-  }
-}
-
-class _TaskTile extends StatelessWidget {
-  final String title;
-  final String time;
-  final bool completed;
-  final String? tag;
-  final Color? tagColor;
-
-  final VoidCallback? onLongPress;
-
-  final VoidCallback? onPressed;
-
-  const _TaskTile({
-    required this.title,
-    required this.time,
-    this.completed = false,
-    this.tag,
-    this.tagColor,
-    required VoidCallback this.onPressed,
-    required VoidCallback this.onLongPress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B1F27),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            icon: completed
-                ? Icon(Icons.check_circle_outline)
-                : Icon(Icons.radio_button_unchecked),
-            color: completed ? Colors.greenAccent : Colors.white38,
-            onPressed: onPressed,
-            onLongPress: onLongPress,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: completed ? Colors.white38 : Colors.white,
-                    fontSize: 18,
-                  ),
-                ),
-                if (tag != null) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: tagColor ?? Colors.grey,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      tag!,
-                      style: const TextStyle(color: Colors.black, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          Text(
-            time,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
       ),
     );
   }

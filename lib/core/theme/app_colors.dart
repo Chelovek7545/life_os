@@ -4,6 +4,7 @@ class AppColors {
   // Базовые системные цвета
   static final Color scaffoldBackgroundColor = const Color(0xFF0E0E0E);
   //static const Color background = Color(0xFF050505);
+  static const Color surfaceBright = Color(0xFF3A3939);
   static const Color surfaceDim = Color(0xFF131313);
   static const Color surfaceContainer = Color(0xFF201F1F);
   static const Color surfaceContainerLow = Color(0xFF1C1B1B);
@@ -12,6 +13,7 @@ class AppColors {
   static const Color onBackground = Color(0xFFE5E2E1);
   static const Color onSurface = Color(0xFFE5E2E1);
   static const Color onSurfaceVariant = Color(0xFFE5BEB2);
+
 
   // Акценты (Бренд)
   static const Color primary = Color(0xFFFFB59C);

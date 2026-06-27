@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/di.dart';
 import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:life_os/features/projects/presentation/projects_screen.dart';
@@ -32,6 +33,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      
       appBar: AppBar(toolbarHeight: 0),
       body: IndexedStack(
         index: _selectedIndex,
@@ -84,7 +86,7 @@ class SlidingNavBar extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.scaffoldBackgroundColor,
             // borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.white10),
+            border: Border.all(color: AppColors.borderGlass),
           ),
           child: Stack(
             alignment: AlignmentGeometry.center,
@@ -96,11 +98,13 @@ class SlidingNavBar extends StatelessWidget {
                 top: 1,
                 bottom: 1,
                 child: Container(
+                  
                   margin: EdgeInsets.symmetric(horizontal: itemWidth * 0.05),
                   width: itemWidth * 0.9,
                   decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.borderGlass),
                     color: AppColors.borderGlass,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.full),
                   ),
                 ),
               ),
@@ -134,7 +138,7 @@ class SlidingNavBar extends StatelessWidget {
                                 items[index].$1,
                                 color: selected
                                     ? AppColors.primaryContainer
-                                    : Colors.grey,
+                                    : AppColors.onBackground,
 
                                 size: 26,
                               ),
@@ -145,7 +149,7 @@ class SlidingNavBar extends StatelessWidget {
                               style: AppTypography.codeLabel.copyWith(
                                 color: selected
                                     ? AppColors.primaryContainer
-                                    : Colors.grey,
+                                    : AppColors.onBackground,
                                 shadows: [
                                   if (selected)
                                     Shadow(

@@ -65,6 +65,7 @@ class AppTypography {
     height: 1.0,
     letterSpacing: 0.05 * 12,
     fontWeight: FontWeight.w500,
-    color: AppColors.onSurfaceVariant.withOpacity(0.6),
+    color: AppColors.onSurfaceVariant
+    //.withOpacity(0.6),
   );
 }

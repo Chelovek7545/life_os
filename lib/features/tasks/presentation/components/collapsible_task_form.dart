@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/theme/button_styles.dart';
 import 'package:life_os/core/utils/date_format.dart';
@@ -178,7 +179,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
               Theme.of(context).cardColor,
               maxProgress,
             ), // Пример: меняем цвет фона от высоты
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius:  BorderRadius.vertical(top: Radius.circular(AppSpacing.xxl)),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.2),
@@ -242,15 +243,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              isEditMode
-                                  ? 'Edit task'
-                                  : 'New task',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize:
-                                    14 + 1, // Размер шрифта растет при открытии
-                                fontWeight: FontWeight.w600,
-                              ),
+                              isEditMode ? 'Edit task' : 'New task',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600,)
                             ),
                           ],
                         ),
@@ -330,72 +324,120 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                   minLines: 3,
                   maxLines: 10,
                   decoration: InputDecoration(
-                    labelText: 'Описание',
+                    labelText: 'Description',
                     prefixIcon: const Icon(Icons.description),
                   ),
                 ),
                 const SizedBox(height: 16),
-                StreamBuilder<List<Project>>(
-                  stream: widget.projects,
-                  builder: (_, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const LinearProgressIndicator();
-                    }
-                    final projectsAsync = snapshot.data;
-                    return DropdownMenu<String?>(
-                      trailingIcon: Icon(Icons.arrow_drop_down_rounded, size: 40,),
-                      hintText: "Choose project",
-                      width: MediaQuery.of(context).size.width - 32,
-                      initialSelection: _selectedProjectId,
-                      menuStyle: MenuStyle(
-                        backgroundColor: WidgetStateProperty.all(
-                          AppColors.borderGlass,
-                        ),
-                        
-                        elevation: WidgetStateProperty.all(8),
-                        shape: WidgetStateProperty.all(
-                          RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: StreamBuilder<List<Project>>(
+                        stream: widget.projects,
+                        builder: (_, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const LinearProgressIndicator();
+                          }
+                          final projectsAsync = snapshot.data;
+                          return DropdownMenu<String?>(
+                            //textStyle: TextStyle(backgroundColor: AppColors.surfaceBright),
+                            // trailingIcon: Icon(
+                            //   Icons.arrow_drop_down_rounded,
+                            //   size: 40,
+                            // ),
+                            hintText: "Choose project",
+                            width: MediaQuery.of(context).size.width / 2,
+                            initialSelection: _selectedProjectId,
+                            menuStyle: MenuStyle(
+                              backgroundColor: WidgetStateProperty.all(
+                                AppColors.borderGlass,
+                              ),
+
+                              elevation: WidgetStateProperty.all(8),
+                              shape: WidgetStateProperty.all(
+                                RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              // ТЕ САМЫЕ ОТСТУПЫ: задаем внутренние отступы для всего контейнера меню
+                              padding: WidgetStateProperty.all(
+                                EdgeInsets.all(
+                                  8,
+                                ), // Элементы внутри меню не будут прижаты к его краям
+                              ),
+                            ),
+
+                            dropdownMenuEntries: [
+                              DropdownMenuEntry<String?>(
+                                label: "No project",
+                                value: null,
+                                style: dateButtonStyle,
+                              ),
+
+                              if (projectsAsync != null)
+                                ...projectsAsync.map((project) {
+                                  return DropdownMenuEntry<String?>(
+                                    style: dateButtonStyle,
+                                    value: project.id,
+                                    label: project.name,
+                                    labelWidget: Row(
+                                      children: [
+                                        const Icon(Icons.circle, size: 12),
+                                        const SizedBox(width: 8),
+                                        Text(project.name),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                            ],
+                            onSelected: (String? newValue) {
+                              setState(() {
+                                _selectedProjectId = newValue;
+                              });
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Container(
+                        //width: double.infinity,
+                        child: DropdownMenu(
+                          initialSelection: TaskStatus.notStarted,
+                          width: MediaQuery.of(context).size.width / 2,
+                          menuStyle: MenuStyle(
+                            backgroundColor: WidgetStateProperty.all(
+                              AppColors.borderGlass,
+                            ),
+
+                            elevation: WidgetStateProperty.all(8),
+                            shape: WidgetStateProperty.all(
+                              RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            // ТЕ САМЫЕ ОТСТУПЫ: задаем внутренние отступы для всего контейнера меню
+                            padding: WidgetStateProperty.all(
+                              EdgeInsets.all(
+                                8,
+                              ), // Элементы внутри меню не будут прижаты к его краям
+                            ),
                           ),
-                        ),
-                        // ТЕ САМЫЕ ОТСТУПЫ: задаем внутренние отступы для всего контейнера меню
-                        padding: WidgetStateProperty.all(
-                          EdgeInsets.all(
-                            8,
-                          ), // Элементы внутри меню не будут прижаты к его краям
+                          dropdownMenuEntries: [
+                            ...TaskStatus.values.map((e) {
+                              return DropdownMenuEntry(
+                                value: e,
+                                label: e.name,
+                                style: dateButtonStyle,
+                              );
+                            }),
+                          ],
                         ),
                       ),
-
-                      dropdownMenuEntries: [
-                        DropdownMenuEntry<String?>(
-                          label: "No project",
-                          value: null,
-                          style: dateButtonStyle,
-                        ),
-
-                        if (projectsAsync != null)
-                          ...projectsAsync.map((project) {
-                            return DropdownMenuEntry<String?>(
-                              style: dateButtonStyle,
-                              value: project.id,
-                              label: project.name,
-                              labelWidget: Row(
-                                children: [
-                                  const Icon(Icons.circle, size: 12),
-                                  const SizedBox(width: 8),
-                                  Text(project.name),
-                                ],
-                              ),
-                            );
-                          }),
-                      ],
-                      onSelected: (String? newValue) {
-                        setState(() {
-                          _selectedProjectId = newValue;
-                        });
-                      },
-                    );
-                  },
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 Row(

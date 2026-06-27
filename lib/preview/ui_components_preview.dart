@@ -84,7 +84,7 @@ class _UIComponentsPreviewScreenState extends State<UIComponentsPreviewScreen> {
             _buildSectionTitle('Pill Switcher'),
             const SizedBox(height: 12),
             PillSwitcher(
-              options: const ['Option 1', 'Option 2', 'Option 3'],
+              options: const ['Option 1', 'Option 2'],
               onSelectionChanged: (index) {
                 setState(() => _pillSwitcherIndex = index);
               },

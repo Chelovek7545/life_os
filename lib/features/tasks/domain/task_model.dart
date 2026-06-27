@@ -1,7 +1,7 @@
 import 'package:uuid/uuid.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
 
-enum TaskStatus { open, inProgress, done }
+enum TaskStatus {notStarted, inProgress, done, open}
 
 class Wrapped<T> {
   final T value;
