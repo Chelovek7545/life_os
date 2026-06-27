@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/di.dart';
 import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:life_os/features/projects/presentation/projects_screen.dart';
 import 'package:life_os/features/resources/presentation/resources_screen.dart';
@@ -64,28 +65,24 @@ class SlidingNavBar extends StatelessWidget {
   static const itemCount = 4;
 
   static const items = [
-    (Icons.bolt_rounded, 'Pulse'),
-    (Icons.format_list_bulleted_rounded, 'Tasks'),
-    (Icons.grid_view_rounded, 'Projects'),
-    (Icons.menu_book_rounded, 'Library'),
+    (Icons.bolt_rounded, 'PULSE'),
+    (Icons.format_list_bulleted_rounded, 'TASKS'),
+    (Icons.grid_view_rounded, 'PROJECTS'),
+    (Icons.menu_book_rounded, 'LIBRARY'),
     //(Icons.gps_fixed_rounded, 'Goals'),
   ];
 
   @override
   Widget build(BuildContext context) {
-    const accent = Color(0xFFE4C4B8);
-    const selectedBg = Color(0xFF3A2821);
-    const navBg = Color(0xFF181818);
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final itemWidth = (constraints.maxWidth - 24 - 4) / itemCount;
 
         return Container(
-          height: constraints.maxHeight * 0.11,
+          height: constraints.maxHeight * 0.1,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
-            color: navBg,
+            color: AppColors.scaffoldBackgroundColor,
             // borderRadius: BorderRadius.circular(28),
             border: Border.all(color: Colors.white10),
           ),
@@ -99,38 +96,93 @@ class SlidingNavBar extends StatelessWidget {
                 top: 1,
                 bottom: 1,
                 child: Container(
-                  margin: EdgeInsets.symmetric(horizontal:  itemWidth * 0.05),
+                  margin: EdgeInsets.symmetric(horizontal: itemWidth * 0.05),
                   width: itemWidth * 0.9,
                   decoration: BoxDecoration(
-                    color: selectedBg,
+                    color: AppColors.borderGlass,
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
               ),
 
               Row(
-
-                
                 children: List.generate(itemCount, (index) {
-
+                  bool selected = selectedIndex == index;
                   return Expanded(
                     child: InkWell(
                       borderRadius: BorderRadius.circular(12),
                       onTap: () => onTap(index),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(items[index].$1, color: accent, size: 26),
-                          const SizedBox(height: 6),
-                          Text(
-                            items[index].$2,
-                            style: const TextStyle(
-                              color: accent,
-                              fontSize: 14,
-                              fontFamily: 'monospace',
+                      child: AnimatedScale(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeOutBack,
+                        scale: selected ? 1.05 : 1.0,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                boxShadow: [
+                                  if (selected)
+                                  BoxShadow(
+                                    color: const Color.fromARGB(255, 255, 68, 0).withValues(alpha: 0.6),
+                                    blurRadius: 15,
+                                    spreadRadius: -4,
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                items[index].$1,
+                                color: selected
+                                    ? AppColors.primaryContainer
+                                    : Colors.grey,
+
+                                size: 26,
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 2),
+                            Text(
+                              items[index].$2,
+                              style: AppTypography.codeLabel.copyWith(
+                                color: selected
+                                    ? AppColors.primaryContainer
+                                    : Colors.grey,
+                                shadows: [
+                                  if (selected)
+                                    Shadow(
+                                      color: const Color.fromARGB(
+                                        255,
+                                        255,
+                                        68,
+                                        0,
+                                      ).withValues(alpha: 0.8),
+                                      blurRadius: 20,
+                                    ),
+                                ],
+                                fontSize: 10,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            AnimatedOpacity(
+                              opacity: selected ? 1 : 0,
+                              duration: const Duration(milliseconds: 200),
+                              child: Container(
+                                height: 2.5,
+                                width: 20,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryContainer,
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                    color: const Color.fromARGB(255, 255, 68, 0).withValues(alpha: 0.6),
+                                    blurRadius: 15,
+                                    spreadRadius: -4,
+                                  ),
+                                  ]
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   );

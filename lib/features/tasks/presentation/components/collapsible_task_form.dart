@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/theme/app_text_styles.dart';
+import 'package:life_os/core/theme/button_styles.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 typedef OnTaskSubmit = void Function(Task task);
+typedef OnCancel = void Function();
 
 class CollapsibleTaskForm extends StatefulWidget {
   const CollapsibleTaskForm({
@@ -12,11 +15,13 @@ class CollapsibleTaskForm extends StatefulWidget {
     required this.task,
     required this.height,
     required this.onSubmit,
+    required this.onCancel,
     required this.projects,
     required this.isEditMode,
   });
 
   final OnTaskSubmit onSubmit;
+  final OnCancel onCancel;
   final Stream<List<Project>> projects;
   final Task task;
   final bool isEditMode;
@@ -46,7 +51,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   void initState() {
     super.initState();
     _maxHeight = widget.height;
-    
+
     // Стартуем сразу в развернутом виде, если это редактирование, либо на минимуме
     _currentHeight = widget.isEditMode ? _maxHeight : _midHeight;
     _initFields();
@@ -62,7 +67,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   }
 
   void _initFields() {
-    
     _titleController.text = widget.task.title;
     _descController.text = widget.task.description;
     _selectedProjectId = widget.task.projectId;
@@ -107,8 +111,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     });
   }
 
-  
-
   void _submitTask() {
     final title = _titleController.text.trim();
     final updatedTask = widget.task.copyWith(
@@ -130,7 +132,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     setState(() {
       _currentHeight = _minHeight;
     });
-    
   }
 
   @override
@@ -167,7 +168,10 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
         height: _currentHeight,
         child: Container(
           decoration: BoxDecoration(
-            border: Border.all( color: AppColors.borderGlass, strokeAlign: BorderSide.strokeAlignOutside),
+            border: Border.all(
+              color: AppColors.borderGlass,
+              strokeAlign: BorderSide.strokeAlignOutside,
+            ),
             // Динамический цвет: становится темнее и премиальнее при полном раскрытии
             color: Color.lerp(
               Theme.of(context).scaffoldBackgroundColor,
@@ -197,7 +201,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                       _minHeight,
                       _maxHeight,
                     );
-                    
                   });
                 },
                 onVerticalDragEnd: (details) {
@@ -209,37 +212,67 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   color: Colors
                       .transparent, // Делаем всю область хэндла кликабельной
-                  child: Column(
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Традиционная полоска-индикатор
-                      Container(
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.white24,
-                          borderRadius: BorderRadius.circular(2),
+                      Expanded(
+                        flex: 1,
+                        child: Align(
+                          alignment: AlignmentGeometry.centerLeft,
+                          child: IconButton(
+                            onPressed: () => widget.onCancel(),
+                            icon: Icon(Icons.close),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Динамически меняем размер текста в зависимости от прогресса драга
-                          Text(
-                            isEditMode
-                                ? 'Редактирование задачи'
-                                : 'Новая задача',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize:
-                                  14 +
-                                  (2 *
-                                      totalProgress), // Размер шрифта растет при открытии
-                              fontWeight: FontWeight.w600,
+
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Традиционная полоска-индикатор
+                            Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Colors.white24,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              isEditMode
+                                  ? 'Edit task'
+                                  : 'New task',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize:
+                                    14 + 1, // Размер шрифта растет при открытии
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      Expanded(
+                        flex: 1,
+                        child: FilledButton(
+                          style: ButtonStyle(
+                            backgroundColor: WidgetStatePropertyAll(
+                              AppColors.primaryContainer,
                             ),
                           ),
-                        ],
+                          onPressed: () => _submitTask(),
+                          child: Text(
+                            "Save",
+                            style: AppTypography.bodyMd.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -253,152 +286,195 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                       ? const BouncingScrollPhysics()
                       : const NeverScrollableScrollPhysics(), // Блокируем скролл контента, если форма не на максимуме
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Opacity(
-                        opacity: midProgress,
-                        child: Transform.scale(
-                          scale:
-                              0.95 +
-                              (0.05 *
-                                  midProgress), // Слегка увеличивается при открытии
-                          child: TextField(
-                            controller: _titleController,
-                            decoration: const InputDecoration(
-                              labelText: 'Название задачи',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.task_alt),
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      // 2. БЛОК ДОПОЛНИТЕЛЬНЫХ ПОЛЕЙ — плавно проявляется ТОЛЬКО при переходе от Mid к Ma
-                      if (_currentHeight > _midHeight-50)
-                        Opacity(
-                          opacity: maxProgress,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              const SizedBox(height: 16),
-                              TextField(
-                                controller: _descController,
-                                maxLines: 3,
-                                decoration: const InputDecoration(
-                                  labelText: 'Описание',
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.description),
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              StreamBuilder<List<Project>>(
-                                stream: widget.projects,
-                                builder: (_, snapshot) {
-                                  if (snapshot.connectionState ==
-                                      ConnectionState.waiting) {
-                                    return const LinearProgressIndicator();
-                                  }
-                                  final projectsAsync = snapshot.data;
-                                  return DropdownButtonFormField<String?>(
-                                    value: _selectedProjectId,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Выберите проект',
-                                      border: OutlineInputBorder(),
-                                      prefixIcon: Icon(Icons.folder_open),
-                                    ),
-                                    items: [
-                                      const DropdownMenuItem<String?>(
-                                        value: null,
-                                        child: Text('Без проекта'),
-                                      ),
-                                      if (projectsAsync != null)
-                                        ...projectsAsync.map((project) {
-                                          return DropdownMenuItem<String?>(
-                                            value: project.id,
-                                            child: Row(
-                                              children: [
-                                                const Icon(
-                                                  Icons.circle,
-                                                  size: 12,
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Text(project.name),
-                                              ],
-                                            ),
-                                          );
-                                        }),
-                                    ],
-                                    onChanged: (String? newValue) {
-                                      setState(() {
-                                        _selectedProjectId = newValue;
-                                      });
-                                    },
-                                  );
-                                },
-                              ),
-                              const SizedBox(height: 16),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () async {
-                                        final selected = await showDatePicker(
-                                          context: context,
-                                          initialDate: DateTime.now(),
-                                          firstDate: DateTime(2000),
-                                          lastDate: DateTime(2040),
-                                        );
-                                        if (selected != null) {
-                                          setState(() => _dueDate = selected);
-                                        }
-                                      },
-                                      icon: const Icon(Icons.calendar_today),
-                                      label: Text(
-                                        _dueDate == null
-                                            ? 'Choose date'
-                                            : formatDate(_dueDate!),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () {},
-                                      icon: const Icon(Icons.flag),
-                                      label: const Text('Приоритет'),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 24),
-                              Opacity(
-                                opacity: midProgress,
-                                child: ElevatedButton(
-                                  onPressed: _currentHeight > _minHeight + 30 ? _submitTask : null,
-                                  style: ElevatedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 16,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    isEditMode
-                                        ? 'Сохранить изменения'
-                                        : 'Добавить задачу',
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
+                  child: _buildFormContent(midProgress, maxProgress),
                 ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildFormContent(double midProgress, double maxProgress) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Opacity(
+          opacity: midProgress,
+          child: Transform.scale(
+            scale:
+                0.95 +
+                (0.05 * midProgress), // Слегка увеличивается при открытии
+            child: TextField(
+              controller: _titleController,
+              decoration: const InputDecoration(
+                labelText: 'Название задачи',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.task_alt),
+              ),
+            ),
+          ),
+        ),
+
+        // 2. БЛОК ДОПОЛНИТЕЛЬНЫХ ПОЛЕЙ — плавно проявляется ТОЛЬКО при переходе от Mid к Ma
+        if (_currentHeight > _midHeight - 50)
+          Opacity(
+            opacity: maxProgress,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _descController,
+                  minLines: 3,
+                  maxLines: 10,
+                  decoration: InputDecoration(
+                    labelText: 'Описание',
+                    prefixIcon: const Icon(Icons.description),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                StreamBuilder<List<Project>>(
+                  stream: widget.projects,
+                  builder: (_, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const LinearProgressIndicator();
+                    }
+                    final projectsAsync = snapshot.data;
+                    return DropdownMenu<String?>(
+                      trailingIcon: Icon(Icons.arrow_drop_down_rounded, size: 40,),
+                      hintText: "Choose project",
+                      width: MediaQuery.of(context).size.width - 32,
+                      initialSelection: _selectedProjectId,
+                      menuStyle: MenuStyle(
+                        backgroundColor: WidgetStateProperty.all(
+                          AppColors.borderGlass,
+                        ),
+                        
+                        elevation: WidgetStateProperty.all(8),
+                        shape: WidgetStateProperty.all(
+                          RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        // ТЕ САМЫЕ ОТСТУПЫ: задаем внутренние отступы для всего контейнера меню
+                        padding: WidgetStateProperty.all(
+                          EdgeInsets.all(
+                            8,
+                          ), // Элементы внутри меню не будут прижаты к его краям
+                        ),
+                      ),
+
+                      dropdownMenuEntries: [
+                        DropdownMenuEntry<String?>(
+                          label: "No project",
+                          value: null,
+                          style: dateButtonStyle,
+                        ),
+
+                        if (projectsAsync != null)
+                          ...projectsAsync.map((project) {
+                            return DropdownMenuEntry<String?>(
+                              style: dateButtonStyle,
+                              value: project.id,
+                              label: project.name,
+                              labelWidget: Row(
+                                children: [
+                                  const Icon(Icons.circle, size: 12),
+                                  const SizedBox(width: 8),
+                                  Text(project.name),
+                                ],
+                              ),
+                            );
+                          }),
+                      ],
+                      onSelected: (String? newValue) {
+                        setState(() {
+                          _selectedProjectId = newValue;
+                        });
+                      },
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: dateButtonStyle,
+
+                        onPressed: () async {
+                          final selected = await showDatePicker(
+                            context: context,
+                            initialDate: DateTime.now(),
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime(2040),
+                          );
+                          if (selected != null) {
+                            setState(() => _dueDate = selected);
+                          }
+                        },
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              _dueDate == null
+                                  ? 'Choose date'
+                                  : formatDate(_dueDate!),
+                              style: AppTypography.codeLabel.copyWith(
+                                color: Colors.white,
+                              ),
+                            ),
+                            // Spacer(),
+                            const Icon(Icons.calendar_today, size: 16),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton(
+                        style: dateButtonStyle,
+                        onPressed: () {},
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Priority',
+                              style: AppTypography.codeLabel.copyWith(
+                                color: Colors.white,
+                              ),
+                            ),
+
+                            const Icon(Icons.flag),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                // Opacity(
+                //   opacity: midProgress,
+                //   child: ElevatedButton(
+                //     onPressed: _currentHeight > _minHeight + 30
+                //         ? _submitTask
+                //         : null,
+                //     style: ElevatedButton.styleFrom(
+                //       padding: const EdgeInsets.symmetric(vertical: 16),
+                //     ),
+                //     child: Text(
+                //       isEditMode ? 'Сохранить изменения' : 'Добавить задачу',
+                //     ),
+                //   ),
+                // ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

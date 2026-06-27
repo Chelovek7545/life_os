@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/ui/empty_placeholder.dart';
 import 'package:life_os/core/ui/segmented_pill_controller.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/date_format.dart';
@@ -24,6 +25,13 @@ class TasksScreen extends StatefulWidget {
 class _TasksScreenState extends State<TasksScreen> {
   // int dayIndex = 0;
   bool _shouldRenderForm = false;
+
+  @override
+  void dispose() {
+    widget.viewModel.dispose();    
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<bool>(
@@ -65,8 +73,9 @@ class _TasksScreenState extends State<TasksScreen> {
 
                         return Column(
                           children: [
-                            Row(
-                              children: [
+                            Align(
+
+                              child: 
                                 SegmentedPillControl(
                                   tabs: ["Day", "Week", "Month"],
                                   onTabChanged: (index) {
@@ -77,12 +86,8 @@ class _TasksScreenState extends State<TasksScreen> {
                                     );
                                   },
                                 ),
-                                const Spacer(),
-                                const Icon(
-                                  Icons.calendar_month_outlined,
-                                  color: Colors.white,
-                                ),
-                              ],
+                                
+                              
                             ),
                             if (currentFilter.period == DatePeriod.day)
                               CalendarRow(
@@ -109,7 +114,7 @@ class _TasksScreenState extends State<TasksScreen> {
                           return snapshot.data!.when(
                             loading: () =>
                                 Center(child: CircularProgressIndicator()),
-                            empty: (_, _) => Text("empty"),
+                            empty: (_, _) => EmptyPlaceholder(),
                             error: (e) => Text(e),
                             loaded: (items, selectedTasks, _, curTask) {
                               if (items.isEmpty) {
@@ -178,6 +183,7 @@ class _TasksScreenState extends State<TasksScreen> {
                 },
                 child: _shouldRenderForm
                     ? CollapsibleTaskForm(
+                        onCancel: () => widget.viewModel.hideForm(),
                         height: MediaQuery.sizeOf(context).height * 0.8,
                         task:
                             widget.viewModel.activeTaskWithProject?.task ??

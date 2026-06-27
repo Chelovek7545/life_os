@@ -21,6 +21,13 @@ class _SegmentedPillControlState extends State<SegmentedPillControl> {
 
   @override
   Widget build(BuildContext context) {
+    final totalTabs = widget.tabs.length;
+    
+    // Вычисляем координату X для Alignment (от -1.0 до 1.0)
+    final alignmentX = totalTabs <= 1 
+        ? 0.0 
+        : -1.0 + (_currentIdx * (2.0 / (totalTabs - 1)));
+
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
@@ -28,32 +35,59 @@ class _SegmentedPillControlState extends State<SegmentedPillControl> {
         borderRadius: BorderRadius.circular(9999),
         border: Border.all(color: AppColors.borderGlass),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: List.generate(widget.tabs.length, (index) {
-          final isSelected = index == _currentIdx;
-          return GestureDetector(
-            onTap: () {
-              setState(() => _currentIdx = index);
-              widget.onTabChanged(index);
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-              decoration: BoxDecoration(
-                color: isSelected ? AppColors.primaryContainer : Colors.transparent,
-                borderRadius: BorderRadius.circular(9999),
-              ),
-              child: Text(
-                widget.tabs[index],
-                style: AppTypography.bodySm.copyWith(
-                  color: isSelected ? Colors.white : AppColors.onSurfaceVariant,
-                  fontWeight: FontWeight.w600,
+      child: Stack(
+        children: [
+          // Слой 1: Скользящий оранжевый (primaryContainer) фон
+          Positioned.fill(
+            child: AnimatedAlign(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOutCubic, // Мягкий и естественный эффект скольжения
+              alignment: Alignment(alignmentX, 0.0),
+              child: FractionallySizedBox(
+                widthFactor: 1 / totalTabs, // Занимает ровно одну вкладку
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryContainer,
+                    borderRadius: BorderRadius.circular(9999),
+                  ),
                 ),
               ),
             ),
-          );
-        }),
+          ),
+          
+          // Слой 2: Интерактивные вкладки поверх фона
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: List.generate(totalTabs, (index) {
+              final isSelected = index == _currentIdx;
+              
+              return Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque, // Чтобы кликалась вся область вкладки
+                  onTap: () {
+                    setState(() => _currentIdx = index);
+                    widget.onTabChanged(index);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                    alignment: Alignment.center,
+                    // Плавно меняем цвет текста при смене вкладки
+                    child: AnimatedDefaultTextStyle(
+                      duration: const Duration(milliseconds: 200),
+                      style: AppTypography.headlineLg.copyWith(
+                        color: isSelected ? Colors.white : AppColors.onSurfaceVariant,
+                        //fontWeight: FontWeight.w100,
+                        fontSize: 16
+                      ),
+                      child: Text(widget.tabs[index],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
       ),
     );
   }

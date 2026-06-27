@@ -55,7 +55,7 @@ class _VibrantGradientButtonState extends State<VibrantGradientButton> {
               ],
               Text(
                 widget.text,
-                style: AppTypography.headlineLgMobile.copyWith(color: Colors.white),
+                style: AppTypography.bodyMd.copyWith(color: Colors.white),
               ),
             ],
           ),
