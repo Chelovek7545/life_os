@@ -6,6 +6,8 @@ import 'package:path/path.dart' as p;
 import 'dart:io';
 
 part 'database.g.dart';
+//dart run build_runner build
+
 
 @DataClassName('TaskModel')
 class Tasks extends Table {
@@ -13,13 +15,22 @@ class Tasks extends Table {
   TextColumn get title => text()();
   TextColumn get description => text()();
   IntColumn get status => intEnum<TaskStatus>()(); // enum как int
-  BoolColumn get isCompleted => boolean()();
   DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
+  //Если нужен Event
+  DateTimeColumn get startsAt => dateTime().nullable()();
+  DateTimeColumn get endsAt => dateTime().nullable()();
+
+
   DateTimeColumn get dueDate => dateTime().nullable()();
-  TextColumn get projectId => text().nullable()();
   TextColumn get space => text().nullable()();
-  IntColumn get timerSeconds => integer()();
-  RealColumn get effortWeight => real()();
+  TextColumn get projectId => text().nullable()();
+  TextColumn get spaceId => text().nullable()();
+  
+  IntColumn get timerSeconds => integer().withDefault(const Constant(0))();
+  IntColumn get priority => integer().withDefault(const Constant(0))();
+  RealColumn get effortWeight => real().withDefault(const Constant(1.0))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -31,8 +42,11 @@ class Projects extends Table {
   TextColumn get name => text()();
   TextColumn get description => text()();
   TextColumn get color => text()(); // Hex color, например "#FF5733"
+  //TextColumn get color => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+  //IntColumn get status => integer().withDefault(const Constant(0))();
+  TextColumn get goalId => text().nullable()();
   BoolColumn get isArchived => boolean().withDefault(const Constant(false))();
   
   @override

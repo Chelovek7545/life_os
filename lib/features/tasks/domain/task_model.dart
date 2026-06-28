@@ -1,7 +1,7 @@
 import 'package:uuid/uuid.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
 
-enum TaskStatus {notStarted, inProgress, done, open}
+enum TaskStatus { notStarted, inProgress, done, open }
 
 class Wrapped<T> {
   final T value;
@@ -14,8 +14,12 @@ class Task {
     required this.title,
     required this.description,
     required this.status,
-    required this.isCompleted,
     required this.createdAt,
+
+    this.updatedAt,
+
+    this.startsAt,
+    this.endsAt,
     required this.timerSeconds,
     required this.effortWeight,
     required this.tags,
@@ -28,8 +32,13 @@ class Task {
   final String title;
   final String description;
   final TaskStatus status;
-  final bool isCompleted;
+
   final DateTime createdAt;
+  final DateTime? updatedAt;
+
+  final DateTime? startsAt;
+  final DateTime? endsAt;
+
   final DateTime? dueDate;
   final String? projectId;
   final String? space;
@@ -37,13 +46,14 @@ class Task {
   final double effortWeight;
   final List<Tag> tags;
 
+  bool get isCompleted => status == TaskStatus.done;
+
   factory Task.blank() {
     return Task(
       id: const Uuid().v4(), // или можно генирировать UUID
       title: 'Untitled',
       description: '',
       status: TaskStatus.open,
-      isCompleted: false,
       createdAt: DateTime.now(),
       timerSeconds: 0,
       effortWeight: 0.0,
@@ -56,8 +66,11 @@ class Task {
     String? title,
     String? description,
     TaskStatus? status,
-    bool? isCompleted,
     DateTime? createdAt,
+    DateTime? updatedAt,
+    Wrapped<DateTime?>? startsAt,
+    Wrapped<DateTime?>? endsAt,
+
     Wrapped<DateTime?>? dueDate,
     Wrapped<String?>? projectId,
     Wrapped<String?>? space,
@@ -70,9 +83,12 @@ class Task {
       title: title ?? this.title,
       description: description ?? this.description,
       status: status ?? this.status,
-      isCompleted: isCompleted ?? this.isCompleted,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       dueDate: dueDate != null ? dueDate.value : this.dueDate,
+      startsAt: startsAt != null ? startsAt.value : this.startsAt,
+      endsAt: endsAt != null ? endsAt.value : this.endsAt,
+      
       projectId: projectId != null ? projectId.value : this.projectId,
       space: space != null ? space.value : this.space,
       timerSeconds: timerSeconds ?? this.timerSeconds,

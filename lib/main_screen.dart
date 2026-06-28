@@ -84,7 +84,7 @@ class SlidingNavBar extends StatelessWidget {
           height: constraints.maxHeight * 0.1,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
-            color: AppColors.scaffoldBackgroundColor,
+            color: Theme.of(context).colorScheme.surfaceDim,
             // borderRadius: BorderRadius.circular(28),
             border: Border.all(color: AppColors.borderGlass),
           ),
@@ -103,7 +103,7 @@ class SlidingNavBar extends StatelessWidget {
                   width: itemWidth * 0.9,
                   decoration: BoxDecoration(
                     border: Border.all(color: AppColors.borderGlass),
-                    color: AppColors.borderGlass,
+                    color: AppColors.surface,
                     borderRadius: BorderRadius.circular(AppRadius.full),
                   ),
                 ),

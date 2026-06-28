@@ -27,7 +27,7 @@ class TasksScreen extends StatefulWidget {
 
 class _TasksScreenState extends State<TasksScreen> {
   // int dayIndex = 0;
-  bool _shouldRenderForm = false;
+  //bool _shouldRenderForm = false;
 
   @override
   void dispose() {
@@ -43,9 +43,10 @@ class _TasksScreenState extends State<TasksScreen> {
       builder: (context, snap) {
         final isFormVisible = snap.data ?? false;
 
-        if (isFormVisible) {
-          _shouldRenderForm = true;
-        }
+        // if (isFormVisible) {
+          
+        //   _shouldRenderForm = true;
+        // }
 
         return Scaffold(
           //appBar: AppBar(title: const Text('Tasks')),
@@ -56,7 +57,7 @@ class _TasksScreenState extends State<TasksScreen> {
           //   tooltip: 'Новая задача',
           //   child: Icon(isFormVisible ? Icons.close : Icons.add),
           // ),
-          backgroundColor: AppColors.surfaceGlass,
+          backgroundColor: AppColors.surfaceDim,
           body: Stack(
             children: [
               Padding(
@@ -172,20 +173,21 @@ class _TasksScreenState extends State<TasksScreen> {
                 ),
               ),
               AnimatedPositioned(
-                duration: const Duration(milliseconds: 400),
+                duration: const Duration(milliseconds: 600),
                 curve: Curves.easeInOut,
                 left: 0,
                 right: 0,
                 bottom: isFormVisible ? 0 : -_kFormExpandedHeight,
-                height: _kFormExpandedHeight,
+                height:  _kFormExpandedHeight,
                 onEnd: () {
                   if (!isFormVisible) {
                     setState(() {
-                      _shouldRenderForm = false;
+                      widget.viewModel.disableForm();
+                      //_shouldRenderForm = false;
                     });
                   }
                 },
-                child: _shouldRenderForm
+                child: widget.viewModel.shouldRenderForm
                     ? CollapsibleTaskForm(
                         onCancel: () => widget.viewModel.hideForm(),
                         height: MediaQuery.sizeOf(context).height * 0.8,

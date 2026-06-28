@@ -8,16 +8,31 @@ class AppTheme {
   static ThemeData get darkTheme {
     return ThemeData(
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: AppColors.scaffoldBackgroundColor,
+      //scaffoldBackgroundColor: AppColors.scaffoldBackgroundColor,
       primaryColor: AppColors.primary,
       colorScheme: ColorScheme.fromSeed(
           seedColor: AppColors.primaryContainer,
           brightness: Brightness.dark
         ).copyWith(
-        surface: AppColors.surfaceDim,
         primary: AppColors.primary,
+        onPrimary: Colors.white,
+        primaryContainer: AppColors.primaryContainer,
+        onPrimaryContainer: Colors.white,
         secondary: AppColors.secondary,
-        surfaceContainerLow: AppColors.surfaceContainerLow
+
+        surface: AppColors.surface,
+        surfaceBright: AppColors.surfaceBright,
+        surfaceDim: AppColors.surfaceDim,
+        onSurface: AppColors.onSurface,
+        onSurfaceVariant: AppColors.onSurfaceVariant,
+
+        surfaceContainerHigh: AppColors.surfaceContainerHigh,
+        surfaceContainerLow: AppColors.surfaceContainerLow,
+        
+        outline: AppColors.inputBorderGlass,
+        outlineVariant: AppColors.borderGlass
+      
+
       ),
       // Настройка глобального текстового филда под стиль Glass
       inputDecorationTheme: InputDecorationTheme(

@@ -68,4 +68,6 @@ class AppTypography {
     color: AppColors.onSurfaceVariant
     //.withOpacity(0.6),
   );
+
+
 }

@@ -46,20 +46,6 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
         type: DriftSqlType.int,
         requiredDuringInsert: true,
       ).withConverter<TaskStatus>($TasksTable.$converterstatus);
-  static const VerificationMeta _isCompletedMeta = const VerificationMeta(
-    'isCompleted',
-  );
-  @override
-  late final GeneratedColumn<bool> isCompleted = GeneratedColumn<bool>(
-    'is_completed',
-    aliasedName,
-    false,
-    type: DriftSqlType.bool,
-    requiredDuringInsert: true,
-    defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("is_completed" IN (0, 1))',
-    ),
-  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -71,6 +57,37 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _startsAtMeta = const VerificationMeta(
+    'startsAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startsAt = GeneratedColumn<DateTime>(
+    'starts_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _endsAtMeta = const VerificationMeta('endsAt');
+  @override
+  late final GeneratedColumn<DateTime> endsAt = GeneratedColumn<DateTime>(
+    'ends_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _dueDateMeta = const VerificationMeta(
     'dueDate',
   );
@@ -80,6 +97,15 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
     aliasedName,
     true,
     type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _spaceMeta = const VerificationMeta('space');
+  @override
+  late final GeneratedColumn<String> space = GeneratedColumn<String>(
+    'space',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
   static const VerificationMeta _projectIdMeta = const VerificationMeta(
@@ -93,10 +119,12 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _spaceMeta = const VerificationMeta('space');
+  static const VerificationMeta _spaceIdMeta = const VerificationMeta(
+    'spaceId',
+  );
   @override
-  late final GeneratedColumn<String> space = GeneratedColumn<String>(
-    'space',
+  late final GeneratedColumn<String> spaceId = GeneratedColumn<String>(
+    'space_id',
     aliasedName,
     true,
     type: DriftSqlType.string,
@@ -111,7 +139,20 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
     aliasedName,
     false,
     type: DriftSqlType.int,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _priorityMeta = const VerificationMeta(
+    'priority',
+  );
+  @override
+  late final GeneratedColumn<int> priority = GeneratedColumn<int>(
+    'priority',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
   );
   static const VerificationMeta _effortWeightMeta = const VerificationMeta(
     'effortWeight',
@@ -122,7 +163,8 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
     aliasedName,
     false,
     type: DriftSqlType.double,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1.0),
   );
   @override
   List<GeneratedColumn> get $columns => [
@@ -130,12 +172,16 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
     title,
     description,
     status,
-    isCompleted,
     createdAt,
+    updatedAt,
+    startsAt,
+    endsAt,
     dueDate,
-    projectId,
     space,
+    projectId,
+    spaceId,
     timerSeconds,
+    priority,
     effortWeight,
   ];
   @override
@@ -174,17 +220,6 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
     } else if (isInserting) {
       context.missing(_descriptionMeta);
     }
-    if (data.containsKey('is_completed')) {
-      context.handle(
-        _isCompletedMeta,
-        isCompleted.isAcceptableOrUnknown(
-          data['is_completed']!,
-          _isCompletedMeta,
-        ),
-      );
-    } else if (isInserting) {
-      context.missing(_isCompletedMeta);
-    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -193,10 +228,34 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
     } else if (isInserting) {
       context.missing(_createdAtMeta);
     }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('starts_at')) {
+      context.handle(
+        _startsAtMeta,
+        startsAt.isAcceptableOrUnknown(data['starts_at']!, _startsAtMeta),
+      );
+    }
+    if (data.containsKey('ends_at')) {
+      context.handle(
+        _endsAtMeta,
+        endsAt.isAcceptableOrUnknown(data['ends_at']!, _endsAtMeta),
+      );
+    }
     if (data.containsKey('due_date')) {
       context.handle(
         _dueDateMeta,
         dueDate.isAcceptableOrUnknown(data['due_date']!, _dueDateMeta),
+      );
+    }
+    if (data.containsKey('space')) {
+      context.handle(
+        _spaceMeta,
+        space.isAcceptableOrUnknown(data['space']!, _spaceMeta),
       );
     }
     if (data.containsKey('project_id')) {
@@ -205,10 +264,10 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
         projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
       );
     }
-    if (data.containsKey('space')) {
+    if (data.containsKey('space_id')) {
       context.handle(
-        _spaceMeta,
-        space.isAcceptableOrUnknown(data['space']!, _spaceMeta),
+        _spaceIdMeta,
+        spaceId.isAcceptableOrUnknown(data['space_id']!, _spaceIdMeta),
       );
     }
     if (data.containsKey('timer_seconds')) {
@@ -219,8 +278,12 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
           _timerSecondsMeta,
         ),
       );
-    } else if (isInserting) {
-      context.missing(_timerSecondsMeta);
+    }
+    if (data.containsKey('priority')) {
+      context.handle(
+        _priorityMeta,
+        priority.isAcceptableOrUnknown(data['priority']!, _priorityMeta),
+      );
     }
     if (data.containsKey('effort_weight')) {
       context.handle(
@@ -230,8 +293,6 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
           _effortWeightMeta,
         ),
       );
-    } else if (isInserting) {
-      context.missing(_effortWeightMeta);
     }
     return context;
   }
@@ -260,29 +321,45 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
           data['${effectivePrefix}status'],
         )!,
       ),
-      isCompleted: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}is_completed'],
-      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      ),
+      startsAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}starts_at'],
+      ),
+      endsAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}ends_at'],
+      ),
       dueDate: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}due_date'],
-      ),
-      projectId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}project_id'],
       ),
       space: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}space'],
       ),
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      ),
+      spaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}space_id'],
+      ),
       timerSeconds: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}timer_seconds'],
+      )!,
+      priority: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}priority'],
       )!,
       effortWeight: attachedDatabase.typeMapping.read(
         DriftSqlType.double,
@@ -305,24 +382,32 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
   final String title;
   final String description;
   final TaskStatus status;
-  final bool isCompleted;
   final DateTime createdAt;
+  final DateTime? updatedAt;
+  final DateTime? startsAt;
+  final DateTime? endsAt;
   final DateTime? dueDate;
-  final String? projectId;
   final String? space;
+  final String? projectId;
+  final String? spaceId;
   final int timerSeconds;
+  final int priority;
   final double effortWeight;
   const TaskModel({
     required this.id,
     required this.title,
     required this.description,
     required this.status,
-    required this.isCompleted,
     required this.createdAt,
+    this.updatedAt,
+    this.startsAt,
+    this.endsAt,
     this.dueDate,
-    this.projectId,
     this.space,
+    this.projectId,
+    this.spaceId,
     required this.timerSeconds,
+    required this.priority,
     required this.effortWeight,
   });
   @override
@@ -334,18 +419,30 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
     {
       map['status'] = Variable<int>($TasksTable.$converterstatus.toSql(status));
     }
-    map['is_completed'] = Variable<bool>(isCompleted);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
+    if (!nullToAbsent || startsAt != null) {
+      map['starts_at'] = Variable<DateTime>(startsAt);
+    }
+    if (!nullToAbsent || endsAt != null) {
+      map['ends_at'] = Variable<DateTime>(endsAt);
+    }
     if (!nullToAbsent || dueDate != null) {
       map['due_date'] = Variable<DateTime>(dueDate);
-    }
-    if (!nullToAbsent || projectId != null) {
-      map['project_id'] = Variable<String>(projectId);
     }
     if (!nullToAbsent || space != null) {
       map['space'] = Variable<String>(space);
     }
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
+    }
+    if (!nullToAbsent || spaceId != null) {
+      map['space_id'] = Variable<String>(spaceId);
+    }
     map['timer_seconds'] = Variable<int>(timerSeconds);
+    map['priority'] = Variable<int>(priority);
     map['effort_weight'] = Variable<double>(effortWeight);
     return map;
   }
@@ -356,18 +453,30 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
       title: Value(title),
       description: Value(description),
       status: Value(status),
-      isCompleted: Value(isCompleted),
       createdAt: Value(createdAt),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
+      startsAt: startsAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startsAt),
+      endsAt: endsAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endsAt),
       dueDate: dueDate == null && nullToAbsent
           ? const Value.absent()
           : Value(dueDate),
-      projectId: projectId == null && nullToAbsent
-          ? const Value.absent()
-          : Value(projectId),
       space: space == null && nullToAbsent
           ? const Value.absent()
           : Value(space),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
+      spaceId: spaceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(spaceId),
       timerSeconds: Value(timerSeconds),
+      priority: Value(priority),
       effortWeight: Value(effortWeight),
     );
   }
@@ -384,12 +493,16 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
       status: $TasksTable.$converterstatus.fromJson(
         serializer.fromJson<int>(json['status']),
       ),
-      isCompleted: serializer.fromJson<bool>(json['isCompleted']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
+      startsAt: serializer.fromJson<DateTime?>(json['startsAt']),
+      endsAt: serializer.fromJson<DateTime?>(json['endsAt']),
       dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
-      projectId: serializer.fromJson<String?>(json['projectId']),
       space: serializer.fromJson<String?>(json['space']),
+      projectId: serializer.fromJson<String?>(json['projectId']),
+      spaceId: serializer.fromJson<String?>(json['spaceId']),
       timerSeconds: serializer.fromJson<int>(json['timerSeconds']),
+      priority: serializer.fromJson<int>(json['priority']),
       effortWeight: serializer.fromJson<double>(json['effortWeight']),
     );
   }
@@ -403,12 +516,16 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
       'status': serializer.toJson<int>(
         $TasksTable.$converterstatus.toJson(status),
       ),
-      'isCompleted': serializer.toJson<bool>(isCompleted),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
+      'startsAt': serializer.toJson<DateTime?>(startsAt),
+      'endsAt': serializer.toJson<DateTime?>(endsAt),
       'dueDate': serializer.toJson<DateTime?>(dueDate),
-      'projectId': serializer.toJson<String?>(projectId),
       'space': serializer.toJson<String?>(space),
+      'projectId': serializer.toJson<String?>(projectId),
+      'spaceId': serializer.toJson<String?>(spaceId),
       'timerSeconds': serializer.toJson<int>(timerSeconds),
+      'priority': serializer.toJson<int>(priority),
       'effortWeight': serializer.toJson<double>(effortWeight),
     };
   }
@@ -418,24 +535,32 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
     String? title,
     String? description,
     TaskStatus? status,
-    bool? isCompleted,
     DateTime? createdAt,
+    Value<DateTime?> updatedAt = const Value.absent(),
+    Value<DateTime?> startsAt = const Value.absent(),
+    Value<DateTime?> endsAt = const Value.absent(),
     Value<DateTime?> dueDate = const Value.absent(),
-    Value<String?> projectId = const Value.absent(),
     Value<String?> space = const Value.absent(),
+    Value<String?> projectId = const Value.absent(),
+    Value<String?> spaceId = const Value.absent(),
     int? timerSeconds,
+    int? priority,
     double? effortWeight,
   }) => TaskModel(
     id: id ?? this.id,
     title: title ?? this.title,
     description: description ?? this.description,
     status: status ?? this.status,
-    isCompleted: isCompleted ?? this.isCompleted,
     createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+    startsAt: startsAt.present ? startsAt.value : this.startsAt,
+    endsAt: endsAt.present ? endsAt.value : this.endsAt,
     dueDate: dueDate.present ? dueDate.value : this.dueDate,
-    projectId: projectId.present ? projectId.value : this.projectId,
     space: space.present ? space.value : this.space,
+    projectId: projectId.present ? projectId.value : this.projectId,
+    spaceId: spaceId.present ? spaceId.value : this.spaceId,
     timerSeconds: timerSeconds ?? this.timerSeconds,
+    priority: priority ?? this.priority,
     effortWeight: effortWeight ?? this.effortWeight,
   );
   TaskModel copyWithCompanion(TasksCompanion data) {
@@ -446,16 +571,18 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
           ? data.description.value
           : this.description,
       status: data.status.present ? data.status.value : this.status,
-      isCompleted: data.isCompleted.present
-          ? data.isCompleted.value
-          : this.isCompleted,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      startsAt: data.startsAt.present ? data.startsAt.value : this.startsAt,
+      endsAt: data.endsAt.present ? data.endsAt.value : this.endsAt,
       dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
-      projectId: data.projectId.present ? data.projectId.value : this.projectId,
       space: data.space.present ? data.space.value : this.space,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      spaceId: data.spaceId.present ? data.spaceId.value : this.spaceId,
       timerSeconds: data.timerSeconds.present
           ? data.timerSeconds.value
           : this.timerSeconds,
+      priority: data.priority.present ? data.priority.value : this.priority,
       effortWeight: data.effortWeight.present
           ? data.effortWeight.value
           : this.effortWeight,
@@ -469,12 +596,16 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
           ..write('title: $title, ')
           ..write('description: $description, ')
           ..write('status: $status, ')
-          ..write('isCompleted: $isCompleted, ')
           ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('startsAt: $startsAt, ')
+          ..write('endsAt: $endsAt, ')
           ..write('dueDate: $dueDate, ')
-          ..write('projectId: $projectId, ')
           ..write('space: $space, ')
+          ..write('projectId: $projectId, ')
+          ..write('spaceId: $spaceId, ')
           ..write('timerSeconds: $timerSeconds, ')
+          ..write('priority: $priority, ')
           ..write('effortWeight: $effortWeight')
           ..write(')'))
         .toString();
@@ -486,12 +617,16 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
     title,
     description,
     status,
-    isCompleted,
     createdAt,
+    updatedAt,
+    startsAt,
+    endsAt,
     dueDate,
-    projectId,
     space,
+    projectId,
+    spaceId,
     timerSeconds,
+    priority,
     effortWeight,
   );
   @override
@@ -502,12 +637,16 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
           other.title == this.title &&
           other.description == this.description &&
           other.status == this.status &&
-          other.isCompleted == this.isCompleted &&
           other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.startsAt == this.startsAt &&
+          other.endsAt == this.endsAt &&
           other.dueDate == this.dueDate &&
-          other.projectId == this.projectId &&
           other.space == this.space &&
+          other.projectId == this.projectId &&
+          other.spaceId == this.spaceId &&
           other.timerSeconds == this.timerSeconds &&
+          other.priority == this.priority &&
           other.effortWeight == this.effortWeight);
 }
 
@@ -516,12 +655,16 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
   final Value<String> title;
   final Value<String> description;
   final Value<TaskStatus> status;
-  final Value<bool> isCompleted;
   final Value<DateTime> createdAt;
+  final Value<DateTime?> updatedAt;
+  final Value<DateTime?> startsAt;
+  final Value<DateTime?> endsAt;
   final Value<DateTime?> dueDate;
-  final Value<String?> projectId;
   final Value<String?> space;
+  final Value<String?> projectId;
+  final Value<String?> spaceId;
   final Value<int> timerSeconds;
+  final Value<int> priority;
   final Value<double> effortWeight;
   final Value<int> rowid;
   const TasksCompanion({
@@ -529,12 +672,16 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
     this.title = const Value.absent(),
     this.description = const Value.absent(),
     this.status = const Value.absent(),
-    this.isCompleted = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.startsAt = const Value.absent(),
+    this.endsAt = const Value.absent(),
     this.dueDate = const Value.absent(),
-    this.projectId = const Value.absent(),
     this.space = const Value.absent(),
+    this.projectId = const Value.absent(),
+    this.spaceId = const Value.absent(),
     this.timerSeconds = const Value.absent(),
+    this.priority = const Value.absent(),
     this.effortWeight = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -543,33 +690,38 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
     required String title,
     required String description,
     required TaskStatus status,
-    required bool isCompleted,
     required DateTime createdAt,
+    this.updatedAt = const Value.absent(),
+    this.startsAt = const Value.absent(),
+    this.endsAt = const Value.absent(),
     this.dueDate = const Value.absent(),
-    this.projectId = const Value.absent(),
     this.space = const Value.absent(),
-    required int timerSeconds,
-    required double effortWeight,
+    this.projectId = const Value.absent(),
+    this.spaceId = const Value.absent(),
+    this.timerSeconds = const Value.absent(),
+    this.priority = const Value.absent(),
+    this.effortWeight = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        title = Value(title),
        description = Value(description),
        status = Value(status),
-       isCompleted = Value(isCompleted),
-       createdAt = Value(createdAt),
-       timerSeconds = Value(timerSeconds),
-       effortWeight = Value(effortWeight);
+       createdAt = Value(createdAt);
   static Insertable<TaskModel> custom({
     Expression<String>? id,
     Expression<String>? title,
     Expression<String>? description,
     Expression<int>? status,
-    Expression<bool>? isCompleted,
     Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? startsAt,
+    Expression<DateTime>? endsAt,
     Expression<DateTime>? dueDate,
-    Expression<String>? projectId,
     Expression<String>? space,
+    Expression<String>? projectId,
+    Expression<String>? spaceId,
     Expression<int>? timerSeconds,
+    Expression<int>? priority,
     Expression<double>? effortWeight,
     Expression<int>? rowid,
   }) {
@@ -578,12 +730,16 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
       if (title != null) 'title': title,
       if (description != null) 'description': description,
       if (status != null) 'status': status,
-      if (isCompleted != null) 'is_completed': isCompleted,
       if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (startsAt != null) 'starts_at': startsAt,
+      if (endsAt != null) 'ends_at': endsAt,
       if (dueDate != null) 'due_date': dueDate,
-      if (projectId != null) 'project_id': projectId,
       if (space != null) 'space': space,
+      if (projectId != null) 'project_id': projectId,
+      if (spaceId != null) 'space_id': spaceId,
       if (timerSeconds != null) 'timer_seconds': timerSeconds,
+      if (priority != null) 'priority': priority,
       if (effortWeight != null) 'effort_weight': effortWeight,
       if (rowid != null) 'rowid': rowid,
     });
@@ -594,12 +750,16 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
     Value<String>? title,
     Value<String>? description,
     Value<TaskStatus>? status,
-    Value<bool>? isCompleted,
     Value<DateTime>? createdAt,
+    Value<DateTime?>? updatedAt,
+    Value<DateTime?>? startsAt,
+    Value<DateTime?>? endsAt,
     Value<DateTime?>? dueDate,
-    Value<String?>? projectId,
     Value<String?>? space,
+    Value<String?>? projectId,
+    Value<String?>? spaceId,
     Value<int>? timerSeconds,
+    Value<int>? priority,
     Value<double>? effortWeight,
     Value<int>? rowid,
   }) {
@@ -608,12 +768,16 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
       title: title ?? this.title,
       description: description ?? this.description,
       status: status ?? this.status,
-      isCompleted: isCompleted ?? this.isCompleted,
       createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      startsAt: startsAt ?? this.startsAt,
+      endsAt: endsAt ?? this.endsAt,
       dueDate: dueDate ?? this.dueDate,
-      projectId: projectId ?? this.projectId,
       space: space ?? this.space,
+      projectId: projectId ?? this.projectId,
+      spaceId: spaceId ?? this.spaceId,
       timerSeconds: timerSeconds ?? this.timerSeconds,
+      priority: priority ?? this.priority,
       effortWeight: effortWeight ?? this.effortWeight,
       rowid: rowid ?? this.rowid,
     );
@@ -636,23 +800,35 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
         $TasksTable.$converterstatus.toSql(status.value),
       );
     }
-    if (isCompleted.present) {
-      map['is_completed'] = Variable<bool>(isCompleted.value);
-    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (startsAt.present) {
+      map['starts_at'] = Variable<DateTime>(startsAt.value);
+    }
+    if (endsAt.present) {
+      map['ends_at'] = Variable<DateTime>(endsAt.value);
     }
     if (dueDate.present) {
       map['due_date'] = Variable<DateTime>(dueDate.value);
     }
-    if (projectId.present) {
-      map['project_id'] = Variable<String>(projectId.value);
-    }
     if (space.present) {
       map['space'] = Variable<String>(space.value);
     }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
+    if (spaceId.present) {
+      map['space_id'] = Variable<String>(spaceId.value);
+    }
     if (timerSeconds.present) {
       map['timer_seconds'] = Variable<int>(timerSeconds.value);
+    }
+    if (priority.present) {
+      map['priority'] = Variable<int>(priority.value);
     }
     if (effortWeight.present) {
       map['effort_weight'] = Variable<double>(effortWeight.value);
@@ -670,12 +846,16 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
           ..write('title: $title, ')
           ..write('description: $description, ')
           ..write('status: $status, ')
-          ..write('isCompleted: $isCompleted, ')
           ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('startsAt: $startsAt, ')
+          ..write('endsAt: $endsAt, ')
           ..write('dueDate: $dueDate, ')
-          ..write('projectId: $projectId, ')
           ..write('space: $space, ')
+          ..write('projectId: $projectId, ')
+          ..write('spaceId: $spaceId, ')
           ..write('timerSeconds: $timerSeconds, ')
+          ..write('priority: $priority, ')
           ..write('effortWeight: $effortWeight, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -749,6 +929,15 @@ class $ProjectsTable extends Projects
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _goalIdMeta = const VerificationMeta('goalId');
+  @override
+  late final GeneratedColumn<String> goalId = GeneratedColumn<String>(
+    'goal_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _isArchivedMeta = const VerificationMeta(
     'isArchived',
   );
@@ -772,6 +961,7 @@ class $ProjectsTable extends Projects
     color,
     createdAt,
     updatedAt,
+    goalId,
     isArchived,
   ];
   @override
@@ -834,6 +1024,12 @@ class $ProjectsTable extends Projects
     } else if (isInserting) {
       context.missing(_updatedAtMeta);
     }
+    if (data.containsKey('goal_id')) {
+      context.handle(
+        _goalIdMeta,
+        goalId.isAcceptableOrUnknown(data['goal_id']!, _goalIdMeta),
+      );
+    }
     if (data.containsKey('is_archived')) {
       context.handle(
         _isArchivedMeta,
@@ -873,6 +1069,10 @@ class $ProjectsTable extends Projects
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      goalId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}goal_id'],
+      ),
       isArchived: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_archived'],
@@ -893,6 +1093,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
   final String color;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? goalId;
   final bool isArchived;
   const ProjectModel({
     required this.id,
@@ -901,6 +1102,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
     required this.color,
     required this.createdAt,
     required this.updatedAt,
+    this.goalId,
     required this.isArchived,
   });
   @override
@@ -912,6 +1114,9 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
     map['color'] = Variable<String>(color);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || goalId != null) {
+      map['goal_id'] = Variable<String>(goalId);
+    }
     map['is_archived'] = Variable<bool>(isArchived);
     return map;
   }
@@ -924,6 +1129,9 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
       color: Value(color),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
+      goalId: goalId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(goalId),
       isArchived: Value(isArchived),
     );
   }
@@ -940,6 +1148,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
       color: serializer.fromJson<String>(json['color']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      goalId: serializer.fromJson<String?>(json['goalId']),
       isArchived: serializer.fromJson<bool>(json['isArchived']),
     );
   }
@@ -953,6 +1162,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
       'color': serializer.toJson<String>(color),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'goalId': serializer.toJson<String?>(goalId),
       'isArchived': serializer.toJson<bool>(isArchived),
     };
   }
@@ -964,6 +1174,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
     String? color,
     DateTime? createdAt,
     DateTime? updatedAt,
+    Value<String?> goalId = const Value.absent(),
     bool? isArchived,
   }) => ProjectModel(
     id: id ?? this.id,
@@ -972,6 +1183,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
     color: color ?? this.color,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
+    goalId: goalId.present ? goalId.value : this.goalId,
     isArchived: isArchived ?? this.isArchived,
   );
   ProjectModel copyWithCompanion(ProjectsCompanion data) {
@@ -984,6 +1196,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
       color: data.color.present ? data.color.value : this.color,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      goalId: data.goalId.present ? data.goalId.value : this.goalId,
       isArchived: data.isArchived.present
           ? data.isArchived.value
           : this.isArchived,
@@ -999,6 +1212,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
           ..write('color: $color, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('goalId: $goalId, ')
           ..write('isArchived: $isArchived')
           ..write(')'))
         .toString();
@@ -1012,6 +1226,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
     color,
     createdAt,
     updatedAt,
+    goalId,
     isArchived,
   );
   @override
@@ -1024,6 +1239,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
           other.color == this.color &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
+          other.goalId == this.goalId &&
           other.isArchived == this.isArchived);
 }
 
@@ -1034,6 +1250,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
   final Value<String> color;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
+  final Value<String?> goalId;
   final Value<bool> isArchived;
   final Value<int> rowid;
   const ProjectsCompanion({
@@ -1043,6 +1260,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
     this.color = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.goalId = const Value.absent(),
     this.isArchived = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1053,6 +1271,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
     required String color,
     required DateTime createdAt,
     required DateTime updatedAt,
+    this.goalId = const Value.absent(),
     this.isArchived = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1068,6 +1287,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
     Expression<String>? color,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
+    Expression<String>? goalId,
     Expression<bool>? isArchived,
     Expression<int>? rowid,
   }) {
@@ -1078,6 +1298,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
       if (color != null) 'color': color,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (goalId != null) 'goal_id': goalId,
       if (isArchived != null) 'is_archived': isArchived,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1090,6 +1311,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
     Value<String>? color,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
+    Value<String?>? goalId,
     Value<bool>? isArchived,
     Value<int>? rowid,
   }) {
@@ -1100,6 +1322,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
       color: color ?? this.color,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      goalId: goalId ?? this.goalId,
       isArchived: isArchived ?? this.isArchived,
       rowid: rowid ?? this.rowid,
     );
@@ -1126,6 +1349,9 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (goalId.present) {
+      map['goal_id'] = Variable<String>(goalId.value);
+    }
     if (isArchived.present) {
       map['is_archived'] = Variable<bool>(isArchived.value);
     }
@@ -1144,6 +1370,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
           ..write('color: $color, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('goalId: $goalId, ')
           ..write('isArchived: $isArchived, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -1658,13 +1885,17 @@ typedef $$TasksTableCreateCompanionBuilder =
       required String title,
       required String description,
       required TaskStatus status,
-      required bool isCompleted,
       required DateTime createdAt,
+      Value<DateTime?> updatedAt,
+      Value<DateTime?> startsAt,
+      Value<DateTime?> endsAt,
       Value<DateTime?> dueDate,
-      Value<String?> projectId,
       Value<String?> space,
-      required int timerSeconds,
-      required double effortWeight,
+      Value<String?> projectId,
+      Value<String?> spaceId,
+      Value<int> timerSeconds,
+      Value<int> priority,
+      Value<double> effortWeight,
       Value<int> rowid,
     });
 typedef $$TasksTableUpdateCompanionBuilder =
@@ -1673,12 +1904,16 @@ typedef $$TasksTableUpdateCompanionBuilder =
       Value<String> title,
       Value<String> description,
       Value<TaskStatus> status,
-      Value<bool> isCompleted,
       Value<DateTime> createdAt,
+      Value<DateTime?> updatedAt,
+      Value<DateTime?> startsAt,
+      Value<DateTime?> endsAt,
       Value<DateTime?> dueDate,
-      Value<String?> projectId,
       Value<String?> space,
+      Value<String?> projectId,
+      Value<String?> spaceId,
       Value<int> timerSeconds,
+      Value<int> priority,
       Value<double> effortWeight,
       Value<int> rowid,
     });
@@ -1690,7 +1925,7 @@ final class $$TasksTableReferences
   static MultiTypedResultKey<$TaskTagEntriesTable, List<TaskTagEntry>>
   _taskTagEntriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.taskTagEntries,
-    aliasName: $_aliasNameGenerator(db.tasks.id, db.taskTagEntries.taskId),
+    aliasName: 'tasks__id__task_tag_entries__task_id',
   );
 
   $$TaskTagEntriesTableProcessedTableManager get taskTagEntriesRefs {
@@ -1735,13 +1970,23 @@ class $$TasksTableFilterComposer extends Composer<_$AppDatabase, $TasksTable> {
         builder: (column) => ColumnWithTypeConverterFilters(column),
       );
 
-  ColumnFilters<bool> get isCompleted => $composableBuilder(
-    column: $table.isCompleted,
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startsAt => $composableBuilder(
+    column: $table.startsAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get endsAt => $composableBuilder(
+    column: $table.endsAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1750,18 +1995,28 @@ class $$TasksTableFilterComposer extends Composer<_$AppDatabase, $TasksTable> {
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get projectId => $composableBuilder(
-    column: $table.projectId,
-    builder: (column) => ColumnFilters(column),
-  );
-
   ColumnFilters<String> get space => $composableBuilder(
     column: $table.space,
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get spaceId => $composableBuilder(
+    column: $table.spaceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<int> get timerSeconds => $composableBuilder(
     column: $table.timerSeconds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get priority => $composableBuilder(
+    column: $table.priority,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1825,13 +2080,23 @@ class $$TasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<bool> get isCompleted => $composableBuilder(
-    column: $table.isCompleted,
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
-    column: $table.createdAt,
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get startsAt => $composableBuilder(
+    column: $table.startsAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get endsAt => $composableBuilder(
+    column: $table.endsAt,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -1840,18 +2105,28 @@ class $$TasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get projectId => $composableBuilder(
-    column: $table.projectId,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<String> get space => $composableBuilder(
     column: $table.space,
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get spaceId => $composableBuilder(
+    column: $table.spaceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get timerSeconds => $composableBuilder(
     column: $table.timerSeconds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get priority => $composableBuilder(
+    column: $table.priority,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -1884,27 +2159,37 @@ class $$TasksTableAnnotationComposer
   GeneratedColumnWithTypeConverter<TaskStatus, int> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
 
-  GeneratedColumn<bool> get isCompleted => $composableBuilder(
-    column: $table.isCompleted,
-    builder: (column) => column,
-  );
-
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startsAt =>
+      $composableBuilder(column: $table.startsAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get endsAt =>
+      $composableBuilder(column: $table.endsAt, builder: (column) => column);
 
   GeneratedColumn<DateTime> get dueDate =>
       $composableBuilder(column: $table.dueDate, builder: (column) => column);
 
+  GeneratedColumn<String> get space =>
+      $composableBuilder(column: $table.space, builder: (column) => column);
+
   GeneratedColumn<String> get projectId =>
       $composableBuilder(column: $table.projectId, builder: (column) => column);
 
-  GeneratedColumn<String> get space =>
-      $composableBuilder(column: $table.space, builder: (column) => column);
+  GeneratedColumn<String> get spaceId =>
+      $composableBuilder(column: $table.spaceId, builder: (column) => column);
 
   GeneratedColumn<int> get timerSeconds => $composableBuilder(
     column: $table.timerSeconds,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get priority =>
+      $composableBuilder(column: $table.priority, builder: (column) => column);
 
   GeneratedColumn<double> get effortWeight => $composableBuilder(
     column: $table.effortWeight,
@@ -1969,12 +2254,16 @@ class $$TasksTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<String> description = const Value.absent(),
                 Value<TaskStatus> status = const Value.absent(),
-                Value<bool> isCompleted = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<DateTime?> startsAt = const Value.absent(),
+                Value<DateTime?> endsAt = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
-                Value<String?> projectId = const Value.absent(),
                 Value<String?> space = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
+                Value<String?> spaceId = const Value.absent(),
                 Value<int> timerSeconds = const Value.absent(),
+                Value<int> priority = const Value.absent(),
                 Value<double> effortWeight = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TasksCompanion(
@@ -1982,12 +2271,16 @@ class $$TasksTableTableManager
                 title: title,
                 description: description,
                 status: status,
-                isCompleted: isCompleted,
                 createdAt: createdAt,
+                updatedAt: updatedAt,
+                startsAt: startsAt,
+                endsAt: endsAt,
                 dueDate: dueDate,
-                projectId: projectId,
                 space: space,
+                projectId: projectId,
+                spaceId: spaceId,
                 timerSeconds: timerSeconds,
+                priority: priority,
                 effortWeight: effortWeight,
                 rowid: rowid,
               ),
@@ -1997,25 +2290,33 @@ class $$TasksTableTableManager
                 required String title,
                 required String description,
                 required TaskStatus status,
-                required bool isCompleted,
                 required DateTime createdAt,
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<DateTime?> startsAt = const Value.absent(),
+                Value<DateTime?> endsAt = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
-                Value<String?> projectId = const Value.absent(),
                 Value<String?> space = const Value.absent(),
-                required int timerSeconds,
-                required double effortWeight,
+                Value<String?> projectId = const Value.absent(),
+                Value<String?> spaceId = const Value.absent(),
+                Value<int> timerSeconds = const Value.absent(),
+                Value<int> priority = const Value.absent(),
+                Value<double> effortWeight = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TasksCompanion.insert(
                 id: id,
                 title: title,
                 description: description,
                 status: status,
-                isCompleted: isCompleted,
                 createdAt: createdAt,
+                updatedAt: updatedAt,
+                startsAt: startsAt,
+                endsAt: endsAt,
                 dueDate: dueDate,
-                projectId: projectId,
                 space: space,
+                projectId: projectId,
+                spaceId: spaceId,
                 timerSeconds: timerSeconds,
+                priority: priority,
                 effortWeight: effortWeight,
                 rowid: rowid,
               ),
@@ -2082,6 +2383,7 @@ typedef $$ProjectsTableCreateCompanionBuilder =
       required String color,
       required DateTime createdAt,
       required DateTime updatedAt,
+      Value<String?> goalId,
       Value<bool> isArchived,
       Value<int> rowid,
     });
@@ -2093,6 +2395,7 @@ typedef $$ProjectsTableUpdateCompanionBuilder =
       Value<String> color,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
+      Value<String?> goalId,
       Value<bool> isArchived,
       Value<int> rowid,
     });
@@ -2133,6 +2436,11 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get goalId => $composableBuilder(
+    column: $table.goalId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2181,6 +2489,11 @@ class $$ProjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get goalId => $composableBuilder(
+    column: $table.goalId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isArchived => $composableBuilder(
     column: $table.isArchived,
     builder: (column) => ColumnOrderings(column),
@@ -2215,6 +2528,9 @@ class $$ProjectsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get goalId =>
+      $composableBuilder(column: $table.goalId, builder: (column) => column);
 
   GeneratedColumn<bool> get isArchived => $composableBuilder(
     column: $table.isArchived,
@@ -2259,6 +2575,7 @@ class $$ProjectsTableTableManager
                 Value<String> color = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<String?> goalId = const Value.absent(),
                 Value<bool> isArchived = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ProjectsCompanion(
@@ -2268,6 +2585,7 @@ class $$ProjectsTableTableManager
                 color: color,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                goalId: goalId,
                 isArchived: isArchived,
                 rowid: rowid,
               ),
@@ -2279,6 +2597,7 @@ class $$ProjectsTableTableManager
                 required String color,
                 required DateTime createdAt,
                 required DateTime updatedAt,
+                Value<String?> goalId = const Value.absent(),
                 Value<bool> isArchived = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ProjectsCompanion.insert(
@@ -2288,6 +2607,7 @@ class $$ProjectsTableTableManager
                 color: color,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
+                goalId: goalId,
                 isArchived: isArchived,
                 rowid: rowid,
               ),
@@ -2336,7 +2656,7 @@ final class $$TagsTableReferences
   static MultiTypedResultKey<$TaskTagEntriesTable, List<TaskTagEntry>>
   _taskTagEntriesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.taskTagEntries,
-    aliasName: $_aliasNameGenerator(db.tags.id, db.taskTagEntries.tagId),
+    aliasName: 'tags__id__task_tag_entries__tag_id',
   );
 
   $$TaskTagEntriesTableProcessedTableManager get taskTagEntriesRefs {
@@ -2584,9 +2904,8 @@ final class $$TaskTagEntriesTableReferences
     super.$_typedResult,
   );
 
-  static $TasksTable _taskIdTable(_$AppDatabase db) => db.tasks.createAlias(
-    $_aliasNameGenerator(db.taskTagEntries.taskId, db.tasks.id),
-  );
+  static $TasksTable _taskIdTable(_$AppDatabase db) =>
+      db.tasks.createAlias('task_tag_entries__task_id__tasks__id');
 
   $$TasksTableProcessedTableManager get taskId {
     final $_column = $_itemColumn<String>('task_id')!;
@@ -2602,9 +2921,8 @@ final class $$TaskTagEntriesTableReferences
     );
   }
 
-  static $TagsTable _tagIdTable(_$AppDatabase db) => db.tags.createAlias(
-    $_aliasNameGenerator(db.taskTagEntries.tagId, db.tags.id),
-  );
+  static $TagsTable _tagIdTable(_$AppDatabase db) =>
+      db.tags.createAlias('task_tag_entries__tag_id__tags__id');
 
   $$TagsTableProcessedTableManager get tagId {
     final $_column = $_itemColumn<int>('tag_id')!;

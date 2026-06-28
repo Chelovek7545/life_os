@@ -60,22 +60,24 @@ class TasksViewModel {
 
   TaskWithProject? activeTaskWithProject;
   Task draftTask = Task.blank();
+  bool shouldRenderForm = false;
 
   void showForm() {
+    shouldRenderForm = true;
     _isFormVisibleController.add(true);
   }
 
   void hideForm() {
     _isFormVisibleController.add(false);
-    activeTaskWithProject = null;
     draftTask = Task.blank();
   }
 
-  void toggleForm() {
-    shouldRenderForm = !shouldRenderForm;
+  void disableForm() {
+    shouldRenderForm = false;
+    activeTaskWithProject = null;
+
   }
 
-  bool shouldRenderForm = true;
 
   //Для формы редактирования задач
 
@@ -133,8 +135,8 @@ class TasksViewModel {
       final task = item.task;
 
       // 1. Фильтр по ДАТЕ и ПЕРИОДУ
-      if (task.dueDate != null) {
-        final taskDay = task.dueDate!.startOfDay;
+      if (task.startsAt != null) {
+        final taskDay = task.startsAt!.startOfDay;
         final anchorDay = filter.anchorDate.startOfDay;
 
         final bool dateMatches = switch (filter.period) {
@@ -246,7 +248,7 @@ class TasksViewModel {
   }
 
   Future<void> toggleTask(Task task) async {
-    final updated = task.copyWith(isCompleted: !task.isCompleted);
+    final updated = task.copyWith(status: task.isCompleted ? TaskStatus.inProgress : TaskStatus.done);
     await updateTask(updated);
   }
 

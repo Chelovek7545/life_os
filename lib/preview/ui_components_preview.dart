@@ -7,7 +7,7 @@ import 'package:life_os/core/ui/segmented_pill_controller.dart';
 import 'package:life_os/core/ui/semantic_tag.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/ui/vibrant_gradient_button.dart';
-import 'package:life_os/features/tasks/domain/tag_model.dart';
+//import 'package:life_os/features/tasks/domain/tag_model.dart';
 
 void main() {
   runApp(const UIComponentsPreviewApp());

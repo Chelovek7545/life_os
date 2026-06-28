@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
-import 'package:life_os/core/theme/button_styles.dart';
+import 'package:life_os/core/theme/app_button_styles.dart';
+import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
@@ -45,6 +46,10 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   final TextEditingController _descController = TextEditingController();
   String? _selectedProjectId;
   DateTime? _dueDate;
+  DateTime? _startsAt;
+  DateTime? _endsAt;
+
+  TaskStatus _taskStatus = TaskStatus.notStarted;
 
   bool get isEditMode => widget.isEditMode;
 
@@ -71,7 +76,10 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     _titleController.text = widget.task.title;
     _descController.text = widget.task.description;
     _selectedProjectId = widget.task.projectId;
+    _startsAt = widget.task.startsAt;
+    _endsAt = widget.task.endsAt;
     _dueDate = widget.task.dueDate;
+    _taskStatus = widget.task.status;
   }
 
   @override
@@ -118,7 +126,10 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
       title: title.isEmpty ? 'Untitled' : title,
       description: _descController.text.trim(),
       projectId: Wrapped(_selectedProjectId),
+      startsAt: Wrapped(_startsAt),
+      endsAt: Wrapped(_endsAt),
       dueDate: Wrapped(_dueDate),
+      status: _taskStatus,
     );
 
     widget.onSubmit(updatedTask);
@@ -128,11 +139,12 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
       _descController.clear();
       _selectedProjectId = null;
       _dueDate = null;
+      _taskStatus = TaskStatus.notStarted;
     }
 
-    setState(() {
-      _currentHeight = _minHeight;
-    });
+    // setState(() {
+    //   _currentHeight = _minHeight;
+    // });
   }
 
   @override
@@ -175,11 +187,15 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
             ),
             // Динамический цвет: становится темнее и премиальнее при полном раскрытии
             color: Color.lerp(
-              Theme.of(context).scaffoldBackgroundColor,
-              Theme.of(context).cardColor,
+              AppColors.surface,
+              AppColors.surfaceDim,
+
+              //Theme.of(context).cardColor,
               maxProgress,
             ), // Пример: меняем цвет фона от высоты
-            borderRadius:  BorderRadius.vertical(top: Radius.circular(AppSpacing.xxl)),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppSpacing.xxl),
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.2),
@@ -228,7 +244,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                       ),
 
                       Expanded(
-                        flex: 2,
+                        flex: 1,
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -244,7 +260,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                             const SizedBox(height: 8),
                             Text(
                               isEditMode ? 'Edit task' : 'New task',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600,)
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
                             ),
                           ],
                         ),
@@ -252,18 +269,17 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
 
                       Expanded(
                         flex: 1,
-                        child: FilledButton(
-                          style: ButtonStyle(
-                            backgroundColor: WidgetStatePropertyAll(
-                              AppColors.primaryContainer,
-                            ),
-                          ),
-                          onPressed: () => _submitTask(),
-                          child: Text(
-                            "Save",
-                            style: AppTypography.bodyMd.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: FilledButton(
+                            style: AppButtonStyles.saveButton,
+                            onPressed: () => _submitTask(),
+                            child: Text(
+                              "Save",
+                              style: AppTypography.bodySm.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                         ),
@@ -290,6 +306,40 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     );
   }
 
+  Widget _datePickButton({
+    required String label,
+    DateTime? date,
+    required Function(DateTime newDate) onStartsAtChange,
+  }) {
+    return OutlinedButton(
+      style: AppButtonStyles.baseButtonStyle,
+
+      onPressed: () async {
+        final selected = await showDatePicker(
+          context: context,
+          initialDate: date ?? DateTime.now(),
+          firstDate: DateTime(2000),
+          lastDate: DateTime(2040),
+        );
+        if (selected != null) {
+          onStartsAtChange(selected);
+        }
+      },
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            date == null ? label : formatDate(date),
+            style: AppTypography.codeLabel.copyWith(color: Colors.white),
+          ),
+          // Spacer(),
+          const Icon(Icons.calendar_today, size: 16),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFormContent(double midProgress, double maxProgress) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -303,6 +353,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
             child: TextField(
               controller: _titleController,
               decoration: const InputDecoration(
+                //fillColor: AppColors.surfaceContainer,
                 labelText: 'Название задачи',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.task_alt),
@@ -324,6 +375,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                   minLines: 3,
                   maxLines: 10,
                   decoration: InputDecoration(
+                    fillColor: AppColors.surface,
+                    hoverColor: AppColors.surfaceBright,
                     labelText: 'Description',
                     prefixIcon: const Icon(Icons.description),
                   ),
@@ -357,7 +410,9 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                               elevation: WidgetStateProperty.all(8),
                               shape: WidgetStateProperty.all(
                                 RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.xl,
+                                  ),
                                 ),
                               ),
                               // ТЕ САМЫЕ ОТСТУПЫ: задаем внутренние отступы для всего контейнера меню
@@ -372,13 +427,13 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                               DropdownMenuEntry<String?>(
                                 label: "No project",
                                 value: null,
-                                style: dateButtonStyle,
+                                style: AppButtonStyles.baseButtonStyle,
                               ),
 
                               if (projectsAsync != null)
                                 ...projectsAsync.map((project) {
                                   return DropdownMenuEntry<String?>(
-                                    style: dateButtonStyle,
+                                    style: AppButtonStyles.baseButtonStyle,
                                     value: project.id,
                                     label: project.name,
                                     labelWidget: Row(
@@ -405,7 +460,10 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                       child: Container(
                         //width: double.infinity,
                         child: DropdownMenu(
-                          initialSelection: TaskStatus.notStarted,
+                          onSelected: (v) => setState(() {
+                            _taskStatus = v ?? _taskStatus;
+                          }),
+                          initialSelection: _taskStatus,
                           width: MediaQuery.of(context).size.width / 2,
                           menuStyle: MenuStyle(
                             backgroundColor: WidgetStateProperty.all(
@@ -430,7 +488,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                               return DropdownMenuEntry(
                                 value: e,
                                 label: e.name,
-                                style: dateButtonStyle,
+                                style: AppButtonStyles.baseButtonStyle,
                               );
                             }),
                           ],
@@ -439,46 +497,33 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                SizedBox(height: AppMargins.md),
                 Row(
                   children: [
                     Expanded(
-                      child: OutlinedButton(
-                        style: dateButtonStyle,
-
-                        onPressed: () async {
-                          final selected = await showDatePicker(
-                            context: context,
-                            initialDate: DateTime.now(),
-                            firstDate: DateTime(2000),
-                            lastDate: DateTime(2040),
-                          );
-                          if (selected != null) {
-                            setState(() => _dueDate = selected);
-                          }
-                        },
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              _dueDate == null
-                                  ? 'Choose date'
-                                  : formatDate(_dueDate!),
-                              style: AppTypography.codeLabel.copyWith(
-                                color: Colors.white,
-                              ),
-                            ),
-                            // Spacer(),
-                            const Icon(Icons.calendar_today, size: 16),
-                          ],
-                        ),
+                      child: PillSwitcher(
+                        options: ["TASK", "EVENT"],
+                        onSelectionChanged: (typeId) {},
                       ),
                     ),
-                    const SizedBox(width: 12),
+                  ],
+                ),
+                SizedBox(height: AppMargins.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _datePickButton(
+                        label: "Due date",
+                        date: _dueDate,
+                        onStartsAtChange: (selected) =>
+                            setState(() => _dueDate = selected),
+                      ),
+                    ),
+                    SizedBox(width: AppMargins.sm),
+
                     Expanded(
                       child: OutlinedButton(
-                        style: dateButtonStyle,
+                        style: AppButtonStyles.baseButtonStyle,
                         onPressed: () {},
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -494,6 +539,29 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                             const Icon(Icons.flag),
                           ],
                         ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: AppMargins.md),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: _datePickButton(
+                        label: "Starts at",
+                        date: _startsAt,
+                        onStartsAtChange: (selected) =>
+                            setState(() => _startsAt = selected),
+                      ),
+                    ),
+                    SizedBox(width: AppMargins.sm),
+                    Expanded(
+                      child: _datePickButton(
+                        label: "Ends at",
+                        date: _endsAt,
+                        onStartsAtChange: (selected) =>
+                            setState(() => _endsAt = selected),
                       ),
                     ),
                   ],
