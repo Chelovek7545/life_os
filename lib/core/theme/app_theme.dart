@@ -7,6 +7,8 @@ import 'app_colors.dart';
 class AppTheme {
   static ThemeData get darkTheme {
     return ThemeData(
+      //Чтобы были одинаковые отступы и т.д
+      visualDensity: VisualDensity.standard,
       brightness: Brightness.dark,
       //scaffoldBackgroundColor: AppColors.scaffoldBackgroundColor,
       primaryColor: AppColors.primary,
