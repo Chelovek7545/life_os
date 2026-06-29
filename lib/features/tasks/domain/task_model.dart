@@ -16,7 +16,7 @@ class Task {
     required this.status,
     required this.createdAt,
 
-    this.updatedAt,
+    required this.updatedAt,
 
     this.startsAt,
     this.endsAt,
@@ -34,7 +34,7 @@ class Task {
   final TaskStatus status;
 
   final DateTime createdAt;
-  final DateTime? updatedAt;
+  final DateTime updatedAt;
 
   final DateTime? startsAt;
   final DateTime? endsAt;
@@ -55,6 +55,8 @@ class Task {
       description: '',
       status: TaskStatus.open,
       createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+
       timerSeconds: 0,
       effortWeight: 0.0,
       tags: const [],

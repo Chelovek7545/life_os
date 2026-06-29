@@ -566,7 +566,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: AppMargins.lg),
                 // Opacity(
                 //   opacity: midProgress,
                 //   child: ElevatedButton(
@@ -581,10 +581,207 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                 //     ),
                 //   ),
                 // ),
+                BaseContainer(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Status',
+                            style: AppTypography.codeLabel.copyWith(
+                              color: Colors.white,
+                            ),
+                          ),
+
+                          DropdownMenu<String>(
+                            // 1. Настройка текста внутри меню
+                            textStyle: AppTypography.bodySm,
+
+                            // 2. Настройка цвета стрелочки (как на image_adb2e3.png, она имеет оттенок primary)
+                            trailingIcon: const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: AppColors.primary,
+                            ),
+                            selectedTrailingIcon: const Icon(
+                              Icons.keyboard_arrow_up_rounded,
+                              color: AppColors.primary,
+                            ),
+
+                            // 3. Стилизация самой плашки (поля ввода)
+                            inputDecorationTheme:
+                                AppButtonStyles.baseInputDecoration,
+                            // 4. Стилизация выпадающего списка (всплывающего окна)
+                            menuStyle: MenuStyle(
+                              backgroundColor: WidgetStateProperty.all(
+                                AppColors.surfaceContainer,
+                              ),
+                              shape: WidgetStateProperty.all(
+                                RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                            ),
+
+                            // Данные (для примера)
+                            //initialValue: 'System Core v2',
+                            dropdownMenuEntries: const [
+                              DropdownMenuEntry(
+                                value: 'System Core v1',
+                                label: 'System Core v1',
+                              ),
+                              DropdownMenuEntry(
+                                value: 'System Core v2',
+                                label: 'System Core v2',
+                              ),
+                              DropdownMenuEntry(
+                                value: 'System Core v3',
+                                label: 'System Core v3',
+                              ),
+                            ],
+                            onSelected: (String? value) {
+                              // Обработка выбора
+                            },
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: AppMargins.sm),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Projects',
+                            style: AppTypography.codeLabel.copyWith(
+                              color: Colors.white,
+                            ),
+                          ),
+
+                          DropdownMenu<String>(
+                            // 1. Настройка текста внутри меню
+                            textStyle: AppTypography.bodySm,
+
+                            // 2. Настройка цвета стрелочки (как на image_adb2e3.png, она имеет оттенок primary)
+                            trailingIcon: const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: AppColors.primary,
+                            ),
+                            selectedTrailingIcon: const Icon(
+                              Icons.keyboard_arrow_up_rounded,
+                              color: AppColors.primary,
+                            ),
+
+                            // 3. Стилизация самой плашки (поля ввода)
+                            inputDecorationTheme:
+                                AppButtonStyles.baseInputDecoration,
+                            // 4. Стилизация выпадающего списка (всплывающего окна)
+                            menuStyle: MenuStyle(
+                              backgroundColor: WidgetStateProperty.all(
+                                AppColors.surfaceContainer,
+                              ),
+                              shape: WidgetStateProperty.all(
+                                RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                            ),
+
+                            // Данные (для примера)
+                            //initialValue: 'System Core v2',
+                            dropdownMenuEntries: const [
+                              DropdownMenuEntry(
+                                value: 'System Core v1',
+                                label: 'System Core v1',
+                              ),
+                              DropdownMenuEntry(
+                                value: 'System Core v2',
+                                label: 'System Core v2',
+                              ),
+                              DropdownMenuEntry(
+                                value: 'System Core v3',
+                                label: 'System Core v3',
+                              ),
+                            ],
+                            onSelected: (String? value) {
+                              // Обработка выбора
+                            },
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: AppMargins.sm),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'DueDate',
+                              style: AppTypography.codeLabel.copyWith(
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+
+                          Expanded(
+                            child: TextButton(
+                              //style: ,
+
+                              onPressed: () async {
+                                final selected = await showDatePicker(
+                                  context: context,
+                                  initialDate: _dueDate ?? DateTime.now(),
+                                  firstDate: DateTime(2000),
+                                  lastDate: DateTime(2040),
+                                );
+                                if (selected != null) {
+                                  //onStartsAtChange(selected);
+                                }
+                              },
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceAround,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    
+                                    _dueDate == null ? "Choose" : formatDate(_dueDate!),
+                                    style: AppTypography.codeLabel.copyWith(
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                  // Spacer(),
+                                  const Icon(Icons.calendar_today, size: 16),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
       ],
+    );
+  }
+}
+
+class BaseContainer extends StatelessWidget {
+  const BaseContainer({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.borderGlass, width: 1),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      padding: EdgeInsets.all(AppSpacing.xl),
+      child: child,
     );
   }
 }

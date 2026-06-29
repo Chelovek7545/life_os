@@ -64,9 +64,9 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
   late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
     'updated_at',
     aliasedName,
-    true,
+    false,
     type: DriftSqlType.dateTime,
-    requiredDuringInsert: false,
+    requiredDuringInsert: true,
   );
   static const VerificationMeta _startsAtMeta = const VerificationMeta(
     'startsAt',
@@ -233,6 +233,8 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
         _updatedAtMeta,
         updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
       );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
     }
     if (data.containsKey('starts_at')) {
       context.handle(
@@ -328,7 +330,7 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
-      ),
+      )!,
       startsAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}starts_at'],
@@ -383,7 +385,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
   final String description;
   final TaskStatus status;
   final DateTime createdAt;
-  final DateTime? updatedAt;
+  final DateTime updatedAt;
   final DateTime? startsAt;
   final DateTime? endsAt;
   final DateTime? dueDate;
@@ -399,7 +401,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
     required this.description,
     required this.status,
     required this.createdAt,
-    this.updatedAt,
+    required this.updatedAt,
     this.startsAt,
     this.endsAt,
     this.dueDate,
@@ -420,9 +422,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
       map['status'] = Variable<int>($TasksTable.$converterstatus.toSql(status));
     }
     map['created_at'] = Variable<DateTime>(createdAt);
-    if (!nullToAbsent || updatedAt != null) {
-      map['updated_at'] = Variable<DateTime>(updatedAt);
-    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || startsAt != null) {
       map['starts_at'] = Variable<DateTime>(startsAt);
     }
@@ -454,9 +454,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
       description: Value(description),
       status: Value(status),
       createdAt: Value(createdAt),
-      updatedAt: updatedAt == null && nullToAbsent
-          ? const Value.absent()
-          : Value(updatedAt),
+      updatedAt: Value(updatedAt),
       startsAt: startsAt == null && nullToAbsent
           ? const Value.absent()
           : Value(startsAt),
@@ -494,7 +492,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
         serializer.fromJson<int>(json['status']),
       ),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
-      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       startsAt: serializer.fromJson<DateTime?>(json['startsAt']),
       endsAt: serializer.fromJson<DateTime?>(json['endsAt']),
       dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
@@ -517,7 +515,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
         $TasksTable.$converterstatus.toJson(status),
       ),
       'createdAt': serializer.toJson<DateTime>(createdAt),
-      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'startsAt': serializer.toJson<DateTime?>(startsAt),
       'endsAt': serializer.toJson<DateTime?>(endsAt),
       'dueDate': serializer.toJson<DateTime?>(dueDate),
@@ -536,7 +534,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
     String? description,
     TaskStatus? status,
     DateTime? createdAt,
-    Value<DateTime?> updatedAt = const Value.absent(),
+    DateTime? updatedAt,
     Value<DateTime?> startsAt = const Value.absent(),
     Value<DateTime?> endsAt = const Value.absent(),
     Value<DateTime?> dueDate = const Value.absent(),
@@ -552,7 +550,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
     description: description ?? this.description,
     status: status ?? this.status,
     createdAt: createdAt ?? this.createdAt,
-    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
     startsAt: startsAt.present ? startsAt.value : this.startsAt,
     endsAt: endsAt.present ? endsAt.value : this.endsAt,
     dueDate: dueDate.present ? dueDate.value : this.dueDate,
@@ -656,7 +654,7 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
   final Value<String> description;
   final Value<TaskStatus> status;
   final Value<DateTime> createdAt;
-  final Value<DateTime?> updatedAt;
+  final Value<DateTime> updatedAt;
   final Value<DateTime?> startsAt;
   final Value<DateTime?> endsAt;
   final Value<DateTime?> dueDate;
@@ -691,7 +689,7 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
     required String description,
     required TaskStatus status,
     required DateTime createdAt,
-    this.updatedAt = const Value.absent(),
+    required DateTime updatedAt,
     this.startsAt = const Value.absent(),
     this.endsAt = const Value.absent(),
     this.dueDate = const Value.absent(),
@@ -706,7 +704,8 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
        title = Value(title),
        description = Value(description),
        status = Value(status),
-       createdAt = Value(createdAt);
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
   static Insertable<TaskModel> custom({
     Expression<String>? id,
     Expression<String>? title,
@@ -751,7 +750,7 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
     Value<String>? description,
     Value<TaskStatus>? status,
     Value<DateTime>? createdAt,
-    Value<DateTime?>? updatedAt,
+    Value<DateTime>? updatedAt,
     Value<DateTime?>? startsAt,
     Value<DateTime?>? endsAt,
     Value<DateTime?>? dueDate,
@@ -1886,7 +1885,7 @@ typedef $$TasksTableCreateCompanionBuilder =
       required String description,
       required TaskStatus status,
       required DateTime createdAt,
-      Value<DateTime?> updatedAt,
+      required DateTime updatedAt,
       Value<DateTime?> startsAt,
       Value<DateTime?> endsAt,
       Value<DateTime?> dueDate,
@@ -1905,7 +1904,7 @@ typedef $$TasksTableUpdateCompanionBuilder =
       Value<String> description,
       Value<TaskStatus> status,
       Value<DateTime> createdAt,
-      Value<DateTime?> updatedAt,
+      Value<DateTime> updatedAt,
       Value<DateTime?> startsAt,
       Value<DateTime?> endsAt,
       Value<DateTime?> dueDate,
@@ -2255,7 +2254,7 @@ class $$TasksTableTableManager
                 Value<String> description = const Value.absent(),
                 Value<TaskStatus> status = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
-                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> startsAt = const Value.absent(),
                 Value<DateTime?> endsAt = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
@@ -2291,7 +2290,7 @@ class $$TasksTableTableManager
                 required String description,
                 required TaskStatus status,
                 required DateTime createdAt,
-                Value<DateTime?> updatedAt = const Value.absent(),
+                required DateTime updatedAt,
                 Value<DateTime?> startsAt = const Value.absent(),
                 Value<DateTime?> endsAt = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),

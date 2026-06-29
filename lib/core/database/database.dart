@@ -16,7 +16,7 @@ class Tasks extends Table {
   TextColumn get description => text()();
   IntColumn get status => intEnum<TaskStatus>()(); // enum как int
   DateTimeColumn get createdAt => dateTime()();
-  DateTimeColumn get updatedAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
 
   //Если нужен Event
   DateTimeColumn get startsAt => dateTime().nullable()();

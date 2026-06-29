@@ -1,4 +1,5 @@
 // models/project_model.dart
+import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:uuid/uuid.dart';
 
 class Project {
@@ -9,6 +10,8 @@ class Project {
   final DateTime createdAt;
   final DateTime updatedAt;
   final bool isArchived;
+  final String? goalId;
+
 
   Project({
     required this.id,
@@ -17,6 +20,7 @@ class Project {
     required this.color,
     required this.createdAt,
     required this.updatedAt,
+    this.goalId,
     this.isArchived = false,
   });
 
@@ -24,6 +28,7 @@ class Project {
   factory Project.create({
     required String name,
     String description = '',
+    String goalId = '',
     String color = '#4A90D9',
   }) {
     final now = DateTime.now();
@@ -46,6 +51,7 @@ class Project {
     String? color,
     DateTime? createdAt,
     DateTime? updatedAt,
+    Wrapped<String?>? goalId,
     bool? isArchived,
   }) {
     return Project(
@@ -56,6 +62,8 @@ class Project {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isArchived: isArchived ?? this.isArchived,
+      goalId: goalId != null ? goalId.value : this.goalId,
+
     );
   }
 
