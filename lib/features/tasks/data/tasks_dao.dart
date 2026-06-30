@@ -133,6 +133,34 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
     });
   }
 
+  Stream<List<Task>> watchTasksForProject(String projectId) {
+    final query = select(tasks).join([
+      leftOuterJoin(taskTagEntries, taskTagEntries.taskId.equalsExp(tasks.id)),
+      leftOuterJoin(tags, tags.id.equalsExp(taskTagEntries.tagId)),
+    ])
+      ..where(tasks.projectId.equals(projectId));
+
+    return query.watch().map((rows) {
+      final Map<TaskModel, List<TagModel>> grouped = {};
+
+      for (final row in rows) {
+        final task = row.readTable(tasks);
+        final tag = row.readTableOrNull(tags);
+
+        final list = grouped.putIfAbsent(task, () => []);
+        if (tag != null) {
+          list.add(tag);
+        }
+      }
+
+      return grouped.entries.map((entry) {
+        return entry.key.toDomain(
+          tags: entry.value.map((e) => e.toDomain()).toList(),
+        );
+      }).toList();
+    });
+  }
+
   // =============== UPDATE ===============
 
   Future<bool> updateTaskWithTags(TasksCompanion taskCompanion, List<String> tagNames) async {

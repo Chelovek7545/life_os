@@ -63,7 +63,7 @@ late final ProjectsDao projectsDao;
     tasksViewModel = TasksViewModel(tasksRepository, taskWithPrjct, projectsRepository);
     tasksViewModel.initialize();
     
-    projectViewModel = ProjectsViewModel(projectsRepository);
+    projectViewModel = ProjectsViewModel(repository: projectsRepository, taskRepo: tasksRepository);
     projectViewModel.initialize();
     // moodViewModel = MoodViewModel(moodRepository, AiMoodAnalyzer(apiClient));
     // aiCoachViewModel = AiCoachViewModel(aiRepository);

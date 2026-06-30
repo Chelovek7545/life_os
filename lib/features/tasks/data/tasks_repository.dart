@@ -20,6 +20,7 @@ class TasksRepository {
 
   Stream<List<Task>> watchTasks() => _dao.watchAllTasksWithTags();
 
+  Stream<List<Task>> watchTasksForProject(String projectId) => _dao.watchTasksForProject(projectId);
 
   Future<Task?> getById(String id) => _dao.getById(id).then((v) => v?.toDomain());
 
