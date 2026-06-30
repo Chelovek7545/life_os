@@ -518,7 +518,7 @@ class _ProjectCardState extends State<_ProjectCard> {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            'SYSTEM CHECKPOINT MODULES:',
+                            'TASKS:',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
@@ -611,7 +611,7 @@ class _ProjectCardState extends State<_ProjectCard> {
                                           ),
                                           const SizedBox(width: 8),
                                           Text(
-                                            done ? 'STABLE' : 'PENDING',
+                                            done ? 'DONE' : 'PENDING',
                                             style: theme.textTheme.bodySmall
                                                 ?.copyWith(
                                                   color: theme

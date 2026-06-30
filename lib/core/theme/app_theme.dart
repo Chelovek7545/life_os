@@ -12,30 +12,29 @@ class AppTheme {
       brightness: Brightness.dark,
       //scaffoldBackgroundColor: AppColors.scaffoldBackgroundColor,
       primaryColor: AppColors.primary,
-      colorScheme: ColorScheme.fromSeed(
-          seedColor: AppColors.primaryContainer,
-          brightness: Brightness.dark
-        ).copyWith(
-        primary: AppColors.primary,
-        onPrimary: Colors.white,
-        primaryContainer: AppColors.primaryContainer,
-        onPrimaryContainer: Colors.white,
-        secondary: AppColors.secondary,
+      colorScheme:
+          ColorScheme.fromSeed(
+            seedColor: AppColors.primaryContainer,
+            brightness: Brightness.dark,
+          ).copyWith(
+            primary: AppColors.primary,
+            onPrimary: Colors.white,
+            primaryContainer: AppColors.primaryContainer,
+            onPrimaryContainer: Colors.white,
+            secondary: AppColors.secondary,
 
-        surface: AppColors.surface,
-        surfaceBright: AppColors.surfaceBright,
-        surfaceDim: AppColors.surfaceDim,
-        onSurface: AppColors.onSurface,
-        onSurfaceVariant: AppColors.onSurfaceVariant,
+            surface: AppColors.surface,
+            surfaceBright: AppColors.surfaceBright,
+            surfaceDim: AppColors.surfaceDim,
+            onSurface: AppColors.onSurface,
+            onSurfaceVariant: AppColors.onSurfaceVariant,
 
-        surfaceContainerHigh: AppColors.surfaceContainerHigh,
-        surfaceContainerLow: AppColors.surfaceContainerLow,
-        
-        outline: AppColors.inputBorderGlass,
-        outlineVariant: AppColors.borderGlass
-      
+            surfaceContainerHigh: AppColors.surfaceContainerHigh,
+            surfaceContainerLow: AppColors.surfaceContainerLow,
 
-      ),
+            outline: AppColors.inputBorderGlass,
+            outlineVariant: AppColors.borderGlass,
+          ),
       // Настройка глобального текстового филда под стиль Glass
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -53,7 +52,6 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.primaryContainer),
         ),
-        
       ),
       cardTheme: CardThemeData(
         color: AppColors.surfaceContainerLow,
@@ -74,13 +72,16 @@ class AppTheme {
           textStyle: AppTypography.codeLabel,
         ),
       ),
+
       textTheme: TextTheme(
         displayLarge: AppTypography.displayXL,
-        headlineLarge: Platform.isAndroid ? AppTypography.headlineLgMobile : AppTypography.headlineLg,
+        headlineLarge: Platform.isAndroid
+            ? AppTypography.headlineLgMobile
+            : AppTypography.headlineLg,
         bodyMedium: AppTypography.bodyMd,
         bodySmall: AppTypography.bodySm,
-        labelMedium: AppTypography.codeLabel
-      )
+        labelMedium: AppTypography.codeLabel,
+      ),
     );
   }
 }

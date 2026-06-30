@@ -22,6 +22,29 @@ class AppButtonStyles {
     backgroundColor: AppColors.primaryContainer,
   );
 
+    static ButtonStyle menuButtonStyle({Color bgColor = AppColors.surfaceContainerHigh}) =>
+      OutlinedButton.styleFrom(
+        minimumSize: const Size(0, 0), // Убираем минимальный размер
+        // Максимальный размер (опционально)
+        maximumSize: const Size(double.infinity, double.infinity),
+
+        // Tap target size
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+
+        backgroundColor: bgColor.withAlpha(10),
+        // foregroundColor: Colors.white,
+        side: BorderSide(color: bgColor.withAlpha(200), width: 1.2),
+        shape: RoundedRectangleBorder( borderRadius: BorderRadius.circular(AppRadius.md)),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.lg,
+        ),
+      ).copyWith(
+        overlayColor: WidgetStatePropertyAll(Colors.white.withOpacity(0.06)),
+        iconColor: const WidgetStatePropertyAll(Color(0xFFFFB39B)),
+      );
+  
+  
   static ButtonStyle get baseButtonStyle =>
       OutlinedButton.styleFrom(
         minimumSize: const Size(0, 0), // Убираем минимальный размер

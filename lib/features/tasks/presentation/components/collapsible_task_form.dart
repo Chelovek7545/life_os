@@ -4,6 +4,7 @@ import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
+import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
@@ -404,14 +405,14 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                             initialSelection: _selectedProjectId,
                             menuStyle: MenuStyle(
                               backgroundColor: WidgetStateProperty.all(
-                                AppColors.borderGlass,
+                                AppColors.surfaceContainerLow,
                               ),
 
                               elevation: WidgetStateProperty.all(8),
                               shape: WidgetStateProperty.all(
                                 RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(
-                                    AppRadius.xl,
+                                    AppRadius.lg,
                                   ),
                                 ),
                               ),
@@ -427,18 +428,19 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                               DropdownMenuEntry<String?>(
                                 label: "No project",
                                 value: null,
-                                style: AppButtonStyles.baseButtonStyle,
+                                style: AppButtonStyles.menuButtonStyle(),
                               ),
 
                               if (projectsAsync != null)
                                 ...projectsAsync.map((project) {
                                   return DropdownMenuEntry<String?>(
-                                    style: AppButtonStyles.baseButtonStyle,
+                                    style: AppButtonStyles.menuButtonStyle(bgColor: parseHexColor(project.color)),
                                     value: project.id,
                                     label: project.name,
                                     labelWidget: Row(
                                       children: [
-                                        const Icon(Icons.circle, size: 12),
+                                        Icon(Icons.circle, size: 12
+                                        , color: parseHexColor(project.color),),
                                         const SizedBox(width: 8),
                                         Text(project.name),
                                       ],
@@ -467,7 +469,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                           width: MediaQuery.of(context).size.width / 2,
                           menuStyle: MenuStyle(
                             backgroundColor: WidgetStateProperty.all(
-                              AppColors.borderGlass,
+                              AppColors.surfaceContainerLow,
                             ),
 
                             elevation: WidgetStateProperty.all(8),
@@ -488,7 +490,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                               return DropdownMenuEntry(
                                 value: e,
                                 label: e.name,
-                                style: AppButtonStyles.baseButtonStyle,
+                                style: AppButtonStyles.menuButtonStyle(),
                               );
                             }),
                           ],
