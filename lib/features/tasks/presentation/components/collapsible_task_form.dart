@@ -3,9 +3,11 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
+import 'package:life_os/core/ui/date_pick_button.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/core/utils/wrapped.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
@@ -307,40 +309,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     );
   }
 
-  Widget _datePickButton({
-    required String label,
-    DateTime? date,
-    required Function(DateTime newDate) onStartsAtChange,
-  }) {
-    return OutlinedButton(
-      style: AppButtonStyles.baseButtonStyle,
-
-      onPressed: () async {
-        final selected = await showDatePicker(
-          context: context,
-          initialDate: date ?? DateTime.now(),
-          firstDate: DateTime(2000),
-          lastDate: DateTime(2040),
-        );
-        if (selected != null) {
-          onStartsAtChange(selected);
-        }
-      },
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            date == null ? label : formatDate(date),
-            style: AppTypography.codeLabel.copyWith(color: Colors.white),
-          ),
-          // Spacer(),
-          const Icon(Icons.calendar_today, size: 16),
-        ],
-      ),
-    );
-  }
-
+  
   Widget _buildFormContent(double midProgress, double maxProgress) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -514,7 +483,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                 Row(
                   children: [
                     Expanded(
-                      child: _datePickButton(
+                      child: datePickButton(
+                        context,
                         label: "Due date",
                         date: _dueDate,
                         onStartsAtChange: (selected) =>
@@ -550,7 +520,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                 Row(
                   children: [
                     Expanded(
-                      child: _datePickButton(
+                      child: datePickButton(
+                        context,
                         label: "Starts at",
                         date: _startsAt,
                         onStartsAtChange: (selected) =>
@@ -559,7 +530,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                     ),
                     SizedBox(width: AppMargins.sm),
                     Expanded(
-                      child: _datePickButton(
+                      child: datePickButton(
+                        context,
                         label: "Ends at",
                         date: _endsAt,
                         onStartsAtChange: (selected) =>

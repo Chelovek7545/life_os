@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
+import 'package:life_os/core/ui/date_pick_button.dart';
 import 'package:life_os/core/utils/color_format.dart';
+import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/core/utils/wrapped.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
-import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/projects/presentation/projects_state.dart';
 import 'package:life_os/features/projects/presentation/projects_view_model.dart';
@@ -38,13 +40,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
         child: _EditProjectCard(
-          onSave: (name, description, color) {
+          onSave: (name, description, color, dueDate) {
             widget.viewModel.addProjects(
               Project.create(
                 name: name,
                 description: description,
                 color: color,
-              ),
+              ).copyWith(dueDate: Wrapped(dueDate)),
             );
             setState(() => _isCreating = false);
           },
@@ -91,38 +93,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                         const Center(child: CircularProgressIndicator()),
                     error: (e) => Center(child: Text(e)),
                     loaded: (projects, _, _) {
-                      final bool isCreating = _isCreating;
-
-                      // if (projects.isEmpty && !isCreating) {
-                      //   return ListView(
-                      //     padding: const EdgeInsets.symmetric(vertical: 8),
-                      //     children: [
-                      //       Align(
-                      //         alignment: Alignment.center,
-                      //         child: ElevatedButton(
-                      //           onPressed: () {
-                      //             setState(() => _isCreating = true);
-                      //           },
-                      //           style: AppButtonStyles.saveButton.copyWith(
-                      //             padding: const WidgetStatePropertyAll(
-                      //               EdgeInsets.all(AppSpacing.xl),
-                      //             ),
-                      //           ),
-                      //           child: const Text(
-                      //             'New project',
-                      //             style: TextStyle(
-                      //               fontSize: 16,
-                      //               fontWeight: FontWeight.bold,
-                      //             ),
-                      //           ),
-                      //         ),
-                      //       ),
-                      //     ],
-                      //   );
-                      //}
-
-                      final itemCount = projects.length + 1; 
-                      //(projects.isNotEmpty ?  (isCreating ? 1 : 0) : 1);
+                      final itemCount = projects.length + 1;
 
                       return ListView.separated(
                         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -185,14 +156,14 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                           }
 
                           final projectIndex = index - 1;
-                              // isCreating ? index - 1 :
-                              // index;
                           final project = projects[projectIndex];
+                          print(projects[projectIndex].dueDate);
 
                           return _ProjectCard(
                             title: project.name,
                             description: project.description,
                             color: parseHexColor(project.color),
+                            dueDate: project.dueDate,
                             project: project,
                             viewModel: widget.viewModel,
                           );
@@ -212,7 +183,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 
 // Карточка с полями ввода параметров проекта
 class _EditProjectCard extends StatefulWidget {
-  final Function(String name, String description, String color) onSave;
+  final Function(
+    String name,
+    String description,
+    String color,
+    DateTime? dueDate,
+  )
+  onSave;
   final VoidCallback onCancel;
 
   const _EditProjectCard({required this.onSave, required this.onCancel});
@@ -226,6 +203,7 @@ class _EditProjectCardState extends State<_EditProjectCard> {
   final _nameController = TextEditingController();
   final _descController = TextEditingController();
   String _selectedColor = '#4A90D9';
+  DateTime? _dueDate;
 
   // A quick palette of preset hex colors for your Life OS style
   final List<String> _colorPalette = [
@@ -357,7 +335,19 @@ class _EditProjectCardState extends State<_EditProjectCard> {
                   },
                 ),
               ),
-              const SizedBox(height: 32),
+                            SizedBox(height: AppSpacing.lg),
+
+              SizedBox(
+                width: 200,
+                child: datePickButton(
+                  context,
+                  label: _dueDate == null ? "Due date" : formatDate(_dueDate!),
+                  onStartsAtChange: (d) => setState(() {
+                    _dueDate = d;
+                  }),
+                ),
+              ),
+              SizedBox(height: AppSpacing.lg),
 
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -380,6 +370,7 @@ class _EditProjectCardState extends State<_EditProjectCard> {
                           _nameController.text,
                           _descController.text,
                           _selectedColor,
+                          _dueDate,
                         );
                       }
                     },
@@ -408,12 +399,15 @@ class _ProjectCard extends StatefulWidget {
   final Project project;
   final ProjectsViewModel viewModel;
 
+  final DateTime? dueDate;
+
   const _ProjectCard({
     required this.title,
     required this.description,
     required this.color,
     required this.project,
     required this.viewModel,
+    this.dueDate,
   });
 
   @override
@@ -465,7 +459,7 @@ class _ProjectCardState extends State<_ProjectCard> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            'PROJECT',
+                            "Due date${widget.dueDate != null ? ': ${formatDate(widget.dueDate!)}'  : ''}",
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: AppColors.primaryContainer,
                             ),

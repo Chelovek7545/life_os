@@ -45,6 +45,8 @@ class Projects extends Table {
   //TextColumn get color => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+  DateTimeColumn get dueDate => dateTime().nullable()();
+
   //IntColumn get status => integer().withDefault(const Constant(0))();
   TextColumn get goalId => text().nullable()();
   BoolColumn get isArchived => boolean().withDefault(const Constant(false))();

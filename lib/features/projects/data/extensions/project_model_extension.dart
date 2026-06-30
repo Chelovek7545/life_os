@@ -12,6 +12,7 @@ extension ProjectDataToDomain on ProjectModel {
       color: color,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      dueDate: dueDate,
       isArchived: isArchived,
     );
   }
@@ -28,6 +29,7 @@ extension ProjectToDrift on Project {
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       isArchived: Value(isArchived),
+      dueDate: Value(dueDate)
     );
   }
 }

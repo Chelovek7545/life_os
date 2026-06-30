@@ -1,12 +1,9 @@
+import 'package:life_os/core/utils/wrapped.dart';
 import 'package:uuid/uuid.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
 
 enum TaskStatus { notStarted, inProgress, done, open }
 
-class Wrapped<T> {
-  final T value;
-  const Wrapped(this.value);
-}
 
 class Task {
   const Task({

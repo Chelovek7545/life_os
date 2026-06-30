@@ -1,5 +1,5 @@
 // models/project_model.dart
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:life_os/core/utils/wrapped.dart';
 import 'package:uuid/uuid.dart';
 
 class Project {
@@ -9,6 +9,7 @@ class Project {
   final String color;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final DateTime? dueDate;
   final bool isArchived;
   final String? goalId;
 
@@ -20,6 +21,9 @@ class Project {
     required this.color,
     required this.createdAt,
     required this.updatedAt,
+
+    this.dueDate,
+
     this.goalId,
     this.isArchived = false,
   });
@@ -51,6 +55,7 @@ class Project {
     String? color,
     DateTime? createdAt,
     DateTime? updatedAt,
+    Wrapped<DateTime?>? dueDate,
     Wrapped<String?>? goalId,
     bool? isArchived,
   }) {
@@ -61,6 +66,8 @@ class Project {
       color: color ?? this.color,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      dueDate: dueDate != null ? dueDate.value : this.dueDate,
+
       isArchived: isArchived ?? this.isArchived,
       goalId: goalId != null ? goalId.value : this.goalId,
 
