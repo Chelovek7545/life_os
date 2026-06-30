@@ -69,13 +69,11 @@ class ProjectsViewModel {
   }
 
   Future<void> _emitUiState() async {
-    if (_projects.isEmpty) {
-      _uiStateController.add(ProjectsEmpty());
-      return;
-    }
-
     _uiStateController.add(
-      ProjectsLoaded(curProject: _projects[0], projects: _projects),
+      ProjectsLoaded(
+        curProject: _projects.isNotEmpty ? _projects.first : null,
+        projects: _projects,
+      ),
     );
   }
 

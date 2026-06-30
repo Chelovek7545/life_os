@@ -40,7 +40,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         child: _EditProjectCard(
           onSave: (name, description, color) {
             widget.viewModel.addProjects(
-              Project.create(name: name, description: description, color: color,),
+              Project.create(
+                name: name,
+                description: description,
+                color: color,
+              ),
             );
             setState(() => _isCreating = false);
           },
@@ -61,43 +65,16 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       body: Padding(
         padding: const EdgeInsets.all(8.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  setState(() => _isCreating = true);
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryContainer,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text(
-                  'New project',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
             Text(
               'Projects & Routines',
-              style: theme.textTheme.headlineSmall?.copyWith(
+              style: theme.textTheme.displaySmall?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: theme.colorScheme.onSurface,
               ),
             ),
-            const SizedBox(height: 14),
-            Text(
-              'Organize your ongoing projects and repeatable routines in one place.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+
             const SizedBox(height: 24),
 
             Expanded(
@@ -112,35 +89,104 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                   return snapshot.data!.when(
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
-                    empty: (_) {
-                      return Column(
-                        children: [
-                          if (_isCreating) _buildCreateProjectForm(),
-
-                          _buildEmptyState(),
-                        ],
-                      );
-                    },
                     error: (e) => Center(child: Text(e)),
                     loaded: (projects, _, _) {
                       final bool isCreating = _isCreating;
 
-                      if (projects.isEmpty && !isCreating) {
-                        return _buildEmptyState();
-                      }
+                      // if (projects.isEmpty && !isCreating) {
+                      //   return ListView(
+                      //     padding: const EdgeInsets.symmetric(vertical: 8),
+                      //     children: [
+                      //       Align(
+                      //         alignment: Alignment.center,
+                      //         child: ElevatedButton(
+                      //           onPressed: () {
+                      //             setState(() => _isCreating = true);
+                      //           },
+                      //           style: AppButtonStyles.saveButton.copyWith(
+                      //             padding: const WidgetStatePropertyAll(
+                      //               EdgeInsets.all(AppSpacing.xl),
+                      //             ),
+                      //           ),
+                      //           child: const Text(
+                      //             'New project',
+                      //             style: TextStyle(
+                      //               fontSize: 16,
+                      //               fontWeight: FontWeight.bold,
+                      //             ),
+                      //           ),
+                      //         ),
+                      //       ),
+                      //     ],
+                      //   );
+                      //}
 
-                      final itemCount = projects.length + (isCreating ? 1 : 0);
+                      final itemCount = projects.length + 1; 
+                      //(projects.isNotEmpty ?  (isCreating ? 1 : 0) : 1);
 
                       return ListView.separated(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         itemCount: itemCount,
                         separatorBuilder: (_, _) => const SizedBox(height: 10),
                         itemBuilder: (context, index) {
-                          if (isCreating && index == 0) {
-                            return _buildCreateProjectForm();
+                          if (index == 0) {
+                            return AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 400),
+                              reverseDuration: const Duration(
+                                milliseconds: 300,
+                              ),
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeInCubic,
+                              transitionBuilder: (child, animation) {
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: SizeTransition(
+                                    sizeFactor: animation,
+                                    //axisAlignment: -1.0,
+                                    child: child,
+                                  ),
+                                );
+                              },
+                              child: _isCreating
+                                  ? SizedBox(
+                                      key: const ValueKey('project_form'),
+                                      width: double.infinity,
+                                      child: _buildCreateProjectForm(),
+                                    )
+                                  : SizedBox(
+                                      key: const ValueKey('project_button'),
+                                      width: double.infinity,
+                                      child: Align(
+                                        alignment: Alignment.center,
+                                        child: ElevatedButton(
+                                          onPressed: () {
+                                            setState(() => _isCreating = true);
+                                          },
+                                          style: AppButtonStyles.saveButton
+                                              .copyWith(
+                                                padding:
+                                                    const WidgetStatePropertyAll(
+                                                      EdgeInsets.all(
+                                                        AppSpacing.xl,
+                                                      ),
+                                                    ),
+                                              ),
+                                          child: const Text(
+                                            'New project',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                            );
                           }
 
-                          final projectIndex = isCreating ? index - 1 : index;
+                          final projectIndex = index - 1;
+                              // isCreating ? index - 1 :
+                              // index;
                           final project = projects[projectIndex];
 
                           return _ProjectCard(
@@ -333,7 +379,7 @@ class _EditProjectCardState extends State<_EditProjectCard> {
                         widget.onSave(
                           _nameController.text,
                           _descController.text,
-                          _selectedColor
+                          _selectedColor,
                         );
                       }
                     },
@@ -405,6 +451,7 @@ class _ProjectCardState extends State<_ProjectCard> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -418,7 +465,7 @@ class _ProjectCardState extends State<_ProjectCard> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            'PROJECT BLOC',
+                            'PROJECT',
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: AppColors.primaryContainer,
                             ),
