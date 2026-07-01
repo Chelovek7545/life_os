@@ -69,7 +69,7 @@ class SlidingNavBar extends StatelessWidget {
   static const items = [
     (Icons.bolt_rounded, 'PULSE'),
     (Icons.format_list_bulleted_rounded, 'TASKS'),
-    (Icons.grid_view_rounded, 'PROJECTS'),
+    (Icons.hub_outlined, 'PROJECTS'),
     (Icons.menu_book_rounded, 'LIBRARY'),
     //(Icons.gps_fixed_rounded, 'Goals'),
   ];
