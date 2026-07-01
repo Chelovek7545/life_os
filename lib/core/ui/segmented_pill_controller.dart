@@ -31,7 +31,7 @@ class _SegmentedPillControlState extends State<SegmentedPillControl> {
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
+        color: AppColors.surfaceContainer,
         borderRadius: BorderRadius.circular(9999),
         border: Border.all(color: AppColors.borderGlass),
       ),

@@ -22,13 +22,31 @@ class ProjectsScreen extends StatefulWidget {
 
 class _ProjectsScreenState extends State<ProjectsScreen> {
   bool _isCreating = false;
+  Project? _editingProject;
+
+  void _startEditingProject({Project? project}) {
+    setState(() {
+      _isCreating = true;
+      _editingProject = project;
+    });
+  }
+
+  void _closeProjectForm() {
+    setState(() {
+      _isCreating = false;
+      _editingProject = null;
+    });
+  }
 
   Widget _buildEmptyState() {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('No tasks available yet.', style: TextStyle(fontSize: 16)),
+          const Text(
+            'No projects available yet.',
+            style: TextStyle(fontSize: 16),
+          ),
         ],
       ),
     );
@@ -40,19 +58,29 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 760),
         child: _EditProjectCard(
-          onSave: (name, description, color, dueDate) {
-            widget.viewModel.addProjects(
-              Project.create(
-                name: name,
-                description: description,
-                color: color,
-              ).copyWith(dueDate: Wrapped(dueDate)),
-            );
-            setState(() => _isCreating = false);
+          project: _editingProject,
+          onSave: (name, description, color, dueDate) async {
+            if (_editingProject != null) {
+              await widget.viewModel.updateProject(
+                _editingProject!.copyWith(
+                  name: name,
+                  description: description,
+                  color: color,
+                  dueDate: Wrapped(dueDate),
+                ),
+              );
+            } else {
+              await widget.viewModel.addProjects(
+                Project.create(
+                  name: name,
+                  description: description,
+                  color: color,
+                ).copyWith(dueDate: Wrapped(dueDate)),
+              );
+            }
+            _closeProjectForm();
           },
-          onCancel: () {
-            setState(() => _isCreating = false);
-          },
+          onCancel: _closeProjectForm,
         ),
       ),
     );
@@ -70,7 +98,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
-              'Projects & Routines',
+              'Projects',
               style: theme.textTheme.displaySmall?.copyWith(
                 fontWeight: FontWeight.bold,
                 color: theme.colorScheme.onSurface,
@@ -93,7 +121,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                         const Center(child: CircularProgressIndicator()),
                     error: (e) => Center(child: Text(e)),
                     loaded: (projects, _, _) {
-                      final itemCount = projects.length + 1;
+                      final itemCount =
+                          (projects.isEmpty && _isCreating == false)
+                          ? 2
+                          : projects.length + 1;
 
                       return ListView.separated(
                         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -131,7 +162,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                                         alignment: Alignment.center,
                                         child: ElevatedButton(
                                           onPressed: () {
-                                            setState(() => _isCreating = true);
+                                            _startEditingProject();
                                           },
                                           style: AppButtonStyles.saveButton
                                               .copyWith(
@@ -154,10 +185,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                                     ),
                             );
                           }
-
+                          if (projects.isEmpty && index == 1) {
+                            return _buildEmptyState();
+                          }
                           final projectIndex = index - 1;
                           final project = projects[projectIndex];
-                          print(projects[projectIndex].dueDate);
 
                           return _ProjectCard(
                             title: project.name,
@@ -166,6 +198,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                             dueDate: project.dueDate,
                             project: project,
                             viewModel: widget.viewModel,
+                            onEditRequested: () =>
+                                _startEditingProject(project: project),
                           );
                         },
                       );
@@ -191,8 +225,13 @@ class _EditProjectCard extends StatefulWidget {
   )
   onSave;
   final VoidCallback onCancel;
+  final Project? project;
 
-  const _EditProjectCard({required this.onSave, required this.onCancel});
+  const _EditProjectCard({
+    required this.onSave,
+    required this.onCancel,
+    this.project,
+  });
 
   @override
   State<_EditProjectCard> createState() => _EditProjectCardState();
@@ -200,8 +239,8 @@ class _EditProjectCard extends StatefulWidget {
 
 class _EditProjectCardState extends State<_EditProjectCard> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _descController = TextEditingController();
+  late final TextEditingController _nameController;
+  late final TextEditingController _descController;
   String _selectedColor = '#4A90D9';
   DateTime? _dueDate;
 
@@ -217,6 +256,28 @@ class _EditProjectCardState extends State<_EditProjectCard> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.project?.name ?? '');
+    _descController = TextEditingController(
+      text: widget.project?.description ?? '',
+    );
+    _selectedColor = widget.project?.color ?? '#4A90D9';
+    _dueDate = widget.project?.dueDate;
+  }
+
+  @override
+  void didUpdateWidget(covariant _EditProjectCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.project != widget.project) {
+      _nameController.text = widget.project?.name ?? '';
+      _descController.text = widget.project?.description ?? '';
+      _selectedColor = widget.project?.color ?? '#4A90D9';
+      _dueDate = widget.project?.dueDate;
+    }
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _descController.dispose();
@@ -227,11 +288,15 @@ class _EditProjectCardState extends State<_EditProjectCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Card(
+    return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 2,
-      color: Theme.of(context).colorScheme.surface,
+
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(color: AppColors.borderGlass),
+      ),
+
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -241,7 +306,10 @@ class _EditProjectCardState extends State<_EditProjectCard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'CONFIGURE NEW PROJECT'.toUpperCase(),
+                (widget.project == null
+                        ? 'CONFIGURE NEW PROJECT'
+                        : 'EDIT PROJECT')
+                    .toUpperCase(),
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   color: AppColors.primaryContainer,
@@ -260,7 +328,7 @@ class _EditProjectCardState extends State<_EditProjectCard> {
                   filled: true,
                   fillColor: Theme.of(
                     context,
-                  ).colorScheme.surfaceVariant.withOpacity(0.04),
+                  ).colorScheme.surfaceVariant.withValues(alpha: 0.04),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 14,
@@ -282,7 +350,7 @@ class _EditProjectCardState extends State<_EditProjectCard> {
                   filled: true,
                   fillColor: Theme.of(
                     context,
-                  ).colorScheme.surfaceVariant.withOpacity(0.02),
+                  ).colorScheme.surfaceVariant.withValues(alpha: 0.02),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 12,
@@ -317,7 +385,7 @@ class _EditProjectCardState extends State<_EditProjectCard> {
                               : null,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
+                              color: Colors.black.withValues(alpha: 0.1),
                               blurRadius: 4,
                               offset: const Offset(0, 2),
                             ),
@@ -335,7 +403,7 @@ class _EditProjectCardState extends State<_EditProjectCard> {
                   },
                 ),
               ),
-                            SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
 
               SizedBox(
                 width: 200,
@@ -361,7 +429,7 @@ class _EditProjectCardState extends State<_EditProjectCard> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: AppSpacing.md),
                   ElevatedButton(
                     style: AppButtonStyles.saveButton,
                     onPressed: () {
@@ -375,7 +443,9 @@ class _EditProjectCardState extends State<_EditProjectCard> {
                       }
                     },
                     child: Text(
-                      'INITIALIZE PROJECT',
+                      widget.project == null
+                          ? 'INITIALIZE PROJECT'
+                          : 'SAVE CHANGES',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -398,6 +468,7 @@ class _ProjectCard extends StatefulWidget {
   final Color color;
   final Project project;
   final ProjectsViewModel viewModel;
+  final VoidCallback onEditRequested;
 
   final DateTime? dueDate;
 
@@ -407,6 +478,7 @@ class _ProjectCard extends StatefulWidget {
     required this.color,
     required this.project,
     required this.viewModel,
+    required this.onEditRequested,
     this.dueDate,
   });
 
@@ -453,13 +525,13 @@ class _ProjectCardState extends State<_ProjectCard> {
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceVariant.withOpacity(
-                              0.06,
+                            color: theme.colorScheme.surfaceVariant.withValues(
+                              alpha: 0.06,
                             ),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
-                            "Due date${widget.dueDate != null ? ': ${formatDate(widget.dueDate!)}'  : ''}",
+                            "Due date${widget.dueDate != null ? ': ${formatDate(widget.dueDate!)}' : ''}",
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: AppColors.primaryContainer,
                             ),
@@ -477,9 +549,10 @@ class _ProjectCardState extends State<_ProjectCard> {
                                 color: widget.color,
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.surfaceVariant.withOpacity(0.5),
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .surfaceVariant
+                                      .withValues(alpha: 0.5),
                                 ),
                               ),
                             ),
@@ -509,13 +582,19 @@ class _ProjectCardState extends State<_ProjectCard> {
                         const SizedBox(height: 8),
                         PopupMenuButton<String>(
                           onSelected: (v) async {
-                            if (v == 'delete') {
+                            if (v == 'edit') {
+                              widget.onEditRequested();
+                            } else if (v == 'delete') {
                               await widget.viewModel.deleteProject(
                                 widget.project.id,
                               );
                             }
                           },
                           itemBuilder: (_) => [
+                            const PopupMenuItem(
+                              value: 'edit',
+                              child: Text('Edit'),
+                            ),
                             const PopupMenuItem(
                               value: 'delete',
                               child: Text('Delete'),
@@ -600,7 +679,7 @@ class _ProjectCardState extends State<_ProjectCard> {
                                       ),
                                       decoration: BoxDecoration(
                                         color: theme.colorScheme.surface
-                                            .withOpacity(0.02),
+                                            .withValues(alpha: 0.02),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Row(
@@ -616,7 +695,7 @@ class _ProjectCardState extends State<_ProjectCard> {
                                                 color: theme
                                                     .colorScheme
                                                     .onSurfaceVariant
-                                                    .withOpacity(0.2),
+                                                    .withValues(alpha: 0.2),
                                               ),
                                               borderRadius:
                                                   BorderRadius.circular(6),
@@ -639,7 +718,9 @@ class _ProjectCardState extends State<_ProjectCard> {
                                                         ? theme
                                                               .colorScheme
                                                               .onSurface
-                                                              .withOpacity(0.7)
+                                                              .withValues(
+                                                                alpha: 0.7,
+                                                              )
                                                         : theme
                                                               .colorScheme
                                                               .onSurface,

@@ -33,20 +33,14 @@ class ProjectsViewModel {
     );
   }
 
-
-
   //FOR TASKS
-  Stream<List<Task>> watchTaskByProject(String projectId){
+  Stream<List<Task>> watchTaskByProject(String projectId) {
     return _taskRepo.watchTasksForProject(projectId);
-  } 
+  }
 
   Future<void> updateTask(Task task) async {
     await _taskRepo.updateTask(task);
-  }  
-
-
-
-
+  }
 
   Future<void> addProjects(Project project) async {
     // final projectWithId = project.copyWith(
@@ -55,6 +49,11 @@ class ProjectsViewModel {
     //   updatedAt: DateTime.now(),
     // );
     await _repository.addProject(project);
+    await _emitUiState();
+  }
+
+  Future<void> updateProject(Project project) async {
+    await _repository.updateProject(project);
     await _emitUiState();
   }
 

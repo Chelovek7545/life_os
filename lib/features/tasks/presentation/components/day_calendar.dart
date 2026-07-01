@@ -44,7 +44,7 @@ class DateTimelineCard extends StatelessWidget {
               : null,
           color: isSelected
               ? Color.fromARGB(255, 255, 105, 35)
-              : AppColors.surfaceContainerLow,
+              : AppColors.surfaceContainer,
           // boxShadow: isSelected
           //     ? [
           //         BoxShadow(

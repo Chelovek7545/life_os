@@ -13,9 +13,9 @@ class AppColors {
   // === ИЕРАРХИЯ КОНТЕЙНЕРОВ (От темного к светлому) ===
   // Нижний слой контейнеров (чуть светлее surface)
   static const Color surfaceContainerLowest = Color(0xFF101010);
-  static const Color surfaceContainerLow = Color(0xFF1C1A1A);
+  static const Color surfaceContainer = Color(0xFF1C1A1A);
   // Средний слой (карточки, инпуты)
-  static const Color surfaceContainer = Color(0xFF252222);
+  static const Color surfaceContainerLow = Color(0xFF151414);
   // Верхний слой (диалоги, всплывающие меню)
   static const Color surfaceContainerHigh = Color(0xFF312E2E);
 
