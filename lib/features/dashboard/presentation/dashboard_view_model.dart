@@ -23,6 +23,7 @@ class DashboardViewModel {
       );
   Stream<DashboardScreenState> get state => _uiStateController.stream;
 
+
   void initialize() {
     // Используем Rx.combineLatest2, чтобы пересчитывать отфильтрованный список задач
     // каждый раз, когда меняются либо данные в БД, либо пользователь переключает вкладку (день/неделя/месяц)
@@ -65,3 +66,4 @@ class DashboardViewModel {
     _uiStateController.close();
   }
 }
+

@@ -1,5 +1,7 @@
 // core/di/dependency_container.dart
+import 'package:life_os/core/ai/ai_service.dart';
 import 'package:life_os/core/database/database.dart';
+import 'package:life_os/features/dashboard/presentation/ai_assistant_view_model.dart';
 import 'package:life_os/features/dashboard/presentation/dashboard_view_model.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
@@ -19,7 +21,8 @@ class DependencyContainer {
 late final ProjectsDao projectsDao;  
   // late final ApiClient apiClient;
   // late final SyncService syncService;
-  
+  late final AIService gemmaAiService;
+
   late final TasksRepository tasksRepository;
   // late final MoodRepository moodRepository;
   late final ProjectsRepository projectsRepository;
@@ -29,6 +32,7 @@ late final ProjectsDao projectsDao;
   // late final MoodViewModel moodViewModel;
   late final ProjectsViewModel projectViewModel;
   late final DashboardViewModel dashboardViewModel;
+  late final AIAssistantViewModel aiAssistantViewModel;
   // late final AiCoachViewModel aiCoachViewModel;
   late final GetTasksWithProjectsUseCase taskWithPrjct; 
 
@@ -36,6 +40,8 @@ late final ProjectsDao projectsDao;
     database = AppDatabase();
     tasksDAO = TasksDao(database);
     projectsDao = ProjectsDao(database);
+    gemmaAiService = GemmaAIService();
+
     // apiClient = ApiClient('https://api.motivator.com');
     // syncService = SyncService(apiClient, localDatabase);
     tasksRepository = TasksRepository(
@@ -56,7 +62,7 @@ late final ProjectsDao projectsDao;
     
 
 
-    // aiRepository = AiCoachRepository(apiClient);
+    aiAssistantViewModel = AIAssistantViewModel(gemmaAiService);
     dashboardViewModel = DashboardViewModel(tasksRepository, projectsRepository);
     dashboardViewModel.initialize();
 
