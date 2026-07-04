@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_gemma/flutter_gemma.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
@@ -6,6 +9,7 @@ import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/features/dashboard/presentation/ai_assistant_view_model.dart';
 import 'package:life_os/features/dashboard/presentation/chat_input_field.dart';
+import 'package:life_os/features/dashboard/presentation/chat_streaming_text.dart';
 import 'package:life_os/features/dashboard/presentation/dashboard_view_model.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -55,7 +59,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     try {
       await widget.aiViewModel.installModel(options: installOptions);
-      
     } catch (e) {
       debugPrint('Error installing model: $e');
     }
@@ -174,14 +177,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   return ListView.separated(
                     controller: _scrollController,
                     itemCount: messages.length,
-                    separatorBuilder: (_, _) =>
-                        SizedBox(height: AppSpacing.sm),
+                    separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
                     itemBuilder: (_, index) {
+                      final isLast = index == messages.length - 1;
                       final msg = messages[index];
+
+                      final isStreamingNow =
+                          isLast &&
+                          !msg.isUser &&
+                          widget.aiViewModel.generating;
+
                       if (msg.isUser) {
                         return _buildUserMessage(msg.text);
                       } else {
-                        return _buildBotMessage(msg.text);
+                        return _buildBotMessage(
+                          msg.text,
+                          messageTextStream:
+                              widget.aiViewModel.messageTextStream,
+                          isStreamingNow: isStreamingNow,
+                        );
                       }
                     },
                   );
@@ -242,7 +256,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-Widget _buildBotMessage(String text) {
+Widget _buildBotMessage(
+  String text, {
+  //String time,
+  required Stream<String> messageTextStream,
+  required bool isStreamingNow,
+}) {
   final textStyle = const TextStyle(
     color: Colors.white,
     height: 1.4,
@@ -274,7 +293,26 @@ Widget _buildBotMessage(String text) {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.white10),
           ),
-          child: Text(text, style: textStyle),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              isStreamingNow
+                  ? GemmaStreamFadeInText(
+                      tokenStream: messageTextStream,
+                      textStyle: textStyle,
+                      fadeDuration: const Duration(milliseconds: 250),
+                    )
+                  : Text(text, style: textStyle),
+              // const SizedBox(height: 8),
+              // Align(
+              //   alignment: Alignment.bottomRight,
+              //   child: Text(
+              //     time,
+              //     style: const TextStyle(color: Colors.white30, fontSize: 12),
+              //   ),
+              // ),
+            ],
+          ),
         ),
       ),
     ],
@@ -367,6 +405,72 @@ class _Card extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class GemmaStreamFadeInText extends StatefulWidget {
+  final Stream<String> tokenStream;
+  final TextStyle textStyle;
+  final Duration fadeDuration;
+
+  const GemmaStreamFadeInText({
+    super.key,
+    required this.tokenStream,
+    required this.textStyle,
+    this.fadeDuration = const Duration(milliseconds: 250),
+  });
+
+  @override
+  State<GemmaStreamFadeInText> createState() => _GemmaStreamFadeInTextState();
+}
+
+class _GemmaStreamFadeInTextState extends State<GemmaStreamFadeInText>
+    with SingleTickerProviderStateMixin {
+  final List<AnimatedToken> _tokens = [];
+  StreamSubscription<String>? _subscription;
+  late final Ticker _ticker;
+  Duration _currentElapsed = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker((Duration elapsed) {
+      _currentElapsed = elapsed;
+      final hasActiveAnimations = _tokens.any(
+        (t) => t.getOpacity(_currentElapsed, widget.fadeDuration) < 1.0,
+      );
+      if (hasActiveAnimations) {
+        setState(() {});
+      }
+    });
+    _ticker.start();
+
+    _subscription = widget.tokenStream.listen((token) {
+      if (token.isNotEmpty) {
+        setState(() {
+          _tokens.add(
+            AnimatedToken(text: token, startDuration: _currentElapsed),
+          );
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    _ticker.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamingCustomText(
+      tokens: _tokens,
+      currentElapsed: _currentElapsed,
+      textStyle: widget.textStyle,
+      fadeDuration: widget.fadeDuration,
     );
   }
 }
