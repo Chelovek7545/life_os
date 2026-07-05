@@ -187,6 +187,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           !msg.isUser &&
                           widget.aiViewModel.generating;
 
+                      // return _buildChatMessage(
+                      //   msg.isUser,
+                      //   msg,
+                      //   isStreamingNow,
+                      //   widget.aiViewModel.messageTextStream,
+                      // );
                       if (msg.isUser) {
                         return _buildUserMessage(msg.text);
                       } else {
@@ -269,6 +275,7 @@ Widget _buildBotMessage(
   );
 
   return Row(
+    mainAxisSize: MainAxisSize.min,
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Container(
@@ -285,35 +292,22 @@ Widget _buildBotMessage(
         ),
       ),
       const SizedBox(width: 12),
-      Expanded(
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.03),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white10),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              isStreamingNow
-                  ? GemmaStreamFadeInText(
-                      tokenStream: messageTextStream,
-                      textStyle: textStyle,
-                      fadeDuration: const Duration(milliseconds: 250),
-                    )
-                  : Text(text, style: textStyle),
-              // const SizedBox(height: 8),
-              // Align(
-              //   alignment: Alignment.bottomRight,
-              //   child: Text(
-              //     time,
-              //     style: const TextStyle(color: Colors.white30, fontSize: 12),
-              //   ),
-              // ),
-            ],
-          ),
+      AnimatedContainer(
+        margin: const EdgeInsets.all(8.0),
+        duration: Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.03),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white10),
         ),
+        child: isStreamingNow
+            ? GemmaStreamFadeInText(
+                tokenStream: messageTextStream,
+                textStyle: textStyle,
+                fadeDuration: const Duration(milliseconds: 250),
+              )
+            : Text(text, style: textStyle),
       ),
     ],
   );
@@ -324,7 +318,9 @@ Widget _buildUserMessage(String text) {
     crossAxisAlignment: CrossAxisAlignment.end,
     children: [
       const Expanded(child: SizedBox()),
-      Container(
+      AnimatedContainer(
+        duration: Duration(milliseconds: 200),
+
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: const BoxDecoration(
           color: Colors.deepOrange,
@@ -337,6 +333,7 @@ Widget _buildUserMessage(String text) {
         ),
         child: Text(
           text,
+          softWrap: true,
           style: const TextStyle(color: Colors.white, fontSize: 15),
         ),
       ),
@@ -355,6 +352,42 @@ Widget _buildUserMessage(String text) {
         ),
       ),
     ],
+  );
+}
+
+Widget _buildChatMessage(
+  bool isUser,
+  Message message,
+  bool isStreamingNow,
+  Stream<String> messageTextStream,
+) {
+  final textStyle = const TextStyle(
+    color: Colors.white,
+    height: 1.4,
+    fontSize: 15,
+  );
+  return Align(
+    alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+    child: AnimatedContainer(
+      duration: Duration(milliseconds: 200),
+      margin: const EdgeInsets.all(8.0),
+      padding: const EdgeInsets.all(12.0),
+      decoration: BoxDecoration(
+        color: isUser
+            ? const Color.fromARGB(255, 48, 48, 48)
+            : const Color.fromARGB(255, 255, 105, 5),
+        borderRadius: BorderRadius.circular(12.0),
+      ),
+      // ЕСЛИ СТРИМИМ: отдаем под капот CustomRenderObject с поддержкой стрима
+      // ИНАЧЕ: просто рендерим обычный готовый статический текст
+      child: isStreamingNow
+          ? GemmaStreamFadeInText(
+              tokenStream: messageTextStream,
+              textStyle: textStyle,
+              fadeDuration: const Duration(milliseconds: 250),
+            )
+          : Text(message.text, style: textStyle),
+    ),
   );
 }
 
