@@ -42,6 +42,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
+  bool _autoScroll = true;
 
   Future<void> _installModel() async {
     await requestStoragePermission();
@@ -64,12 +65,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final atBottom =
+        _scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 50;
+    if (atBottom != _autoScroll) {
+      setState(() => _autoScroll = atBottom);
+    }
+  }
+
+  void _scrollToBottom() {
+    setState(() {
+      _autoScroll = true;
+    });
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  void _scrollToBottomIfAuto() {
+    if (_autoScroll && _scrollController.hasClients) {
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    }
+  }
+
   void _sendMessage() {
     final text = _controller.text.trim();
     if (text.isNotEmpty && !widget.aiViewModel.generating) {
       widget.aiViewModel.sendMessage(text);
       _controller.clear();
     }
+    setState(() {
+      
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    widget.aiViewModel.messageTextStream.listen((t) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _scrollToBottomIfAuto(),
+      );
+    });
   }
 
   @override
@@ -160,52 +204,76 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             Expanded(
-              child: StreamBuilder<AiAssistantState>(
-                stream: widget.aiViewModel.state,
-                builder: (context, snapshot) {
-                  final messages = snapshot.data?.messages ?? [];
+              child: Stack(
+                children: [
+                  StreamBuilder<AiAssistantState>(
+                    stream: widget.aiViewModel.state,
+                    builder: (context, snapshot) {
+                      final messages = snapshot.data?.messages ?? [];
 
-                  if (messages.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'Начните диалог',
-                        style: TextStyle(color: Colors.white38),
-                      ),
-                    );
-                  }
-
-                  return ListView.separated(
-                    controller: _scrollController,
-                    itemCount: messages.length,
-                    separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-                    itemBuilder: (_, index) {
-                      final isLast = index == messages.length - 1;
-                      final msg = messages[index];
-
-                      final isStreamingNow =
-                          isLast &&
-                          !msg.isUser &&
-                          widget.aiViewModel.generating;
-
-                      // return _buildChatMessage(
-                      //   msg.isUser,
-                      //   msg,
-                      //   isStreamingNow,
-                      //   widget.aiViewModel.messageTextStream,
-                      // );
-                      if (msg.isUser) {
-                        return _buildUserMessage(msg.text);
-                      } else {
-                        return _buildBotMessage(
-                          msg.text,
-                          messageTextStream:
-                              widget.aiViewModel.messageTextStream,
-                          isStreamingNow: isStreamingNow,
+                      if (messages.isEmpty) {
+                        return const Center(
+                          child: Text(
+                            'Начните диалог',
+                            style: TextStyle(color: Colors.white38),
+                          ),
                         );
                       }
+
+                      return ListView.separated(
+                        controller: _scrollController,
+                        itemCount: messages.length,
+                        separatorBuilder: (_, _) =>
+                            SizedBox(height: AppSpacing.sm),
+                        itemBuilder: (_, index) {
+                          final isLast = index == messages.length - 1;
+                          final msg = messages[index];
+
+                          final isStreamingNow =
+                              isLast &&
+                              !msg.isUser &&
+                              widget.aiViewModel.generating;
+
+                          return _buildMessageBubble(
+                            isUser: msg.isUser,
+                            text: msg.text,
+                            isStreamingNow: isStreamingNow,
+                            messageTextStream:
+                                widget.aiViewModel.messageTextStream,
+                          );
+                        },
+                      );
                     },
-                  );
-                },
+                  ),
+                  if (!_autoScroll)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: GestureDetector(
+                        onTap: _scrollToBottom,
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.deepOrange,
+                            shape: BoxShape.circle,
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Colors.black26,
+                                blurRadius: 8,
+                                offset: Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.keyboard_arrow_down,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             _buildTextInputField(),
@@ -262,132 +330,93 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-Widget _buildBotMessage(
-  String text, {
-  //String time,
-  required Stream<String> messageTextStream,
-  required bool isStreamingNow,
+Widget _buildAvatar(IconData icon, Color iconColor, {Color? borderColor}) {
+  return Container(
+    width: 36,
+    height: 36,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      color: borderColor == null ? Colors.white.withOpacity(0.05) : null,
+      border: borderColor != null ? Border.all(color: borderColor) : null,
+    ),
+    child: Icon(icon, color: iconColor, size: 20),
+  );
+}
+
+Widget _buildMessageBubble({
+  required bool isUser,
+  required String text,
+  bool isStreamingNow = false,
+  Stream<String>? messageTextStream,
 }) {
-  final textStyle = const TextStyle(
+  const userTextStyle = TextStyle(color: Colors.white, fontSize: 15);
+  const botTextStyle = TextStyle(
     color: Colors.white,
     height: 1.4,
     fontSize: 15,
   );
 
-  return Row(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.deepOrange.withOpacity(0.5)),
-        ),
-        child: const Icon(
-          Icons.psychology_rounded,
-          color: Colors.deepOrange,
-          size: 20,
-        ),
-      ),
-      const SizedBox(width: 12),
-      AnimatedContainer(
-        margin: const EdgeInsets.all(8.0),
-        duration: Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.03),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white10),
-        ),
-        child: isStreamingNow
-            ? GemmaStreamFadeInText(
-                tokenStream: messageTextStream,
-                textStyle: textStyle,
-                fadeDuration: const Duration(milliseconds: 250),
-              )
-            : Text(text, style: textStyle),
-      ),
-    ],
-  );
-}
+  if (isUser) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        const SizedBox(width: 36), //Размер аватарки
 
-Widget _buildUserMessage(String text) {
+        Flexible(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            decoration: const BoxDecoration(
+              color: Colors.deepOrange,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+                bottomLeft: Radius.circular(16),
+                bottomRight: Radius.circular(4),
+              ),
+            ),
+            child: Text(text, softWrap: true, style: userTextStyle),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _buildAvatar(
+          Icons.person_outline_rounded,
+          Colors.white.withOpacity(0.5),
+        ),
+      ],
+    );
+  }
+
   return Row(
     crossAxisAlignment: CrossAxisAlignment.end,
     children: [
-      const Expanded(child: SizedBox()),
-      AnimatedContainer(
-        duration: Duration(milliseconds: 200),
-
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: const BoxDecoration(
-          color: Colors.deepOrange,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(16),
-            topRight: Radius.circular(16),
-            bottomLeft: Radius.circular(16),
-            bottomRight: Radius.circular(4),
-          ),
-        ),
-        child: Text(
-          text,
-          softWrap: true,
-          style: const TextStyle(color: Colors.white, fontSize: 15),
-        ),
+      _buildAvatar(
+        Icons.psychology_rounded,
+        Colors.deepOrange,
+        borderColor: Colors.deepOrange.withOpacity(0.5),
       ),
-      const SizedBox(width: 8),
-      Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.white.withOpacity(0.05),
-        ),
-        child: Icon(
-          Icons.person_outline_rounded,
-          color: Colors.white.withOpacity(0.5),
-          size: 20,
+      const SizedBox(width: 12),
+      Flexible(
+        child: AnimatedContainer(
+          margin: const EdgeInsets.all(8.0),
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.03),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white10),
+          ),
+          child: isStreamingNow && messageTextStream != null
+              ? GemmaStreamFadeInText(
+                  tokenStream: messageTextStream,
+                  textStyle: botTextStyle,
+                  fadeDuration: const Duration(milliseconds: 250),
+                )
+              : Text(text, style: botTextStyle),
         ),
       ),
     ],
-  );
-}
-
-Widget _buildChatMessage(
-  bool isUser,
-  Message message,
-  bool isStreamingNow,
-  Stream<String> messageTextStream,
-) {
-  final textStyle = const TextStyle(
-    color: Colors.white,
-    height: 1.4,
-    fontSize: 15,
-  );
-  return Align(
-    alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-    child: AnimatedContainer(
-      duration: Duration(milliseconds: 200),
-      margin: const EdgeInsets.all(8.0),
-      padding: const EdgeInsets.all(12.0),
-      decoration: BoxDecoration(
-        color: isUser
-            ? const Color.fromARGB(255, 48, 48, 48)
-            : const Color.fromARGB(255, 255, 105, 5),
-        borderRadius: BorderRadius.circular(12.0),
-      ),
-      // ЕСЛИ СТРИМИМ: отдаем под капот CustomRenderObject с поддержкой стрима
-      // ИНАЧЕ: просто рендерим обычный готовый статический текст
-      child: isStreamingNow
-          ? GemmaStreamFadeInText(
-              tokenStream: messageTextStream,
-              textStyle: textStyle,
-              fadeDuration: const Duration(milliseconds: 250),
-            )
-          : Text(message.text, style: textStyle),
-    ),
   );
 }
 
