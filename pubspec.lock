@@ -218,10 +218,10 @@ packages:
     dependency: "direct main"
     description:
       name: flutter_gemma
-      sha256: "211656c2dce34fc8f9a3f414a5ea556ed2357b5908602e8c6220b176cdd4140b"
+      sha256: "45685fd7a2344ab85c1c4642170d1a6fb55fcefcd96f1f263963cd122c15e1e7"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.0"
+    version: "1.2.1"
   flutter_gemma_litertlm:
     dependency: "direct main"
     description:

@@ -51,8 +51,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final installOptions = ModelInstallOptions(
       modelType: ModelType.gemma4,
       fileType: isAndroid ? ModelFileType.task : ModelFileType.litertlm,
-      source: r'/storage/emulated/0/Download/gemma3-1b-it-int4.task',
-      fromAsset: !isAndroid,
+      source: isAndroid
+          ? r'/storage/emulated/0/Download/gemma3-1b-it-int4.task'
+          : r"C:\Users\anzor\Downloads\gemma-4-E2B-it.litertlm",
+      fromAsset:
+          //!isAndroid
+          false,
       description: isAndroid
           ? 'Install task model from external storage'
           : 'Install bundled litertlm model from assets',
@@ -100,9 +104,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       widget.aiViewModel.sendMessage(text);
       _controller.clear();
     }
-    setState(() {
-      
-    });
+    setState(() {});
   }
 
   @override
@@ -192,92 +194,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Container(
         padding: EdgeInsets.all(AppSpacing.xl),
         height: 500,
-        child: Column(
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white12,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            Expanded(
-              child: Stack(
-                children: [
-                  StreamBuilder<AiAssistantState>(
-                    stream: widget.aiViewModel.state,
-                    builder: (context, snapshot) {
-                      final messages = snapshot.data?.messages ?? [];
+        child: StreamBuilder<AiAssistantState>(
+          stream: widget.aiViewModel.state,
+          builder: (context, snapshot) {
+            final messages = snapshot.data?.messages ?? [];
 
-                      if (messages.isEmpty) {
-                        return const Center(
+            return Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white12,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Expanded(
+                  child: Stack(
+                    children: [
+                      if (messages.isEmpty)
+                        Center(
                           child: Text(
                             'Начните диалог',
                             style: TextStyle(color: Colors.white38),
                           ),
-                        );
-                      }
+                        ),
+                      if (messages.isNotEmpty)
+                        ListView.separated(
+                          controller: _scrollController,
+                          itemCount: messages.length,
+                          separatorBuilder: (_, _) =>
+                              SizedBox(height: AppSpacing.sm),
+                          itemBuilder: (_, index) {
+                            final isLast = index == messages.length - 1;
+                            final msg = messages[index];
 
-                      return ListView.separated(
-                        controller: _scrollController,
-                        itemCount: messages.length,
-                        separatorBuilder: (_, _) =>
-                            SizedBox(height: AppSpacing.sm),
-                        itemBuilder: (_, index) {
-                          final isLast = index == messages.length - 1;
-                          final msg = messages[index];
+                            final isStreamingNow =
+                                isLast &&
+                                !msg.isUser &&
+                                widget.aiViewModel.generating;
+                            if (!isStreamingNow) {}
+                            return _buildMessageBubble(
+                              isUser: msg.isUser,
+                              text: msg.text,
+                              isStreamingNow: isStreamingNow,
+                              messageTextStream:
+                                  widget.aiViewModel.messageTextStream,
+                            );
+                          },
+                        ),
 
-                          final isStreamingNow =
-                              isLast &&
-                              !msg.isUser &&
-                              widget.aiViewModel.generating;
-
-                          return _buildMessageBubble(
-                            isUser: msg.isUser,
-                            text: msg.text,
-                            isStreamingNow: isStreamingNow,
-                            messageTextStream:
-                                widget.aiViewModel.messageTextStream,
-                          );
-                        },
-                      );
-                    },
-                  ),
-                  if (!_autoScroll)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: GestureDetector(
-                        onTap: _scrollToBottom,
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: Colors.deepOrange,
-                            shape: BoxShape.circle,
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black26,
-                                blurRadius: 8,
-                                offset: Offset(0, 2),
+                      if (!_autoScroll)
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: GestureDetector(
+                            onTap: _scrollToBottom,
+                            child: Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: Colors.deepOrange,
+                                shape: BoxShape.circle,
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Colors.black26,
+                                    blurRadius: 8,
+                                    offset: Offset(0, 2),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.keyboard_arrow_down,
-                            color: Colors.white,
-                            size: 22,
+                              child: const Icon(
+                                Icons.keyboard_arrow_down,
+                                color: Colors.white,
+                                size: 22,
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            _buildTextInputField(),
-          ],
+                    ],
+                  ),
+                ),
+                _buildTextInputField(),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -288,6 +290,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       controller: _controller,
       focusNode: _focusNode,
       enabled: true,
+
       isGenerating: widget.aiViewModel.generating,
       hintText: 'Задайте системный вопрос архитектору...',
       disabledHintText: 'Требуется инициализация ядра...',

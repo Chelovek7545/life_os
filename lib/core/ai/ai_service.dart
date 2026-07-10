@@ -66,7 +66,9 @@ class GemmaAIService implements AIService {
   @override
   Future<void> initialize() async {
     try {
-      _model = await FlutterGemma.getActiveModel(maxTokens: 2048);
+      _model = await FlutterGemma.getActiveModel(
+        preferredBackend: PreferredBackend.cpu,
+        maxTokens: 2048);
       _chat = await _model!.createChat(
         supportsFunctionCalls: true,
         tools: _tools,
