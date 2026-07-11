@@ -143,9 +143,9 @@ class TasksViewModel {
           DatePeriod.day => taskDay.isAtSameMomentAs(anchorDay),
           DatePeriod.week => isDateInSameWeek(taskDay, anchorDay),
           DatePeriod.month =>
-            task.dueDate!.year == filter.anchorDate.year &&
-                task.dueDate!.month == filter.anchorDate.month,
-          DatePeriod.year => task.dueDate!.year == filter.anchorDate.year,
+            task.startsAt!.year == filter.anchorDate.year &&
+                task.startsAt!.month == filter.anchorDate.month,
+          DatePeriod.year => task.startsAt!.year == filter.anchorDate.year,
         };
 
         if (!dateMatches) return false;

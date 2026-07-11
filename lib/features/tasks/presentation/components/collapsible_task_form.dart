@@ -444,6 +444,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
 
                           Flexible(
                             child: DropdownMenu(
+                              width: 180,
                               selectOnly: true,
                               onSelected: _onTaskStatusChange,
                               textStyle: AppTypography.bodySm,
@@ -504,16 +505,16 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                             child: StreamBuilder<List<Project>>(
                               stream: widget.projects,
                               builder: (_, snapshot) {
-                                if (snapshot.connectionState ==
-                                    ConnectionState.waiting) {
-                                  return const LinearProgressIndicator();
-                                }
+                                // if (snapshot.connectionState ==
+                                //     ConnectionState.waiting) {
+                                //   return Text("Waiting...");
+                                // }
                                 final projectsAsync = snapshot.data;
                                 return DropdownMenu<String?>(
                                   // 1. Настройка текста внутри меню
                                   textStyle: AppTypography.bodySm,
                                   hintText: "Choose project",
-
+                                  width: 180,
                                   // 2. Настройка цвета стрелочки (как на image_adb2e3.png, она имеет оттенок primary)
                                   trailingIcon: const Icon(
                                     Icons.keyboard_arrow_down_rounded,
@@ -569,7 +570,13 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                                                 ),
                                               ),
                                               const SizedBox(width: 8),
-                                              Text(project.name),
+                                              Flexible(
+                                                child: Text(
+                                                  project.name,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
                                             ],
                                           ),
                                         );
@@ -595,7 +602,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                             ),
                           ),
 
-                          Expanded(
+                          Container(
+                            width: 160,
                             child: TextButton(
                               style: TextButton.styleFrom(
                                 backgroundColor: AppColors.primary.withValues(

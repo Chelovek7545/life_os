@@ -4,15 +4,19 @@ import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/semantic_tag.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
+import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'glass_panel.dart'; // Из предыдущего шага
 
 class TaskCard extends StatelessWidget {
-  final String title;
-  final DateTime? dueDate;
   final String? projectTitle;
-  final List<Tag> tags;
-  final bool isCompleted;
+  
+  
+  // final String title;
+  // final DateTime? dueDate;
+  // final List<Tag> tags;
+  // final bool isCompleted;
   final bool isSelected;
+  final Task task;
   final VoidCallback? onTap;
   final VoidCallback? onCheckChanged;
   final VoidCallback? onSelected;
@@ -22,11 +26,12 @@ class TaskCard extends StatelessWidget {
 
   const TaskCard({
     Key? key,
-    required this.title,
-    required this.dueDate,
+    // required this.title,
+    // required this.dueDate,
     this.projectTitle,
-    required this.tags,
-    required this.isCompleted,
+    required this.task,
+    // required this.tags,
+    // required this.isCompleted,
     this.isSelected = false,
     this.onTap,
     this.onLongPress,
@@ -45,7 +50,7 @@ class TaskCard extends StatelessWidget {
       onTap: onTap,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 200),
-        opacity: isCompleted ? 0.5 : 1.0,
+        opacity: task.isCompleted ? 0.5 : 1.0,
         child: Container(
           // Настройка свечения overdue-glow или стандартных рамок
           decoration: BoxDecoration(
@@ -84,15 +89,15 @@ class TaskCard extends StatelessWidget {
                       height: 24,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: isCompleted ? AppColors.primaryContainer : Colors.transparent,
+                        color: task.isCompleted ? AppColors.primaryContainer : Colors.transparent,
                         border: Border.all(
-                          color: isCompleted
+                          color: task.isCompleted
                               ? AppColors.primaryContainer
                               : (isOverdue ? AppColors.primaryContainer : AppColors.borderGlass),
                           width: 2,
                         ),
                       ),
-                      child: isCompleted
+                      child: task.isCompleted
                           ? const Icon(Icons.check, size: 14, color: Colors.white)
                           : null,
                     ),
@@ -104,7 +109,7 @@ class TaskCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          title,
+                          task.title,
                           style: AppTypography.bodyMd.copyWith(
                             fontWeight: FontWeight.w600,
                             color: isOverdue ? AppColors.primaryContainer : Colors.white,
@@ -128,14 +133,14 @@ class TaskCard extends StatelessWidget {
                               color: isOverdue ? AppColors.primaryContainer : AppColors.onSurfaceVariant,
                             ),
                             const SizedBox(width: 4),
-                            if(dueDate != null)
+                            if(task.dueDate != null)
                             Text(
-                              formatDate(dueDate!),
+                              formatDate(task.dueDate!),
                               style: AppTypography.codeLabel.copyWith(
                                 color: isOverdue ? AppColors.primaryContainer : AppColors.onSurfaceVariant,
                               ),
                             ),
-                            if (tags.isNotEmpty) ...[
+                            if (task.tags.isNotEmpty) ...[
                               const SizedBox(width: 12),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -148,7 +153,7 @@ class TaskCard extends StatelessWidget {
                                 child: Wrap(
                             spacing: 12,
                             runSpacing: 8,
-                            children: tags
+                            children: task.tags
                                 .map(
                                   (link) => SemanticTag(
                                     label: link.name,

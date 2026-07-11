@@ -141,10 +141,11 @@ class _TasksScreenState extends State<TasksScreen> {
                                 itemBuilder: (context, index) {
                                   final item = items[index];
                                   return TaskCard(
-                                    tags: item.task.tags,
-                                    title: item.task.title,
-                                    dueDate: item.task.dueDate,
-                                    isCompleted: item.task.isCompleted,
+                                    task: item.task,
+                                    // tags: item.task.tags,
+                                    // title: item.task.title,
+                                    // dueDate: item.task.dueDate,
+                                    // isCompleted: item.task.isCompleted,
                                     onCheckChanged: () async {
                                       await widget.viewModel.toggleTask(
                                         item.task,
