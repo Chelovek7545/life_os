@@ -83,17 +83,18 @@ class AppButtonStyles {
     filled: true,
     fillColor: AppColors.surface, // Темный фон контейнера
     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-
+    hoverColor: AppColors.surfaceBright,
     // Настройка скругления и границ
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(AppRadius.lg), // Большое скругление
       borderSide: BorderSide(color: AppColors.surfaceBright, width: 1),
     ),
-    enabledBorder: InputBorder.none,
-    // OutlineInputBorder(
-    //   borderRadius: BorderRadius.circular(AppRadius.lg),
-    //   borderSide:  BorderSide(color: AppColors.borderGlass, width: 1),
-    // ),
+    enabledBorder: 
+    //InputBorder.none,
+    OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      borderSide:  BorderSide(color: Colors.transparent, width: 1),
+    ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(AppRadius.lg),
       // При фокусе можно подсветить границу цветом primary

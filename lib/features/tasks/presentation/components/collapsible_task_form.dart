@@ -123,6 +123,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     });
   }
 
+  //--------------------- Methods for fields ------------------------
   void _submitTask() {
     final title = _titleController.text.trim();
     final updatedTask = widget.task.copyWith(
@@ -148,6 +149,30 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     // setState(() {
     //   _currentHeight = _minHeight;
     // });
+  }
+
+  void _onProjectChange(String? newValue) {
+    setState(() {
+      _selectedProjectId = newValue;
+    });
+  }
+
+  void _onDueDateChange(selected) {
+    setState(() => _dueDate = selected);
+  }
+
+  void _onTaskStatusChange(TaskStatus? v) {
+    setState(() {
+      _taskStatus = v ?? _taskStatus;
+    });
+  }
+
+  void _onStartsAtChange(DateTime selected) {
+    setState(() => _startsAt = selected);
+  }
+
+  void _onEndsAtChange(DateTime selected) {
+    setState(() => _endsAt = selected);
   }
 
   @override
@@ -309,7 +334,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     );
   }
 
-  
   Widget _buildFormContent(double midProgress, double maxProgress) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -351,170 +375,18 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                     prefixIcon: const Icon(Icons.description),
                   ),
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: StreamBuilder<List<Project>>(
-                        stream: widget.projects,
-                        builder: (_, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const LinearProgressIndicator();
-                          }
-                          final projectsAsync = snapshot.data;
-                          return DropdownMenu<String?>(
-                            //textStyle: TextStyle(backgroundColor: AppColors.surfaceBright),
-                            // trailingIcon: Icon(
-                            //   Icons.arrow_drop_down_rounded,
-                            //   size: 40,
-                            // ),
-                            hintText: "Choose project",
-                            width: MediaQuery.of(context).size.width / 2,
-                            initialSelection: _selectedProjectId,
-                            menuStyle: MenuStyle(
-                              backgroundColor: WidgetStateProperty.all(
-                                AppColors.surfaceContainerLow,
-                              ),
+                // const SizedBox(height: 16),
 
-                              elevation: WidgetStateProperty.all(8),
-                              shape: WidgetStateProperty.all(
-                                RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(
-                                    AppRadius.lg,
-                                  ),
-                                ),
-                              ),
-                              // ТЕ САМЫЕ ОТСТУПЫ: задаем внутренние отступы для всего контейнера меню
-                              padding: WidgetStateProperty.all(
-                                EdgeInsets.all(
-                                  8,
-                                ), // Элементы внутри меню не будут прижаты к его краям
-                              ),
-                            ),
-
-                            dropdownMenuEntries: [
-                              DropdownMenuEntry<String?>(
-                                label: "No project",
-                                value: null,
-                                style: AppButtonStyles.menuButtonStyle(),
-                              ),
-
-                              if (projectsAsync != null)
-                                ...projectsAsync.map((project) {
-                                  return DropdownMenuEntry<String?>(
-                                    style: AppButtonStyles.menuButtonStyle(bgColor: parseHexColor(project.color)),
-                                    value: project.id,
-                                    label: project.name,
-                                    labelWidget: Row(
-                                      children: [
-                                        Icon(Icons.circle, size: 12
-                                        , color: parseHexColor(project.color),),
-                                        const SizedBox(width: 8),
-                                        Text(project.name),
-                                      ],
-                                    ),
-                                  );
-                                }),
-                            ],
-                            onSelected: (String? newValue) {
-                              setState(() {
-                                _selectedProjectId = newValue;
-                              });
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    SizedBox(width: 12),
-                    Expanded(
-                      child: Container(
-                        //width: double.infinity,
-                        child: DropdownMenu(
-                          onSelected: (v) => setState(() {
-                            _taskStatus = v ?? _taskStatus;
-                          }),
-                          initialSelection: _taskStatus,
-                          width: MediaQuery.of(context).size.width / 2,
-                          menuStyle: MenuStyle(
-                            backgroundColor: WidgetStateProperty.all(
-                              AppColors.surfaceContainerLow,
-                            ),
-
-                            elevation: WidgetStateProperty.all(8),
-                            shape: WidgetStateProperty.all(
-                              RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            // ТЕ САМЫЕ ОТСТУПЫ: задаем внутренние отступы для всего контейнера меню
-                            padding: WidgetStateProperty.all(
-                              EdgeInsets.all(
-                                8,
-                              ), // Элементы внутри меню не будут прижаты к его краям
-                            ),
-                          ),
-                          dropdownMenuEntries: [
-                            ...TaskStatus.values.map((e) {
-                              return DropdownMenuEntry(
-                                value: e,
-                                label: e.name,
-                                style: AppButtonStyles.menuButtonStyle(),
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: AppMargins.md),
-                Row(
-                  children: [
-                    Expanded(
-                      child: PillSwitcher(
-                        options: ["TASK", "EVENT"],
-                        onSelectionChanged: (typeId) {},
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: AppMargins.md),
-                Row(
-                  children: [
-                    Expanded(
-                      child: datePickButton(
-                        context,
-                        label: "Due date",
-                        date: _dueDate,
-                        onStartsAtChange: (selected) =>
-                            setState(() => _dueDate = selected),
-                      ),
-                    ),
-                    SizedBox(width: AppMargins.sm),
-
-                    Expanded(
-                      child: OutlinedButton(
-                        style: AppButtonStyles.baseButtonStyle,
-                        onPressed: () {},
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Priority',
-                              style: AppTypography.codeLabel.copyWith(
-                                color: Colors.white,
-                              ),
-                            ),
-
-                            const Icon(Icons.flag),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                // Row(
+                //   children: [
+                //     Expanded(
+                //       child: PillSwitcher(
+                //         options: ["TASK", "EVENT"],
+                //         onSelectionChanged: (typeId) {},
+                //       ),
+                //     ),
+                //   ],
+                // ),
                 SizedBox(height: AppMargins.md),
 
                 Row(
@@ -524,18 +396,19 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                         context,
                         label: "Starts at",
                         date: _startsAt,
-                        onStartsAtChange: (selected) =>
-                            setState(() => _startsAt = selected),
+                        onDateChange: _onStartsAtChange,
                       ),
                     ),
-                    SizedBox(width: AppMargins.sm),
+                    SizedBox(
+                      width: AppMargins.lg,
+                      child: Center(child: Text("-")),
+                    ),
                     Expanded(
                       child: datePickButton(
                         context,
                         label: "Ends at",
                         date: _endsAt,
-                        onStartsAtChange: (selected) =>
-                            setState(() => _endsAt = selected),
+                        onDateChange: _onEndsAtChange,
                       ),
                     ),
                   ],
@@ -569,54 +442,50 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                             ),
                           ),
 
-                          DropdownMenu<String>(
-                            // 1. Настройка текста внутри меню
-                            textStyle: AppTypography.bodySm,
-
-                            // 2. Настройка цвета стрелочки (как на image_adb2e3.png, она имеет оттенок primary)
-                            trailingIcon: const Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              color: AppColors.primary,
-                            ),
-                            selectedTrailingIcon: const Icon(
-                              Icons.keyboard_arrow_up_rounded,
-                              color: AppColors.primary,
-                            ),
-
-                            // 3. Стилизация самой плашки (поля ввода)
-                            inputDecorationTheme:
-                                AppButtonStyles.baseInputDecoration,
-                            // 4. Стилизация выпадающего списка (всплывающего окна)
-                            menuStyle: MenuStyle(
-                              backgroundColor: WidgetStateProperty.all(
-                                AppColors.surfaceContainer,
+                          Flexible(
+                            child: DropdownMenu(
+                              selectOnly: true,
+                              onSelected: _onTaskStatusChange,
+                              textStyle: AppTypography.bodySm,
+                              trailingIcon: const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: AppColors.primary,
                               ),
-                              shape: WidgetStateProperty.all(
-                                RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
+                              selectedTrailingIcon: const Icon(
+                                Icons.keyboard_arrow_up_rounded,
+                                color: AppColors.primary,
+                              ),
+                              initialSelection: _taskStatus,
+                              menuStyle: MenuStyle(
+                                backgroundColor: WidgetStateProperty.all(
+                                  AppColors.surfaceContainerLow,
+                                ),
+
+                                elevation: WidgetStateProperty.all(8),
+                                shape: WidgetStateProperty.all(
+                                  RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                ),
+                                // ТЕ САМЫЕ ОТСТУПЫ: задаем внутренние отступы для всего контейнера меню
+                                padding: WidgetStateProperty.all(
+                                  EdgeInsets.all(
+                                    8,
+                                  ), // Элементы внутри меню не будут прижаты к его краям
                                 ),
                               ),
+                              inputDecorationTheme:
+                                  AppButtonStyles.baseInputDecoration,
+                              dropdownMenuEntries: [
+                                ...TaskStatus.values.map((e) {
+                                  return DropdownMenuEntry(
+                                    value: e,
+                                    label: e.name,
+                                    //style: AppButtonStyles.menuButtonStyle(),
+                                  );
+                                }),
+                              ],
                             ),
-
-                            // Данные (для примера)
-                            //initialValue: 'System Core v2',
-                            dropdownMenuEntries: const [
-                              DropdownMenuEntry(
-                                value: 'System Core v1',
-                                label: 'System Core v1',
-                              ),
-                              DropdownMenuEntry(
-                                value: 'System Core v2',
-                                label: 'System Core v2',
-                              ),
-                              DropdownMenuEntry(
-                                value: 'System Core v3',
-                                label: 'System Core v3',
-                              ),
-                            ],
-                            onSelected: (String? value) {
-                              // Обработка выбора
-                            },
                           ),
                         ],
                       ),
@@ -631,54 +500,85 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                             ),
                           ),
 
-                          DropdownMenu<String>(
-                            // 1. Настройка текста внутри меню
-                            textStyle: AppTypography.bodySm,
+                          Flexible(
+                            child: StreamBuilder<List<Project>>(
+                              stream: widget.projects,
+                              builder: (_, snapshot) {
+                                if (snapshot.connectionState ==
+                                    ConnectionState.waiting) {
+                                  return const LinearProgressIndicator();
+                                }
+                                final projectsAsync = snapshot.data;
+                                return DropdownMenu<String?>(
+                                  // 1. Настройка текста внутри меню
+                                  textStyle: AppTypography.bodySm,
+                                  hintText: "Choose project",
 
-                            // 2. Настройка цвета стрелочки (как на image_adb2e3.png, она имеет оттенок primary)
-                            trailingIcon: const Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              color: AppColors.primary,
-                            ),
-                            selectedTrailingIcon: const Icon(
-                              Icons.keyboard_arrow_up_rounded,
-                              color: AppColors.primary,
-                            ),
+                                  // 2. Настройка цвета стрелочки (как на image_adb2e3.png, она имеет оттенок primary)
+                                  trailingIcon: const Icon(
+                                    Icons.keyboard_arrow_down_rounded,
+                                    color: AppColors.primary,
+                                  ),
+                                  selectedTrailingIcon: const Icon(
+                                    Icons.keyboard_arrow_up_rounded,
+                                    color: AppColors.primary,
+                                  ),
 
-                            // 3. Стилизация самой плашки (поля ввода)
-                            inputDecorationTheme:
-                                AppButtonStyles.baseInputDecoration,
-                            // 4. Стилизация выпадающего списка (всплывающего окна)
-                            menuStyle: MenuStyle(
-                              backgroundColor: WidgetStateProperty.all(
-                                AppColors.surfaceContainer,
-                              ),
-                              shape: WidgetStateProperty.all(
-                                RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                            ),
+                                  // 3. Стилизация самой плашки (поля ввода)
+                                  inputDecorationTheme:
+                                      AppButtonStyles.baseInputDecoration,
+                                  // 4. Стилизация выпадающего списка (всплывающего окна)
+                                  menuStyle: MenuStyle(
+                                    backgroundColor: WidgetStateProperty.all(
+                                      AppColors.surfaceContainer,
+                                    ),
+                                    shape: WidgetStateProperty.all(
+                                      RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                  ),
 
-                            // Данные (для примера)
-                            //initialValue: 'System Core v2',
-                            dropdownMenuEntries: const [
-                              DropdownMenuEntry(
-                                value: 'System Core v1',
-                                label: 'System Core v1',
-                              ),
-                              DropdownMenuEntry(
-                                value: 'System Core v2',
-                                label: 'System Core v2',
-                              ),
-                              DropdownMenuEntry(
-                                value: 'System Core v3',
-                                label: 'System Core v3',
-                              ),
-                            ],
-                            onSelected: (String? value) {
-                              // Обработка выбора
-                            },
+                                  // Данные (для примера)
+                                  //initialValue: 'System Core v2',
+                                  dropdownMenuEntries: [
+                                    DropdownMenuEntry<String?>(
+                                      label: "No project",
+                                      value: null,
+                                      style: AppButtonStyles.menuButtonStyle(),
+                                    ),
+
+                                    if (projectsAsync != null)
+                                      ...projectsAsync.map((project) {
+                                        return DropdownMenuEntry<String?>(
+                                          style:
+                                              AppButtonStyles.menuButtonStyle(
+                                                bgColor: parseHexColor(
+                                                  project.color,
+                                                ),
+                                              ),
+                                          value: project.id,
+                                          label: project.name,
+                                          labelWidget: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.circle,
+                                                size: 12,
+                                                color: parseHexColor(
+                                                  project.color,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(project.name),
+                                            ],
+                                          ),
+                                        );
+                                      }),
+                                  ],
+                                  onSelected: _onProjectChange,
+                                );
+                              },
+                            ),
                           ),
                         ],
                       ),
@@ -697,8 +597,12 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
 
                           Expanded(
                             child: TextButton(
-                              //style: ,
-
+                              style: TextButton.styleFrom(
+                                backgroundColor: AppColors.primary.withValues(
+                                  alpha: 0.05,
+                                ),
+                                overlayColor: AppColors.primary,
+                              ),
                               onPressed: () async {
                                 final selected = await showDatePicker(
                                   context: context,
@@ -707,7 +611,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                                   lastDate: DateTime(2040),
                                 );
                                 if (selected != null) {
-                                  //onStartsAtChange(selected);
+                                  _onDueDateChange(selected);
                                 }
                               },
                               child: Row(
@@ -716,8 +620,9 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   Text(
-                                    
-                                    _dueDate == null ? "Choose" : formatDate(_dueDate!),
+                                    _dueDate == null
+                                        ? "Choose"
+                                        : formatDate(_dueDate!),
                                     style: AppTypography.codeLabel.copyWith(
                                       color: AppColors.primary,
                                     ),

@@ -6,7 +6,7 @@ import 'package:life_os/core/utils/date_format.dart';
 Widget datePickButton(BuildContext context, {
     required String label,
     DateTime? date,
-    required Function(DateTime newDate) onStartsAtChange,
+    required Function(DateTime newDate) onDateChange,
   }) {
     return OutlinedButton(
       style: AppButtonStyles.baseButtonStyle,
@@ -19,7 +19,7 @@ Widget datePickButton(BuildContext context, {
           lastDate: DateTime(2040),
         );
         if (selected != null) {
-          onStartsAtChange(selected);
+          onDateChange(selected);
         }
       },
       child: Row(
