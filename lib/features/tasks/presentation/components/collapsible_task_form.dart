@@ -157,7 +157,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     });
   }
 
-  void _onDueDateChange(selected) {
+  void _onDueDateChange(DateTime? selected) {
     setState(() => _dueDate = selected);
   }
 
@@ -167,11 +167,11 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     });
   }
 
-  void _onStartsAtChange(DateTime selected) {
+  void _onStartsAtChange(DateTime? selected) {
     setState(() => _startsAt = selected);
   }
 
-  void _onEndsAtChange(DateTime selected) {
+  void _onEndsAtChange(DateTime? selected) {
     setState(() => _endsAt = selected);
   }
 
@@ -618,11 +618,12 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                                   firstDate: DateTime(2000),
                                   lastDate: DateTime(2040),
                                 );
-                                if (selected != null) {
+                                
                                   _onDueDateChange(selected);
-                                }
+                                
                               },
                               child: Row(
+                                //mainAxisSize: MainAxisSize.min,
                                 mainAxisAlignment:
                                     MainAxisAlignment.spaceAround,
                                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -635,8 +636,19 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                                       color: AppColors.primary,
                                     ),
                                   ),
-                                  // Spacer(),
                                   const Icon(Icons.calendar_today, size: 16),
+                                  if (_dueDate != null)
+                                    GestureDetector(
+                                      onTap: () => _onDueDateChange(null),
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(left: 4),
+                                        child: Icon(
+                                          Icons.close,
+                                          size: 16,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),

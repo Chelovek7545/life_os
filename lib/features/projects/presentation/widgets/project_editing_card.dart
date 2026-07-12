@@ -202,7 +202,7 @@ class EditProjectCardState extends State<EditProjectCard> {
                 child: datePickButton(
                   context,
                   label: _dueDate == null ? "Due date" : formatDate(_dueDate!),
-                  onDateChange: (d) => setState(() {
+                  onDateChange: (DateTime? d) => setState(() {
                     _dueDate = d;
                   }),
                 ),
