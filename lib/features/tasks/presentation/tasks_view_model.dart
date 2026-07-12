@@ -87,6 +87,7 @@ class TasksViewModel {
         TaskFilterConfig(anchorDate: DateTime.now()),
       );
   Stream<TaskFilterConfig> get currentFilter => _filterController.stream;
+  TaskFilterConfig get currentFilterValue => _filterController.value;
 
   StreamSubscription<dynamic>? _combineSubscription;
 

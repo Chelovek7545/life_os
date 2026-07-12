@@ -13,6 +13,7 @@ import 'package:life_os/features/tasks/presentation/components/collapsible_task_
 //import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
 import 'package:life_os/features/tasks/presentation/components/day_calendar.dart';
 import 'package:life_os/features/tasks/presentation/task_state.dart';
+import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
 
 const double _kFormExpandedHeight = 1000.0;
@@ -35,6 +36,126 @@ class _TasksScreenState extends State<TasksScreen> {
     super.dispose();
   }
 
+  Widget _buildWeekView(List<TaskWithProject> items, List<Task> selectedTasks) {
+    final Map<DateTime, List<TaskWithProject>> grouped = {};
+    for (final item in items) {
+      final day = item.task.startsAt!.startOfDay;
+      grouped.putIfAbsent(day, () => []).add(item);
+    }
+
+    final anchorDate = widget.viewModel.currentFilterValue.anchorDate;
+    final weekDates = getDatesForWeek(anchorDate);
+
+    const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final widgets = <Widget>[];
+    final now = DateTime.now();
+
+    for (final date in weekDates) {
+      final dayName = dayNames[date.weekday - 1];
+      final isToday =
+          date.year == now.year &&
+          date.month == now.month &&
+          date.day == now.day;
+
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            8,
+            AppSpacing.xl,
+            8,
+            AppSpacing.sm,
+          ),
+          child: Row(
+            children: [
+              if (isToday) ...[
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primaryContainer.withValues(
+                          alpha: 0.8,
+                        ),
+                        blurRadius: 10,
+                      ),
+                    ],
+                    color: AppColors
+                        .primaryContainer, // оранжевый, используется в приложении
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                SizedBox(width: 8),
+              ],
+              Text(
+                '$dayName ${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}',
+                style: AppTypography.headlineLgMobile.copyWith(
+                  shadows: [
+                    if (isToday)
+                      Shadow(
+                        color: AppColors.overdueGlow.withValues(alpha: 0.7),
+                        blurRadius: 21,
+                      ),
+                  ],
+                  color: isToday
+                      ? AppColors.primaryContainer
+                      : AppColors.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final dayTasks = grouped[date];
+      if (dayTasks != null) {
+        for (final item in dayTasks) {
+          widgets.add(
+            Padding(
+              padding: const EdgeInsets.only(
+                bottom: AppSpacing.sm,
+                left: 8,
+                right: 8,
+              ),
+              child: TaskCard(
+                task: item.task,
+                onCheckChanged: () async {
+                  await widget.viewModel.toggleTask(item.task);
+                },
+                onLongPress: () {
+                  widget.viewModel.startEditingTask(item);
+                  widget.viewModel.showForm();
+                },
+                projectTitle: item.project?.name,
+                isSelected: selectedTasks.any((t) => t.id == item.task.id),
+                onSelected: () =>
+                    widget.viewModel.toggleTaskSelection(item.task),
+                onTap: () {},
+              ),
+            ),
+          );
+        }
+      } else {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10, left: 16),
+            child: Text(
+              'No tasks',
+              style: AppTypography.bodySm.copyWith(
+                color: AppColors.onSurfaceVariant.withOpacity(0.5),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      children: widgets,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<bool>(
@@ -44,7 +165,7 @@ class _TasksScreenState extends State<TasksScreen> {
         final isFormVisible = snap.data ?? false;
 
         // if (isFormVisible) {
-          
+
         //   _shouldRenderForm = true;
         // }
 
@@ -68,7 +189,7 @@ class _TasksScreenState extends State<TasksScreen> {
                       () => isFormVisible
                           ? widget.viewModel.hideForm()
                           : widget.viewModel.showForm(),
-                      context
+                      context,
                     ),
                     StreamBuilder(
                       stream: widget.viewModel.currentFilter,
@@ -131,6 +252,11 @@ class _TasksScreenState extends State<TasksScreen> {
                                 );
                               }
 
+                              if (widget.viewModel.currentFilterValue.period ==
+                                  DatePeriod.week) {
+                                return _buildWeekView(items, selectedTasks);
+                              }
+
                               return ListView.separated(
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 8,
@@ -142,10 +268,6 @@ class _TasksScreenState extends State<TasksScreen> {
                                   final item = items[index];
                                   return TaskCard(
                                     task: item.task,
-                                    // tags: item.task.tags,
-                                    // title: item.task.title,
-                                    // dueDate: item.task.dueDate,
-                                    // isCompleted: item.task.isCompleted,
                                     onCheckChanged: () async {
                                       await widget.viewModel.toggleTask(
                                         item.task,
@@ -179,7 +301,7 @@ class _TasksScreenState extends State<TasksScreen> {
                 left: 0,
                 right: 0,
                 bottom: isFormVisible ? 0 : -_kFormExpandedHeight,
-                height:  _kFormExpandedHeight,
+                height: _kFormExpandedHeight,
                 onEnd: () {
                   if (!isFormVisible) {
                     setState(() {
@@ -247,10 +369,7 @@ Widget _buildHeader(VoidCallback onPressed, BuildContext context) {
       ),
       //const Icon(Icons.dashboard_outlined, color: Colors.white),
       //const SizedBox(width: 8),
-      Text(
-        'Main',
-        style: Theme.of(context).textTheme.headlineLarge  
-      ),
+      Text('Main', style: Theme.of(context).textTheme.headlineLarge),
       ElevatedButton(
         style: ElevatedButton.styleFrom(
           padding: EdgeInsets.all(5),
