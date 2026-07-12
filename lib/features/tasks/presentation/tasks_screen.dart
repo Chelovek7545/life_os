@@ -36,7 +36,7 @@ class _TasksScreenState extends State<TasksScreen> {
     super.dispose();
   }
 
-  Widget _buildWeekView(List<TaskWithProject> items, List<Task> selectedTasks) {
+  Widget _buildWeekView(List<TaskWithProject> items, List<Task> selectedTasks, double overlayHeight) {
     final Map<DateTime, List<TaskWithProject>> grouped = {};
     for (final item in items) {
       final day = item.task.startsAt!.startOfDay;
@@ -151,13 +151,21 @@ class _TasksScreenState extends State<TasksScreen> {
       }
     }
     return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.symmetric(vertical: overlayHeight),
       children: widgets,
     );
   }
 
+  bool showCalendar = true;
   @override
   Widget build(BuildContext context) {
+    const kHeaderH = 48.0;
+    const kPillH = 16.0;
+    const kCalendarH = 116.0;
+
+    double overlayHeight =
+        kHeaderH + 8 + kPillH + (showCalendar ? kCalendarH : 0);
+
     return StreamBuilder<bool>(
       stream: widget.viewModel.isFormVisible,
       initialData: false,
@@ -185,61 +193,18 @@ class _TasksScreenState extends State<TasksScreen> {
                 padding: const EdgeInsets.all(8.0),
                 child: Column(
                   children: [
-                    _buildHeader(
-                      () => isFormVisible
-                          ? widget.viewModel.hideForm()
-                          : widget.viewModel.showForm(),
-                      context,
-                    ),
-                    StreamBuilder(
-                      stream: widget.viewModel.currentFilter,
-                      builder: (_, snapshot) {
-                        final currentFilter =
-                            snapshot.data ??
-                            TaskFilterConfig(anchorDate: DateTime.now());
-
-                        // Извлекаем "опорную" дату из текущего фильтра для сохранения контекста
-                        final DateTime anchorDate = currentFilter.anchorDate;
-
-                        return Column(
-                          children: [
-                            Align(
-                              child: SegmentedPillControl(
-                                tabs: ["Day", "Week", "Month"],
-                                onTabChanged: (index) {
-                                  widget.viewModel.updateFilter(
-                                    (old) => old.copyWith(
-                                      period: DatePeriod.values[index],
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            if (currentFilter.period == DatePeriod.day)
-                              CalendarRow(
-                                selectedDate: anchorDate,
-                                onDaySelected: (date) {
-                                  widget.viewModel.updateFilter(
-                                    (old) => old.copyWith(anchorDate: date),
-                                  );
-                                },
-                              ),
-                          ],
-                        );
-                      },
-                    ),
-
+                    
                     Expanded(
                       child: StreamBuilder<TaskScreenState>(
                         stream: widget.viewModel.state,
                         builder: (context, snapshot) {
                           if (snapshot.connectionState ==
                               ConnectionState.waiting) {
-                            return CircularProgressIndicator();
+                            return const CircularProgressIndicator();
                           }
                           return snapshot.data!.when(
                             loading: () =>
-                                Center(child: CircularProgressIndicator()),
+                                const Center(child: CircularProgressIndicator()),
                             empty: (_, _) => EmptyPlaceholder(),
                             error: (e) => Text(e),
                             loaded: (items, selectedTasks, _, curTask) {
@@ -254,12 +219,12 @@ class _TasksScreenState extends State<TasksScreen> {
 
                               if (widget.viewModel.currentFilterValue.period ==
                                   DatePeriod.week) {
-                                return _buildWeekView(items, selectedTasks);
+                                return _buildWeekView(items, selectedTasks, overlayHeight);
                               }
 
                               return ListView.separated(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8,
+                                padding: EdgeInsets.symmetric(
+                                  vertical: overlayHeight,
                                 ),
                                 itemCount: items.length,
                                 separatorBuilder: (_, _) =>
@@ -291,6 +256,72 @@ class _TasksScreenState extends State<TasksScreen> {
                           );
                         },
                       ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: [0, 0.9, 0.95, 1],
+                    colors: [Colors.black, Colors.black54, Colors.black12,  Colors.transparent],
+                  ),
+                ),
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildHeader(
+                      () => isFormVisible
+                          ? widget.viewModel.hideForm()
+                          : widget.viewModel.showForm(),
+                      context,
+                    ),
+                    StreamBuilder(
+                      stream: widget.viewModel.currentFilter,
+                      builder: (_, snapshot) {
+                        final currentFilter =
+                            snapshot.data ??
+                            TaskFilterConfig(anchorDate: DateTime.now());
+                
+                        // Извлекаем "опорную" дату из текущего фильтра для сохранения контекста
+                        final DateTime anchorDate = currentFilter.anchorDate;
+                
+                        return Column(
+                          children: [
+                            Align(
+                              child: SegmentedPillControl(
+                                tabs: ["Day", "Week", "Month"],
+                                onTabChanged: (index) {
+                                  setState(() {
+                                    if (index == 0) {
+                                      showCalendar = true;
+                                    } else {
+                                      showCalendar = false;
+                                    }
+                                  });
+                                  widget.viewModel.updateFilter(
+                                    (old) => old.copyWith(
+                                      period: DatePeriod.values[index],
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                            if (currentFilter.period == DatePeriod.day)
+                              CalendarRow(
+                                selectedDate: anchorDate,
+                                onDaySelected: (date) {
+                                  widget.viewModel.updateFilter(
+                                    (old) => old.copyWith(anchorDate: date),
+                                  );
+                                },
+                              ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
