@@ -22,10 +22,11 @@ class CollapsibleTaskForm extends StatefulWidget {
     required this.onSubmit,
     required this.onCancel,
     required this.projects,
-    required this.isEditMode,
+    required this.isEditMode, required this.onDelete,
   });
 
   final OnTaskSubmit onSubmit;
+  final Function(String) onDelete; 
   final OnCancel onCancel;
   final Stream<List<Project>> projects;
   final Task task;
@@ -151,6 +152,10 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     // });
   }
 
+  void _deleteTask() {
+    widget.onDelete(widget.task.id);  
+  }
+
   void _onProjectChange(String? newValue) {
     setState(() {
       _selectedProjectId = newValue;
@@ -174,6 +179,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   void _onEndsAtChange(DateTime? selected) {
     setState(() => _endsAt = selected);
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -655,15 +662,21 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                           ),
                         ],
                       ),
+                    
                     ],
                   ),
                 ),
+                if(isEditMode) ElevatedButton(
+                  style: AppButtonStyles.saveButton,
+                  onPressed: _deleteTask, child: Text("Delete task"))
               ],
             ),
           ),
       ],
     );
   }
+  
+  
 }
 
 class BaseContainer extends StatelessWidget {

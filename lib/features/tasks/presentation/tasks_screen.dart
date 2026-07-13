@@ -63,7 +63,12 @@ class _TasksScreenState extends State<TasksScreen> {
 
       widgets.add(
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, AppSpacing.lg, 8, AppSpacing.xs),
+          padding: const EdgeInsets.fromLTRB(
+            8,
+            AppSpacing.lg,
+            8,
+            AppSpacing.xs,
+          ),
           child: Row(
             children: [
               if (isToday) ...[
@@ -169,6 +174,12 @@ class _TasksScreenState extends State<TasksScreen> {
     end: Alignment.bottomCenter,
   );
 
+  void _deleteTasks(List<String> tasksId) {
+    for (final i in tasksId) {
+      widget.viewModel.deleteTask(i);
+    }
+  }
+
   bool showCalendar = true;
   @override
   Widget build(BuildContext context) {
@@ -177,14 +188,16 @@ class _TasksScreenState extends State<TasksScreen> {
     const kCalendarH = 86.0;
 
     double overlayHeight =
-        kHeaderH + kPillH + (showCalendar ? kCalendarH + AppSpacing.sm + AppSpacing.md : 0);
+        kHeaderH +
+        kPillH +
+        (showCalendar ? kCalendarH + AppSpacing.sm + AppSpacing.md : 0);
 
     return StreamBuilder<bool>(
       stream: widget.viewModel.isFormVisible,
       initialData: false,
       builder: (context, snap) {
         final isFormVisible = snap.data ?? false;
-
+        final nowDate = DateTime.now();
         // if (isFormVisible) {
 
         //   _shouldRenderForm = true;
@@ -257,6 +270,11 @@ class _TasksScreenState extends State<TasksScreen> {
                                     final item = items[index];
                                     return TaskCard(
                                       task: item.task,
+                                      isOverdue:
+                                          item.task.dueDate?.isBefore(
+                                            nowDate.startOfDay,
+                                          ) ??
+                                          false,
                                       onCheckChanged: () async {
                                         await widget.viewModel.toggleTask(
                                           item.task,
@@ -309,7 +327,7 @@ class _TasksScreenState extends State<TasksScreen> {
                       builder: (_, snapshot) {
                         final currentFilter =
                             snapshot.data ??
-                            TaskFilterConfig(anchorDate: DateTime.now());
+                            TaskFilterConfig(anchorDate: nowDate);
 
                         // Извлекаем "опорную" дату из текущего фильтра для сохранения контекста
                         final DateTime anchorDate = currentFilter.anchorDate;
@@ -378,6 +396,10 @@ class _TasksScreenState extends State<TasksScreen> {
                         projects: widget.viewModel.watchProjects(),
                         isEditMode:
                             widget.viewModel.activeTaskWithProject != null,
+                        onDelete: (taskId) {
+                          _deleteTasks([taskId]);
+                          widget.viewModel.hideForm();
+                        },
                         onSubmit: (Task task) {
                           if (widget.viewModel.activeTaskWithProject != null) {
                             print("update");

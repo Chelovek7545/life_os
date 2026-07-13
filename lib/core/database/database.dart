@@ -90,10 +90,10 @@ LazyDatabase _openConnection() {
 
 
 
-    //ТОЛЬКО В РАЗРАБОТКЕ
-    if (await file.exists()) {
-      await file.delete();
-    }
+    // //ТОЛЬКО В РАЗРАБОТКЕ
+    // if (await file.exists()) {
+    //   await file.delete();
+    // }
 
     return NativeDatabase(file);
   });
