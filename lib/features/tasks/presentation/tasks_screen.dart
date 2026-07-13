@@ -36,7 +36,11 @@ class _TasksScreenState extends State<TasksScreen> {
     super.dispose();
   }
 
-  Widget _buildWeekView(List<TaskWithProject> items, List<Task> selectedTasks, double overlayHeight) {
+  Widget _buildWeekView(
+    List<TaskWithProject> items,
+    List<Task> selectedTasks,
+    double overlayHeight,
+  ) {
     final Map<DateTime, List<TaskWithProject>> grouped = {};
     for (final item in items) {
       final day = item.task.startsAt!.startOfDay;
@@ -59,12 +63,7 @@ class _TasksScreenState extends State<TasksScreen> {
 
       widgets.add(
         Padding(
-          padding: const EdgeInsets.fromLTRB(
-            8,
-            AppSpacing.xl,
-            8,
-            AppSpacing.sm,
-          ),
+          padding: const EdgeInsets.fromLTRB(8, AppSpacing.lg, 8, AppSpacing.xs),
           child: Row(
             children: [
               if (isToday) ...[
@@ -156,15 +155,29 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
+  static const Gradient _maskingGradient = LinearGradient(
+    // This gradient goes from fully transparent to fully opaque black...
+    colors: [
+      Colors.transparent,
+      Colors.black,
+      Colors.black,
+      Colors.transparent,
+    ],
+    // ... from the top (transparent) to half (0.5) of the way to the bottom.
+    stops: [0.0, 0.15, 0.96, 1.0],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
+
   bool showCalendar = true;
   @override
   Widget build(BuildContext context) {
-    const kHeaderH = 48.0;
-    const kPillH = 16.0;
-    const kCalendarH = 116.0;
+    const kHeaderH = 40.0;
+    const kPillH = 45.0;
+    const kCalendarH = 86.0;
 
     double overlayHeight =
-        kHeaderH + 8 + kPillH + (showCalendar ? kCalendarH : 0);
+        kHeaderH + kPillH + (showCalendar ? kCalendarH + AppSpacing.sm + AppSpacing.md : 0);
 
     return StreamBuilder<bool>(
       stream: widget.viewModel.isFormVisible,
@@ -190,85 +203,97 @@ class _TasksScreenState extends State<TasksScreen> {
           body: Stack(
             children: [
               Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: Column(
-                  children: [
-                    
-                    Expanded(
-                      child: StreamBuilder<TaskScreenState>(
-                        stream: widget.viewModel.state,
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const CircularProgressIndicator();
-                          }
-                          return snapshot.data!.when(
-                            loading: () =>
-                                const Center(child: CircularProgressIndicator()),
-                            empty: (_, _) => EmptyPlaceholder(),
-                            error: (e) => Text(e),
-                            loaded: (items, selectedTasks, _, curTask) {
-                              if (items.isEmpty) {
-                                return const Center(
-                                  child: Text(
-                                    'No tasks available yet.',
-                                    style: TextStyle(fontSize: 16),
-                                  ),
-                                );
-                              }
-
-                              if (widget.viewModel.currentFilterValue.period ==
-                                  DatePeriod.week) {
-                                return _buildWeekView(items, selectedTasks, overlayHeight);
-                              }
-
-                              return ListView.separated(
-                                padding: EdgeInsets.symmetric(
-                                  vertical: overlayHeight,
-                                ),
-                                itemCount: items.length,
-                                separatorBuilder: (_, _) =>
-                                    const SizedBox(height: 10),
-                                itemBuilder: (context, index) {
-                                  final item = items[index];
-                                  return TaskCard(
-                                    task: item.task,
-                                    onCheckChanged: () async {
-                                      await widget.viewModel.toggleTask(
-                                        item.task,
-                                      );
-                                    },
-                                    onLongPress: () {
-                                      widget.viewModel.startEditingTask(item);
-                                      widget.viewModel.showForm();
-                                    },
-                                    projectTitle: item.project?.name,
-                                    isSelected: selectedTasks.any(
-                                      (t) => t.id == item.task.id,
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: ShaderMask(
+                  shaderCallback: (bounds) =>
+                      _maskingGradient.createShader(bounds),
+                  blendMode: BlendMode.dstIn,
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: StreamBuilder<TaskScreenState>(
+                          stream: widget.viewModel.state,
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return const CircularProgressIndicator();
+                            }
+                            return snapshot.data!.when(
+                              loading: () => const Center(
+                                child: CircularProgressIndicator(),
+                              ),
+                              empty: (_, _) => EmptyPlaceholder(),
+                              error: (e) => Text(e),
+                              loaded: (items, selectedTasks, _, curTask) {
+                                if (items.isEmpty) {
+                                  return const Center(
+                                    child: Text(
+                                      'No tasks available yet.',
+                                      style: TextStyle(fontSize: 16),
                                     ),
-                                    onSelected: () => widget.viewModel
-                                        .toggleTaskSelection(item.task),
-                                    onTap: () {},
                                   );
-                                },
-                              );
-                            },
-                          );
-                        },
+                                }
+
+                                if (widget
+                                        .viewModel
+                                        .currentFilterValue
+                                        .period ==
+                                    DatePeriod.week) {
+                                  return _buildWeekView(
+                                    items,
+                                    selectedTasks,
+                                    overlayHeight,
+                                  );
+                                }
+
+                                return ListView.separated(
+                                  padding: EdgeInsets.symmetric(
+                                    vertical: overlayHeight + AppSpacing.sm,
+                                  ),
+                                  itemCount: items.length,
+                                  separatorBuilder: (_, _) =>
+                                      const SizedBox(height: 10),
+                                  itemBuilder: (context, index) {
+                                    final item = items[index];
+                                    return TaskCard(
+                                      task: item.task,
+                                      onCheckChanged: () async {
+                                        await widget.viewModel.toggleTask(
+                                          item.task,
+                                        );
+                                      },
+                                      onLongPress: () {
+                                        widget.viewModel.startEditingTask(item);
+                                        widget.viewModel.showForm();
+                                      },
+                                      projectTitle: item.project?.name,
+                                      isSelected: selectedTasks.any(
+                                        (t) => t.id == item.task.id,
+                                      ),
+                                      onSelected: () => widget.viewModel
+                                          .toggleTaskSelection(item.task),
+                                      onTap: () {},
+                                    );
+                                  },
+                                );
+                              },
+                            );
+                          },
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               Container(
-                                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    stops: [0, 0.9, 0.95, 1],
-                    colors: [Colors.black, Colors.black54, Colors.black12,  Colors.transparent],
-                  ),
-                ),
+                //                 decoration: const BoxDecoration(
+                //   gradient: LinearGradient(
+                //     begin: Alignment.topCenter,
+                //     end: Alignment.bottomCenter,
+                //     stops: [0, 0.9, 0.95, 1],
+                //     colors: [Colors.black, Colors.black54, Colors.black12,  Colors.transparent],
+                //   ),
+                // ),
                 padding: EdgeInsets.symmetric(horizontal: 8),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -285,10 +310,10 @@ class _TasksScreenState extends State<TasksScreen> {
                         final currentFilter =
                             snapshot.data ??
                             TaskFilterConfig(anchorDate: DateTime.now());
-                
+
                         // Извлекаем "опорную" дату из текущего фильтра для сохранения контекста
                         final DateTime anchorDate = currentFilter.anchorDate;
-                
+
                         return Column(
                           children: [
                             Align(
@@ -310,7 +335,8 @@ class _TasksScreenState extends State<TasksScreen> {
                                 },
                               ),
                             ),
-                            if (currentFilter.period == DatePeriod.day)
+                            if (currentFilter.period == DatePeriod.day) ...[
+                              SizedBox(height: AppSpacing.sm),
                               CalendarRow(
                                 selectedDate: anchorDate,
                                 onDaySelected: (date) {
@@ -319,6 +345,7 @@ class _TasksScreenState extends State<TasksScreen> {
                                   );
                                 },
                               ),
+                            ],
                           ],
                         );
                       },
@@ -421,30 +448,6 @@ Widget _buildHeader(VoidCallback onPressed, BuildContext context) {
   );
 }
 
-Widget _segmentButton({
-  required String text,
-  required bool selected,
-  required GestureTapCallback? onTap,
-}) {
-  return GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-      decoration: BoxDecoration(
-        color: selected ? const Color(0xFF2A2E39) : const Color(0xFF1C2028),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: selected ? Colors.white : Colors.white70,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    ),
-  );
-}
-
 class CalendarRow extends StatelessWidget {
   final DateTime selectedDate;
   final void Function(DateTime date) onDaySelected;
@@ -461,8 +464,9 @@ class CalendarRow extends StatelessWidget {
 
     return Container(
       height: 90,
-      margin: const EdgeInsets.symmetric(vertical: 12),
+      //margin: const EdgeInsets.symmetric(vertical: 12),
       child: ListView.separated(
+        clipBehavior: Clip.none,
         scrollDirection: Axis.horizontal,
         itemCount: 7,
         separatorBuilder: (_, _) => const SizedBox(width: 12),
