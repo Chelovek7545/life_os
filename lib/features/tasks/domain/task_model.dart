@@ -45,6 +45,8 @@ class Task {
 
   bool get isCompleted => status == TaskStatus.done;
 
+  Duration get duration => endsAt?.difference(startsAt!) ?? Duration(minutes: 15); 
+
   factory Task.blank() {
     return Task(
       id: const Uuid().v4(), // или можно генирировать UUID

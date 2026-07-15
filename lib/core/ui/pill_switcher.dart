@@ -6,13 +6,20 @@ import 'package:life_os/core/theme/app_text_styles.dart';
 
 
 class PillSwitcher extends StatefulWidget {
-  final List<String> options;
+  final List<Widget> options;
   final Function(int) onSelectionChanged;
+  final double? outerPadding;
+  final double? paddingBetweenOptions;
+  final double? innerPadding;
 
   const PillSwitcher({
     Key? key,
     required this.options,
     required this.onSelectionChanged,
+    this.outerPadding,
+    this.paddingBetweenOptions,
+    this.innerPadding,
+    
   }) : super(key: key);
 
   @override
@@ -49,9 +56,9 @@ class _PillSwitcherState extends State<PillSwitcher> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.all(AppSpacing.sm),
+      padding:  EdgeInsets.all(widget.outerPadding ?? AppSpacing.sm),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color:  AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(AppRadius.full),
         border: Border.all(color: AppColors.borderGlass),
       ),
@@ -59,9 +66,10 @@ class _PillSwitcherState extends State<PillSwitcher> {
         //mainAxisSize: MainAxisSize.max,
         children: List.generate(widget.options.length, (index) {
           final isSelected = index == selectedIndex;
-          return Expanded(
+          final child = widget.options[index];
+          return Flexible(
             child: Padding(
-              padding: const EdgeInsets.all(1.0),
+              padding: EdgeInsets.all(widget.paddingBetweenOptions ?? 1),
               child: GestureDetector(
                 onTap: () {
                   setState(() => selectedIndex = index);
@@ -69,7 +77,7 @@ class _PillSwitcherState extends State<PillSwitcher> {
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  padding: EdgeInsets.all(AppSpacing.md),
+                  padding: EdgeInsets.all(widget.innerPadding ?? AppSpacing.md),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? AppColors.primaryContainer
@@ -88,14 +96,7 @@ class _PillSwitcherState extends State<PillSwitcher> {
                     ),
                   ),
                   child: Center(
-                    child: Text(
-                      widget.options[index],
-                      style: AppTypography.codeLabel.copyWith(
-                        
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                      ),
-                    ),
+                    child: child
                   ),
                 ),
               ),

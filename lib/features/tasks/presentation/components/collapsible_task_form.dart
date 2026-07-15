@@ -398,6 +398,18 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
 
                 Row(
                   children: [
+                    TextButton(child: Text("Time"), onPressed: () async {
+                      final TimeOfDay? selectedTime = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.fromDateTime(_startsAt ?? DateTime.now()),
+                      );
+                      if(selectedTime != null){
+                        _onStartsAtChange(_startsAt?.copyWith(
+                          hour: selectedTime.hour,
+                          minute: selectedTime.minute,
+                        ));
+                      }
+                    }),
                     Expanded(
                       child: datePickButton(
                         context,
@@ -410,6 +422,18 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                       width: AppMargins.lg,
                       child: Center(child: Text("-")),
                     ),
+                    TextButton(child: Text("Time"), onPressed: () async {
+                      final TimeOfDay? selectedTime = await showTimePicker(
+                        context: context,
+                        initialTime: TimeOfDay.fromDateTime(_endsAt ?? DateTime.now()),
+                      );
+                      if(selectedTime != null){
+                        _onEndsAtChange(_endsAt?.copyWith(
+                          hour: selectedTime.hour,
+                          minute: selectedTime.minute,
+                        ));
+                      }
+                    }),
                     Expanded(
                       child: datePickButton(
                         context,
