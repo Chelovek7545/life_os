@@ -296,7 +296,10 @@ class _TasksScreenState extends State<TasksScreen> {
     setState(() {});
   }
 
+
+
   Widget _buildEventBody() {
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -362,34 +365,22 @@ class _TasksScreenState extends State<TasksScreen> {
             _onModeChanged,
           ),
           SizedBox(height: AppSpacing.sm),
-
+          
           if (!_isEventMode)
             StreamBuilder(
               stream: widget.viewModel.currentFilter,
               builder: (_, snapshot) {
                 final currentFilter =
-                    snapshot.data ?? TaskFilterConfig(anchorDate: nowDate);
+                    snapshot.data ?? widget.viewModel.currentFilterValue;
 
                 final DateTime anchorDate = currentFilter.anchorDate;
-
                 return Column(
                   children: [
                     Align(
                       child: SegmentedPillControl(
                         tabs: ["Day", "Week", "Month"],
-                        onTabChanged: (index) {
-                          setState(() {
-                            if (index == 0) {
-                              showCalendar = true;
-                            } else {
-                              showCalendar = false;
-                            }
-                          });
-                          widget.viewModel.updateFilter(
-                            (old) =>
-                                old.copyWith(period: DatePeriod.values[index]),
-                          );
-                        },
+                        currentIdx: currentFilter.period.index,
+                        onTabChanged: _onTabChange,
                       ),
                     ),
                     if (currentFilter.period == DatePeriod.day) ...[
@@ -412,6 +403,8 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
+
+
   static const Gradient _maskingGradient = LinearGradient(
     // This gradient goes from fully transparent to fully opaque black...
     colors: [
@@ -426,9 +419,12 @@ class _TasksScreenState extends State<TasksScreen> {
     end: Alignment.bottomCenter,
   );
 
+
+
   bool _isEventMode = false;
   void _onModeChanged(int index) {
-    setState(() => _isEventMode = index == 1);
+      _onTabChange(0);
+      setState(() => _isEventMode = index == 1);
   }
 
   void _deleteTasks(List<String> tasksId) {
@@ -436,6 +432,21 @@ class _TasksScreenState extends State<TasksScreen> {
       widget.viewModel.deleteTask(i);
     }
   }
+
+  void _onTabChange(index) {
+            setState(() {
+              if (index == 0) {
+                showCalendar = true;
+              } else {
+                showCalendar = false;
+              }
+            });
+            widget.viewModel.updateFilter(
+              (old) =>
+                  old.copyWith(period: DatePeriod.values[index]),
+            );
+          }
+
 
   bool showCalendar = true;
   @override

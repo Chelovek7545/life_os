@@ -8,7 +8,7 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const _orange = Color(0xFFFF5C00);
-const _startHour = 8;
+const _startHour = 0;
 const _endHour = 24;
 const _hourHeight = 140.0; // px per hour
 const _leftLabelWidth = 52.0;

@@ -2,31 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 
-class SegmentedPillControl extends StatefulWidget {
+class SegmentedPillControl extends StatelessWidget {
   final List<String> tabs;
   final Function(int) onTabChanged;
+  final int currentIdx;
 
-  const SegmentedPillControl({
+  SegmentedPillControl({
     Key? key,
     required this.tabs,
-    required this.onTabChanged,
+    required this.onTabChanged, required this.currentIdx,
   }) : super(key: key);
 
-  @override
-  State<SegmentedPillControl> createState() => _SegmentedPillControlState();
-}
-
-class _SegmentedPillControlState extends State<SegmentedPillControl> {
-  int _currentIdx = 0;
+  
 
   @override
   Widget build(BuildContext context) {
-    final totalTabs = widget.tabs.length;
+    final totalTabs = tabs.length;
     
     // Вычисляем координату X для Alignment (от -1.0 до 1.0)
     final alignmentX = totalTabs <= 1 
         ? 0.0 
-        : -1.0 + (_currentIdx * (2.0 / (totalTabs - 1)));
+        : -1.0 + (currentIdx * (2.0 / (totalTabs - 1)));
 
     return Container(
       padding: const EdgeInsets.all(4),
@@ -60,14 +56,13 @@ class _SegmentedPillControlState extends State<SegmentedPillControl> {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: List.generate(totalTabs, (index) {
-              final isSelected = index == _currentIdx;
+              final isSelected = index == currentIdx;
               
               return Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque, // Чтобы кликалась вся область вкладки
                   onTap: () {
-                    setState(() => _currentIdx = index);
-                    widget.onTabChanged(index);
+                    onTabChanged(index);// Обновляем состояние, чтобы перерисовать виджет
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -80,7 +75,7 @@ class _SegmentedPillControlState extends State<SegmentedPillControl> {
                         //fontWeight: FontWeight.w100,
                         fontSize: 16
                       ),
-                      child: Text(widget.tabs[index],
+                      child: Text(tabs[index],
                       ),
                     ),
                   ),

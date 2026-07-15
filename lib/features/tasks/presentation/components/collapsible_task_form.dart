@@ -3,6 +3,7 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
+import 'package:life_os/core/ui/date_and_time_pick_button.dart';
 import 'package:life_os/core/ui/date_pick_button.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/utils/color_format.dart';
@@ -22,11 +23,12 @@ class CollapsibleTaskForm extends StatefulWidget {
     required this.onSubmit,
     required this.onCancel,
     required this.projects,
-    required this.isEditMode, required this.onDelete,
+    required this.isEditMode,
+    required this.onDelete,
   });
 
   final OnTaskSubmit onSubmit;
-  final Function(String) onDelete; 
+  final Function(String) onDelete;
   final OnCancel onCancel;
   final Stream<List<Project>> projects;
   final Task task;
@@ -153,7 +155,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   }
 
   void _deleteTask() {
-    widget.onDelete(widget.task.id);  
+    widget.onDelete(widget.task.id);
   }
 
   void _onProjectChange(String? newValue) {
@@ -179,8 +181,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   void _onEndsAtChange(DateTime? selected) {
     setState(() => _endsAt = selected);
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -398,20 +398,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
 
                 Row(
                   children: [
-                    TextButton(child: Text("Time"), onPressed: () async {
-                      final TimeOfDay? selectedTime = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.fromDateTime(_startsAt ?? DateTime.now()),
-                      );
-                      if(selectedTime != null){
-                        _onStartsAtChange(_startsAt?.copyWith(
-                          hour: selectedTime.hour,
-                          minute: selectedTime.minute,
-                        ));
-                      }
-                    }),
                     Expanded(
-                      child: datePickButton(
+                      child: dateAndTimePickButton(
                         context,
                         label: "Starts at",
                         date: _startsAt,
@@ -422,24 +410,17 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                       width: AppMargins.lg,
                       child: Center(child: Text("-")),
                     ),
-                    TextButton(child: Text("Time"), onPressed: () async {
-                      final TimeOfDay? selectedTime = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.fromDateTime(_endsAt ?? DateTime.now()),
-                      );
-                      if(selectedTime != null){
-                        _onEndsAtChange(_endsAt?.copyWith(
-                          hour: selectedTime.hour,
-                          minute: selectedTime.minute,
-                        ));
-                      }
-                    }),
+
                     Expanded(
-                      child: datePickButton(
-                        context,
-                        label: "Ends at",
-                        date: _endsAt,
-                        onDateChange: _onEndsAtChange,
+                      child: Column(
+                        children: [
+                          dateAndTimePickButton(
+                            context,
+                            label: "Ends at",
+                            date: _endsAt,
+                            onDateChange: _onEndsAtChange,
+                          ),
+                       ],
                       ),
                     ),
                   ],
@@ -605,7 +586,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                                                 child: Text(
                                                   project.name,
                                                   maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
                                               ),
                                             ],
@@ -649,9 +631,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                                   firstDate: DateTime(2000),
                                   lastDate: DateTime(2040),
                                 );
-                                
-                                  _onDueDateChange(selected);
-                                
+
+                                _onDueDateChange(selected);
                               },
                               child: Row(
                                 //mainAxisSize: MainAxisSize.min,
@@ -686,21 +667,21 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                           ),
                         ],
                       ),
-                    
                     ],
                   ),
                 ),
-                if(isEditMode) ElevatedButton(
-                  style: AppButtonStyles.saveButton,
-                  onPressed: _deleteTask, child: Text("Delete task"))
+                if (isEditMode)
+                  ElevatedButton(
+                    style: AppButtonStyles.saveButton,
+                    onPressed: _deleteTask,
+                    child: Text("Delete task"),
+                  ),
               ],
             ),
           ),
       ],
     );
   }
-  
-  
 }
 
 class BaseContainer extends StatelessWidget {
