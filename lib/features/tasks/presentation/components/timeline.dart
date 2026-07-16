@@ -253,6 +253,9 @@ class _TimelineBodyState extends State<TimelineBody> {
           physics: _draggingId != null || _resizingId != null
               ? const NeverScrollableScrollPhysics()
               : const ClampingScrollPhysics(),
+          controller: ScrollController(
+            initialScrollOffset: (DateTime.now().hour * _hourHeight) - 100,
+          ),
           padding: EdgeInsets.only(top: widget.topPadding),
           child: SizedBox(
             height: _totalHeight + 24,
