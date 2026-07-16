@@ -68,6 +68,13 @@ class AppDatabase extends _$AppDatabase {
   // Конструктор
   AppDatabase() : super(_openConnection());
 
+
+//Чтобы сохранялась 1 миллисекунда которую я добавляю
+@override
+  DriftDatabaseOptions get options =>
+      const DriftDatabaseOptions(storeDateTimeAsText: true);
+
+
   // Версия схемы базы данных
   @override
   int get schemaVersion => 1;

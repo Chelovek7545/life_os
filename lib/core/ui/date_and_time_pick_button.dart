@@ -4,13 +4,69 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/core/utils/datetime_utils.dart';
 
 Widget dateAndTimePickButton(
   BuildContext context, {
   required String label,
   DateTime? date,
   required ValueChanged<DateTime?> onDateChange,
+  required bool Function(DateTime) validate,
 }) {
+  void _chooseDate() async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: date ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2040),
+    );
+    final dt = date?.copyWith(
+          year: selected?.year,
+          month: selected?.month,
+          day: selected?.day,
+        ) ??
+        selected?.add(const Duration(milliseconds: 1));
+    if (selected != null){
+
+      if(
+          validate(
+            dt!
+          )) {
+        onDateChange(
+          dt
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('End time must be after start time')),
+        );
+      }
+    }
+  }
+
+  void _chooseTime() async {
+    final TimeOfDay? selectedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(date!),
+    );
+
+    if (selectedTime != null) {
+      final dt = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        selectedTime.hour,
+        selectedTime.minute,
+      );
+      if (validate(dt)) {
+        onDateChange(dt);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('End time must be after start time')),
+        );
+      }
+    }
+  }
+
   return Column(
     mainAxisSize: MainAxisSize.min,
     mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -23,18 +79,8 @@ Widget dateAndTimePickButton(
           aspectRatio: 5 / 6,
           child: OutlinedButton(
             style: AppButtonStyles.baseButtonStyle,
-            
-            onPressed: () async {
-              final selected = await showDatePicker(
-                context: context,
-                initialDate: date ?? DateTime.now(),
-                firstDate: DateTime(2000),
-                lastDate: DateTime(2040),
-              );
-              if (selected != null) {
-                onDateChange(selected);
-              }
-            },
+
+            onPressed: _chooseDate,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -78,7 +124,7 @@ Widget dateAndTimePickButton(
                       ],
                     ),
                     SizedBox(height: AppMargins.lg),
-                
+
                     Text(
                       label,
                       style: AppTypography.codeLabel.copyWith(
@@ -110,24 +156,11 @@ Widget dateAndTimePickButton(
                         ),
                         //style: AppButtonStyles.baseButtonStyle,
                         child: Text(
-                          date != null ? formatTimeOfDate(date) : "Time",
+                          date == null || date.isDateOnly
+                              ? "Time"
+                              : formatTimeOfDate(date),
                         ),
-                        onPressed: date != null ? () async {
-                          final TimeOfDay? selectedTime = await showTimePicker(
-                            context: context,
-                            initialTime: TimeOfDay.fromDateTime(
-                              date ?? DateTime.now(),
-                            ),
-                          );
-                          if (selectedTime != null) {
-                            onDateChange(
-                              date?.copyWith(
-                                hour: selectedTime.hour,
-                                minute: selectedTime.minute,
-                              ),
-                            );
-                          }
-                        } : null,
+                        onPressed: date != null ? _chooseTime : null,
                       ),
                     ],
                   ),

@@ -8,6 +8,7 @@ import 'package:life_os/core/ui/date_pick_button.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/core/utils/wrapped.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
@@ -404,6 +405,17 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                         label: "Starts at",
                         date: _startsAt,
                         onDateChange: _onStartsAtChange,
+                        validate: (date) {
+                              if (_endsAt != null) {
+                                return date.isBefore(_endsAt!) ||
+                                    date.isDateOnly &&
+                                        date.startOfDay.isAtSameMomentAs(
+                                          _endsAt!.startOfDay,
+                                        );
+                              } else {
+                                return true;
+                              }
+                        },
                       ),
                     ),
                     SizedBox(
@@ -419,8 +431,19 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                             label: "Ends at",
                             date: _endsAt,
                             onDateChange: _onEndsAtChange,
+                            validate: (date) {
+                              if (_startsAt != null) {
+                                return date.isAfter(_startsAt!) ||
+                                    date.isDateOnly &&
+                                        date.startOfDay.isAtSameMomentAs(
+                                          _startsAt!.startOfDay,
+                                        );
+                              } else {
+                                return true;
+                              }
+                            },
                           ),
-                       ],
+                        ],
                       ),
                     ),
                   ],

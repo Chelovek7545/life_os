@@ -318,7 +318,7 @@ class _TasksScreenState extends State<TasksScreen> {
                   Placeholder(child: Text("No events to display")),
               loaded: (items, selectedTasks, _, curTask) {
                 final List<TaskEvent> events = items
-                    .where((e) => e.task.startsAt != null)
+                    .where((e) => e.task.startsAt != null && !e.task.startsAt!.isDateOnly)
                     .map(
                       (e) => TaskEvent(
                         task: e.task,
