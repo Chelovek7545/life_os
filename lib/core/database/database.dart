@@ -6,7 +6,6 @@ import 'package:path/path.dart' as p;
 import 'dart:io';
 
 part 'database.g.dart';
-//dart run build_runner build
 
 
 @DataClassName('TaskModel')
