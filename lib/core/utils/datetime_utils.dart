@@ -23,3 +23,12 @@ extension DateTimeStartOfDay on DateTime {
   // Возвращает дату в начале дня (00:00:00), чтобы сравнивать только дни
   DateTime get startOfDay => DateTime(year, month, day);
 }
+
+extension DateTimeDurationInMinutes on DateTime {
+  //Пишет длительность в минутах дня(времени)
+  int get durationInMinutes => hour * 60 + minute;
+}
+
+extension IsDateOnly on DateTime {
+  bool get isDateOnly => millisecond == 1 && second == 0 && minute == 0 && hour == 0; 
+}

@@ -3,7 +3,7 @@ class Tag {
   final String name;
   final int colorHex;
 
-  Tag({required this.id, required this.name, required this.colorHex});
+  const Tag({required this.id, required this.name, required this.colorHex});
 
   Tag copyWith({int? id, String? name, int? colorHex}) {
     return Tag(
