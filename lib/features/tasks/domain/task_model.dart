@@ -45,7 +45,12 @@ class Task {
 
   bool get isCompleted => status == TaskStatus.done;
 
-  Duration get duration => endsAt?.difference(startsAt!) ?? Duration(minutes: 15); 
+  Duration get duration {
+    if (startsAt != null && endsAt != null) {
+      return endsAt!.difference(startsAt!);
+    }
+    return const Duration(minutes: 15);
+  } 
 
   factory Task.blank() {
     return Task(
