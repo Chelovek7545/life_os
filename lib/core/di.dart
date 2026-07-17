@@ -16,21 +16,21 @@ class DependencyContainer {
 
   late final AppDatabase database;
   late final TasksDao tasksDAO;
-late final ProjectsDao projectsDao;  
+  late final ProjectsDao projectsDao;
   // late final ApiClient apiClient;
   // late final SyncService syncService;
-  
+
   late final TasksRepository tasksRepository;
   // late final MoodRepository moodRepository;
   late final ProjectsRepository projectsRepository;
   // late final AiCoachRepository aiRepository;
-  
+
   late final TasksViewModel tasksViewModel;
   // late final MoodViewModel moodViewModel;
   late final ProjectsViewModel projectViewModel;
   late final DashboardViewModel dashboardViewModel;
   // late final AiCoachViewModel aiCoachViewModel;
-  late final GetTasksWithProjectsUseCase taskWithPrjct; 
+  late final GetTasksWithProjectsUseCase taskWithPrjct;
 
   void init() {
     database = AppDatabase();
@@ -39,31 +39,40 @@ late final ProjectsDao projectsDao;
     // apiClient = ApiClient('https://api.motivator.com');
     // syncService = SyncService(apiClient, localDatabase);
     tasksRepository = TasksRepository(
-      tasksDAO
+      tasksDAO,
       //TaskLocalDS(localDatabase),
       // apiClient,
       // syncService,
     );
-    projectsRepository = ProjectsRepository(
-      projectsDao
-    );
+    projectsRepository = ProjectsRepository(projectsDao);
     // moodRepository = MoodRepository(
     //   MoodLocalDS(localDatabase),
     //   apiClient,
     // );
-    
-    taskWithPrjct = GetTasksWithProjectsUseCase(tasksRepository, projectsRepository);
-    
 
+    taskWithPrjct = GetTasksWithProjectsUseCase(
+      tasksRepository,
+      projectsRepository,
+    );
 
     // aiRepository = AiCoachRepository(apiClient);
-    dashboardViewModel = DashboardViewModel(tasksRepository, projectsRepository);
+    dashboardViewModel = DashboardViewModel(
+      tasksRepository,
+      projectsRepository,
+    );
     dashboardViewModel.initialize();
 
-    tasksViewModel = TasksViewModel(tasksRepository, taskWithPrjct, projectsRepository);
+    tasksViewModel = TasksViewModel(
+      tasksRepository,
+      taskWithPrjct,
+      projectsRepository,
+    );
     tasksViewModel.initialize();
-    
-    projectViewModel = ProjectsViewModel(repository: projectsRepository, taskRepo: tasksRepository);
+
+    projectViewModel = ProjectsViewModel(
+      repository: projectsRepository,
+      taskRepo: tasksRepository,
+    );
     projectViewModel.initialize();
     // moodViewModel = MoodViewModel(moodRepository, AiMoodAnalyzer(apiClient));
     // aiCoachViewModel = AiCoachViewModel(aiRepository);

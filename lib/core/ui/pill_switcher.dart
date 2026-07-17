@@ -3,8 +3,6 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 
-
-
 class PillSwitcher extends StatefulWidget {
   final List<Widget> options;
   final Function(int) onSelectionChanged;
@@ -19,7 +17,6 @@ class PillSwitcher extends StatefulWidget {
     this.outerPadding,
     this.paddingBetweenOptions,
     this.innerPadding,
-    
   }) : super(key: key);
 
   @override
@@ -30,35 +27,33 @@ class _PillSwitcherState extends State<PillSwitcher> {
   int selectedIndex = 0;
 
   BorderRadius radiusForIndex(int index, Radius inner, Radius outer) {
+    if (index == 0) {
+      return BorderRadius.only(
+        topLeft: outer,
+        bottomLeft: outer,
+        topRight: inner,
+        bottomRight: inner,
+      );
+    }
 
+    if (index == widget.options.length - 1) {
+      return BorderRadius.only(
+        topLeft: inner,
+        bottomLeft: inner,
+        topRight: outer,
+        bottomRight: outer,
+      );
+    }
 
-  if (index == 0) {
-    return BorderRadius.only(
-      topLeft: outer,
-      bottomLeft: outer,
-      topRight: inner,
-      bottomRight: inner,
-    );
+    return BorderRadius.all(inner);
   }
-
-  if (index == widget.options.length - 1) {
-    return BorderRadius.only(
-      topLeft: inner,
-      bottomLeft: inner,
-      topRight: outer,
-      bottomRight: outer,
-    );
-  }
-
-  return BorderRadius.all(inner);
-}
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:  EdgeInsets.all(widget.outerPadding ?? AppSpacing.sm),
+      padding: EdgeInsets.all(widget.outerPadding ?? AppSpacing.sm),
       decoration: BoxDecoration(
-        color:  AppColors.surfaceContainerLowest,
+        color: AppColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(AppRadius.full),
         border: Border.all(color: AppColors.borderGlass),
       ),
@@ -87,17 +82,15 @@ class _PillSwitcherState extends State<PillSwitcher> {
                       Radius.circular(AppRadius.md),
                       Radius.circular(AppRadius.xxl),
                       //AppRadius.xl - AppSpacing.sm
-                      ),
-            
+                    ),
+
                     border: Border.all(
                       color: isSelected
                           ? Colors.transparent
                           : AppColors.inputGlass,
                     ),
                   ),
-                  child: Center(
-                    child: child
-                  ),
+                  child: Center(child: child),
                 ),
               ),
             ),

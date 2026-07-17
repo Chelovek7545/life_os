@@ -54,10 +54,14 @@ class _PillCheckerState extends State<PillChecker> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? AppColors.primaryContainer : Colors.transparent,
+                    color: isSelected
+                        ? AppColors.primaryContainer
+                        : Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: isSelected ? Colors.transparent : Colors.white.withOpacity(0.1),
+                      color: isSelected
+                          ? Colors.transparent
+                          : Colors.white.withOpacity(0.1),
                     ),
                   ),
                   child: Center(

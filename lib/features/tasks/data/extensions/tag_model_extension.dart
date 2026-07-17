@@ -5,11 +5,7 @@ import 'package:life_os/features/tasks/domain/tag_model.dart';
 /// Extension для преобразования Drift TagModel -> domain Tag
 extension TagDataToDomain on TagModel {
   Tag toDomain() {
-    return Tag(
-      id: id,
-      name: name,
-      colorHex: colorHex,
-    );
+    return Tag(id: id, name: name, colorHex: colorHex);
   }
 }
 
@@ -26,9 +22,6 @@ extension TagToDrift on Tag {
 
   /// Используется для вставки — пропускает id, чтобы БД сгенерировала его
   TagsCompanion toInsertCompanion() {
-    return TagsCompanion(
-      name: Value(name),
-      colorHex: Value(colorHex),
-    );
+    return TagsCompanion(name: Value(name), colorHex: Value(colorHex));
   }
 }

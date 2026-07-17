@@ -34,7 +34,11 @@ void main() {
     mockRepository = MockTasksRepository();
     mockUseCase = MockGetTasksWithProjectsUseCase();
     mockProjectsRepository = MockProjectsRepository();
-    viewModel = TasksViewModel(mockRepository, mockUseCase, mockProjectsRepository);
+    viewModel = TasksViewModel(
+      mockRepository,
+      mockUseCase,
+      mockProjectsRepository,
+    );
   });
 
   tearDown(() {
@@ -81,7 +85,14 @@ void main() {
       }
 
       // Helper to create task with time
-      TaskWithProject taskAt(DateTime date, int hour, {int endHour = 10, String? projectId, List<Tag>? tags, TaskStatus? status}) {
+      TaskWithProject taskAt(
+        DateTime date,
+        int hour, {
+        int endHour = 10,
+        String? projectId,
+        List<Tag>? tags,
+        TaskStatus? status,
+      }) {
         final start = date.atTime(hour);
         final end = date.atTime(endHour);
         return createMockTaskWithProject(
@@ -110,10 +121,7 @@ void main() {
 
       test('filters by day period - only today tasks', () async {
         final tomorrow = today.add(const Duration(days: 1));
-        final tasks = [
-          taskAt(today, 9),
-          taskAt(tomorrow, 9),
-        ];
+        final tasks = [taskAt(today, 9), taskAt(tomorrow, 9)];
         emitTasks(tasks);
 
         final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
@@ -143,10 +151,7 @@ void main() {
         viewModel.updateFilter((c) => c.copyWith(period: DatePeriod.month));
 
         final nextMonth = DateTime(today.year, today.month + 1, 1);
-        final tasks = [
-          taskAt(today, 9),
-          taskAt(nextMonth, 9),
-        ];
+        final tasks = [taskAt(today, 9), taskAt(nextMonth, 9)];
         emitTasks(tasks);
 
         final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
@@ -158,10 +163,7 @@ void main() {
         viewModel.updateFilter((c) => c.copyWith(period: DatePeriod.year));
 
         final nextYear = DateTime(today.year + 1, 1, 1);
-        final tasks = [
-          taskAt(today, 9),
-          taskAt(nextYear, 9),
-        ];
+        final tasks = [taskAt(today, 9), taskAt(nextYear, 9)];
         emitTasks(tasks);
 
         final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
@@ -207,19 +209,28 @@ void main() {
 
       test('filters by tagIds - includes if ANY tag matches', () async {
         // Use week period so all tasks in the week are included
-        viewModel.updateFilter((c) => c.copyWith(period: DatePeriod.week, tagIds: [1]));
+        viewModel.updateFilter(
+          (c) => c.copyWith(period: DatePeriod.week, tagIds: [1]),
+        );
 
         final mondayThisWeek = getWeekStart(today);
         final tasks = [
           taskAt(mondayThisWeek, 9, tags: [createMockTag(id: 1)]),
           taskAt(mondayThisWeek, 14, tags: [createMockTag(id: 2)]),
-          taskAt(mondayThisWeek.add(const Duration(days: 1)), 9, tags: [createMockTag(id: 1), createMockTag(id: 2)]),
+          taskAt(
+            mondayThisWeek.add(const Duration(days: 1)),
+            9,
+            tags: [createMockTag(id: 1), createMockTag(id: 2)],
+          ),
         ];
         emitTasks(tasks);
 
         final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
         expect(state.tasks.length, 2);
-        expect(state.tasks.every((t) => t.task.tags.any((tag) => tag.id == 1)), isTrue);
+        expect(
+          state.tasks.every((t) => t.task.tags.any((tag) => tag.id == 1)),
+          isTrue,
+        );
       });
 
       test('filters by showCompleted true - only completed', () async {
@@ -263,7 +274,11 @@ void main() {
       });
 
       test('updateFilter updates filter and re-emits state', () async {
-        final tasks = [createMockTaskWithProject(task: createTaskWithTimes(start: today.atTime(9)))];
+        final tasks = [
+          createMockTaskWithProject(
+            task: createTaskWithTimes(start: today.atTime(9)),
+          ),
+        ];
         taskStream.add(tasks);
 
         viewModel.updateFilter((c) => c.copyWith(period: DatePeriod.week));
@@ -273,7 +288,9 @@ void main() {
       });
 
       test('resetFilters resets to day period, keeps anchorDate', () {
-        viewModel.updateFilter((c) => c.copyWith(period: DatePeriod.month, projectIds: ['p1']));
+        viewModel.updateFilter(
+          (c) => c.copyWith(period: DatePeriod.month, projectIds: ['p1']),
+        );
         viewModel.resetFilters();
 
         final filter = viewModel.currentFilterValue;
@@ -286,7 +303,9 @@ void main() {
       });
 
       test('toggleTaskSelection adds task to selectedTasks', () async {
-        final task = createMockTaskWithProject(task: createTaskWithTimes(start: today.atTime(9)));
+        final task = createMockTaskWithProject(
+          task: createTaskWithTimes(start: today.atTime(9)),
+        );
         taskStream.add([task]);
 
         viewModel.toggleTaskSelection(task.task);
@@ -297,7 +316,9 @@ void main() {
       });
 
       test('toggleTaskSelection removes task from selectedTasks', () async {
-        final task = createMockTaskWithProject(task: createTaskWithTimes(start: today.atTime(9)));
+        final task = createMockTaskWithProject(
+          task: createTaskWithTimes(start: today.atTime(9)),
+        );
         taskStream.add([task]);
         viewModel.toggleTaskSelection(task.task);
 
@@ -340,9 +361,13 @@ void main() {
 
         await viewModel.addTask(task);
 
-        verify(mockRepository.addTask(argThat(
-          predicate<Task>((t) => t.id == task.id && t.title == task.title),
-        ))).called(1);
+        verify(
+          mockRepository.addTask(
+            argThat(
+              predicate<Task>((t) => t.id == task.id && t.title == task.title),
+            ),
+          ),
+        ).called(1);
       });
 
       test('updateTask delegates to repository', () async {
@@ -360,9 +385,11 @@ void main() {
 
         await viewModel.toggleTask(task);
 
-        verify(mockRepository.updateTask(argThat(
-          predicate<Task>((t) => t.status == TaskStatus.done),
-        ))).called(1);
+        verify(
+          mockRepository.updateTask(
+            argThat(predicate<Task>((t) => t.status == TaskStatus.done)),
+          ),
+        ).called(1);
       });
 
       test('deleteTask delegates to repository', () async {
@@ -377,7 +404,9 @@ void main() {
     group('projects', () {
       test('watchProjects delegates to projects repository', () {
         final stream = Stream<List<Project>>.value([]);
-        when(mockProjectsRepository.watchAllProjects()).thenAnswer((_) => stream);
+        when(
+          mockProjectsRepository.watchAllProjects(),
+        ).thenAnswer((_) => stream);
 
         final result = viewModel.watchProjects();
 

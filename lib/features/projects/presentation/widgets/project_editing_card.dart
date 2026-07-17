@@ -18,7 +18,8 @@ class EditProjectCard extends StatefulWidget {
   final VoidCallback onCancel;
   final Project? project;
 
-  const EditProjectCard({super.key, 
+  const EditProjectCard({
+    super.key,
     required this.onSave,
     required this.onCancel,
     this.project,
@@ -27,7 +28,6 @@ class EditProjectCard extends StatefulWidget {
   @override
   State<EditProjectCard> createState() => EditProjectCardState();
 }
-
 
 class EditProjectCardState extends State<EditProjectCard> {
   final _formKey = GlobalKey<FormState>();

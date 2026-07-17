@@ -29,7 +29,8 @@ class GetTasksWithProjectsUseCase {
         // Логика склейки: для каждой задачи ищем её проект по ID
         return tasks.map((task) {
           final project = projects.firstWhereOrNull(
-            (p) => p.id == task.projectId,);
+            (p) => p.id == task.projectId,
+          );
           return TaskWithProject(task: task, project: project);
         }).toList();
       },

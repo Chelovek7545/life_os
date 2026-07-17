@@ -370,7 +370,6 @@ class _TaskList extends StatelessWidget {
   }
 }
 
-
 //Week view
 class _WeekTasksList extends StatelessWidget {
   const _WeekTasksList({
@@ -527,7 +526,6 @@ class _WeekDaySection extends StatelessWidget {
     );
   }
 }
-
 
 // Header elements
 class _TasksHeader extends StatelessWidget {

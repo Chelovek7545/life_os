@@ -7,6 +7,13 @@ class EmptyPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(child: Text("Empty", style: AppTypography.headlineLgMobile.copyWith(color: AppColors.onSurfaceVariant)));
+    return Center(
+      child: Text(
+        "Empty",
+        style: AppTypography.headlineLgMobile.copyWith(
+          color: AppColors.onSurfaceVariant,
+        ),
+      ),
+    );
   }
 }

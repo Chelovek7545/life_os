@@ -3,7 +3,7 @@ bool isDateInSameWeek(DateTime date, DateTime anchorDate) {
   final anchorWeekStart = getWeekStart(anchorDate);
   // Week ends on Sunday (start + 6 days)
   final anchorWeekEnd = anchorWeekStart.add(const Duration(days: 6));
-  
+
   // Check if date falls within [anchorWeekStart, anchorWeekEnd]
   return !date.isBefore(anchorWeekStart) && !date.isAfter(anchorWeekEnd);
 }
@@ -30,5 +30,6 @@ extension DateTimeDurationInMinutes on DateTime {
 }
 
 extension IsDateOnly on DateTime {
-  bool get isDateOnly => millisecond == 1 && second == 0 && minute == 0 && hour == 0; 
+  bool get isDateOnly =>
+      millisecond == 1 && second == 0 && minute == 0 && hour == 0;
 }

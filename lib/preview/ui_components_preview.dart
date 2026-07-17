@@ -34,7 +34,8 @@ class UIComponentsPreviewScreen extends StatefulWidget {
   const UIComponentsPreviewScreen({Key? key}) : super(key: key);
 
   @override
-  State<UIComponentsPreviewScreen> createState() => _UIComponentsPreviewScreenState();
+  State<UIComponentsPreviewScreen> createState() =>
+      _UIComponentsPreviewScreenState();
 }
 
 class _UIComponentsPreviewScreenState extends State<UIComponentsPreviewScreen> {
@@ -123,27 +124,21 @@ class _UIComponentsPreviewScreenState extends State<UIComponentsPreviewScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                SemanticTag(
-                  label: 'flutter',
-                  accentColor: Colors.blue,
-                ),
+                SemanticTag(label: 'flutter', accentColor: Colors.blue),
                 SemanticTag(
                   label: 'ui',
                   accentColor: Colors.purple,
-                  onRemove: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Tag removed')),
-                  ),
+                  onRemove: () => ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('Tag removed'))),
                 ),
-                SemanticTag(
-                  label: 'design',
-                  accentColor: Colors.green,
-                ),
+                SemanticTag(label: 'design', accentColor: Colors.green),
                 SemanticTag(
                   label: 'components',
                   accentColor: Colors.orange,
-                  onRemove: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Tag removed')),
-                  ),
+                  onRemove: () => ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('Tag removed'))),
                 ),
               ],
             ),
@@ -166,25 +161,24 @@ class _UIComponentsPreviewScreenState extends State<UIComponentsPreviewScreen> {
             // Task Card Section
             _buildSectionTitle('Task Card Examples'),
             const SizedBox(height: 12),
-            
+
             // Normal Task Card
             TaskCard(
               title: 'Complete UI preview design',
               projectTitle: 'Life OS',
               dueDate: DateTime.now().add(const Duration(days: 2)),
-              tags: [
-              ],
+              tags: [],
               isCompleted: false,
               isOverdue: false,
               onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Task tapped')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('Task tapped')));
               },
               onCheckChanged: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Task completed')),
-                );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text('Task completed')));
               },
             ),
             const SizedBox(height: 12),
@@ -194,8 +188,7 @@ class _UIComponentsPreviewScreenState extends State<UIComponentsPreviewScreen> {
               title: 'Fix critical bug in database',
               projectTitle: 'Backend',
               dueDate: DateTime.now().subtract(const Duration(days: 1)),
-              tags: [
-              ],
+              tags: [],
               isCompleted: false,
               isOverdue: true,
               leftBorderColor: Colors.red,
@@ -209,8 +202,7 @@ class _UIComponentsPreviewScreenState extends State<UIComponentsPreviewScreen> {
               title: 'Review pull request',
               projectTitle: 'Life OS',
               dueDate: DateTime.now().subtract(const Duration(days: 3)),
-              tags: [
-              ],
+              tags: [],
               isCompleted: true,
               isOverdue: false,
               onTap: () {},
@@ -221,7 +213,7 @@ class _UIComponentsPreviewScreenState extends State<UIComponentsPreviewScreen> {
             // Additional Glass Panel Examples
             _buildSectionTitle('Glass Panel Variants'),
             const SizedBox(height: 12),
-            
+
             // Without padding
             GlassPanel(
               borderRadius: 16,

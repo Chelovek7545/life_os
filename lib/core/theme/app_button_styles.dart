@@ -22,7 +22,9 @@ class AppButtonStyles {
     backgroundColor: AppColors.primaryContainer,
   );
 
-    static ButtonStyle menuButtonStyle({Color bgColor = AppColors.surfaceContainerHigh}) =>
+  static ButtonStyle menuButtonStyle({
+    Color bgColor = AppColors.surfaceContainerHigh,
+  }) =>
       OutlinedButton.styleFrom(
         minimumSize: const Size(0, 0), // Убираем минимальный размер
         // Максимальный размер (опционально)
@@ -34,7 +36,9 @@ class AppButtonStyles {
         backgroundColor: bgColor.withAlpha(10),
         // foregroundColor: Colors.white,
         side: BorderSide(color: bgColor.withAlpha(200), width: 1.2),
-        shape: RoundedRectangleBorder( borderRadius: BorderRadius.circular(AppRadius.md)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+        ),
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.sm,
           vertical: AppSpacing.lg,
@@ -43,8 +47,7 @@ class AppButtonStyles {
         overlayColor: WidgetStatePropertyAll(Colors.white.withOpacity(0.06)),
         iconColor: const WidgetStatePropertyAll(Color(0xFFFFB39B)),
       );
-  
-  
+
   static ButtonStyle get baseButtonStyle =>
       OutlinedButton.styleFrom(
         minimumSize: const Size(0, 0), // Убираем минимальный размер
@@ -89,12 +92,12 @@ class AppButtonStyles {
       borderRadius: BorderRadius.circular(AppRadius.lg), // Большое скругление
       borderSide: BorderSide(color: AppColors.surfaceBright, width: 1),
     ),
-    enabledBorder: 
-    //InputBorder.none,
-    OutlineInputBorder(
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      borderSide:  BorderSide(color: Colors.transparent, width: 1),
-    ),
+    enabledBorder:
+        //InputBorder.none,
+        OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          borderSide: BorderSide(color: Colors.transparent, width: 1),
+        ),
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(AppRadius.lg),
       // При фокусе можно подсветить границу цветом primary

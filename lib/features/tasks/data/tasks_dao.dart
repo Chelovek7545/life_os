@@ -17,16 +17,17 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
     return into(tasks).insert(task);
   }
 
-  Future<void> insertTaskWithTags(TasksCompanion taskCompanion, List<String> tagNames) async {
+  Future<void> insertTaskWithTags(
+    TasksCompanion taskCompanion,
+    List<String> tagNames,
+  ) async {
     await transaction(() async {
       await into(tasks).insert(taskCompanion, mode: InsertMode.insertOrReplace);
-      
+
       // Вызываем общий метод, передавая имена тегов
       await _syncTaskTags(taskCompanion.id.value, tagNames);
     });
   }
-
-
 
   //Заполняет таблицу taskTagEntries
   Future<void> _syncTaskTags(String taskId, List<String> tagNames) async {
@@ -58,7 +59,8 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
             .map(
               (tagId) =>
                   TaskTagEntriesCompanion.insert(taskId: taskId, tagId: tagId),
-            ).toList(),
+            )
+            .toList(),
       );
     });
   }
@@ -137,8 +139,7 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
     final query = select(tasks).join([
       leftOuterJoin(taskTagEntries, taskTagEntries.taskId.equalsExp(tasks.id)),
       leftOuterJoin(tags, tags.id.equalsExp(taskTagEntries.tagId)),
-    ])
-      ..where(tasks.projectId.equals(projectId));
+    ])..where(tasks.projectId.equals(projectId));
 
     return query.watch().map((rows) {
       final Map<TaskModel, List<TagModel>> grouped = {};
@@ -163,7 +164,10 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
 
   // =============== UPDATE ===============
 
-  Future<bool> updateTaskWithTags(TasksCompanion taskCompanion, List<String> tagNames) async {
+  Future<bool> updateTaskWithTags(
+    TasksCompanion taskCompanion,
+    List<String> tagNames,
+  ) async {
     // if (!taskCompanion.id.isPresent) {
     //   throw ArgumentError('Для обновления задачи необходим ID');
     // }
@@ -175,7 +179,7 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
 
       // Вызываем тот же метод синхронизации по именам
       await _syncTaskTags(taskId, tagNames);
-      
+
       return true;
     });
   }

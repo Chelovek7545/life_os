@@ -16,7 +16,11 @@ class Tag {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is Tag && runtimeType == other.runtimeType && id == other.id && name == other.name && colorHex == other.colorHex;
+      other is Tag &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          colorHex == other.colorHex;
 
   @override
   int get hashCode => Object.hash(id, name, colorHex);

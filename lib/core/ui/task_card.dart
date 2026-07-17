@@ -10,8 +10,7 @@ import 'glass_panel.dart'; // Из предыдущего шага
 
 class TaskCard extends StatelessWidget {
   final String? projectTitle;
-  
-  
+
   // final String title;
   // final DateTime? dueDate;
   // final List<Tag> tags;
@@ -42,11 +41,9 @@ class TaskCard extends StatelessWidget {
     this.leftBorderColor,
   }) : super(key: key);
 
-
-
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(      
+    return GestureDetector(
       onLongPress: onLongPress,
       onTap: onTap,
       child: AnimatedOpacity(
@@ -62,21 +59,24 @@ class TaskCard extends StatelessWidget {
                       color: AppColors.overdueGlow,
                       blurRadius: 15,
                       spreadRadius: 1,
-                    )
+                    ),
                   ]
                 : null,
           ),
           child: GlassPanel(
             borderRadius: 12,
-            padding: EdgeInsets.zero, // Срезы контролируем через внутренний контейнер
+            padding: EdgeInsets
+                .zero, // Срезы контролируем через внутренний контейнер
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(AppRadius.md),
                 border: leftBorderColor != null
-                    ? Border(left: BorderSide(color: leftBorderColor!, width: 4))
+                    ? Border(
+                        left: BorderSide(color: leftBorderColor!, width: 4),
+                      )
                     : isOverdue
-                        ? Border.all(color: AppColors.primaryContainer, width: 1)
-                        : null,
+                    ? Border.all(color: AppColors.primaryContainer, width: 1)
+                    : null,
               ),
               padding: const EdgeInsets.all(20),
               child: Row(
@@ -91,16 +91,24 @@ class TaskCard extends StatelessWidget {
                       height: 24,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: task.isCompleted ? AppColors.primaryContainer : Colors.transparent,
+                        color: task.isCompleted
+                            ? AppColors.primaryContainer
+                            : Colors.transparent,
                         border: Border.all(
                           color: task.isCompleted
                               ? AppColors.primaryContainer
-                              : (isOverdue ? AppColors.primaryContainer : AppColors.borderGlass),
+                              : (isOverdue
+                                    ? AppColors.primaryContainer
+                                    : AppColors.borderGlass),
                           width: 2,
                         ),
                       ),
                       child: task.isCompleted
-                          ? const Icon(Icons.check, size: 14, color: Colors.white)
+                          ? const Icon(
+                              Icons.check,
+                              size: 14,
+                              color: Colors.white,
+                            )
                           : null,
                     ),
                   ),
@@ -114,17 +122,21 @@ class TaskCard extends StatelessWidget {
                           task.title,
                           style: AppTypography.bodyMd.copyWith(
                             fontWeight: FontWeight.w600,
-                            color: isOverdue ? AppColors.primaryContainer : Colors.white,
+                            color: isOverdue
+                                ? AppColors.primaryContainer
+                                : Colors.white,
                           ),
                         ),
                         const SizedBox(height: 4),
                         if (projectTitle != null)
-                        Text(
-                          projectTitle!,
-                          style: AppTypography.bodySm.copyWith(
-                            color: AppColors.onSurfaceVariant.withOpacity(0.7),
+                          Text(
+                            projectTitle!,
+                            style: AppTypography.bodySm.copyWith(
+                              color: AppColors.onSurfaceVariant.withOpacity(
+                                0.7,
+                              ),
+                            ),
                           ),
-                        ),
                         const SizedBox(height: 8),
                         // Метаданные (Время / Теги)
                         Row(
@@ -132,40 +144,48 @@ class TaskCard extends StatelessWidget {
                             Icon(
                               Icons.schedule,
                               size: 12,
-                              color: isOverdue ? AppColors.primaryContainer : AppColors.onSurfaceVariant,
+                              color: isOverdue
+                                  ? AppColors.primaryContainer
+                                  : AppColors.onSurfaceVariant,
                             ),
                             const SizedBox(width: 4),
-                            if(task.dueDate != null)
-                            Text(
-                              formatDate(task.dueDate!),
-                              style: AppTypography.codeLabel.copyWith(
-                                color: isOverdue ? AppColors.primaryContainer : AppColors.onSurfaceVariant,
+                            if (task.dueDate != null)
+                              Text(
+                                formatDate(task.dueDate!),
+                                style: AppTypography.codeLabel.copyWith(
+                                  color: isOverdue
+                                      ? AppColors.primaryContainer
+                                      : AppColors.onSurfaceVariant,
+                                ),
                               ),
-                            ),
                             if (task.tags.isNotEmpty) ...[
                               const SizedBox(width: 12),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
                                   color: isOverdue
-                                      ? AppColors.primaryContainer.withOpacity(0.2)
+                                      ? AppColors.primaryContainer.withOpacity(
+                                          0.2,
+                                        )
                                       : AppColors.surfaceGlass,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Wrap(
-                            spacing: 12,
-                            runSpacing: 8,
-                            children: task.tags
-                                .map(
-                                  (link) => SemanticTag(
-                                    label: link.name,
-                                    accentColor: Colors.black,
-                                  ),
-                                )
-                                .toList(),
-                          ),
+                                  spacing: 12,
+                                  runSpacing: 8,
+                                  children: task.tags
+                                      .map(
+                                        (link) => SemanticTag(
+                                          label: link.name,
+                                          accentColor: Colors.black,
+                                        ),
+                                      )
+                                      .toList(),
                                 ),
-                              
+                              ),
                             ],
                           ],
                         ),

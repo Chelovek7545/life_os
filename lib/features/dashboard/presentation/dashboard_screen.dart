@@ -26,28 +26,30 @@ class DashboardScreen extends StatelessWidget {
                 }
 
                 return asyncSnapshot.data!.when(
-                  initial: () =>
-                                Center(child: Text("initial")),
-                  loading: () =>
-                                Center(child: CircularProgressIndicator()),
+                  initial: () => Center(child: Text("initial")),
+                  loading: () => Center(child: CircularProgressIndicator()),
                   error: (e) => Text(e),
                   loaded: (items) {
                     return LayoutBuilder(
-                  builder: (context, constraints) {
-                    int crossAxisCount = constraints.maxWidth > 600 ? 3 : 2;
-                    
-                    return GridView.builder(
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: crossAxisCount,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
-                      ),
-                      itemBuilder: (context, index) =>
-                          _Card(title: items[index].title, subtitle: items[index].value, icon: items[index].icon),
-                      itemCount: items.length,
+                      builder: (context, constraints) {
+                        int crossAxisCount = constraints.maxWidth > 600 ? 3 : 2;
+
+                        return GridView.builder(
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: crossAxisCount,
+                                crossAxisSpacing: 8,
+                                mainAxisSpacing: 8,
+                              ),
+                          itemBuilder: (context, index) => _Card(
+                            title: items[index].title,
+                            subtitle: items[index].value,
+                            icon: items[index].icon,
+                          ),
+                          itemCount: items.length,
+                        );
+                      },
                     );
-                  },
-                );
                   },
                 );
               },

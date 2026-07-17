@@ -6,20 +6,18 @@ import 'extensions/project_model_extension.dart';
 part 'projects_dao.g.dart';
 
 @DriftAccessor(tables: [Projects])
-class ProjectsDao extends DatabaseAccessor<AppDatabase> with _$ProjectsDaoMixin {
+class ProjectsDao extends DatabaseAccessor<AppDatabase>
+    with _$ProjectsDaoMixin {
   ProjectsDao(AppDatabase db) : super(db);
 
   // =============== CREATE ===============
-  
+
   Future<void> createProject(ProjectsCompanion project) async {
-
-
-    
     await into(projects).insert(project);
   }
 
   // =============== READ ===============
-  
+
   Future<List<Project>> getAllProjects() async {
     final dataList = await select(projects).get();
     return dataList.map((data) => data.toDomain()).toList();
@@ -35,7 +33,9 @@ class ProjectsDao extends DatabaseAccessor<AppDatabase> with _$ProjectsDaoMixin 
 
   Future<ProjectModel?> getProjectById(String id) async {
     try {
-      final data = await (select(projects)..where((p) => p.id.equals(id))).getSingle();
+      final data = await (select(
+        projects,
+      )..where((p) => p.id.equals(id))).getSingle();
       return data;
     } catch (e) {
       return null;
@@ -51,7 +51,7 @@ class ProjectsDao extends DatabaseAccessor<AppDatabase> with _$ProjectsDaoMixin 
 
   Stream<List<Project>> watchAllProjects() {
     return (select(projects)).watch().map(
-      (dataList) => dataList.map((data) => data.toDomain()).toList()
+      (dataList) => dataList.map((data) => data.toDomain()).toList(),
     );
   }
 
@@ -62,28 +62,21 @@ class ProjectsDao extends DatabaseAccessor<AppDatabase> with _$ProjectsDaoMixin 
   // }
 
   // =============== UPDATE ===============
-  
+
   Future<void> updateProject(Project project) async {
-    await update(projects).replace(
-      project.copyWith(updatedAt: DateTime.now()).toDrift()
-    );
+    await update(
+      projects,
+    ).replace(project.copyWith(updatedAt: DateTime.now()).toDrift());
   }
 
   Future<void> updateProjectName(String id, String newName) async {
-    await (update(projects)
-      ..where((p) => p.id.equals(id))
-    ).write(
-      ProjectsCompanion(
-        name: Value(newName),
-        updatedAt: Value(DateTime.now()),
-      ),
+    await (update(projects)..where((p) => p.id.equals(id))).write(
+      ProjectsCompanion(name: Value(newName), updatedAt: Value(DateTime.now())),
     );
   }
 
   Future<void> archiveProject(String id) async {
-    await (update(projects)
-      ..where((p) => p.id.equals(id))
-    ).write(
+    await (update(projects)..where((p) => p.id.equals(id))).write(
       ProjectsCompanion(
         isArchived: const Value(true),
         updatedAt: Value(DateTime.now()),
@@ -92,9 +85,7 @@ class ProjectsDao extends DatabaseAccessor<AppDatabase> with _$ProjectsDaoMixin 
   }
 
   Future<void> unarchiveProject(String id) async {
-    await (update(projects)
-      ..where((p) => p.id.equals(id))
-    ).write(
+    await (update(projects)..where((p) => p.id.equals(id))).write(
       ProjectsCompanion(
         isArchived: const Value(false),
         updatedAt: Value(DateTime.now()),
@@ -103,7 +94,7 @@ class ProjectsDao extends DatabaseAccessor<AppDatabase> with _$ProjectsDaoMixin 
   }
 
   // =============== DELETE ===============
-  
+
   Future<void> deleteProject(String id) async {
     await (delete(projects)..where((p) => p.id.equals(id))).go();
   }
@@ -113,7 +104,7 @@ class ProjectsDao extends DatabaseAccessor<AppDatabase> with _$ProjectsDaoMixin 
   // }
 
   // =============== STATS ===============
-  
+
   // Future<int> getProjectTaskCount(String projectId) async {
   //   final count = await (selectOnly(tasks)
   //     ..addColumns([tasks.id.count()])
@@ -125,11 +116,11 @@ class ProjectsDao extends DatabaseAccessor<AppDatabase> with _$ProjectsDaoMixin 
   // Future<Map<Project, int>> getProjectsWithTaskCount() async {
   //   final projects = await getActiveProjects();
   //   final Map<Project, int> result = {};
-    
+
   //   for (var project in projects) {
   //     result[project] = await getProjectTaskCount(project.id);
   //   }
-    
+
   //   return result;
   // }
 }

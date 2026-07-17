@@ -4,20 +4,20 @@ String formatDate(DateTime date) {
       '${date.year}';
 }
 
-String getWeekDayName(int index){
+String getWeekDayName(int index) {
   return index == DateTime.monday
-                ? "MON"
-                : index == DateTime.tuesday
-                    ? "TUE"
-                    : index == DateTime.wednesday
-                        ? "WED"
-                        : index == DateTime.thursday
-                            ? "THU"
-                            : index == DateTime.friday
-                                ? "FRI"
-                                : index == DateTime.saturday
-                                    ? "SAT"
-                                    : "SUN";
+      ? "MON"
+      : index == DateTime.tuesday
+      ? "TUE"
+      : index == DateTime.wednesday
+      ? "WED"
+      : index == DateTime.thursday
+      ? "THU"
+      : index == DateTime.friday
+      ? "FRI"
+      : index == DateTime.saturday
+      ? "SAT"
+      : "SUN";
 }
 
 String formatTimeOfDate(DateTime date) {

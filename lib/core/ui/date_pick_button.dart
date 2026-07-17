@@ -51,10 +51,10 @@ Widget datePickButton(
             ? Padding(
                 padding: EdgeInsets.only(left: 4),
                 child: IconButton(
-                style: AppButtonStyles.activeButtonStyle,
-                onPressed: () => onDateChange(null),
-                icon: Icon(Icons.close, size: 14, color: Colors.white70),
-              ),
+                  style: AppButtonStyles.activeButtonStyle,
+                  onPressed: () => onDateChange(null),
+                  icon: Icon(Icons.close, size: 14, color: Colors.white70),
+                ),
               )
             : SizedBox(width: 0),
       ),

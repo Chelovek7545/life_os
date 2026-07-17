@@ -38,12 +38,15 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
     TaskScreenState? initialState,
     bool? initialFormVisible,
     TaskFilterConfig? initialFilter,
-  })  : _stateController = BehaviorSubject<TaskScreenState>.seeded(
-            initialState ?? const TasksLoading()),
-        _formVisibleController = BehaviorSubject<bool>.seeded(
-            initialFormVisible ?? false),
-        _filterController = BehaviorSubject<TaskFilterConfig>.seeded(
-            initialFilter ?? TaskFilterConfig(anchorDate: DateTime.now()));
+  }) : _stateController = BehaviorSubject<TaskScreenState>.seeded(
+         initialState ?? const TasksLoading(),
+       ),
+       _formVisibleController = BehaviorSubject<bool>.seeded(
+         initialFormVisible ?? false,
+       ),
+       _filterController = BehaviorSubject<TaskFilterConfig>.seeded(
+         initialFilter ?? TaskFilterConfig(anchorDate: DateTime.now()),
+       );
 
   @override
   Stream<TaskScreenState> get state => _stateController.stream;
@@ -89,11 +92,13 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
       _selectedTasks.add(task);
     }
     if (_stateController.valueOrNull case final TasksLoaded state) {
-      _stateController.add(TasksLoaded(
-        curTask: state.curTask,
-        tasks: state.tasks,
-        selectedTasks: List.from(_selectedTasks),
-      ));
+      _stateController.add(
+        TasksLoaded(
+          curTask: state.curTask,
+          tasks: state.tasks,
+          selectedTasks: List.from(_selectedTasks),
+        ),
+      );
     }
   }
 
@@ -148,7 +153,10 @@ void main() {
     setUp(() {
       today = DateTime.now().startOfDay;
       viewModel = FakeTasksViewModel(
-        initialFilter: TaskFilterConfig(anchorDate: today, period: DatePeriod.day),
+        initialFilter: TaskFilterConfig(
+          anchorDate: today,
+          period: DatePeriod.day,
+        ),
       );
     });
 
@@ -173,7 +181,7 @@ void main() {
     group('Initial State', () {
       testWidgets('shows loading indicator initially', (tester) async {
         await tester.pumpWidget(createWidgetUnderTest());
-        
+
         expect(find.byType(CircularProgressIndicator), findsOneWidget);
       });
 
@@ -187,7 +195,9 @@ void main() {
       });
 
       testWidgets('shows error message when state is error', (tester) async {
-        viewModel._stateController.add(const TasksError('Failed to load tasks'));
+        viewModel._stateController.add(
+          const TasksError('Failed to load tasks'),
+        );
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
 
@@ -218,12 +228,16 @@ void main() {
       });
 
       testWidgets('renders task list for day period', (tester) async {
-        viewModel._filterController.add(TaskFilterConfig(anchorDate: today, period: DatePeriod.day));
-        viewModel._stateController.add(TasksLoaded(
-          curTask: mockTasks.first.task,
-          tasks: mockTasks,
-          selectedTasks: [],
-        ));
+        viewModel._filterController.add(
+          TaskFilterConfig(anchorDate: today, period: DatePeriod.day),
+        );
+        viewModel._stateController.add(
+          TasksLoaded(
+            curTask: mockTasks.first.task,
+            tasks: mockTasks,
+            selectedTasks: [],
+          ),
+        );
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
 
@@ -232,12 +246,16 @@ void main() {
       });
 
       testWidgets('shows calendar row for day period', (tester) async {
-        viewModel._filterController.add(TaskFilterConfig(anchorDate: today, period: DatePeriod.day));
-        viewModel._stateController.add(TasksLoaded(
-          curTask: mockTasks.first.task,
-          tasks: mockTasks,
-          selectedTasks: [],
-        ));
+        viewModel._filterController.add(
+          TaskFilterConfig(anchorDate: today, period: DatePeriod.day),
+        );
+        viewModel._stateController.add(
+          TasksLoaded(
+            curTask: mockTasks.first.task,
+            tasks: mockTasks,
+            selectedTasks: [],
+          ),
+        );
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
 
@@ -246,26 +264,33 @@ void main() {
       });
 
       testWidgets('tapping day in calendar updates filter', (tester) async {
-        viewModel._filterController.add(TaskFilterConfig(anchorDate: today, period: DatePeriod.day));
-        viewModel._stateController.add(TasksLoaded(
-          curTask: mockTasks.first.task,
-          tasks: mockTasks,
-          selectedTasks: [],
-        ));
+        viewModel._filterController.add(
+          TaskFilterConfig(anchorDate: today, period: DatePeriod.day),
+        );
+        viewModel._stateController.add(
+          TasksLoaded(
+            curTask: mockTasks.first.task,
+            tasks: mockTasks,
+            selectedTasks: [],
+          ),
+        );
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
 
         final dayCard = find.byWidgetPredicate(
-          (widget) => widget is DateTimelineCard && 
+          (widget) =>
+              widget is DateTimelineCard &&
               widget.day == today.add(const Duration(days: 2)).day.toString(),
         );
-        
+
         if (dayCard.evaluate().isNotEmpty) {
           await tester.tap(dayCard);
           await tester.pump();
-          
-          expect(viewModel.currentFilterValue.anchorDate, 
-              today.add(const Duration(days: 2)));
+
+          expect(
+            viewModel.currentFilterValue.anchorDate,
+            today.add(const Duration(days: 2)),
+          );
         }
       });
     });
@@ -295,13 +320,17 @@ void main() {
       });
 
       testWidgets('renders week view with day sections', (tester) async {
-        viewModel._filterController.add(TaskFilterConfig(anchorDate: weekStart, period: DatePeriod.week));
-        viewModel._stateController.add(TasksLoaded(
-          curTask: mockTasks.first.task,
-          tasks: mockTasks,
-          selectedTasks: [],
-        ));
-        
+        viewModel._filterController.add(
+          TaskFilterConfig(anchorDate: weekStart, period: DatePeriod.week),
+        );
+        viewModel._stateController.add(
+          TasksLoaded(
+            curTask: mockTasks.first.task,
+            tasks: mockTasks,
+            selectedTasks: [],
+          ),
+        );
+
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
 
@@ -311,7 +340,9 @@ void main() {
     });
 
     group('Header Panel', () {
-      testWidgets('shows settings icon, mode switcher, and add button', (tester) async {
+      testWidgets('shows settings icon, mode switcher, and add button', (
+        tester,
+      ) async {
         viewModel._stateController.add(const TasksEmpty());
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
@@ -343,7 +374,9 @@ void main() {
     });
 
     group('Period Tabs', () {
-      testWidgets('shows Day, Week, Month tabs when not in event mode', (tester) async {
+      testWidgets('shows Day, Week, Month tabs when not in event mode', (
+        tester,
+      ) async {
         viewModel._stateController.add(const TasksEmpty());
         viewModel._filterController.add(TaskFilterConfig(anchorDate: today));
         await tester.pumpWidget(createWidgetUnderTest());
@@ -384,7 +417,9 @@ void main() {
     group('Calendar Row', () {
       testWidgets('shows calendar row when period is day', (tester) async {
         viewModel._stateController.add(const TasksEmpty());
-        viewModel._filterController.add(TaskFilterConfig(anchorDate: today, period: DatePeriod.day));
+        viewModel._filterController.add(
+          TaskFilterConfig(anchorDate: today, period: DatePeriod.day),
+        );
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
 
@@ -394,7 +429,9 @@ void main() {
 
       testWidgets('hides calendar row when period is week', (tester) async {
         viewModel._stateController.add(const TasksEmpty());
-        viewModel._filterController.add(TaskFilterConfig(anchorDate: today, period: DatePeriod.week));
+        viewModel._filterController.add(
+          TaskFilterConfig(anchorDate: today, period: DatePeriod.week),
+        );
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
 
@@ -429,7 +466,9 @@ void main() {
         expect(find.text('mon'), findsOneWidget);
       });
 
-      testWidgets('shows selected styling when isSelected is true', (tester) async {
+      testWidgets('shows selected styling when isSelected is true', (
+        tester,
+      ) async {
         await tester.pumpWidget(
           MaterialApp(
             theme: ThemeData.dark().copyWith(
@@ -499,10 +538,7 @@ void main() {
               ),
             ),
             home: Scaffold(
-              body: CalendarRow(
-                selectedDate: anchor,
-                onDaySelected: (date) {},
-              ),
+              body: CalendarRow(selectedDate: anchor, onDaySelected: (date) {}),
             ),
           ),
         );

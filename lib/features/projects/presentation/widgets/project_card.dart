@@ -72,9 +72,8 @@ class _ProjectCardState extends State<ProjectCard> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.surfaceVariant.withValues(
-                                alpha: 0.06,
-                              ),
+                              color: theme.colorScheme.surfaceVariant
+                                  .withValues(alpha: 0.06),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
@@ -111,10 +110,11 @@ class _ProjectCardState extends State<ProjectCard> {
                                     widget.title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.titleMedium?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: theme.colorScheme.onSurface,
-                                    ),
+                                    style: theme.textTheme.titleMedium
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: theme.colorScheme.onSurface,
+                                        ),
                                   ),
                                 ),
                               ),

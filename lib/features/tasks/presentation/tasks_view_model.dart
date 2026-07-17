@@ -75,9 +75,7 @@ class TasksViewModel {
   void disableForm() {
     shouldRenderForm = false;
     activeTaskWithProject = null;
-
   }
-
 
   //Для формы редактирования задач
 
@@ -221,14 +219,10 @@ class TasksViewModel {
     }
   }
 
-
   // ---UI ЛОГИКА ---
-  void startEditingTask(TaskWithProject item){
+  void startEditingTask(TaskWithProject item) {
     activeTaskWithProject = item;
   }
-
-
-
 
   // --- Бизнес-логика (CUD операции) ---
   // ВАЖНО: Мы убрали ручной вызов _emitUiState() из этих методов.
@@ -249,7 +243,9 @@ class TasksViewModel {
   }
 
   Future<void> toggleTask(Task task) async {
-    final updated = task.copyWith(status: task.isCompleted ? TaskStatus.inProgress : TaskStatus.done);
+    final updated = task.copyWith(
+      status: task.isCompleted ? TaskStatus.inProgress : TaskStatus.done,
+    );
     await updateTask(updated);
   }
 

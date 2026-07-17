@@ -61,9 +61,18 @@ void main() {
       });
 
       test('returns false for other statuses', () {
-        expect(Task.blank().copyWith(status: TaskStatus.open).isCompleted, isFalse);
-        expect(Task.blank().copyWith(status: TaskStatus.notStarted).isCompleted, isFalse);
-        expect(Task.blank().copyWith(status: TaskStatus.inProgress).isCompleted, isFalse);
+        expect(
+          Task.blank().copyWith(status: TaskStatus.open).isCompleted,
+          isFalse,
+        );
+        expect(
+          Task.blank().copyWith(status: TaskStatus.notStarted).isCompleted,
+          isFalse,
+        );
+        expect(
+          Task.blank().copyWith(status: TaskStatus.inProgress).isCompleted,
+          isFalse,
+        );
       });
     });
 
@@ -104,10 +113,7 @@ void main() {
         final newTitle = 'Updated Title';
         final newStatus = TaskStatus.done;
 
-        final updated = original.copyWith(
-          title: newTitle,
-          status: newStatus,
-        );
+        final updated = original.copyWith(title: newTitle, status: newStatus);
 
         expect(updated.id, original.id);
         expect(updated.title, newTitle);
@@ -144,7 +150,9 @@ void main() {
       });
 
       test('updates tags when provided', () {
-        final original = Task.blank().copyWith(tags: [Tag(id: 1, name: 'old', colorHex: 0)]);
+        final original = Task.blank().copyWith(
+          tags: [Tag(id: 1, name: 'old', colorHex: 0)],
+        );
         final newTag = Tag(id: 2, name: 'new', colorHex: 0);
 
         final updated = original.copyWith(tags: [newTag]);

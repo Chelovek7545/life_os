@@ -8,14 +8,28 @@ sealed class TaskScreenState {
   R when<R>({
     required R Function() loading,
     required R Function(String? aiSuggestion, bool isProcessing) empty,
-    required R Function(List<TaskWithProject> tasks, List<Task> selectedTasks, bool isProcessing, Task? curTask) loaded,
+    required R Function(
+      List<TaskWithProject> tasks,
+      List<Task> selectedTasks,
+      bool isProcessing,
+      Task? curTask,
+    )
+    loaded,
     required R Function(String message) error,
   }) {
     return switch (this) {
       TasksLoading() => loading(),
-      TasksEmpty(aiSuggestion: final aiSuggestion, isProcessing: final isProcessing) => 
+      TasksEmpty(
+        aiSuggestion: final aiSuggestion,
+        isProcessing: final isProcessing,
+      ) =>
         empty(aiSuggestion, isProcessing),
-      TasksLoaded(tasks: final tasks, selectedTasks: final selectedTasks, isProcessing: final isProcessing, curTask: final curTask) => 
+      TasksLoaded(
+        tasks: final tasks,
+        selectedTasks: final selectedTasks,
+        isProcessing: final isProcessing,
+        curTask: final curTask,
+      ) =>
         loaded(tasks, selectedTasks, isProcessing, curTask),
       TasksError(message: final message) => error(message),
     };
@@ -25,15 +39,29 @@ sealed class TaskScreenState {
   R? maybeWhen<R>({
     R Function()? loading,
     R Function(String? aiSuggestion, bool isProcessing)? empty,
-    R Function(List<TaskWithProject> tasks, List<Task> selectedTasks, bool isProcessing, Task? curTask)? loaded,
+    R Function(
+      List<TaskWithProject> tasks,
+      List<Task> selectedTasks,
+      bool isProcessing,
+      Task? curTask,
+    )?
+    loaded,
     R Function(String message)? error,
     required R Function() orElse,
   }) {
     return switch (this) {
       TasksLoading() => loading?.call() ?? orElse(),
-      TasksEmpty(aiSuggestion: final aiSuggestion, isProcessing: final isProcessing) => 
+      TasksEmpty(
+        aiSuggestion: final aiSuggestion,
+        isProcessing: final isProcessing,
+      ) =>
         empty?.call(aiSuggestion, isProcessing) ?? orElse(),
-      TasksLoaded(tasks: final tasks, selectedTasks: final selectedTasks, isProcessing: final isProcessing, curTask: final curTask) => 
+      TasksLoaded(
+        tasks: final tasks,
+        selectedTasks: final selectedTasks,
+        isProcessing: final isProcessing,
+        curTask: final curTask,
+      ) =>
         loaded?.call(tasks, selectedTasks, isProcessing, curTask) ?? orElse(),
       TasksError(message: final message) => error?.call(message) ?? orElse(),
     };
@@ -45,7 +73,6 @@ sealed class TaskScreenState {
   bool get isLoaded => this is TasksLoaded;
   bool get isError => this is TasksError;
 }
-
 
 final class TasksLoading extends TaskScreenState {
   const TasksLoading();

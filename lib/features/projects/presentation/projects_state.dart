@@ -5,12 +5,21 @@ sealed class ProjectsScreenState {
 
   R when<R>({
     required R Function() loading,
-    required R Function(List<Project> projects, bool isProcessing, Project? curProject) loaded,
+    required R Function(
+      List<Project> projects,
+      bool isProcessing,
+      Project? curProject,
+    )
+    loaded,
     required R Function(String message) error,
   }) {
     return switch (this) {
       ProjectsLoading() => loading(),
-      ProjectsLoaded(projects: final projects, isProcessing: final isProcessing, curProject: final curProject) =>
+      ProjectsLoaded(
+        projects: final projects,
+        isProcessing: final isProcessing,
+        curProject: final curProject,
+      ) =>
         loaded(projects, isProcessing, curProject),
       ProjectsError(message: final message) => error(message),
     };
@@ -18,13 +27,18 @@ sealed class ProjectsScreenState {
 
   R? maybeWhen<R>({
     R Function()? loading,
-    R Function(List<Project> projects, bool isProcessing, Project? curProject)? loaded,
+    R Function(List<Project> projects, bool isProcessing, Project? curProject)?
+    loaded,
     R Function(String message)? error,
     required R Function() orElse,
   }) {
     return switch (this) {
       ProjectsLoading() => loading?.call() ?? orElse(),
-      ProjectsLoaded(projects: final projects, isProcessing: final isProcessing, curProject: final curProject) =>
+      ProjectsLoaded(
+        projects: final projects,
+        isProcessing: final isProcessing,
+        curProject: final curProject,
+      ) =>
         loaded?.call(projects, isProcessing, curProject) ?? orElse(),
       ProjectsError(message: final message) => error?.call(message) ?? orElse(),
     };

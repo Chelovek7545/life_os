@@ -21,7 +21,10 @@ void main() {
 
       expect(isDateInSameWeek(mondayWeek2, mondayWeek1), isFalse);
       expect(isDateInSameWeek(mondayWeek3, mondayWeek1), isFalse);
-      expect(isDateInSameWeek(sundayWeek1.add(const Duration(days: 1)), mondayWeek1), isFalse);
+      expect(
+        isDateInSameWeek(sundayWeek1.add(const Duration(days: 1)), mondayWeek1),
+        isFalse,
+      );
     });
 
     test('handles year boundaries', () {

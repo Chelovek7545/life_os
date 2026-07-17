@@ -82,14 +82,8 @@ Task createTaskWithTimes({
   );
 }
 
-TaskWithProject createMockTaskWithProject({
-  Task? task,
-  Project? project,
-}) {
-  return TaskWithProject(
-    task: task ?? createMockTask(),
-    project: project,
-  );
+TaskWithProject createMockTaskWithProject({Task? task, Project? project}) {
+  return TaskWithProject(task: task ?? createMockTask(), project: project);
 }
 
 Project createMockProject({
@@ -109,19 +103,12 @@ Project createMockProject({
   );
 }
 
-Tag createMockTag({
-  int? id,
-  String? name,
-  int? colorHex,
-}) {
-  return Tag(
-    id: id ?? 1,
-    name: name ?? 'test',
-    colorHex: colorHex ?? 0xFF0000,
-  );
+Tag createMockTag({int? id, String? name, int? colorHex}) {
+  return Tag(id: id ?? 1, name: name ?? 'test', colorHex: colorHex ?? 0xFF0000);
 }
 
-List<TaskWithProject> createMockTaskList(int count, {
+List<TaskWithProject> createMockTaskList(
+  int count, {
   DateTime? anchorDate,
   DatePeriod? period,
 }) {
@@ -130,18 +117,17 @@ List<TaskWithProject> createMockTaskList(int count, {
     final start = baseDate.add(Duration(hours: i * 2));
     final end = start.add(const Duration(hours: 1));
     return createMockTaskWithProject(
-      task: createTaskWithTimes(
-        start: start,
-        end: end,
-        title: 'Task ${i + 1}',
-      ),
-      project: i % 2 == 0 ? createMockProject(name: 'Project A') : createMockProject(name: 'Project B'),
+      task: createTaskWithTimes(start: start, end: end, title: 'Task ${i + 1}'),
+      project: i % 2 == 0
+          ? createMockProject(name: 'Project A')
+          : createMockProject(name: 'Project B'),
     );
   });
 }
 
 extension TestDateTimeExtensions on DateTime {
   DateTime addDays(int days) => add(Duration(days: days));
-  
-  DateTime atTime(int hour, [int minute = 0]) => DateTime(year, month, day, hour, minute);
+
+  DateTime atTime(int hour, [int minute = 0]) =>
+      DateTime(year, month, day, hour, minute);
 }

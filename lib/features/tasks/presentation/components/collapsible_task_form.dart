@@ -406,15 +406,15 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                         date: _startsAt,
                         onDateChange: _onStartsAtChange,
                         validate: (date) {
-                              if (_endsAt != null) {
-                                return date.isBefore(_endsAt!) ||
-                                    date.isDateOnly &&
-                                        date.startOfDay.isAtSameMomentAs(
-                                          _endsAt!.startOfDay,
-                                        );
-                              } else {
-                                return true;
-                              }
+                          if (_endsAt != null) {
+                            return date.isBefore(_endsAt!) ||
+                                date.isDateOnly &&
+                                    date.startOfDay.isAtSameMomentAs(
+                                      _endsAt!.startOfDay,
+                                    );
+                          } else {
+                            return true;
+                          }
                         },
                       ),
                     ),

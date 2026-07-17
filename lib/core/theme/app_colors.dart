@@ -8,7 +8,7 @@ class AppColors {
   static const Color surface = Color(0xFF141212);
   // Чуть более яркая подложка
   static const Color surfaceBright = Color(0xFF1E1B1B);
-  
+
   static const onBackground = Colors.white;
   // === ИЕРАРХИЯ КОНТЕЙНЕРОВ (От темного к светлому) ===
   // Нижний слой контейнеров (чуть светлее surface)
@@ -28,16 +28,16 @@ class AppColors {
   // === АКЦЕНТЫ (БРЕНД) ===
   // Основной оранжевый (пастельный для темной темы)
   static const Color primary = Color(0xFFFFB59C);
-  // Фон для оранжевых кнопок/плашек. В M3 контейнеры в темной теме 
-  // обычно делают темнее, чтобы белый текст на них не слепил. 
+  // Фон для оранжевых кнопок/плашек. В M3 контейнеры в темной теме
+  // обычно делают темнее, чтобы белый текст на них не слепил.
   // Если нужен именно ядовито-оранжевый, используй vibrantGradient.
-  static const Color primaryContainer = Color(0xFFFF5C00); 
-  
+  static const Color primaryContainer = Color(0xFFFF5C00);
+
   static const Color secondary = Color(0xFFDCB8FF);
   static const Color secondaryContainer = Color(0xFF550099);
-  
-  static const Color tertiary = Color(0xFFFFB1C3); 
-  
+
+  static const Color tertiary = Color(0xFFFFB1C3);
+
   // Эффекты свечения
   static const Color overdueGlow = Color(0x22FF5500);
 
@@ -53,5 +53,4 @@ class AppColors {
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
-
 }

@@ -13,7 +13,6 @@ class Project {
   final bool isArchived;
   final String? goalId;
 
-
   Project({
     required this.id,
     required this.name,
@@ -70,8 +69,6 @@ class Project {
 
       isArchived: isArchived ?? this.isArchived,
       goalId: goalId != null ? goalId.value : this.goalId,
-
     );
   }
-
 }

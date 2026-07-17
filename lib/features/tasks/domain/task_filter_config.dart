@@ -27,7 +27,9 @@ class TaskFilterConfig {
       period: period ?? this.period,
       projectIds: projectIds ?? this.projectIds,
       tagIds: tagIds ?? this.tagIds,
-      showCompleted: showCompleted != null ? showCompleted() : this.showCompleted,
+      showCompleted: showCompleted != null
+          ? showCompleted()
+          : this.showCompleted,
     );
   }
 
@@ -44,12 +46,12 @@ class TaskFilterConfig {
 
   @override
   int get hashCode => Object.hash(
-        anchorDate,
-        period,
-        Object.hashAll,
-        Object.hashAll(tagIds),
-        showCompleted,
-      );
+    anchorDate,
+    period,
+    Object.hashAll,
+    Object.hashAll(tagIds),
+    showCompleted,
+  );
 
   bool _listEquals<T>(List<T> a, List<T> b) {
     if (a.length != b.length) return false;

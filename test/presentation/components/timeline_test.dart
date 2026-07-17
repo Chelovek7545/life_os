@@ -99,13 +99,15 @@ void main() {
       testWidgets('renders hour labels correctly', (tester) async {
         final events = <TaskEvent>[];
 
-        await tester.pumpWidget(createTestWidget(
-          child: TimelineBody(
-            events: events,
-            topPadding: 0,
-            onEventChanged: (task, {startMinutes, durationMinutes}) {},
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: events,
+              topPadding: 0,
+              onEventChanged: (task, {startMinutes, durationMinutes}) {},
+            ),
           ),
-        ));
+        );
 
         // Should render 25 hour labels (0-24)
         expect(find.text('00:00'), findsOneWidget);
@@ -123,13 +125,15 @@ void main() {
           durationMinutes: 60,
         );
 
-        await tester.pumpWidget(createTestWidget(
-          child: TimelineBody(
-            events: [event],
-            topPadding: 0,
-            onEventChanged: (task, {startMinutes, durationMinutes}) {},
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: [event],
+              topPadding: 0,
+              onEventChanged: (task, {startMinutes, durationMinutes}) {},
+            ),
           ),
-        ));
+        );
 
         // Should find the event title
         expect(find.text('Test Event'), findsOneWidget);
@@ -153,13 +157,15 @@ void main() {
           ),
         ];
 
-        await tester.pumpWidget(createTestWidget(
-          child: TimelineBody(
-            events: events,
-            topPadding: 0,
-            onEventChanged: (task, {startMinutes, durationMinutes}) {},
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: events,
+              topPadding: 0,
+              onEventChanged: (task, {startMinutes, durationMinutes}) {},
+            ),
           ),
-        ));
+        );
 
         expect(find.text('Event 1'), findsOneWidget);
         expect(find.text('Event 2'), findsOneWidget);
@@ -175,13 +181,15 @@ void main() {
           isActive: true,
         );
 
-        await tester.pumpWidget(createTestWidget(
-          child: TimelineBody(
-            events: [event],
-            topPadding: 0,
-            onEventChanged: (task, {startMinutes, durationMinutes}) {},
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: [event],
+              topPadding: 0,
+              onEventChanged: (task, {startMinutes, durationMinutes}) {},
+            ),
           ),
-        ));
+        );
 
         expect(find.text('Active Event'), findsOneWidget);
       });
@@ -189,13 +197,15 @@ void main() {
       testWidgets('renders now line indicator', (tester) async {
         final events = <TaskEvent>[];
 
-        await tester.pumpWidget(createTestWidget(
-          child: TimelineBody(
-            events: events,
-            topPadding: 0,
-            onEventChanged: (task, {startMinutes, durationMinutes}) {},
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: events,
+              topPadding: 0,
+              onEventChanged: (task, {startMinutes, durationMinutes}) {},
+            ),
           ),
-        ));
+        );
 
         // Should find the orange now indicator (circle)
         expect(find.byType(DecoratedBox), findsWidgets);
@@ -212,13 +222,15 @@ void main() {
           durationMinutes: 90, // 1.5 hours
         );
 
-        await tester.pumpWidget(createTestWidget(
-          child: TimelineBody(
-            events: [event],
-            topPadding: 0,
-            onEventChanged: (task, {startMinutes, durationMinutes}) {},
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: [event],
+              topPadding: 0,
+              onEventChanged: (task, {startMinutes, durationMinutes}) {},
+            ),
           ),
-        ));
+        );
 
         // Event should show start and end time - look for the time range text specifically
         expect(find.textContaining('9:00 AM - 10:30 AM'), findsOneWidget);
@@ -233,13 +245,15 @@ void main() {
           durationMinutes: 120, // 2 hours - tall enough for drag indicator
         );
 
-        await tester.pumpWidget(createTestWidget(
-          child: TimelineBody(
-            events: [event],
-            topPadding: 0,
-            onEventChanged: (task, {startMinutes, durationMinutes}) {},
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: [event],
+              topPadding: 0,
+              onEventChanged: (task, {startMinutes, durationMinutes}) {},
+            ),
           ),
-        ));
+        );
 
         // Should find drag indicator icon
         expect(find.byIcon(Icons.drag_indicator), findsOneWidget);
@@ -254,13 +268,15 @@ void main() {
           durationMinutes: 5, // Very short - will be snapped to min 15
         );
 
-        await tester.pumpWidget(createTestWidget(
-          child: TimelineBody(
-            events: [event],
-            topPadding: 0,
-            onEventChanged: (task, {startMinutes, durationMinutes}) {},
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: [event],
+              topPadding: 0,
+              onEventChanged: (task, {startMinutes, durationMinutes}) {},
+            ),
           ),
-        ));
+        );
 
         // The minimum duration is 15 minutes which renders at 35px + padding
         // Check if drag indicator is hidden (condition is height > 36)
@@ -271,13 +287,15 @@ void main() {
 
     group('Layout', () {
       testWidgets('handles empty events list', (tester) async {
-        await tester.pumpWidget(createTestWidget(
-          child: TimelineBody(
-            events: const [],
-            topPadding: 0,
-            onEventChanged: (task, {startMinutes, durationMinutes}) {},
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: const [],
+              topPadding: 0,
+              onEventChanged: (task, {startMinutes, durationMinutes}) {},
+            ),
           ),
-        ));
+        );
 
         // Should still render hour grid
         expect(find.text('00:00'), findsOneWidget);
@@ -285,17 +303,20 @@ void main() {
       });
 
       testWidgets('renders grid lines for each hour', (tester) async {
-        await tester.pumpWidget(createTestWidget(
-          child: TimelineBody(
-            events: const [],
-            topPadding: 0,
-            onEventChanged: (task, {startMinutes, durationMinutes}) {},
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: const [],
+              topPadding: 0,
+              onEventChanged: (task, {startMinutes, durationMinutes}) {},
+            ),
           ),
-        ));
+        );
 
         // Should find 25 hour separators (0-24)
         final gridLines = find.byWidgetPredicate(
-          (widget) => widget is ColoredBox && widget.color == const Color(0xFF2A2A2A),
+          (widget) =>
+              widget is ColoredBox && widget.color == const Color(0xFF2A2A2A),
         );
         expect(gridLines, findsAtLeastNWidgets(20));
       });

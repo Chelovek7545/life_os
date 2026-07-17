@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 
-
 class SemanticTag extends StatelessWidget {
   final String label;
   final Color accentColor;
@@ -37,13 +36,9 @@ class SemanticTag extends StatelessWidget {
             const SizedBox(width: 4),
             GestureDetector(
               onTap: onRemove,
-              child: Icon(
-                Icons.close,
-                size: 14,
-                color: accentColor,
-              ),
+              child: Icon(Icons.close, size: 14, color: accentColor),
             ),
-          ]
+          ],
         ],
       ),
     );

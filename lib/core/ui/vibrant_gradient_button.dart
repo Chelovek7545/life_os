@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 
-
 class VibrantGradientButton extends StatefulWidget {
   final String text;
   final IconData? icon;
@@ -25,7 +24,8 @@ class _VibrantGradientButtonState extends State<VibrantGradientButton> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: (_) => setState(() => _scale = 0.98), // Эффект active:scale-[0.98]
+      onTapDown: (_) =>
+          setState(() => _scale = 0.98), // Эффект active:scale-[0.98]
       onTapUp: (_) => setState(() => _scale = 1.0),
       onTapCancel: () => setState(() => _scale = 1.0),
       onTap: widget.onPressed,
@@ -43,7 +43,7 @@ class _VibrantGradientButtonState extends State<VibrantGradientButton> {
                 color: AppColors.primaryContainer.withOpacity(0.2),
                 blurRadius: 24,
                 offset: const Offset(0, 8),
-              )
+              ),
             ],
           ),
           child: Row(

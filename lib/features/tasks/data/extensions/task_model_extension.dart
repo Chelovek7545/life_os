@@ -35,7 +35,7 @@ extension TaskToDrift on Task {
       status: Value(status),
 
       createdAt: Value(createdAt),
-            updatedAt: Value(updatedAt),
+      updatedAt: Value(updatedAt),
       startsAt: Value(startsAt),
       endsAt: Value(endsAt),
       dueDate: Value(dueDate),

@@ -29,7 +29,7 @@ extension ProjectToDrift on Project {
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       isArchived: Value(isArchived),
-      dueDate: Value(dueDate)
+      dueDate: Value(dueDate),
     );
   }
 }

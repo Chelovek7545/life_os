@@ -20,23 +20,27 @@ class TasksRepository {
 
   Stream<List<Task>> watchTasks() => _dao.watchAllTasksWithTags();
 
-  Stream<List<Task>> watchTasksForProject(String projectId) => _dao.watchTasksForProject(projectId);
+  Stream<List<Task>> watchTasksForProject(String projectId) =>
+      _dao.watchTasksForProject(projectId);
 
-  Future<Task?> getById(String id) => _dao.getById(id).then((v) => v?.toDomain());
+  Future<Task?> getById(String id) =>
+      _dao.getById(id).then((v) => v?.toDomain());
 
   Future<void> addTask(Task task) async {
     try {
-      await _dao.insertTaskWithTags(task.toDrift(), task.tags.map((e) => e.name).toList());
+      await _dao.insertTaskWithTags(
+        task.toDrift(),
+        task.tags.map((e) => e.name).toList(),
+      );
     } catch (error) {
       throw StorageException('Failed to save task.', error);
     }
   }
 
-
   Future<void> updateTask(Task task) async {
     try {
       final companion = task.toDrift();
-  
+
       // Собираем плоский список ID тегов, которые сейчас привязаны к задаче
       final tagNames = task.tags.map((tag) => tag.name).toList();
 

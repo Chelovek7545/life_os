@@ -4,7 +4,6 @@ import 'package:life_os/features/tasks/domain/tag_model.dart';
 
 enum TaskStatus { notStarted, inProgress, done, open }
 
-
 class Task {
   const Task({
     required this.id,
@@ -50,7 +49,7 @@ class Task {
       return endsAt!.difference(startsAt!);
     }
     return const Duration(minutes: 15);
-  } 
+  }
 
   factory Task.blank() {
     return Task(
@@ -94,7 +93,7 @@ class Task {
       dueDate: dueDate != null ? dueDate.value : this.dueDate,
       startsAt: startsAt != null ? startsAt.value : this.startsAt,
       endsAt: endsAt != null ? endsAt.value : this.endsAt,
-      
+
       projectId: projectId != null ? projectId.value : this.projectId,
       space: space != null ? space.value : this.space,
       timerSeconds: timerSeconds ?? this.timerSeconds,

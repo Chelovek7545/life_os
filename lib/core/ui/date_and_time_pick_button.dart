@@ -20,21 +20,16 @@ Widget dateAndTimePickButton(
       firstDate: DateTime(2000),
       lastDate: DateTime(2040),
     );
-    final dt = date?.copyWith(
+    final dt =
+        date?.copyWith(
           year: selected?.year,
           month: selected?.month,
           day: selected?.day,
         ) ??
         selected?.add(const Duration(milliseconds: 1));
-    if (selected != null){
-
-      if(
-          validate(
-            dt!
-          )) {
-        onDateChange(
-          dt
-        );
+    if (selected != null) {
+      if (validate(dt!)) {
+        onDateChange(dt);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('End time must be after start time')),

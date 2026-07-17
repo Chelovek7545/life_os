@@ -7,7 +7,6 @@ import 'dart:io';
 
 part 'database.g.dart';
 
-
 @DataClassName('TaskModel')
 class Tasks extends Table {
   TextColumn get id => text()(); // UUID
@@ -21,12 +20,11 @@ class Tasks extends Table {
   DateTimeColumn get startsAt => dateTime().nullable()();
   DateTimeColumn get endsAt => dateTime().nullable()();
 
-
   DateTimeColumn get dueDate => dateTime().nullable()();
   TextColumn get space => text().nullable()();
   TextColumn get projectId => text().nullable()();
   TextColumn get spaceId => text().nullable()();
-  
+
   IntColumn get timerSeconds => integer().withDefault(const Constant(0))();
   IntColumn get priority => integer().withDefault(const Constant(0))();
   RealColumn get effortWeight => real().withDefault(const Constant(1.0))();
@@ -49,7 +47,7 @@ class Projects extends Table {
   //IntColumn get status => integer().withDefault(const Constant(0))();
   TextColumn get goalId => text().nullable()();
   BoolColumn get isArchived => boolean().withDefault(const Constant(false))();
-  
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -67,24 +65,22 @@ class AppDatabase extends _$AppDatabase {
   // Конструктор
   AppDatabase() : super(_openConnection());
 
-
-//Чтобы сохранялась 1 миллисекунда которую я добавляю
-@override
+  //Чтобы сохранялась 1 миллисекунда которую я добавляю
+  @override
   DriftDatabaseOptions get options =>
       const DriftDatabaseOptions(storeDateTimeAsText: true);
-
 
   // Версия схемы базы данных
   @override
   int get schemaVersion => 1;
-
- 
 }
 
 class TaskTagEntries extends Table {
-  TextColumn get taskId => text().references(Tasks, #id, onDelete: KeyAction.cascade)();
-  IntColumn get tagId => integer().references(Tags, #id, onDelete: KeyAction.cascade)();
-  
+  TextColumn get taskId =>
+      text().references(Tasks, #id, onDelete: KeyAction.cascade)();
+  IntColumn get tagId =>
+      integer().references(Tags, #id, onDelete: KeyAction.cascade)();
+
   @override
   Set<Column> get primaryKey => {taskId, tagId}; // Составной первичный ключ
 }
@@ -93,8 +89,6 @@ LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'tasks.sqlite'));
-
-
 
     // //ТОЛЬКО В РАЗРАБОТКЕ
     // if (await file.exists()) {

@@ -33,7 +33,6 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      
       appBar: AppBar(toolbarHeight: 0),
       body: IndexedStack(
         index: _selectedIndex,
@@ -79,7 +78,9 @@ class SlidingNavBar extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final itemWidth = (constraints.maxWidth - 24 - 4) / itemCount;
-
+        final double navBarHeight = constraints.maxHeight * 0.1 > 70.0
+            ? constraints.maxHeight * 0.1
+            : 70.0; // Высота навигационной панели
         return Container(
           height: constraints.maxHeight * 0.1,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
@@ -98,7 +99,6 @@ class SlidingNavBar extends StatelessWidget {
                 top: 1,
                 bottom: 1,
                 child: Container(
-                  
                   margin: EdgeInsets.symmetric(horizontal: itemWidth * 0.05),
                   width: itemWidth * 0.9,
                   decoration: BoxDecoration(
@@ -127,11 +127,16 @@ class SlidingNavBar extends StatelessWidget {
                               decoration: BoxDecoration(
                                 boxShadow: [
                                   if (selected)
-                                  BoxShadow(
-                                    color: const Color.fromARGB(255, 255, 68, 0).withValues(alpha: 0.6),
-                                    blurRadius: 15,
-                                    spreadRadius: -4,
-                                  ),
+                                    BoxShadow(
+                                      color: const Color.fromARGB(
+                                        255,
+                                        255,
+                                        68,
+                                        0,
+                                      ).withValues(alpha: 0.6),
+                                      blurRadius: 15,
+                                      spreadRadius: -4,
+                                    ),
                                 ],
                               ),
                               child: Icon(
@@ -177,11 +182,16 @@ class SlidingNavBar extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(12),
                                   boxShadow: [
                                     BoxShadow(
-                                    color: const Color.fromARGB(255, 255, 68, 0).withValues(alpha: 0.6),
-                                    blurRadius: 15,
-                                    spreadRadius: -4,
-                                  ),
-                                  ]
+                                      color: const Color.fromARGB(
+                                        255,
+                                        255,
+                                        68,
+                                        0,
+                                      ).withValues(alpha: 0.6),
+                                      blurRadius: 15,
+                                      spreadRadius: -4,
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),

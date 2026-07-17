@@ -3,10 +3,8 @@ import 'package:life_os/app.dart';
 import 'package:life_os/core/di.dart';
 
 void main() {
-    final container = DependencyContainer();
+  final container = DependencyContainer();
   container.init();
-  
-  
-  runApp(MyApp(diContainer: container,));
-}
 
+  runApp(MyApp(diContainer: container));
+}

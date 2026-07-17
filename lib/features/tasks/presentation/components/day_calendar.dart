@@ -26,7 +26,6 @@ class DateTimelineCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      
       onTap: onTap,
       child: GlassPanel(
         child: AnimatedContainer(
@@ -36,9 +35,7 @@ class DateTimelineCard extends StatelessWidget {
           decoration: BoxDecoration(
             border: Border.all(color: AppColors.borderGlass),
             borderRadius: BorderRadius.circular(24),
-        
-        
-        
+
             gradient: isSelected
                 ? const LinearGradient(
                     begin: Alignment.topCenter,

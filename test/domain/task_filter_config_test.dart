@@ -73,21 +73,30 @@ void main() {
       });
 
       test('updates showCompleted to false', () {
-        final config = TaskFilterConfig(anchorDate: DateTime.now(), showCompleted: true);
+        final config = TaskFilterConfig(
+          anchorDate: DateTime.now(),
+          showCompleted: true,
+        );
         final updated = config.copyWith(showCompleted: () => false);
 
         expect(updated.showCompleted, false);
       });
 
       test('resets showCompleted to null using function', () {
-        final config = TaskFilterConfig(anchorDate: DateTime.now(), showCompleted: true);
+        final config = TaskFilterConfig(
+          anchorDate: DateTime.now(),
+          showCompleted: true,
+        );
         final updated = config.copyWith(showCompleted: () => null);
 
         expect(updated.showCompleted, isNull);
       });
 
       test('preserves showCompleted when not provided', () {
-        final config = TaskFilterConfig(anchorDate: DateTime.now(), showCompleted: true);
+        final config = TaskFilterConfig(
+          anchorDate: DateTime.now(),
+          showCompleted: true,
+        );
         final updated = config.copyWith(period: DatePeriod.week);
 
         expect(updated.showCompleted, true);

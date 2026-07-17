@@ -13,10 +13,10 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Life OS',
-//      themeMode: ThemeMode.dark,
+      //      themeMode: ThemeMode.dark,
       theme: AppTheme.darkTheme,
       // ThemeData(
-        
+
       //   colorScheme: ColorScheme.fromSeed(
       //     brightness: Brightness.dark,
       //     seedColor:   Colors.deepPurple),

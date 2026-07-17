@@ -1,5 +1,3 @@
-
-
 import 'package:life_os/features/dashboard/domain/dashboard_card_item.dart';
 
 sealed class DashboardScreenState {
@@ -29,8 +27,10 @@ sealed class DashboardScreenState {
     return switch (this) {
       DashboardScreenInitial() => initial != null ? initial() : orElse(),
       DashboardScreenLoading() => loading != null ? loading() : orElse(),
-      DashboardScreenLoaded(:final items) => loaded != null ? loaded(items) : orElse(),
-      DashboardScreenError(:final message) => error != null ? error(message) : orElse(),
+      DashboardScreenLoaded(:final items) =>
+        loaded != null ? loaded(items) : orElse(),
+      DashboardScreenError(:final message) =>
+        error != null ? error(message) : orElse(),
     };
   }
 }
@@ -54,4 +54,3 @@ class DashboardScreenError extends DashboardScreenState {
 
   const DashboardScreenError(this.message);
 }
-
