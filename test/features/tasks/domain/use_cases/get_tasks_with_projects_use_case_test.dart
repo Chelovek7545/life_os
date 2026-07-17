@@ -13,6 +13,7 @@ import '../../../../test_helpers.dart';
 
 class FakeTasksRepo extends Fake implements TasksRepository {
   final BehaviorSubject<List<Task>> _controller;
+<<<<<<< HEAD
   FakeTasksRepo(List<Task> initial)
     : _controller = BehaviorSubject.seeded(initial);
 
@@ -30,11 +31,23 @@ class FakeTasksRepo extends Fake implements TasksRepository {
   @override
   Stream<List<Task>> watchTasksForProject(String projectId) =>
       _controller.stream;
+=======
+  FakeTasksRepo(List<Task> initial) : _controller = BehaviorSubject.seeded(initial);
+
+  void addTasks(List<Task> tasks) => _controller.add(tasks);
+  @override Stream<List<Task>> watchTasks() => _controller.stream;
+  @override Future<void> addTask(Task task) async {}
+  @override Future<void> deleteTask(String id) async {}
+  @override Future<Task?> getById(String id) async => null;
+  @override Future<void> updateTask(Task task) async {}
+  @override Stream<List<Task>> watchTasksForProject(String projectId) => _controller.stream;
+>>>>>>> d7ef432f3f844238948e716c680c6d6572345791
   Future<void> close() => _controller.close();
 }
 
 class FakeProjectsRepo extends Fake implements ProjectsRepository {
   final BehaviorSubject<List<Project>> _controller;
+<<<<<<< HEAD
   FakeProjectsRepo(List<Project> initial)
     : _controller = BehaviorSubject.seeded(initial);
 
@@ -51,6 +64,17 @@ class FakeProjectsRepo extends Fake implements ProjectsRepository {
   Future<Project?> getProjectById(String id) async => null;
   @override
   Future<void> updateProject(Project project) async {}
+=======
+  FakeProjectsRepo(List<Project> initial) : _controller = BehaviorSubject.seeded(initial);
+
+  void addProjects(List<Project> projects) => _controller.add(projects);
+  @override Stream<List<Project>> watchAllProjects() => _controller.stream;
+  @override Future<void> addProject(Project project) async {}
+  @override Future<void> deleteProject(String id) async {}
+  @override Future<List<Project>> getAllProjects() async => [];
+  @override Future<Project?> getProjectById(String id) async => null;
+  @override Future<void> updateProject(Project project) async {}
+>>>>>>> d7ef432f3f844238948e716c680c6d6572345791
   Future<void> close() => _controller.close();
 }
 

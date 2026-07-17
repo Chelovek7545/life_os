@@ -63,7 +63,7 @@ class Tags extends Table {
 @DriftDatabase(tables: [Tasks, Projects, Tags, TaskTagEntries])
 class AppDatabase extends _$AppDatabase {
   // Конструктор
-  AppDatabase() : super(_openConnection());
+  AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   //Чтобы сохранялась 1 миллисекунда которую я добавляю
   @override

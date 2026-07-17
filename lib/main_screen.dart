@@ -7,7 +7,6 @@ import 'package:life_os/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:life_os/features/projects/presentation/projects_screen.dart';
 import 'package:life_os/features/resources/presentation/resources_screen.dart';
 import 'package:life_os/features/tasks/presentation/tasks_screen.dart';
-import 'package:life_os/features/timer/presentation/timer_screen.dart';
 
 class MainScreen extends StatefulWidget {
   final DependencyContainer diContainer;
@@ -82,7 +81,7 @@ class SlidingNavBar extends StatelessWidget {
             ? constraints.maxHeight * 0.1
             : 70.0; // Высота навигационной панели
         return Container(
-          height: constraints.maxHeight * 0.1,
+          height: navBarHeight,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surfaceDim,

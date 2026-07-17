@@ -60,7 +60,7 @@ class DateTimelineCard extends StatelessWidget {
             //     : null,
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 10),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [

@@ -78,6 +78,7 @@ void main() {
       expect(find.text('design'), findsOneWidget);
     });
 
+<<<<<<< HEAD
     testWidgets('calls onCheckChanged when completion button tapped', (
       tester,
     ) async {
@@ -85,6 +86,14 @@ void main() {
       await tester.pumpWidget(
         createTaskCard(completed: true, onCheckChanged: () => checked = true),
       );
+=======
+    testWidgets('calls onCheckChanged when completion button tapped', (tester) async {
+      bool checked = false;
+      await tester.pumpWidget(createTaskCard(
+        completed: true,
+        onCheckChanged: () => checked = true,
+      ));
+>>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
       await tester.tap(find.byIcon(Icons.check).last);
       await tester.pump();
@@ -94,9 +103,16 @@ void main() {
 
     testWidgets('calls onSelected when select box tapped', (tester) async {
       bool selected = false;
+<<<<<<< HEAD
       await tester.pumpWidget(
         createTaskCard(isSelected: false, onSelected: () => selected = true),
       );
+=======
+      await tester.pumpWidget(createTaskCard(
+        isSelected: false,
+        onSelected: () => selected = true,
+      ));
+>>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
       await tester.tap(find.byType(AnimatedContainer).last);
       await tester.pump();
@@ -106,9 +122,15 @@ void main() {
 
     testWidgets('calls onLongPress on long press', (tester) async {
       bool longPressed = false;
+<<<<<<< HEAD
       await tester.pumpWidget(
         createTaskCard(onLongPress: () => longPressed = true),
       );
+=======
+      await tester.pumpWidget(createTaskCard(
+        onLongPress: () => longPressed = true,
+      ));
+>>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
       await tester.longPress(find.byType(TaskCard));
       await tester.pump();

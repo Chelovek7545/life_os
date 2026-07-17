@@ -40,9 +40,14 @@ void main() {
       });
 
       test('initialize listens to watchAllProjects', () {
+<<<<<<< HEAD
         when(
           mockProjectsRepo.watchAllProjects(),
         ).thenAnswer((_) => Stream<List<Project>>.value([]));
+=======
+        when(mockProjectsRepo.watchAllProjects())
+            .thenAnswer((_) => Stream<List<Project>>.value([]));
+>>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         viewModel.initialize();
 
@@ -55,9 +60,14 @@ void main() {
 
       setUp(() {
         projectStream = BehaviorSubject<List<Project>>.seeded([]);
+<<<<<<< HEAD
         when(
           mockProjectsRepo.watchAllProjects(),
         ).thenAnswer((_) => projectStream.stream);
+=======
+        when(mockProjectsRepo.watchAllProjects())
+            .thenAnswer((_) => projectStream.stream);
+>>>>>>> d7ef432f3f844238948e716c680c6d6572345791
         viewModel.initialize();
       });
 
@@ -81,7 +91,13 @@ void main() {
       });
 
       test('emits ProjectsLoaded with curProject set to first', () async {
+<<<<<<< HEAD
         final projects = [createMockProject(name: 'First')];
+=======
+        final projects = [
+          createMockProject(name: 'First'),
+        ];
+>>>>>>> d7ef432f3f844238948e716c680c6d6572345791
         projectStream.add(projects);
 
         final state = await getState() as ProjectsLoaded;
@@ -106,9 +122,14 @@ void main() {
 
     group('CRUD operations', () {
       test('addProject delegates to repository and refreshes', () async {
+<<<<<<< HEAD
         when(
           mockProjectsRepo.watchAllProjects(),
         ).thenAnswer((_) => Stream<List<Project>>.value([]));
+=======
+        when(mockProjectsRepo.watchAllProjects())
+            .thenAnswer((_) => Stream<List<Project>>.value([]));
+>>>>>>> d7ef432f3f844238948e716c680c6d6572345791
         when(mockProjectsRepo.addProject(any)).thenAnswer((_) async => {});
         viewModel.initialize();
 
@@ -119,9 +140,14 @@ void main() {
       });
 
       test('updateProject delegates to repository', () async {
+<<<<<<< HEAD
         when(
           mockProjectsRepo.watchAllProjects(),
         ).thenAnswer((_) => Stream<List<Project>>.value([]));
+=======
+        when(mockProjectsRepo.watchAllProjects())
+            .thenAnswer((_) => Stream<List<Project>>.value([]));
+>>>>>>> d7ef432f3f844238948e716c680c6d6572345791
         when(mockProjectsRepo.updateProject(any)).thenAnswer((_) async => {});
         viewModel.initialize();
 
@@ -131,9 +157,14 @@ void main() {
       });
 
       test('deleteProject delegates to repository', () async {
+<<<<<<< HEAD
         when(
           mockProjectsRepo.watchAllProjects(),
         ).thenAnswer((_) => Stream<List<Project>>.value([]));
+=======
+        when(mockProjectsRepo.watchAllProjects())
+            .thenAnswer((_) => Stream<List<Project>>.value([]));
+>>>>>>> d7ef432f3f844238948e716c680c6d6572345791
         when(mockProjectsRepo.deleteProject(any)).thenAnswer((_) async => {});
         viewModel.initialize();
 
@@ -143,9 +174,14 @@ void main() {
       });
 
       test('getProject delegates to repository', () async {
+<<<<<<< HEAD
         when(
           mockProjectsRepo.getProjectById(any),
         ).thenAnswer((_) async => null);
+=======
+        when(mockProjectsRepo.getProjectById(any))
+            .thenAnswer((_) async => null);
+>>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         await viewModel.getProject('proj-1');
 
@@ -156,7 +192,12 @@ void main() {
     group('tasks integration', () {
       test('watchTaskByProject delegates to tasks repo', () {
         final stream = Stream<List<Task>>.value([]);
+<<<<<<< HEAD
         when(mockTasksRepo.watchTasksForProject(any)).thenAnswer((_) => stream);
+=======
+        when(mockTasksRepo.watchTasksForProject(any))
+            .thenAnswer((_) => stream);
+>>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         final result = viewModel.watchTaskByProject('proj-1');
 

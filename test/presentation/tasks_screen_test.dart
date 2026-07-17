@@ -115,6 +115,11 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
   }
 
   @override
+  void disableForm() {
+    _shouldRenderForm = false;
+  }
+
+  @override
   void startEditingTask(TaskWithProject item) {
     _activeTaskWithProject = item;
   }
@@ -550,6 +555,7 @@ void main() {
     group('Form', () {
       testWidgets('shows form when isFormVisible is true', (tester) async {
         viewModel._stateController.add(const TasksEmpty());
+        viewModel._shouldRenderForm = true;
         viewModel._formVisibleController.add(true);
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
@@ -560,6 +566,7 @@ void main() {
 
       testWidgets('hides form when isFormVisible is false', (tester) async {
         viewModel._stateController.add(const TasksEmpty());
+        viewModel._shouldRenderForm = true;
         viewModel._formVisibleController.add(true);
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
@@ -569,6 +576,7 @@ void main() {
 
         viewModel._formVisibleController.add(false);
         await tester.pump();
+        await tester.pumpAndSettle();
 
         expect(find.byType(CollapsibleTaskForm), findsNothing);
       });
