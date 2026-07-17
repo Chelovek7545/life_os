@@ -18,18 +18,10 @@ import '../../../test_helpers.dart';
 class FakeProjectsViewModel extends Fake implements ProjectsViewModel {
   final BehaviorSubject<ProjectsScreenState> _stateController;
 
-<<<<<<< HEAD
   FakeProjectsViewModel({ProjectsScreenState? initialState})
     : _stateController = BehaviorSubject<ProjectsScreenState>.seeded(
         initialState ?? const ProjectsLoading(),
       );
-=======
-  FakeProjectsViewModel({
-    ProjectsScreenState? initialState,
-  }) : _stateController = BehaviorSubject<ProjectsScreenState>.seeded(
-          initialState ?? const ProjectsLoading(),
-        );
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
   @override
   Stream<ProjectsScreenState> get state => _stateController.stream;
@@ -55,12 +47,7 @@ class FakeProjectsViewModel extends Fake implements ProjectsViewModel {
   Future<Project?> getProject(String id) async => null;
 
   @override
-<<<<<<< HEAD
   Stream<List<Task>> watchTaskByProject(String projectId) => Stream.value([]);
-=======
-  Stream<List<Task>> watchTaskByProject(String projectId) =>
-      Stream.value([]);
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
   @override
   Future<void> updateTask(covariant Task task) async {}
@@ -107,16 +94,9 @@ void main() {
     });
 
     testWidgets('shows empty state when no projects', (tester) async {
-<<<<<<< HEAD
       viewModel._stateController.add(
         ProjectsLoaded(projects: [], curProject: null),
       );
-=======
-      viewModel._stateController.add(ProjectsLoaded(
-        projects: [],
-        curProject: null,
-      ));
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
       await tester.pumpWidget(createWidget());
       await tester.pump();
 
@@ -124,7 +104,6 @@ void main() {
     });
 
     testWidgets('renders project cards when projects exist', (tester) async {
-<<<<<<< HEAD
       viewModel._stateController.add(
         ProjectsLoaded(
           projects: [
@@ -134,15 +113,6 @@ void main() {
           curProject: null,
         ),
       );
-=======
-      viewModel._stateController.add(ProjectsLoaded(
-        projects: [
-          createMockProject(name: 'Project A'),
-          createMockProject(name: 'Project B'),
-        ],
-        curProject: null,
-      ));
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
       await tester.pumpWidget(createWidget());
       await tester.pump();
 
@@ -150,16 +120,9 @@ void main() {
     });
 
     testWidgets('shows new project button', (tester) async {
-<<<<<<< HEAD
       viewModel._stateController.add(
         ProjectsLoaded(projects: [], curProject: null),
       );
-=======
-      viewModel._stateController.add(ProjectsLoaded(
-        projects: [],
-        curProject: null,
-      ));
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
       await tester.pumpWidget(createWidget());
       await tester.pump();
 
@@ -167,16 +130,9 @@ void main() {
     });
 
     testWidgets('tapping new project button shows edit form', (tester) async {
-<<<<<<< HEAD
       viewModel._stateController.add(
         ProjectsLoaded(projects: [], curProject: null),
       );
-=======
-      viewModel._stateController.add(ProjectsLoaded(
-        projects: [],
-        curProject: null,
-      ));
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
       await tester.pumpWidget(createWidget());
       await tester.pump();
 

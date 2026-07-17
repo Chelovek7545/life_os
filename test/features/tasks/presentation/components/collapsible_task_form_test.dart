@@ -18,13 +18,7 @@ void main() {
 
     setUp(() {
       task = createMockTask(title: 'Test Task');
-<<<<<<< HEAD
       projects = [createMockProject(id: 'proj-1', name: 'Project A')];
-=======
-      projects = [
-        createMockProject(id: 'proj-1', name: 'Project A'),
-      ];
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
       projectsStream = BehaviorSubject<List<Project>>.seeded(projects);
       submitted = false;
     });

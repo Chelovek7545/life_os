@@ -81,13 +81,7 @@ void main() {
 
     group('TasksLoaded', () {
       final task = createMockTask();
-<<<<<<< HEAD
       final tasks = [createMockTaskWithProject(task: task)];
-=======
-      final tasks = [
-        createMockTaskWithProject(task: task),
-      ];
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
       test('isLoaded returns true', () {
         final state = TasksLoaded(tasks: tasks, selectedTasks: []);

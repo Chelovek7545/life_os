@@ -76,14 +76,7 @@ void main() {
     group('copyWith', () {
       test('returns new Project with updated fields', () {
         final original = Project.create(name: 'Original');
-<<<<<<< HEAD
         final updated = original.copyWith(name: 'Updated', color: '#00FF00');
-=======
-        final updated = original.copyWith(
-          name: 'Updated',
-          color: '#00FF00',
-        );
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         expect(updated.name, 'Updated');
         expect(updated.color, '#00FF00');
@@ -92,15 +85,9 @@ void main() {
       });
 
       test('Wrapped fields can be set to null', () {
-<<<<<<< HEAD
         final project = Project.create(
           name: 'Test',
         ).copyWith(dueDate: Wrapped(DateTime.now()));
-=======
-        final project = Project.create(name: 'Test').copyWith(
-          dueDate: Wrapped(DateTime.now()),
-        );
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         expect(project.dueDate, isNotNull);
 

@@ -25,13 +25,9 @@ void main() {
       viewModel = MockProjectsViewModel();
       taskStream = BehaviorSubject<List<Task>>.seeded([]);
       project = createMockProject(name: 'Test Project', color: '#FF0000');
-<<<<<<< HEAD
       when(
         viewModel.watchTaskByProject(any),
       ).thenAnswer((_) => taskStream.stream);
-=======
-      when(viewModel.watchTaskByProject(any)).thenAnswer((_) => taskStream.stream);
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
     });
 
     tearDown(() {
@@ -90,13 +86,7 @@ void main() {
     });
 
     testWidgets('shows 100% when all tasks done', (tester) async {
-<<<<<<< HEAD
       taskStream.add([createMockTask(status: TaskStatus.done)]);
-=======
-      taskStream.add([
-        createMockTask(status: TaskStatus.done),
-      ]);
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
       await tester.pumpWidget(createWidget());
       await tester.pump();
 
@@ -124,7 +114,6 @@ void main() {
 
     testWidgets('calls onEditRequested from popup menu', (tester) async {
       bool editRequested = false;
-<<<<<<< HEAD
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark().copyWith(
@@ -149,30 +138,6 @@ void main() {
           ),
         ),
       );
-=======
-      await tester.pumpWidget(MaterialApp(
-        theme: ThemeData.dark().copyWith(
-          scaffoldBackgroundColor: AppColors.surfaceDim,
-          colorScheme: const ColorScheme.dark(
-            surface: AppColors.surface,
-            primary: AppColors.primary,
-            onSurface: Colors.white,
-          ),
-        ),
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: ProjectCard(
-              title: project.name,
-              description: project.description,
-              color: Colors.red,
-              project: project,
-              viewModel: viewModel,
-              onEditRequested: () => editRequested = true,
-            ),
-          ),
-        ),
-      ));
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
       await tester.pump();
 
       final moreVert = find.byIcon(Icons.more_vert);
@@ -191,7 +156,6 @@ void main() {
     testWidgets('calls deleteProject from popup menu', (tester) async {
       when(viewModel.deleteProject(any)).thenAnswer((_) async => {});
 
-<<<<<<< HEAD
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark().copyWith(
@@ -216,30 +180,6 @@ void main() {
           ),
         ),
       );
-=======
-      await tester.pumpWidget(MaterialApp(
-        theme: ThemeData.dark().copyWith(
-          scaffoldBackgroundColor: AppColors.surfaceDim,
-          colorScheme: const ColorScheme.dark(
-            surface: AppColors.surface,
-            primary: AppColors.primary,
-            onSurface: Colors.white,
-          ),
-        ),
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: ProjectCard(
-              title: project.name,
-              description: project.description,
-              color: Colors.red,
-              project: project,
-              viewModel: viewModel,
-              onEditRequested: () {},
-            ),
-          ),
-        ),
-      ));
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
       await tester.pump();
 
       final moreVert = find.byIcon(Icons.more_vert);
@@ -259,7 +199,6 @@ void main() {
       final projectWithDueDate = Project.create(
         name: 'Due Project',
       ).copyWith(dueDate: Wrapped(DateTime(2024, 12, 31)));
-<<<<<<< HEAD
       when(
         viewModel.watchTaskByProject(any),
       ).thenAnswer((_) => taskStream.stream);
@@ -289,33 +228,6 @@ void main() {
           ),
         ),
       );
-=======
-      when(viewModel.watchTaskByProject(any)).thenAnswer((_) => taskStream.stream);
-
-      await tester.pumpWidget(MaterialApp(
-        theme: ThemeData.dark().copyWith(
-          scaffoldBackgroundColor: AppColors.surfaceDim,
-          colorScheme: const ColorScheme.dark(
-            surface: AppColors.surface,
-            primary: AppColors.primary,
-            onSurface: Colors.white,
-          ),
-        ),
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: ProjectCard(
-              title: projectWithDueDate.name,
-              description: projectWithDueDate.description,
-              color: Colors.red,
-              project: projectWithDueDate,
-              viewModel: viewModel,
-              onEditRequested: () {},
-              dueDate: projectWithDueDate.dueDate,
-            ),
-          ),
-        ),
-      ));
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
       await tester.pump();
 
       expect(find.textContaining('Due date'), findsOneWidget);

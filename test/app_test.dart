@@ -32,14 +32,10 @@ void main() {
       dc.taskWithPrjct = useCase;
       dc.dashboardViewModel = DashboardViewModel(tasksRepo, projectsRepo);
       dc.tasksViewModel = TasksViewModel(tasksRepo, useCase, projectsRepo);
-<<<<<<< HEAD
       dc.projectViewModel = ProjectsViewModel(
         repository: projectsRepo,
         taskRepo: tasksRepo,
       );
-=======
-      dc.projectViewModel = ProjectsViewModel(repository: projectsRepo, taskRepo: tasksRepo);
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
       await tester.pumpWidget(MyApp(diContainer: dc));
       await tester.pump();

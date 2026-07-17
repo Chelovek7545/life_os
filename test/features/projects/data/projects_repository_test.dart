@@ -34,12 +34,7 @@ void main() {
 
     group('getAllProjects', () {
       test('delegates to dao.getAllProjects', () async {
-<<<<<<< HEAD
         when(mockDao.getAllProjects()).thenAnswer((_) async => []);
-=======
-        when(mockDao.getAllProjects())
-            .thenAnswer((_) async => []);
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         final result = await repository.getAllProjects();
 
@@ -50,12 +45,7 @@ void main() {
 
     group('getProjectById', () {
       test('delegates to dao.getProjectById', () async {
-<<<<<<< HEAD
         when(mockDao.getProjectById('proj-1')).thenAnswer((_) async => null);
-=======
-        when(mockDao.getProjectById('proj-1'))
-            .thenAnswer((_) async => null);
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         final result = await repository.getProjectById('proj-1');
 
@@ -67,12 +57,7 @@ void main() {
     group('addProject', () {
       test('delegates to dao.createProject', () async {
         final project = createMockProject();
-<<<<<<< HEAD
         when(mockDao.createProject(any)).thenAnswer((_) async => {});
-=======
-        when(mockDao.createProject(any))
-            .thenAnswer((_) async => {});
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         await repository.addProject(project);
 
@@ -81,14 +66,9 @@ void main() {
 
       test('throws StorageException on dao error', () async {
         final project = createMockProject();
-<<<<<<< HEAD
         when(
           mockDao.createProject(any),
         ).thenAnswer((_) => Future.error(Exception('db error')));
-=======
-        when(mockDao.createProject(any))
-            .thenAnswer((_) => Future.error(Exception('db error')));
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         await expectLater(
           repository.addProject(project),
@@ -100,12 +80,7 @@ void main() {
     group('updateProject', () {
       test('delegates to dao.updateProject', () async {
         final project = createMockProject();
-<<<<<<< HEAD
         when(mockDao.updateProject(any)).thenAnswer((_) async => {});
-=======
-        when(mockDao.updateProject(any))
-            .thenAnswer((_) async => {});
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         await repository.updateProject(project);
 
@@ -114,14 +89,9 @@ void main() {
 
       test('propagates dao error', () async {
         final project = createMockProject();
-<<<<<<< HEAD
         when(
           mockDao.updateProject(any),
         ).thenAnswer((_) => Future.error(Exception('db error')));
-=======
-        when(mockDao.updateProject(any))
-            .thenAnswer((_) => Future.error(Exception('db error')));
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         await expectLater(
           repository.updateProject(project),
@@ -132,12 +102,7 @@ void main() {
 
     group('deleteProject', () {
       test('delegates to dao.deleteProject', () async {
-<<<<<<< HEAD
         when(mockDao.deleteProject('proj-1')).thenAnswer((_) async => {});
-=======
-        when(mockDao.deleteProject('proj-1'))
-            .thenAnswer((_) async => {});
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         await repository.deleteProject('proj-1');
 
@@ -145,14 +110,9 @@ void main() {
       });
 
       test('propagates dao error', () async {
-<<<<<<< HEAD
         when(
           mockDao.deleteProject(any),
         ).thenAnswer((_) => Future.error(Exception('db error')));
-=======
-        when(mockDao.deleteProject(any))
-            .thenAnswer((_) => Future.error(Exception('db error')));
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         try {
           await repository.deleteProject('proj-1');

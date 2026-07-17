@@ -35,12 +35,7 @@ void main() {
     group('watchTasksForProject', () {
       test('delegates to dao.watchTasksForProject', () {
         final stream = Stream<List<Task>>.value([]);
-<<<<<<< HEAD
         when(mockDao.watchTasksForProject('proj-1')).thenAnswer((_) => stream);
-=======
-        when(mockDao.watchTasksForProject('proj-1'))
-            .thenAnswer((_) => stream);
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         final result = repository.watchTasksForProject('proj-1');
 
@@ -51,12 +46,7 @@ void main() {
 
     group('getById', () {
       test('returns null when task not found', () async {
-<<<<<<< HEAD
         when(mockDao.getById('task-1')).thenAnswer((_) async => null);
-=======
-        when(mockDao.getById('task-1'))
-            .thenAnswer((_) async => null);
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         final result = await repository.getById('task-1');
 
@@ -68,12 +58,7 @@ void main() {
     group('addTask', () {
       test('delegates to dao.insertTaskWithTags', () async {
         final task = createMockTask(tags: [createMockTag(id: 1, name: 'dev')]);
-<<<<<<< HEAD
         when(mockDao.insertTaskWithTags(any, any)).thenAnswer((_) async => {});
-=======
-        when(mockDao.insertTaskWithTags(any, any))
-            .thenAnswer((_) async => {});
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         await repository.addTask(task);
 
@@ -82,14 +67,9 @@ void main() {
 
       test('throws StorageException on dao error', () async {
         final task = createMockTask();
-<<<<<<< HEAD
         when(
           mockDao.insertTaskWithTags(any, any),
         ).thenAnswer((_) => Future.error(Exception('db error')));
-=======
-        when(mockDao.insertTaskWithTags(any, any))
-            .thenAnswer((_) => Future.error(Exception('db error')));
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         await expectLater(
           repository.addTask(task),
@@ -101,14 +81,9 @@ void main() {
     group('updateTask', () {
       test('delegates to dao.updateTaskWithTags', () async {
         final task = createMockTask(tags: [createMockTag(id: 1, name: 'dev')]);
-<<<<<<< HEAD
         when(
           mockDao.updateTaskWithTags(any, any),
         ).thenAnswer((_) async => true);
-=======
-        when(mockDao.updateTaskWithTags(any, any))
-            .thenAnswer((_) async => true);
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         await repository.updateTask(task);
 
@@ -117,14 +92,9 @@ void main() {
 
       test('throws StorageException on dao error', () async {
         final task = createMockTask();
-<<<<<<< HEAD
         when(
           mockDao.updateTaskWithTags(any, any),
         ).thenAnswer((_) => Future.error(Exception('db error')));
-=======
-        when(mockDao.updateTaskWithTags(any, any))
-            .thenAnswer((_) => Future.error(Exception('db error')));
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         await expectLater(
           repository.updateTask(task),
@@ -135,12 +105,7 @@ void main() {
 
     group('deleteTask', () {
       test('delegates to dao.deleteTask', () async {
-<<<<<<< HEAD
         when(mockDao.deleteTask('task-1')).thenAnswer((_) async => {});
-=======
-        when(mockDao.deleteTask('task-1'))
-            .thenAnswer((_) async => {});
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         await repository.deleteTask('task-1');
 
@@ -148,14 +113,9 @@ void main() {
       });
 
       test('throws StorageException on dao error', () async {
-<<<<<<< HEAD
         when(
           mockDao.deleteTask('task-1'),
         ).thenAnswer((_) => Future.error(Exception('db error')));
-=======
-        when(mockDao.deleteTask('task-1'))
-            .thenAnswer((_) => Future.error(Exception('db error')));
->>>>>>> d7ef432f3f844238948e716c680c6d6572345791
 
         await expectLater(
           repository.deleteTask('task-1'),
