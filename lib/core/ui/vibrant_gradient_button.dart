@@ -8,11 +8,11 @@ class VibrantGradientButton extends StatefulWidget {
   final VoidCallback onPressed;
 
   const VibrantGradientButton({
-    Key? key,
+    super.key,
     required this.text,
     this.icon,
     required this.onPressed,
-  }) : super(key: key);
+  });
 
   @override
   State<VibrantGradientButton> createState() => _VibrantGradientButtonState();
@@ -40,7 +40,7 @@ class _VibrantGradientButtonState extends State<VibrantGradientButton> {
             borderRadius: BorderRadius.circular(16), // rounded-2xl
             boxShadow: [
               BoxShadow(
-                color: AppColors.primaryContainer.withOpacity(0.2),
+                color: AppColors.primaryContainer.withValues(alpha: 0.2),
                 blurRadius: 24,
                 offset: const Offset(0, 8),
               ),

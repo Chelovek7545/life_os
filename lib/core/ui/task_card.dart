@@ -4,7 +4,6 @@ import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/semantic_tag.dart';
 import 'package:life_os/core/utils/date_format.dart';
-import 'package:life_os/features/tasks/domain/tag_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'glass_panel.dart'; // Из предыдущего шага
 
@@ -25,7 +24,7 @@ class TaskCard extends StatelessWidget {
   final Color? leftBorderColor; // Для задач со статус-линией слева
 
   const TaskCard({
-    Key? key,
+    super.key,
     // required this.title,
     // required this.dueDate,
     this.projectTitle,
@@ -39,7 +38,7 @@ class TaskCard extends StatelessWidget {
     this.onSelected,
     this.isOverdue = false,
     this.leftBorderColor,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -132,8 +131,8 @@ class TaskCard extends StatelessWidget {
                           Text(
                             projectTitle!,
                             style: AppTypography.bodySm.copyWith(
-                              color: AppColors.onSurfaceVariant.withOpacity(
-                                0.7,
+                              color: AppColors.onSurfaceVariant.withValues(
+                                alpha: 0.7,
                               ),
                             ),
                           ),
@@ -167,8 +166,8 @@ class TaskCard extends StatelessWidget {
                                 ),
                                 decoration: BoxDecoration(
                                   color: isOverdue
-                                      ? AppColors.primaryContainer.withOpacity(
-                                          0.2,
+                                      ? AppColors.primaryContainer.withValues(
+                                          alpha: 0.2,
                                         )
                                       : AppColors.surfaceGlass,
                                   borderRadius: BorderRadius.circular(4),
@@ -195,7 +194,7 @@ class TaskCard extends StatelessWidget {
                   // Иконка перетаскивания (показывается условно)
                   Icon(
                     Icons.drag_indicator,
-                    color: AppColors.onSurfaceVariant.withOpacity(0.4),
+                    color: AppColors.onSurfaceVariant.withValues(alpha: 0.4),
                   ),
                 ],
               ),

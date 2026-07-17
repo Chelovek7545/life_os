@@ -1,5 +1,4 @@
 import 'package:life_os/core/database/database.dart';
-import 'package:life_os/core/utils/wrapped.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';

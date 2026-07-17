@@ -1,7 +1,4 @@
 import 'dart:async';
-
-import 'package:life_os/core/database/database.dart';
-import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:mockito/mockito.dart';

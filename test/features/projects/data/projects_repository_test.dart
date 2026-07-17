@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';

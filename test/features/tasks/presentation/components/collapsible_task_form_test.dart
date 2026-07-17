@@ -13,7 +13,6 @@ void main() {
     late Task task;
     late BehaviorSubject<List<Project>> projectsStream;
     late List<Project> projects;
-    late Task submittedTask;
     bool submitted = false;
 
     setUp(() {
@@ -34,7 +33,6 @@ void main() {
           height: 500,
           onSubmit: (t) {
             submitted = true;
-            submittedTask = t;
           },
           onCancel: () {},
           onDelete: (_) {},

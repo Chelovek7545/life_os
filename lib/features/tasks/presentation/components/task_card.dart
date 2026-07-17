@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/widget_previews.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
 
@@ -81,7 +80,7 @@ class TaskCard extends StatelessWidget {
               border: Border.all(
                 color: isSelected
                     ? Color(0xFFB8FF63).withValues(alpha: 0.4)
-                    : Colors.white.withOpacity(0.12),
+                    : Colors.white.withValues(alpha: 0.12),
               ),
               boxShadow: [
                 BoxShadow(
@@ -124,7 +123,7 @@ class TaskCard extends StatelessWidget {
                                 formatDate(dueDate!),
                                 style: Theme.of(context).textTheme.titleSmall!
                                     .copyWith(
-                                      color: Colors.white.withOpacity(0.7),
+                                      color: Colors.white.withValues(alpha: 0.7),
 
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -138,7 +137,7 @@ class TaskCard extends StatelessWidget {
                             projectTitle!,
                             style: Theme.of(context).textTheme.bodyMedium
                                 ?.copyWith(
-                                  color: Colors.white.withOpacity(0.7),
+                                  color: Colors.white.withValues(alpha: 0.7),
                                   fontWeight: FontWeight.w500,
                                 ),
                           ),
@@ -174,7 +173,7 @@ class TaskCard extends StatelessWidget {
                       border: Border.all(
                         color: isSelected
                             ? const Color(0xFFB8FF63)
-                            : Colors.white.withOpacity(0.4),
+                            : Colors.white.withValues(alpha: 0.4),
                         width: 2,
                       ),
                     ),
@@ -210,8 +209,8 @@ class _CompletionButton extends StatelessWidget {
           shape: BoxShape.circle,
           color: completed
               ? const Color(0xFFE7FFD0)
-              : Colors.white.withOpacity(0.12),
-          border: Border.all(color: Colors.white.withOpacity(0.15)),
+              : Colors.white.withValues(alpha: 0.12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
           boxShadow: completed
               ? [
                   BoxShadow(
@@ -242,7 +241,7 @@ class _LinkChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(14),
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

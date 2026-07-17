@@ -8,11 +8,11 @@ class GlassPanel extends StatelessWidget {
   final double borderRadius;
 
   const GlassPanel({
-    Key? key,
+    super.key,
     required this.child,
     this.padding,
     this.borderRadius = 24.0, // По умолчанию rounded-3xl (24px)
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

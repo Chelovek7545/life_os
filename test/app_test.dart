@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/app.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/core/di.dart';
-import 'package:life_os/core/theme/app_theme.dart';
 import 'package:life_os/features/dashboard/presentation/dashboard_view_model.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';

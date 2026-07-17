@@ -2,9 +2,7 @@ import 'package:life_os/core/utils/wrapped.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
 import 'package:test/test.dart';
-import 'package:uuid/uuid.dart';
 
-const _uuid = Uuid();
 
 void main() {
   group('Task', () {

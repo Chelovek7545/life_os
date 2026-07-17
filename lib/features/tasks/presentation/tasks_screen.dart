@@ -54,7 +54,7 @@ class _TasksScreenState extends State<TasksScreen> {
           loading: () => const Center(child: CircularProgressIndicator()),
           empty: (_, _) => const EmptyPlaceholder(),
           error: (message) => Center(child: Text(message)),
-          loaded: (items, selectedTasks, _, __) {
+          loaded: (items, selectedTasks, _, _) {
             if (items.isEmpty) {
               return const EmptyPlaceholder();
             }
@@ -99,7 +99,7 @@ class _TasksScreenState extends State<TasksScreen> {
           loading: () => const Center(child: CircularProgressIndicator()),
           empty: (_, _) => const EmptyPlaceholder(),
           error: (message) => Center(child: Text(message)),
-          loaded: (items, _, __, ___) {
+          loaded: (items, _, _, _) {
             final events = items
                 .where((item) {
                   final startsAt = item.task.startsAt;

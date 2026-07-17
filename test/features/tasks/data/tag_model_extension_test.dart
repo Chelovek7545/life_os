@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/extensions/tag_model_extension.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
@@ -33,7 +32,7 @@ void main() {
 
       final companion = tag.toInsertCompanion();
 
-      expect(companion.id is Value<int>, isTrue);
+      expect(companion.id, isTrue);
       expect(companion.name.value, 'new');
       expect(companion.colorHex.value, 0x0000FF);
     });

@@ -5,11 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rxdart/rxdart.dart';
 
 import 'package:life_os/core/theme/app_colors.dart';
-import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/ui/empty_placeholder.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
-import 'package:life_os/core/ui/segmented_pill_controller.dart';
-import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/tasks/domain/task_filter_config.dart';
@@ -17,8 +14,6 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
 import 'package:life_os/features/tasks/presentation/components/day_calendar.dart';
-import 'package:life_os/features/tasks/presentation/components/timeline.dart'
-    hide TaskEvent;
 import 'package:life_os/features/tasks/presentation/task_state.dart';
 import 'package:life_os/features/tasks/presentation/tasks_screen.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
@@ -32,7 +27,7 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
   bool _shouldRenderForm = false;
   Task _draftTask = Task.blank();
   TaskWithProject? _activeTaskWithProject;
-  List<Task> _selectedTasks = [];
+  final List<Task> _selectedTasks = [];
 
   FakeTasksViewModel({
     TaskScreenState? initialState,

@@ -8,10 +8,10 @@ class PillChecker extends StatefulWidget {
   final Function(int) onSelectionChanged;
 
   const PillChecker({
-    Key? key,
+    super.key,
     required this.options,
     required this.onSelectionChanged,
-  }) : super(key: key);
+  });
 
   static Widget preview() {
     return Padding(
@@ -61,7 +61,7 @@ class _PillCheckerState extends State<PillChecker> {
                     border: Border.all(
                       color: isSelected
                           ? Colors.transparent
-                          : Colors.white.withOpacity(0.1),
+                          : Colors.white.withValues(alpha: 0.1),
                     ),
                   ),
                   child: Center(

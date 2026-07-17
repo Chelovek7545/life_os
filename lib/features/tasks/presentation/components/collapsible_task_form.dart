@@ -4,8 +4,6 @@ import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/ui/date_and_time_pick_button.dart';
-import 'package:life_os/core/ui/date_pick_button.dart';
-import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
@@ -75,7 +73,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     super.didUpdateWidget(oldWidget);
     if (widget.task.id != oldWidget.task.id) {
       _initFields();
-      print("${widget.task.id} != ${oldWidget.task.id}");
+      //print("${widget.task.id} != ${oldWidget.task.id}");
     }
   }
 
@@ -186,11 +184,11 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   @override
   Widget build(BuildContext context) {
     // Вычисляем общий прогресс раскрытия (от 0.0 до 1.0) для базовых анимаций шапки
-    final double totalProgress =
-        ((_currentHeight - _minHeight) / (_maxHeight - _minHeight)).clamp(
-          0.0,
-          1.0,
-        );
+    // final double totalProgress =
+    //     ((_currentHeight - _minHeight) / (_maxHeight - _minHeight)).clamp(
+    //       0.0,
+    //       1.0,
+    //     );
 
     // ВЫЧИСЛЯЕМ ПАРАМЕТРЫ ДЛЯ ИЗМЕНЕНИЯ ИНТЕРФЕЙСА:
     // Прогресс раскрытия от минимума до среднее состояния (0.0 -> 1.0)
@@ -638,7 +636,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                             ),
                           ),
 
-                          Container(
+                          SizedBox(
                             width: 160,
                             child: TextButton(
                               style: TextButton.styleFrom(

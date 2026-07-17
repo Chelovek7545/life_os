@@ -1,5 +1,3 @@
-import 'package:life_os/features/tasks/domain/task_model.dart';
-import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
 import 'package:life_os/features/tasks/presentation/task_state.dart';
 import 'package:test/test.dart';
 
@@ -20,8 +18,8 @@ void main() {
         const state = TasksLoading();
         final result = state.when(
           loading: () => 'loading',
-          empty: (_, __) => 'empty',
-          loaded: (_, __, ___, ____) => 'loaded',
+          empty: (_, _) => 'empty',
+          loaded: (_, _, _, _) => 'loaded',
           error: (_) => 'error',
         );
         expect(result, 'loading');
@@ -39,7 +37,7 @@ void main() {
       test('maybeWhen falls back to orElse when no match', () {
         const state = TasksLoading();
         final result = state.maybeWhen(
-          loaded: (_, __, ___, ____) => 'loaded',
+          loaded: (_, _, _, _) => 'loaded',
           orElse: () => 'orElse',
         );
         expect(result, 'orElse');
@@ -72,7 +70,7 @@ void main() {
         final result = state.when(
           loading: () => 'loading',
           empty: (aiSuggestion, isProcessing) => 'empty:$aiSuggestion',
-          loaded: (_, __, ___, ____) => 'loaded',
+          loaded: (_, _, _, _) => 'loaded',
           error: (_) => 'error',
         );
         expect(result, 'empty:test');
@@ -122,7 +120,7 @@ void main() {
         );
         final result = state.when(
           loading: () => 'loading',
-          empty: (_, __) => 'empty',
+          empty: (_, _) => 'empty',
           loaded: (t, s, p, c) => 'loaded:${t.length}:${s.length}',
           error: (_) => 'error',
         );
@@ -132,7 +130,7 @@ void main() {
       test('maybeWhen calls loaded callback', () {
         final state = TasksLoaded(tasks: tasks, selectedTasks: []);
         final result = state.maybeWhen(
-          loaded: (_, __, ___, ____) => 'loaded',
+          loaded: (_, _, _, _) => 'loaded',
           orElse: () => 'orElse',
         );
         expect(result, 'loaded');
@@ -157,8 +155,8 @@ void main() {
         const state = TasksError('fail');
         final result = state.when(
           loading: () => 'loading',
-          empty: (_, __) => 'empty',
-          loaded: (_, __, ___, ____) => 'loaded',
+          empty: (_, _) => 'empty',
+          loaded: (_, _, _, _) => 'loaded',
           error: (msg) => 'error:$msg',
         );
         expect(result, 'error:fail');

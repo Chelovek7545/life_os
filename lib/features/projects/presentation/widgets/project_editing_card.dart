@@ -120,7 +120,7 @@ class EditProjectCardState extends State<EditProjectCard> {
                   filled: true,
                   fillColor: Theme.of(
                     context,
-                  ).colorScheme.surfaceVariant.withValues(alpha: 0.04),
+                  ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.04),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 14,
@@ -142,7 +142,7 @@ class EditProjectCardState extends State<EditProjectCard> {
                   filled: true,
                   fillColor: Theme.of(
                     context,
-                  ).colorScheme.surfaceVariant.withValues(alpha: 0.02),
+                  ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.02),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 12,

@@ -7,12 +7,12 @@ class SegmentedPillControl extends StatelessWidget {
   final Function(int) onTabChanged;
   final int currentIdx;
 
-  SegmentedPillControl({
-    Key? key,
+  const SegmentedPillControl({
+    super.key,
     required this.tabs,
     required this.onTabChanged,
     required this.currentIdx,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

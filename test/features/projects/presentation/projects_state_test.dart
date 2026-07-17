@@ -17,7 +17,7 @@ void main() {
         const state = ProjectsLoading();
         final result = state.when(
           loading: () => 'loading',
-          loaded: (_, __, ___) => 'loaded',
+          loaded: (_, _, _) => 'loaded',
           error: (_) => 'error',
         );
         expect(result, 'loading');
@@ -35,7 +35,7 @@ void main() {
       test('maybeWhen falls back to orElse when no match', () {
         const state = ProjectsLoading();
         final result = state.maybeWhen(
-          loaded: (_, __, ___) => 'loaded',
+          loaded: (_, _, _) => 'loaded',
           orElse: () => 'orElse',
         );
         expect(result, 'orElse');
@@ -80,7 +80,7 @@ void main() {
         final state = ProjectsLoaded(projects: projects);
         final result = state.when(
           loading: () => 'loading',
-          loaded: (p, _, __) => 'loaded:${p.length}',
+          loaded: (p, _, _) => 'loaded:${p.length}',
           error: (_) => 'error',
         );
         expect(result, 'loaded:2');
@@ -89,7 +89,7 @@ void main() {
       test('maybeWhen calls loaded callback', () {
         final state = ProjectsLoaded(projects: projects);
         final result = state.maybeWhen(
-          loaded: (_, __, ___) => 'loaded',
+          loaded: (_, _, _) => 'loaded',
           orElse: () => 'orElse',
         );
         expect(result, 'loaded');
@@ -113,7 +113,7 @@ void main() {
         const state = ProjectsError('fail');
         final result = state.when(
           loading: () => 'loading',
-          loaded: (_, __, ___) => 'loaded',
+          loaded: (_, _, _) => 'loaded',
           error: (msg) => 'error:$msg',
         );
         expect(result, 'error:fail');

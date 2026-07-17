@@ -9,7 +9,7 @@ part 'tasks_dao.g.dart';
 
 @DriftAccessor(tables: [Tasks, Tags, TaskTagEntries])
 class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
-  TasksDao(AppDatabase db) : super(db);
+  TasksDao(super.db);
 
   // =============== CREATE ===============
 
@@ -122,7 +122,7 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
         final list = grouped.putIfAbsent(task, () => []);
         if (tag != null) {
           list.add(tag);
-          print(tag);
+          //print(tag);
         }
       }
 

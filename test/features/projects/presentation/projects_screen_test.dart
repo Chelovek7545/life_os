@@ -10,7 +10,6 @@ import 'package:life_os/features/projects/presentation/projects_view_model.dart'
 import 'package:life_os/features/projects/presentation/widgets/project_card.dart';
 import 'package:life_os/features/projects/presentation/widgets/project_editing_card.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
-import 'package:mockito/mockito.dart';
 import 'package:rxdart/rxdart.dart';
 
 import '../../../test_helpers.dart';

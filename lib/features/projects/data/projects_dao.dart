@@ -8,7 +8,7 @@ part 'projects_dao.g.dart';
 @DriftAccessor(tables: [Projects])
 class ProjectsDao extends DatabaseAccessor<AppDatabase>
     with _$ProjectsDaoMixin {
-  ProjectsDao(AppDatabase db) : super(db);
+  ProjectsDao(super.db);
 
   // =============== CREATE ===============
 

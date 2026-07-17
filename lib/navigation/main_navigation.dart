@@ -1,9 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:life_os/features/dashboard/presentation/dashboard_screen.dart';
-import 'package:life_os/features/projects/presentation/projects_screen.dart';
-import 'package:life_os/features/resources/presentation/resources_screen.dart';
-import 'package:life_os/features/tasks/presentation/tasks_screen.dart';
-import 'package:life_os/features/timer/presentation/timer_screen.dart';
+
 
 abstract class MainNavigationRouteNames {
   static const loaderWidget = '/';

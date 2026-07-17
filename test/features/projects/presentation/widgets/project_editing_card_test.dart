@@ -21,7 +21,7 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               child: EditProjectCard(
-                onSave: (_, __, ___, ____) {},
+                onSave: (_, _, _, _) {},
                 onCancel: () {},
               ),
             ),
@@ -50,7 +50,7 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               child: EditProjectCard(
-                onSave: (_, __, ___, ____) {},
+                onSave: (_, _, _, _) {},
                 onCancel: () {},
               ),
             ),
@@ -76,7 +76,7 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               child: EditProjectCard(
-                onSave: (_, __, ___, ____) {},
+                onSave: (_, _, _, _) {},
                 onCancel: () => cancelled = true,
               ),
             ),
@@ -94,7 +94,6 @@ void main() {
       String? savedName;
       String? savedDesc;
       String? savedColor;
-      DateTime? savedDueDate;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -113,7 +112,6 @@ void main() {
                   savedName = name;
                   savedDesc = desc;
                   savedColor = color;
-                  savedDueDate = dueDate;
                 },
                 onCancel: () {},
               ),
@@ -150,7 +148,7 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               child: EditProjectCard(
-                onSave: (_, __, ___, ____) {},
+                onSave: (_, _, _, _) {},
                 onCancel: () {},
               ),
             ),
@@ -175,7 +173,7 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               child: EditProjectCard(
-                onSave: (_, __, ___, ____) {},
+                onSave: (_, _, _, _) {},
                 onCancel: () {},
               ),
             ),
@@ -201,7 +199,7 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               child: EditProjectCard(
-                onSave: (_, __, ___, ____) => saved = true,
+                onSave: (_, _, _, _) => saved = true,
                 onCancel: () {},
               ),
             ),

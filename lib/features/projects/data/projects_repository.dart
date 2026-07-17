@@ -34,7 +34,7 @@ class ProjectsRepository {
     try {
       await _dao.deleteProject(id);
     } catch (e) {
-      print(e);
+      //print(e);
     }
   }
 }

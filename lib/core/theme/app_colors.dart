@@ -42,10 +42,10 @@ class AppColors {
   static const Color overdueGlow = Color(0x22FF5500);
 
   // === ГЛАССМОРФИЗМ (Альфа-каналы поверх surface) ===
-  static final Color surfaceGlass = Colors.white.withOpacity(0.03);
-  static final Color borderGlass = Colors.white.withOpacity(0.08);
-  static final Color inputGlass = Colors.white.withOpacity(0.02);
-  static final Color inputBorderGlass = Colors.white.withOpacity(0.1);
+  static final Color surfaceGlass = Colors.white.withValues(alpha: 0.03);
+  static final Color borderGlass = Colors.white.withValues(alpha: 0.08);
+  static final Color inputGlass = Colors.white.withValues(alpha: 0.02);
+  static final Color inputBorderGlass = Colors.white.withValues(alpha: 0.1);
 
   // === ГРАДИЕНТЫ ===
   static const LinearGradient vibrantGradient = LinearGradient(

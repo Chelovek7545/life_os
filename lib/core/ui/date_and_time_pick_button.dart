@@ -13,7 +13,7 @@ Widget dateAndTimePickButton(
   required ValueChanged<DateTime?> onDateChange,
   required bool Function(DateTime) validate,
 }) {
-  void _chooseDate() async {
+  void chooseDate() async {
     final selected = await showDatePicker(
       context: context,
       initialDate: date ?? DateTime.now(),
@@ -31,14 +31,14 @@ Widget dateAndTimePickButton(
       if (validate(dt!)) {
         onDateChange(dt);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('End time must be after start time')),
-        );
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   const SnackBar(content: Text('End time must be after start time')),
+        // );
       }
     }
   }
 
-  void _chooseTime() async {
+  void chooseTime() async {
     final TimeOfDay? selectedTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(date!),
@@ -55,9 +55,9 @@ Widget dateAndTimePickButton(
       if (validate(dt)) {
         onDateChange(dt);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('End time must be after start time')),
-        );
+        // ScaffoldMessenger.of(context).showSnackBar(
+        //   const SnackBar(content: Text('End time must be after start time')),
+        // );
       }
     }
   }
@@ -75,7 +75,7 @@ Widget dateAndTimePickButton(
           child: OutlinedButton(
             style: AppButtonStyles.baseButtonStyle,
 
-            onPressed: _chooseDate,
+            onPressed: chooseDate,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -102,7 +102,7 @@ Widget dateAndTimePickButton(
                                   child: IconButton(
                                     style: AppButtonStyles.activeButtonStyle
                                         .copyWith(
-                                          padding: MaterialStateProperty.all(
+                                          padding: WidgetStateProperty.all(
                                             EdgeInsets.all(16),
                                           ),
                                         ),
@@ -149,13 +149,13 @@ Widget dateAndTimePickButton(
                             color: Colors.white,
                           ),
                         ),
+                        onPressed: date != null ? chooseTime : null,
                         //style: AppButtonStyles.baseButtonStyle,
                         child: Text(
                           date == null || date.isDateOnly
                               ? "Time"
                               : formatTimeOfDate(date),
                         ),
-                        onPressed: date != null ? _chooseTime : null,
                       ),
                     ],
                   ),

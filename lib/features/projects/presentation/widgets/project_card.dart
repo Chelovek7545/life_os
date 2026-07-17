@@ -72,7 +72,7 @@ class _ProjectCardState extends State<ProjectCard> {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.surfaceVariant
+                              color: theme.colorScheme.surfaceContainerHighest
                                   .withValues(alpha: 0.06),
                               borderRadius: BorderRadius.circular(8),
                             ),
@@ -97,7 +97,7 @@ class _ProjectCardState extends State<ProjectCard> {
                                   border: Border.all(
                                     color: Theme.of(context)
                                         .colorScheme
-                                        .surfaceVariant
+                                        .surfaceContainerHighest
                                         .withValues(alpha: 0.5),
                                   ),
                                 ),

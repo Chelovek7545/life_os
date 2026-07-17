@@ -7,20 +7,20 @@ class SemanticTag extends StatelessWidget {
   final VoidCallback? onRemove;
 
   const SemanticTag({
-    Key? key,
+    super.key,
     required this.label,
     required this.accentColor,
     this.onRemove,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
-        color: accentColor.withOpacity(0.05),
+        color: accentColor.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(9999),
-        border: Border.all(color: accentColor.withOpacity(0.4)),
+        border: Border.all(color: accentColor.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
