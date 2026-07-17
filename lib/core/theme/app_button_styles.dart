@@ -44,7 +44,9 @@ class AppButtonStyles {
           vertical: AppSpacing.lg,
         ),
       ).copyWith(
-        overlayColor: WidgetStatePropertyAll(Colors.white.withValues(alpha: 0.06)),
+        overlayColor: WidgetStatePropertyAll(
+          Colors.white.withValues(alpha: 0.06),
+        ),
         iconColor: const WidgetStatePropertyAll(Color(0xFFFFB39B)),
       );
 
@@ -66,7 +68,9 @@ class AppButtonStyles {
           vertical: AppSpacing.xl,
         ),
       ).copyWith(
-        overlayColor: WidgetStatePropertyAll(Colors.white.withValues(alpha: 0.06)),
+        overlayColor: WidgetStatePropertyAll(
+          Colors.white.withValues(alpha: 0.06),
+        ),
         iconColor: const WidgetStatePropertyAll(Color(0xFFFFB39B)),
       );
   static ButtonStyle get activeButtonStyle => OutlinedButton.styleFrom(

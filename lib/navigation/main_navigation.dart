@@ -1,5 +1,3 @@
-
-
 abstract class MainNavigationRouteNames {
   static const loaderWidget = '/';
   static const auth = '/auth';

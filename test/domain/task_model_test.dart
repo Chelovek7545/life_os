@@ -3,7 +3,6 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
 import 'package:test/test.dart';
 
-
 void main() {
   group('Task', () {
     group('constructor', () {

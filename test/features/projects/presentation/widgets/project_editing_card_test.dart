@@ -20,10 +20,7 @@ void main() {
           ),
           home: Scaffold(
             body: SingleChildScrollView(
-              child: EditProjectCard(
-                onSave: (_, _, _, _) {},
-                onCancel: () {},
-              ),
+              child: EditProjectCard(onSave: (_, _, _, _) {}, onCancel: () {}),
             ),
           ),
         ),
@@ -49,10 +46,7 @@ void main() {
           ),
           home: Scaffold(
             body: SingleChildScrollView(
-              child: EditProjectCard(
-                onSave: (_, _, _, _) {},
-                onCancel: () {},
-              ),
+              child: EditProjectCard(onSave: (_, _, _, _) {}, onCancel: () {}),
             ),
           ),
         ),
@@ -147,10 +141,7 @@ void main() {
           ),
           home: Scaffold(
             body: SingleChildScrollView(
-              child: EditProjectCard(
-                onSave: (_, _, _, _) {},
-                onCancel: () {},
-              ),
+              child: EditProjectCard(onSave: (_, _, _, _) {}, onCancel: () {}),
             ),
           ),
         ),
@@ -172,10 +163,7 @@ void main() {
           ),
           home: Scaffold(
             body: SingleChildScrollView(
-              child: EditProjectCard(
-                onSave: (_, _, _, _) {},
-                onCancel: () {},
-              ),
+              child: EditProjectCard(onSave: (_, _, _, _) {}, onCancel: () {}),
             ),
           ),
         ),

@@ -123,7 +123,9 @@ class TaskCard extends StatelessWidget {
                                 formatDate(dueDate!),
                                 style: Theme.of(context).textTheme.titleSmall!
                                     .copyWith(
-                                      color: Colors.white.withValues(alpha: 0.7),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.7,
+                                      ),
 
                                       fontWeight: FontWeight.w500,
                                     ),
