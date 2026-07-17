@@ -18,7 +18,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22'
+          flutter-version: '3.44'
           channel: 'stable'
           cache: true
 
@@ -83,7 +83,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22'
+          flutter-version: '3.44'
           channel: 'stable'
           cache: true
 
@@ -112,9 +112,9 @@ jobs:
         channel: [stable, beta]
         include:
           - channel: stable
-            flutter-version: '3.22'
+            flutter-version: '3.44'
           - channel: beta
-            flutter-version: '3.24'
+            flutter-version: '3.44'
 
     steps:
       - name: Checkout repository
