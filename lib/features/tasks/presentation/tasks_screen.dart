@@ -298,9 +298,7 @@ class _TasksScreenState extends State<TasksScreen> {
         final isFormVisible = snapshot.data ?? false;
         final today = DateTime.now().startOfDay;
 
-        return Scaffold(
-          backgroundColor: AppColors.surfaceDim,
-          body: Stack(
+        return Stack(
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -319,8 +317,8 @@ class _TasksScreenState extends State<TasksScreen> {
               _buildHeaderPanel(isFormVisible),
               _buildTaskForm(context, isFormVisible),
             ],
-          ),
-        );
+          )
+        ;
       },
     );
   }

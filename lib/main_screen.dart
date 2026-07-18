@@ -31,21 +31,25 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(toolbarHeight: 0),
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: [
-          DashboardScreen(viewModel: widget.diContainer.dashboardViewModel),
-          TasksScreen(viewModel: widget.diContainer.tasksViewModel),
-          ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
-          ResourcesScreen(),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        child: SlidingNavBar(
-          selectedIndex: _selectedIndex,
-          onTap: _onItemTapped,
+    return SafeArea(
+      child: Scaffold(
+        
+          backgroundColor: AppColors.surfaceDim,
+          resizeToAvoidBottomInset: true,
+        body: IndexedStack(
+          index: _selectedIndex,
+          children: [
+            DashboardScreen(viewModel: widget.diContainer.dashboardViewModel),
+            TasksScreen(viewModel: widget.diContainer.tasksViewModel),
+            ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
+            ResourcesScreen(),
+          ],
+        ),
+        bottomNavigationBar: SafeArea(
+          child: SlidingNavBar(
+            selectedIndex: _selectedIndex,
+            onTap: _onItemTapped,
+          ),
         ),
       ),
     );
