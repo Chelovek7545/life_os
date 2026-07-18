@@ -1,13 +1,17 @@
 import 'dart:async';
 
+import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
+import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';
 
 import '../../../test_helpers.dart';
 import 'projects_repository_test.mocks.dart';
+
+@GenerateMocks([ProjectsDao])
 
 void main() {
   late MockProjectsDao mockDao;
