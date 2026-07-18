@@ -32,7 +32,7 @@ void main() {
 
       final companion = tag.toInsertCompanion();
 
-      expect(companion.id, isTrue);
+      expect(companion.id.present, isFalse);
       expect(companion.name.value, 'new');
       expect(companion.colorHex.value, 0x0000FF);
     });
