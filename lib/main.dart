@@ -5,6 +5,6 @@ import 'package:life_os/core/di.dart';
 void main() {
   final container = DependencyContainer();
   container.init();
-
+  //debugRepaintRainbowEnabled = true;
   runApp(MyApp(diContainer: container));
 }

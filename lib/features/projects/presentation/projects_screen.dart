@@ -89,9 +89,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      backgroundColor: AppColors.surfaceDim,
-      body: Padding(
+    return Padding(
         padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -209,7 +207,6 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             ),
           ],
         ),
-      ),
-    );
+      );
   }
 }

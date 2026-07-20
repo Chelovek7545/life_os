@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
@@ -24,6 +25,7 @@ class CollapsibleTaskForm extends StatefulWidget {
     required this.projects,
     required this.isEditMode,
     required this.onDelete,
+    required this.onFormVisibilityChanged,
   });
 
   final OnTaskSubmit onSubmit;
@@ -33,6 +35,7 @@ class CollapsibleTaskForm extends StatefulWidget {
   final Task task;
   final bool isEditMode;
   final double height;
+  final ValueChanged<bool>? onFormVisibilityChanged;
 
   @override
   State<CollapsibleTaskForm> createState() => _CollapsibleTaskFormState();
@@ -41,7 +44,7 @@ class CollapsibleTaskForm extends StatefulWidget {
 class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   // Границы размеров формы
   static const double _minHeight = 60.0; // Видна только шапка-хэндл
-  static const double _midHeight = 140;
+  static const double _midHeight = 150;
   late double _maxHeight; // Полностью развернутая форма
 
   // Текущая высота формы
@@ -121,8 +124,10 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
               ? point
               : closest,
         );
+        
       }
     });
+    widget.onFormVisibilityChanged?.call(_currentHeight != snapPoints[2]);
   }
 
   //--------------------- Methods for fields ------------------------

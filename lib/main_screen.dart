@@ -18,6 +18,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
+  bool _resizeToAvoidBottomInset = true;
 
   //static const _titles = ['Main', 'Projects & Routines', 'Timer', 'Ресурсы'];
 
@@ -35,12 +36,20 @@ class _MainScreenState extends State<MainScreen> {
       child: Scaffold(
         
           backgroundColor: AppColors.surfaceDim,
-          resizeToAvoidBottomInset: true,
+          resizeToAvoidBottomInset: _resizeToAvoidBottomInset,
         body: IndexedStack(
           index: _selectedIndex,
           children: [
             DashboardScreen(viewModel: widget.diContainer.dashboardViewModel),
-            TasksScreen(viewModel: widget.diContainer.tasksViewModel),
+            TasksScreen(
+              viewModel: widget.diContainer.tasksViewModel,
+              onFormVisibilityChanged: (visible) {
+                _resizeToAvoidBottomInset = visible;
+                setState(() {
+                  
+                });
+              },
+            ),
             ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
             ResourcesScreen(),
           ],

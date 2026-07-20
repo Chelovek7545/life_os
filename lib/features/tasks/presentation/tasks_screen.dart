@@ -25,9 +25,14 @@ const double _kCalendarHeight = 86.0;
 const double _kTimelineTopPadding = 60.0;
 
 class TasksScreen extends StatefulWidget {
-  const TasksScreen({super.key, required this.viewModel});
+  const TasksScreen({
+    super.key,
+    required this.viewModel,
+    this.onFormVisibilityChanged,
+  });
 
   final TasksViewModel viewModel;
+  final ValueChanged<bool>? onFormVisibilityChanged;
 
   @override
   State<TasksScreen> createState() => _TasksScreenState();
@@ -36,6 +41,7 @@ class TasksScreen extends StatefulWidget {
 class _TasksScreenState extends State<TasksScreen> {
   bool _isEventMode = false;
   bool _showCalendar = true;
+  bool _lastFormVisible = false;
 
   @override
   void dispose() {
@@ -194,6 +200,7 @@ class _TasksScreenState extends State<TasksScreen> {
       },
       child: widget.viewModel.shouldRenderForm
           ? CollapsibleTaskForm(
+              onFormVisibilityChanged: (value) => widget.onFormVisibilityChanged?.call(value),
               onCancel: widget.viewModel.hideForm,
               height: MediaQuery.sizeOf(context).height * 0.8,
               task:
@@ -296,6 +303,10 @@ class _TasksScreenState extends State<TasksScreen> {
       initialData: false,
       builder: (context, snapshot) {
         final isFormVisible = snapshot.data ?? false;
+        // if (isFormVisible != _lastFormVisible) {
+        //   _lastFormVisible = isFormVisible;
+        //   widget.onFormVisibilityChanged?.call(isFormVisible);
+        // }
         final today = DateTime.now().startOfDay;
 
         return Stack(
