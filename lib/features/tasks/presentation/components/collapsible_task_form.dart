@@ -346,7 +346,9 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   }
 
   Widget _buildFormContent(double midProgress, double maxProgress) {
-    return Column(
+    return Material(
+      type: MaterialType.transparency,
+      child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Opacity(
@@ -548,7 +550,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                                 //   return Text("Waiting...");
                                 // }
                                 final projectsAsync = snapshot.data;
-                                return DropdownMenu<String?>(
+                                return Material(type: MaterialType.transparency, child: DropdownMenu<String?>(
                                   // 1. Настройка текста внутри меню
                                   textStyle: AppTypography.bodySm,
                                   hintText: "Choose project",
@@ -622,7 +624,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                                       }),
                                   ],
                                   onSelected: _onProjectChange,
-                                );
+                                ));
                               },
                             ),
                           ),
@@ -706,6 +708,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
             ),
           ),
       ],
+      ),
     );
   }
 }

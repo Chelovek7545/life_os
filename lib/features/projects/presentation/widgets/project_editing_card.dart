@@ -80,7 +80,9 @@ class EditProjectCardState extends State<EditProjectCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Container(
+    return Material(
+      type: MaterialType.transparency,
+      child: Container(
       margin: const EdgeInsets.only(bottom: 16),
 
       decoration: BoxDecoration(
@@ -249,6 +251,7 @@ class EditProjectCardState extends State<EditProjectCard> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

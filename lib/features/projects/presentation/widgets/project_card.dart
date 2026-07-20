@@ -135,29 +135,32 @@ class _ProjectCardState extends State<ProjectCard> {
                         ),
 
                         const SizedBox(height: 8),
-                        PopupMenuButton<String>(
-                          onSelected: (v) async {
-                            if (v == 'edit') {
-                              widget.onEditRequested();
-                            } else if (v == 'delete') {
-                              await widget.viewModel.deleteProject(
-                                widget.project.id,
-                              );
-                            }
-                          },
-                          itemBuilder: (_) => [
-                            const PopupMenuItem(
-                              value: 'edit',
-                              child: Text('Edit'),
+                        Material(
+                          type: MaterialType.transparency,
+                          child: PopupMenuButton<String>(
+                            onSelected: (v) async {
+                              if (v == 'edit') {
+                                widget.onEditRequested();
+                              } else if (v == 'delete') {
+                                await widget.viewModel.deleteProject(
+                                  widget.project.id,
+                                );
+                              }
+                            },
+                            itemBuilder: (_) => [
+                              const PopupMenuItem(
+                                value: 'edit',
+                                child: Text('Edit'),
+                              ),
+                              const PopupMenuItem(
+                                value: 'delete',
+                                child: Text('Delete'),
+                              ),
+                            ],
+                            child: const Icon(
+                              Icons.more_vert,
+                              color: Colors.white54,
                             ),
-                            const PopupMenuItem(
-                              value: 'delete',
-                              child: Text('Delete'),
-                            ),
-                          ],
-                          child: const Icon(
-                            Icons.more_vert,
-                            color: Colors.white54,
                           ),
                         ),
                       ],
