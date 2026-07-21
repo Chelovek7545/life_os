@@ -78,6 +78,7 @@ class _TasksScreenState extends State<TasksScreen> {
                 onToggleTask: widget.viewModel.toggleTask,
                 onEditTask: _openTaskEditor,
                 onToggleSelection: widget.viewModel.toggleTaskSelection,
+                onDeleteTask: widget.viewModel.deleteTask,
               ),
               _ => _TaskList(
                 items: items,
@@ -87,6 +88,7 @@ class _TasksScreenState extends State<TasksScreen> {
                 onToggleTask: widget.viewModel.toggleTask,
                 onEditTask: _openTaskEditor,
                 onToggleSelection: widget.viewModel.toggleTaskSelection,
+                onDeleteTask: widget.viewModel.deleteTask,
               ),
             };
           },
@@ -347,6 +349,7 @@ class _TaskList extends StatelessWidget {
     required this.onToggleTask,
     required this.onEditTask,
     required this.onToggleSelection,
+    required this.onDeleteTask,
   });
 
   final List<TaskWithProject> items;
@@ -356,6 +359,7 @@ class _TaskList extends StatelessWidget {
   final ValueChanged<Task> onToggleTask;
   final ValueChanged<TaskWithProject> onEditTask;
   final ValueChanged<Task> onToggleSelection;
+  final ValueChanged<String> onDeleteTask;
 
   @override
   Widget build(BuildContext context) {
@@ -368,10 +372,10 @@ class _TaskList extends StatelessWidget {
         return TaskCard(
           key: ValueKey(item.task.id),
           task: item.task,
-          //isSelected: true,
           isOverdue: item.task.dueDate?.isBefore(today) ?? false,
           onCheckChanged: () => onToggleTask(item.task),
           onLongPress: () => onEditTask(item),
+          onDelete: () => onDeleteTask(item.task.id),
           projectTitle: item.project?.name,
           isSelected: selectedIds.contains(item.task.id),
           onSelected: () => onToggleSelection(item.task),
@@ -392,6 +396,7 @@ class _WeekTasksList extends StatelessWidget {
     required this.onToggleTask,
     required this.onEditTask,
     required this.onToggleSelection,
+    required this.onDeleteTask,
   });
 
   final List<TaskWithProject> items;
@@ -401,6 +406,7 @@ class _WeekTasksList extends StatelessWidget {
   final ValueChanged<Task> onToggleTask;
   final ValueChanged<TaskWithProject> onEditTask;
   final ValueChanged<Task> onToggleSelection;
+  final ValueChanged<String> onDeleteTask;
 
   @override
   Widget build(BuildContext context) {
@@ -431,6 +437,7 @@ class _WeekTasksList extends StatelessWidget {
           onToggleTask: onToggleTask,
           onEditTask: onEditTask,
           onToggleSelection: onToggleSelection,
+          onDeleteTask: onDeleteTask,
         );
       },
     );
@@ -446,6 +453,7 @@ class _WeekDaySection extends StatelessWidget {
     required this.onToggleTask,
     required this.onEditTask,
     required this.onToggleSelection,
+    required this.onDeleteTask,
   });
 
   final DateTime date;
@@ -455,6 +463,7 @@ class _WeekDaySection extends StatelessWidget {
   final ValueChanged<Task> onToggleTask;
   final ValueChanged<TaskWithProject> onEditTask;
   final ValueChanged<Task> onToggleSelection;
+  final ValueChanged<String> onDeleteTask;
 
   @override
   Widget build(BuildContext context) {
@@ -526,6 +535,7 @@ class _WeekDaySection extends StatelessWidget {
                   task: item.task,
                   onCheckChanged: () => onToggleTask(item.task),
                   onLongPress: () => onEditTask(item),
+                  onDelete: () => onDeleteTask(item.task.id),
                   projectTitle: item.project?.name,
                   isSelected: selectedIds.contains(item.task.id),
                   onSelected: () => onToggleSelection(item.task),
