@@ -3,6 +3,7 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/empty_placeholder.dart';
+import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/ui/segmented_pill_controller.dart';
 import 'package:life_os/core/ui/task_card.dart';
@@ -144,6 +145,7 @@ class _TasksScreenState extends State<TasksScreen> {
         children: [
           const SizedBox(height: AppSpacing.sm),
           _TasksHeader(
+            vm: widget.viewModel,
             onAddPressed: isFormVisible
                 ? widget.viewModel.hideForm
                 : widget.viewModel.showForm,
@@ -200,7 +202,8 @@ class _TasksScreenState extends State<TasksScreen> {
       },
       child: widget.viewModel.shouldRenderForm
           ? CollapsibleTaskForm(
-              onFormVisibilityChanged: (value) => widget.onFormVisibilityChanged?.call(value),
+              onFormVisibilityChanged: (value) =>
+                  widget.onFormVisibilityChanged?.call(value),
               onCancel: widget.viewModel.hideForm,
               height: MediaQuery.sizeOf(context).height * 0.8,
               task:
@@ -310,26 +313,25 @@ class _TasksScreenState extends State<TasksScreen> {
         final today = DateTime.now().startOfDay;
 
         return Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: ShaderMask(
-                  shaderCallback: maskingFadeGradient.createShader,
-                  blendMode: BlendMode.dstIn,
-                  child: IndexedStack(
-                    index: _isEventMode ? 1 : 0,
-                    children: [
-                      _buildTaskBody(overlayHeight, today),
-                      _buildEventBody(),
-                    ],
-                  ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: ShaderMask(
+                shaderCallback: maskingFadeGradient.createShader,
+                blendMode: BlendMode.dstIn,
+                child: IndexedStack(
+                  index: _isEventMode ? 1 : 0,
+                  children: [
+                    _buildTaskBody(overlayHeight, today),
+                    _buildEventBody(),
+                  ],
                 ),
               ),
-              _buildHeaderPanel(isFormVisible),
-              _buildTaskForm(context, isFormVisible),
-            ],
-          )
-        ;
+            ),
+            _buildHeaderPanel(isFormVisible),
+            _buildTaskForm(context, isFormVisible),
+          ],
+        );
       },
     );
   }
@@ -366,6 +368,7 @@ class _TaskList extends StatelessWidget {
         return TaskCard(
           key: ValueKey(item.task.id),
           task: item.task,
+          //isSelected: true,
           isOverdue: item.task.dueDate?.isBefore(today) ?? false,
           onCheckChanged: () => onToggleTask(item.task),
           onLongPress: () => onEditTask(item),
@@ -537,21 +540,32 @@ class _WeekDaySection extends StatelessWidget {
 }
 
 // Header elements
-class _TasksHeader extends StatelessWidget {
-  const _TasksHeader({required this.onAddPressed, required this.onModeChanged});
-
+class _TasksHeader extends StatefulWidget {
+  const _TasksHeader({
+    required this.onAddPressed,
+    required this.onModeChanged,
+    required this.vm,
+  });
+  final TasksViewModel vm;
   final VoidCallback onAddPressed;
   final ValueChanged<int> onModeChanged;
 
   @override
+  State<_TasksHeader> createState() => _TasksHeaderState();
+}
+
+class _TasksHeaderState extends State<_TasksHeader>
+    with SingleTickerProviderStateMixin {
+  @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      //mainAxisAlignment: MainAxisAlignment.center,
       children: [
         IconButton(
           onPressed: () {},
           icon: const Icon(Icons.settings_outlined, color: Colors.white),
         ),
+        Spacer(),
         SizedBox(
           width: 150,
           child: PillSwitcher(
@@ -559,19 +573,74 @@ class _TasksHeader extends StatelessWidget {
             paddingBetweenOptions: 1,
             innerPadding: 1,
             options: const [Icon(Icons.check_box), Icon(Icons.event)],
-            onSelectionChanged: onModeChanged,
+            onSelectionChanged: widget.onModeChanged,
           ),
         ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.all(5),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.full),
-            ),
-            visualDensity: VisualDensity.compact,
+        Spacer(),
+
+        Container(
+          padding: EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.08),
+
+            borderRadius: BorderRadius.all(Radius.circular(20)),
           ),
-          onPressed: onAddPressed,
-          child: const Icon(Icons.add),
+          child: Row(
+            children: [
+              StreamBuilder(
+                stream: widget.vm.state,
+                builder: (_, snap) {
+                  Widget? ico;
+                  if (snap.hasData) {
+                    snap.data!.when(
+                      loading: () {},
+                      empty: (_, _) {},
+                      loaded: (_, selected, _, _) {
+                        if (selected.isNotEmpty) {
+                          ico = Row(
+                            children: [
+                              IconButton(
+                                style: IconButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                onPressed: () => widget.vm.clearTaskSelection(),
+                                icon: const Icon(Icons.clear),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                child: Text(
+                                  selected.length.toString(),
+                                  style: AppTypography.bodyMd,
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+                      },
+                      error: (_) {},
+                    );
+                  }
+
+                  return AnimatedSize(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeInOut,
+                    child: ico ?? const SizedBox.shrink(),
+                  );
+                },
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.all(5),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.full),
+                  ),
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: widget.onAddPressed,
+                child: const Icon(Icons.add),
+              ),
+            ],
+          ),
         ),
       ],
     );

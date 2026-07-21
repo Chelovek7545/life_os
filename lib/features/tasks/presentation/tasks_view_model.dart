@@ -192,6 +192,24 @@ class TasksViewModel {
     }
   }
 
+  void clearTaskSelection(){
+    final currentState = _uiStateController.value;
+    selectedTasks.clear();
+
+    if (currentState is TasksLoaded) {
+      // Если стейт уже загружен, просто проталкиваем в него обновленный selectedTasks.
+      // Передаем исходный (неотфильтрованный) список из Use Case здесь не нужно,
+      // мы можем перевыпустить текущие задачи с новым списком выделения.
+      _uiStateController.add(
+        TasksLoaded(
+          curTask: currentState.curTask,
+          tasks: currentState.tasks, // Оставляем текущие отфильтрованные задачи
+          selectedTasks: []
+        ),
+      );
+    }
+  }
+
   void toggleTaskSelection(Task task) {
     // Логика добавления/удаления из списка selectedTasks
     // ...

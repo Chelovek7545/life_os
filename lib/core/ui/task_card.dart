@@ -1,11 +1,66 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/widget_previews.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/semantic_tag.dart';
 import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/core/utils/wrapped.dart';
+import 'package:life_os/features/tasks/domain/tag_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'glass_panel.dart'; // Из предыдущего шага
+
+final testTask = Task.blank().copyWith(
+  title: 'jisd jkjfkljdfk;ljkdlf j;akljdkaljkl fj;aklsjfklajafljs',
+  dueDate: Wrapped(DateTime.now()),
+  tags: ['work', 'gym'].map((e) => Tag(id: 1, name: e, colorHex: 183024)).toList()
+);
+
+@Preview()
+Widget Preview0() => MaterialApp(
+  theme: ThemeData.light(),
+  home: TaskCard(
+    projectTitle: '5m reel',
+    task: testTask,
+    isSelected: false,
+    leftBorderColor: Colors.green,
+  ),
+);
+
+@Preview()
+Widget newPreview() => MaterialApp(
+  theme: ThemeData.light(),
+  home: TaskCard(
+    projectTitle: '5m reel',
+    task: testTask,
+    isSelected: true,
+    leftBorderColor: Colors.green,
+  ),
+);
+
+@Preview()
+Widget Preview1() => MaterialApp(
+  theme: ThemeData.light(),
+  home: TaskCard(
+    projectTitle: '5m reel',
+    task: testTask.copyWith(status: TaskStatus.done),
+    isSelected: false,
+    leftBorderColor: Colors.green,
+    isOverdue: true,
+  ),
+);
+
+@Preview()
+Widget Preview2() => MaterialApp(
+  theme: ThemeData.light(),
+  home: TaskCard(
+    projectTitle: '5m reel',
+    task: testTask.copyWith(status: TaskStatus.done),
+    isSelected: true,
+    leftBorderColor: Colors.green,
+    isOverdue: true,
+  ),
+);
 
 class TaskCard extends StatelessWidget {
   final String? projectTitle;
@@ -31,7 +86,7 @@ class TaskCard extends StatelessWidget {
     required this.task,
     // required this.tags,
     // required this.isCompleted,
-    this.isSelected = false,
+    this.isSelected = true,
     this.onTap,
     this.onLongPress,
     this.onCheckChanged,
@@ -45,12 +100,15 @@ class TaskCard extends StatelessWidget {
     return GestureDetector(
       onLongPress: onLongPress,
       onTap: onTap,
+      onDoubleTap: onSelected,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 200),
         opacity: task.isCompleted ? 0.5 : 1.0,
         child: Container(
           // Настройка свечения overdue-glow или стандартных рамок
           decoration: BoxDecoration(
+            color: isSelected ? Color(0xFFB8FF63).withValues(alpha: 0.1) : null,
+
             borderRadius: BorderRadius.circular(12),
             boxShadow: isOverdue
                 ? [
@@ -66,14 +124,21 @@ class TaskCard extends StatelessWidget {
             borderRadius: 12,
             padding: EdgeInsets
                 .zero, // Срезы контролируем через внутренний контейнер
+            borderColor:   isSelected
+                    ? Color(0xFFB8FF63).withValues(alpha: 0.4)
+                    : null,
             child: Container(
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(AppRadius.md),
                 border: leftBorderColor != null
                     ? Border(
                         left: BorderSide(color: leftBorderColor!, width: 4),
+                        //right: BorderSide(color: leftBorderColor!, width: 2)
                       )
-                    : isOverdue
+                    : isSelected
+                    ? Border.all(color: Color(0xFFB8FF63).withValues(alpha: 0.4), width: 1)
+                    :  
+                    isOverdue
                     ? Border.all(color: AppColors.primaryContainer, width: 1)
                     : null,
               ),
@@ -96,7 +161,9 @@ class TaskCard extends StatelessWidget {
                         border: Border.all(
                           color: task.isCompleted
                               ? AppColors.primaryContainer
-                              : (isOverdue
+                              : (isSelected
+                                    ? Color(0xFFB8FF63).withValues(alpha: 0.4)
+                                    : isOverdue
                                     ? AppColors.primaryContainer
                                     : AppColors.borderGlass),
                           width: 2,
