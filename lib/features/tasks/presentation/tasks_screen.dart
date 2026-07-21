@@ -80,7 +80,19 @@ class _TasksScreenState extends State<TasksScreen> {
                 onToggleSelection: widget.viewModel.toggleTaskSelection,
                 onDeleteTask: widget.viewModel.deleteTask,
               ),
+              DatePeriod.day => _TaskList(
+                key: ValueKey(widget.viewModel.currentFilterValue.anchorDate),
+                items: items,
+                selectedIds: selectedIds,
+                overlayHeight: overlayHeight,
+                today: today,
+                onToggleTask: widget.viewModel.toggleTask,
+                onEditTask: _openTaskEditor,
+                onToggleSelection: widget.viewModel.toggleTaskSelection,
+                onDeleteTask: widget.viewModel.deleteTask,
+              ),
               _ => _TaskList(
+                key: ValueKey(widget.viewModel.currentFilterValue.anchorDate),
                 items: items,
                 selectedIds: selectedIds,
                 overlayHeight: overlayHeight,
@@ -340,8 +352,9 @@ class _TasksScreenState extends State<TasksScreen> {
 }
 
 //TaskList
-class _TaskList extends StatelessWidget {
+class _TaskList extends StatefulWidget {
   const _TaskList({
+    super.key,
     required this.items,
     required this.selectedIds,
     required this.overlayHeight,
@@ -362,26 +375,83 @@ class _TaskList extends StatelessWidget {
   final ValueChanged<String> onDeleteTask;
 
   @override
+  State<_TaskList> createState() => _TaskListState();
+}
+
+class _TaskListState extends State<_TaskList> {
+  final _listKey = GlobalKey<AnimatedListState>();
+  final _items = <TaskWithProject>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _items.addAll(widget.items);
+  }
+
+  @override
+  void didUpdateWidget(_TaskList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldIds = oldWidget.items.map((e) => e.task.id).toSet();
+    final newIds = widget.items.map((e) => e.task.id).toSet();
+
+    for (int i = _items.length - 1; i >= 0; i--) {
+      if (!newIds.contains(_items[i].task.id)) {
+        final removed = _items.removeAt(i);
+        _listKey.currentState?.removeItem(
+          i,
+          (context, animation) => SizeTransition(
+            sizeFactor: animation,
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildCard(removed),
+            ),
+          ),
+          duration: const Duration(milliseconds: 300),
+        );
+      }
+    }
+
+    for (int i = 0; i < widget.items.length; i++) {
+      if (!oldIds.contains(widget.items[i].task.id)) {
+        _items.insert(i, widget.items[i]);
+        _listKey.currentState?.insertItem(i);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: EdgeInsets.symmetric(vertical: overlayHeight + AppSpacing.sm),
-      itemCount: items.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return TaskCard(
-          key: ValueKey(item.task.id),
-          task: item.task,
-          isOverdue: item.task.dueDate?.isBefore(today) ?? false,
-          onCheckChanged: () => onToggleTask(item.task),
-          onLongPress: () => onEditTask(item),
-          onDelete: () => onDeleteTask(item.task.id),
-          projectTitle: item.project?.name,
-          isSelected: selectedIds.contains(item.task.id),
-          onSelected: () => onToggleSelection(item.task),
-          onTap: () {},
+    return AnimatedList(
+      key: _listKey,
+      initialItemCount: _items.length,
+      padding: EdgeInsets.symmetric(
+        vertical: widget.overlayHeight + AppSpacing.sm,
+      ),
+      itemBuilder: (context, index, animation) {
+        return SizeTransition(
+          sizeFactor: animation,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildCard(_items[index]),
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildCard(TaskWithProject item) {
+    return TaskCard(
+      key: ValueKey(item.task.id),
+      task: item.task,
+      isOverdue: item.task.dueDate?.isBefore(widget.today) ?? false,
+      onCheckChanged: () => widget.onToggleTask(item.task),
+      onLongPress: () => widget.onEditTask(item),
+      onDelete: () => widget.onDeleteTask(item.task.id),
+      projectTitle: item.project?.name,
+      isSelected: widget.selectedIds.contains(item.task.id),
+      onSelected: () => widget.onToggleSelection(item.task),
+      onTap: () {},
     );
   }
 }

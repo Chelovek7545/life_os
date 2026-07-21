@@ -141,7 +141,8 @@ class _TaskCardState extends State<TaskCard>
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 200),
         opacity: widget.task.isCompleted ? 0.5 : 1.0,
-        child: Container(
+        child: AnimatedContainer(
+          duration: Duration(milliseconds: 200),
           decoration: BoxDecoration(
             color: widget.isSelected
                 ? const Color(0xFFB8FF63).withValues(alpha: 0.1)
@@ -323,10 +324,7 @@ class _TaskCardState extends State<TaskCard>
                                 _deleteWidth * (1 - _controller.value),
                                 0,
                               ),
-                              child: child,
-                            );
-                          },
-                          child: GestureDetector(
+                              child: GestureDetector(
                             onTap: () {
                               _close();
                               widget.onDelete?.call();
@@ -337,7 +335,7 @@ class _TaskCardState extends State<TaskCard>
                                 boxShadow: [
                                   BoxShadow(
                                     color: AppColors.primaryContainer,
-                                    blurRadius: 40,
+                                    blurRadius: _controller.value * 40,
                                   ),
                                 ],
                                 color: AppColors.primaryContainer,
@@ -353,6 +351,8 @@ class _TaskCardState extends State<TaskCard>
                               ),
                             ),
                           ),
+                            );
+                          },
                         ),
                       ),
                     ],
