@@ -13,7 +13,10 @@ import 'glass_panel.dart';
 final testTask = Task.blank().copyWith(
   title: 'jisd jkjfkljdfk;ljkdlf j;akljdkaljkl fj;aklsjfklajafljs',
   dueDate: Wrapped(DateTime.now()),
-  tags: ['work', 'gym'].map((e) => Tag(id: 1, name: e, colorHex: 183024)).toList()
+  tags: [
+    'work',
+    'gym',
+  ].map((e) => Tag(id: 1, name: e, colorHex: 183024)).toList(),
 );
 
 @Preview()
@@ -174,19 +177,31 @@ class _TaskCardState extends State<TaskCard>
                       : null,
                 ),
               ),
-              GlassPanel(
-                borderRadius: AppRadius.lg,
+              ClipRect(
+                child: Stack(
+                  children: [
+                    Positioned(
+                      left: 4,
+                      top: 14,
+                      bottom: 14,
+                      child: Container(
+                        width: 7,
+                        decoration: BoxDecoration(
+                          color: Colors.amber,
+                          borderRadius: BorderRadius.circular(AppRadius.full),
+                        ),
+                      ),
+                    ),
+                    GlassPanel(
+                                      borderRadius: AppRadius.lg,
                 padding: EdgeInsets.zero,
                 borderColor: widget.isSelected
                     ? const Color(0xFFB8FF63).withValues(alpha: 0.4)
                     : widget.isOverdue
                     ? AppColors.primaryContainer
                     : null,
-                child: ClipRect(
-                  child: Stack(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.all(20),
+                      child: Padding(
+                        padding: const EdgeInsets.all(22),
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -312,51 +327,51 @@ class _TaskCardState extends State<TaskCard>
                           ],
                         ),
                       ),
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: AnimatedBuilder(
-                          animation: _controller,
-                          builder: (context, child) {
-                            return Transform.translate(
-                              offset: Offset(
-                                _deleteWidth * (1 - _controller.value),
-                                0,
-                              ),
-                              child: GestureDetector(
-                            onTap: () {
-                              _close();
-                              widget.onDelete?.call();
-                            },
-                            child: Container(
-                              width: _deleteWidth,
-                              decoration: BoxDecoration(
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primaryContainer,
-                                    blurRadius: _controller.value * 40,
+                    ),
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: AnimatedBuilder(
+                        animation: _controller,
+                        builder: (context, child) {
+                          return Transform.translate(
+                            offset: Offset(
+                              _deleteWidth * (1 - _controller.value),
+                              0,
+                            ),
+                            child: GestureDetector(
+                              onTap: () {
+                                _close();
+                                widget.onDelete?.call();
+                              },
+                              child: Container(
+                                width: _deleteWidth,
+                                decoration: BoxDecoration(
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primaryContainer,
+                                      blurRadius: _controller.value * 40,
+                                    ),
+                                  ],
+                                  color: AppColors.primaryContainer,
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.md,
                                   ),
-                                ],
-                                color: AppColors.primaryContainer,
-                                borderRadius: BorderRadius.circular(
-                                  AppRadius.md,
+                                ),
+                                alignment: Alignment.center,
+                                child: const Icon(
+                                  Icons.delete_outlined,
+                                  color: Colors.white,
+                                  size: 28,
                                 ),
                               ),
-                              alignment: Alignment.center,
-                              child: const Icon(
-                                Icons.delete_outlined,
-                                color: Colors.white,
-                                size: 28,
-                              ),
                             ),
-                          ),
-                            );
-                          },
-                        ),
+                          );
+                        },
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ],

@@ -115,7 +115,7 @@ class _TasksScreenState extends State<TasksScreen> {
       initialData: const TasksLoading(),
       builder: (context, snapshot) {
         final state = snapshot.data ?? const TasksLoading();
-        late List<TaskEvent> events;
+        List<TaskEvent> events = [];
         state.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           empty: (_, _) {events = [];},
