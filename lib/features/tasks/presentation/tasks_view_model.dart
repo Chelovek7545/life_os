@@ -177,9 +177,17 @@ class TasksViewModel {
       return true;
     }).toList();
 
-    if (filteredTasks.isEmpty) {
-      _uiStateController.add(TasksEmpty());
-    } else {
+    if (filteredTasks.isEmpty && selectedTasks.isEmpty) {
+  _uiStateController.add(TasksEmpty());
+} else if (filteredTasks.isEmpty) {
+  _uiStateController.add(
+    TasksLoaded(
+      curTask: null,
+      tasks: [],
+      selectedTasks: List.from(selectedTasks),
+    ),
+  );
+}  else {
       // Передаем первую актуальную задачу как curTask, и весь отфильтрованный список
       _uiStateController.add(
         TasksLoaded(
@@ -271,10 +279,18 @@ class TasksViewModel {
     await _repository.deleteTask(id);
   }
 
+    Future<void> deleteSelectedTask() async {
+      for(final t in selectedTasks){
+        await _repository.deleteTask(t.id);
+      }
+    }
+
   void dispose() {
     _combineSubscription?.cancel();
     _uiStateController.close();
     _isFormVisibleController.close();
     _filterController.close();
   }
+
+
 }

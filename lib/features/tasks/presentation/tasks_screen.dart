@@ -115,13 +115,13 @@ class _TasksScreenState extends State<TasksScreen> {
       initialData: const TasksLoading(),
       builder: (context, snapshot) {
         final state = snapshot.data ?? const TasksLoading();
-
-        return state.when(
+        late List<TaskEvent> events;
+        state.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          empty: (_, _) => const EmptyPlaceholder(),
+          empty: (_, _) {events = [];},
           error: (message) => Center(child: Text(message)),
           loaded: (items, _, _, _) {
-            final events = items
+            events = items
                 .where((item) {
                   final startsAt = item.task.startsAt;
                   return startsAt != null && !startsAt.isDateOnly;
@@ -136,17 +136,16 @@ class _TasksScreenState extends State<TasksScreen> {
                 )
                 .toList(growable: false);
 
-            if (events.isEmpty) {
-              return const EmptyPlaceholder();
-            }
+          },
+        );
+      
 
             return TimelineBody(
               events: events,
               topPadding: _kTimelineTopPadding,
               onEventChanged: _updateEvent,
             );
-          },
-        );
+        
       },
     );
   }
@@ -658,13 +657,9 @@ class _TasksHeaderState extends State<_TasksHeader>
         ),
         Spacer(),
 
-        Container(
+        GlassPanel(
           padding: EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.08),
 
-            borderRadius: BorderRadius.all(Radius.circular(20)),
-          ),
           child: Row(
             children: [
               StreamBuilder(
@@ -686,8 +681,17 @@ class _TasksHeaderState extends State<_TasksHeader>
                                 onPressed: () => widget.vm.clearTaskSelection(),
                                 icon: const Icon(Icons.clear),
                               ),
+                              IconButton(
+                                style: IconButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                onPressed: () => widget.vm.deleteSelectedTask().then((i)=> widget.vm.clearTaskSelection()),
+                                icon: const Icon(Icons.delete_forever),
+                              ),
                               Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                ),
                                 child: Text(
                                   selected.length.toString(),
                                   style: AppTypography.bodyMd,
