@@ -21,9 +21,9 @@ import 'package:life_os/features/tasks/presentation/task_state.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
 
 const double _kFormExpandedHeight = 1000.0;
-const double _kHeaderHeight = 40.0;
+const double _kHeaderHeight = 42.0;
 const double _kPeriodTabsHeight = 45.0;
-const double _kCalendarHeight = 86.0;
+const double _kCalendarHeight = 90.0;
 const double _kDateHeaderHeight = 60.0;
 const double _kTimelineTopPadding = 60.0 + _kDateHeaderHeight;
 
@@ -322,8 +322,8 @@ class _TasksScreenState extends State<TasksScreen> {
     final overlayHeight =
         _kHeaderHeight +
         _kPeriodTabsHeight +
-        AppSpacing.sm * 2 +
-        (_showCalendar ? _kCalendarHeight + AppSpacing.sm + AppSpacing.md : 0);
+        AppSpacing.sm * 2  +
+        (_showCalendar ? _kCalendarHeight + AppSpacing.sm : 0);
 
     return StreamBuilder<bool>(
       stream: widget.viewModel.isFormVisible,
@@ -667,6 +667,7 @@ class _TasksHeaderState extends State<_TasksHeader>
       //mainAxisAlignment: MainAxisAlignment.center,
       children: [
         IconButton(
+
           onPressed: () {},
           icon: const Icon(Icons.settings_outlined, color: Colors.white),
         ),
@@ -702,6 +703,8 @@ class _TasksHeaderState extends State<_TasksHeader>
                             children: [
                               IconButton(
                                 style: IconButton.styleFrom(
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+
                                   visualDensity: VisualDensity.compact,
                                 ),
                                 onPressed: () => widget.vm.clearTaskSelection(),
@@ -709,6 +712,8 @@ class _TasksHeaderState extends State<_TasksHeader>
                               ),
                               IconButton(
                                 style: IconButton.styleFrom(
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+
                                   visualDensity: VisualDensity.compact,
                                 ),
                                 onPressed: () =>
@@ -743,6 +748,7 @@ class _TasksHeaderState extends State<_TasksHeader>
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   padding: const EdgeInsets.all(5),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppRadius.full),

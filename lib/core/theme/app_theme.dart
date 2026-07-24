@@ -61,6 +61,10 @@ class AppTheme {
         ),
         elevation: 0,
       ),
+
+      iconButtonTheme: IconButtonThemeData(
+        style: ButtonStyle(tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryContainer,
