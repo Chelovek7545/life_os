@@ -13,22 +13,10 @@ Widget dateAndTimePickButton(
   required ValueChanged<DateTime?> onDateChange,
   required bool Function(DateTime) validate,
 }) {
-  void chooseDate() async {
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: date ?? DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2040),
-    );
-    final dt =
-        date?.copyWith(
-          year: selected?.year,
-          month: selected?.month,
-          day: selected?.day,
-        ) ??
-        selected?.add(const Duration(milliseconds: 1));
-    if (selected != null) {
-      if (validate(dt!)) {
+  void _chooseDate() async {
+    final dt = await chooseDateOnly(context, date);
+    if (dt != null) {
+      if (validate(dt)) {
         onDateChange(dt);
       } else {
         // ScaffoldMessenger.of(context).showSnackBar(
@@ -38,20 +26,10 @@ Widget dateAndTimePickButton(
     }
   }
 
+  //Эта функция вызывается только если date не ноль
   void chooseTime() async {
-    final TimeOfDay? selectedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(date!),
-    );
-
-    if (selectedTime != null) {
-      final dt = DateTime(
-        date.year,
-        date.month,
-        date.day,
-        selectedTime.hour,
-        selectedTime.minute,
-      );
+    final dt = await chooseTimeForDate(context, date!);
+    if (dt != null) {
       if (validate(dt)) {
         onDateChange(dt);
       } else {
@@ -75,7 +53,7 @@ Widget dateAndTimePickButton(
           child: OutlinedButton(
             style: AppButtonStyles.baseButtonStyle,
 
-            onPressed: chooseDate,
+            onPressed: _chooseDate,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,

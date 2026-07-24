@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
@@ -44,7 +43,7 @@ class CollapsibleTaskForm extends StatefulWidget {
 class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   // Границы размеров формы
   static const double _minHeight = 60.0; // Видна только шапка-хэндл
-  static const double _midHeight = 150;
+  static const double _midHeight = 190;
   late double _maxHeight; // Полностью развернутая форма
 
   // Текущая высота формы
@@ -124,7 +123,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
               ? point
               : closest,
         );
-        
       }
     });
     widget.onFormVisibilityChanged?.call(_currentHeight != snapPoints[2]);
@@ -168,22 +166,44 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     });
   }
 
-  void _onDueDateChange(DateTime? selected) {
-    setState(() => _dueDate = selected);
-  }
-
   void _onTaskStatusChange(TaskStatus? v) {
     setState(() {
       _taskStatus = v ?? _taskStatus;
     });
   }
 
+  void _onDueDateChange(DateTime? selected) {
+    setState(() => _dueDate = selected);
+  }
+
+
+  //WORKING WITH DATES
   void _onStartsAtChange(DateTime? selected) {
     setState(() => _startsAt = selected);
   }
 
   void _onEndsAtChange(DateTime? selected) {
     setState(() => _endsAt = selected);
+  }
+
+  bool _validateEndsAt(date) {
+    if (_startsAt != null) {
+      return date.isAfter(_startsAt!) ||
+          date.isDateOnly &&
+              date.startOfDay.isAtSameMomentAs(_startsAt!.startOfDay);
+    } else {
+      return true;
+    }
+  }
+
+  bool _validateStartsAt(date) {
+    if (_endsAt != null) {
+      return date.isBefore(_endsAt!) ||
+          date.isDateOnly &&
+              date.startOfDay.isAtSameMomentAs(_endsAt!.startOfDay);
+    } else {
+      return true;
+    }
   }
 
   @override
@@ -367,344 +387,316 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
           ),
         ),
 
-        // 2. БЛОК ДОПОЛНИТЕЛЬНЫХ ПОЛЕЙ — плавно проявляется ТОЛЬКО при переходе от Mid к Ma
-        if (_currentHeight > _midHeight - 50)
-          Opacity(
-            opacity: maxProgress,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _descController,
-                  minLines: 3,
-                  maxLines: 10,
-                  decoration: InputDecoration(
-                    fillColor: AppColors.surface,
-                    hoverColor: AppColors.surfaceBright,
-                    labelText: 'Description',
-                    prefixIcon: const Icon(Icons.description),
-                  ),
-                ),
-                // const SizedBox(height: 16),
-
-                // Row(
-                //   children: [
-                //     Expanded(
-                //       child: PillSwitcher(
-                //         options: ["TASK", "EVENT"],
-                //         onSelectionChanged: (typeId) {},
-                //       ),
-                //     ),
-                //   ],
-                // ),
-                SizedBox(height: AppMargins.md),
-
-                Row(
+        AnimatedCrossFade(
+          duration: const Duration(milliseconds: 200),
+          firstChild: SizedBox(
+            width: double.infinity,
+            child: Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
                   children: [
-                    Expanded(
-                      child: dateAndTimePickButton(
-                        context,
-                        label: "Starts at",
-                        date: _startsAt,
-                        onDateChange: _onStartsAtChange,
-                        validate: (date) {
-                          if (_endsAt != null) {
-                            return date.isBefore(_endsAt!) ||
-                                date.isDateOnly &&
-                                    date.startOfDay.isAtSameMomentAs(
-                                      _endsAt!.startOfDay,
-                                    );
-                          } else {
-                            return true;
-                          }
-                        },
-                      ),
+                    _QuickActionChip(
+                      Icons.access_time,
+                      _startsAt == null
+                          ? "Set start time"
+                          : formatDate(_startsAt!),
+                      isActive: _startsAt != null,
+                      onPressed: () async {
+                        final selected = await chooseDateOnly(
+                          context,
+                          _startsAt,
+                        );
+                        if (_validateStartsAt(selected)) {
+                          _onStartsAtChange(selected);
+                        }
+                      },
+                      onCancel: () => _onStartsAtChange(null),
                     ),
-                    SizedBox(
-                      width: AppMargins.lg,
-                      child: Center(child: Text("-")),
-                    ),
+                    SizedBox(width: AppSpacing.sm),
 
-                    Expanded(
-                      child: Column(
-                        children: [
-                          dateAndTimePickButton(
-                            context,
-                            label: "Ends at",
-                            date: _endsAt,
-                            onDateChange: _onEndsAtChange,
-                            validate: (date) {
-                              if (_startsAt != null) {
-                                return date.isAfter(_startsAt!) ||
-                                    date.isDateOnly &&
-                                        date.startOfDay.isAtSameMomentAs(
-                                          _startsAt!.startOfDay,
-                                        );
-                              } else {
-                                return true;
-                              }
-                            },
-                          ),
-                        ],
-                      ),
+                    Text('-'),
+                    SizedBox(width: AppSpacing.sm),
+
+                    _QuickActionChip(
+                      Icons.access_time,
+                      _endsAt == null ? "Set end time" : formatDate(_endsAt!),
+                      isActive: _endsAt != null,
+                      onPressed: () async {
+                        final selected = await chooseDateOnly(context, _endsAt);
+                        if (_validateEndsAt(selected)) {
+                          _onEndsAtChange(selected);
+                        }
+                      },
+                      onCancel: () => _onEndsAtChange(null),
                     ),
                   ],
                 ),
-                const SizedBox(height: AppMargins.lg),
-                // Opacity(
-                //   opacity: midProgress,
-                //   child: ElevatedButton(
-                //     onPressed: _currentHeight > _minHeight + 30
-                //         ? _submitTask
-                //         : null,
-                //     style: ElevatedButton.styleFrom(
-                //       padding: const EdgeInsets.symmetric(vertical: 16),
-                //     ),
-                //     child: Text(
-                //       isEditMode ? 'Сохранить изменения' : 'Добавить задачу',
-                //     ),
-                //   ),
-                // ),
-                BaseContainer(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Status',
+              ),
+            ),
+          ),
+          secondChild: Column(
+            //crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 16),
+              TextField(
+                controller: _descController,
+                minLines: 3,
+                maxLines: 10,
+                decoration: InputDecoration(
+                  fillColor: AppColors.surface,
+                  hoverColor: AppColors.surfaceBright,
+                  labelText: 'Description',
+                  prefixIcon: const Icon(Icons.description),
+                ),
+              ),
+              SizedBox(height: AppMargins.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: dateAndTimePickButton(
+                      context,
+                      label: "Starts at",
+                      date: _startsAt,
+                      onDateChange: _onStartsAtChange,
+                      validate: _validateStartsAt,
+                    ),
+                  ),
+                  SizedBox(
+                    width: AppMargins.lg,
+                    child: Center(child: Text("-")),
+                  ),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        dateAndTimePickButton(
+                          context,
+                          label: "Ends at",
+                          date: _endsAt,
+                          onDateChange: _onEndsAtChange,
+                          validate: _validateEndsAt,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppMargins.lg),
+              BaseContainer(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Status',
+                          style: AppTypography.codeLabel.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                        Flexible(
+                          child: DropdownMenu(
+                            width: 180,
+                            selectOnly: true,
+                            onSelected: _onTaskStatusChange,
+                            textStyle: AppTypography.bodySm,
+                            trailingIcon: const Icon(
+                              Icons.keyboard_arrow_down_rounded,
+                              color: AppColors.primary,
+                            ),
+                            selectedTrailingIcon: const Icon(
+                              Icons.keyboard_arrow_up_rounded,
+                              color: AppColors.primary,
+                            ),
+                            initialSelection: _taskStatus,
+                            menuStyle: MenuStyle(
+                              backgroundColor: WidgetStateProperty.all(
+                                AppColors.surfaceContainerLow,
+                              ),
+                              elevation: WidgetStateProperty.all(8),
+                              shape: WidgetStateProperty.all(
+                                RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              padding: WidgetStateProperty.all(
+                                EdgeInsets.all(8),
+                              ),
+                            ),
+                            inputDecorationTheme:
+                                AppButtonStyles.baseInputDecoration,
+                            dropdownMenuEntries: [
+                              ...TaskStatus.values.map((e) {
+                                return DropdownMenuEntry(
+                                  value: e,
+                                  label: e.name,
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: AppMargins.sm),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Projects',
+                          style: AppTypography.codeLabel.copyWith(
+                            color: Colors.white,
+                          ),
+                        ),
+                        Flexible(
+                          child: StreamBuilder<List<Project>>(
+                            stream: widget.projects,
+                            builder: (_, snapshot) {
+                              final projectsAsync = snapshot.data;
+                              return DropdownMenu<String?>(
+                                textStyle: AppTypography.bodySm,
+                                hintText: "Choose project",
+                                width: 180,
+                                trailingIcon: const Icon(
+                                  Icons.keyboard_arrow_down_rounded,
+                                  color: AppColors.primary,
+                                ),
+                                selectedTrailingIcon: const Icon(
+                                  Icons.keyboard_arrow_up_rounded,
+                                  color: AppColors.primary,
+                                ),
+                                inputDecorationTheme:
+                                    AppButtonStyles.baseInputDecoration,
+                                menuStyle: MenuStyle(
+                                  backgroundColor: WidgetStateProperty.all(
+                                    AppColors.surfaceContainer,
+                                  ),
+                                  shape: WidgetStateProperty.all(
+                                    RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                ),
+                                dropdownMenuEntries: [
+                                  DropdownMenuEntry<String?>(
+                                    label: "No project",
+                                    value: null,
+                                    style: AppButtonStyles.menuButtonStyle(),
+                                  ),
+                                  if (projectsAsync != null)
+                                    ...projectsAsync.map((project) {
+                                      return DropdownMenuEntry<String?>(
+                                        style: AppButtonStyles.menuButtonStyle(
+                                          bgColor: parseHexColor(project.color),
+                                        ),
+                                        value: project.id,
+                                        label: project.name,
+                                        labelWidget: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.circle,
+                                              size: 12,
+                                              color: parseHexColor(
+                                                project.color,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Flexible(
+                                              child: Text(
+                                                project.name,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                ],
+                                onSelected: _onProjectChange,
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: AppMargins.sm),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'DueDate',
                             style: AppTypography.codeLabel.copyWith(
                               color: Colors.white,
                             ),
                           ),
-
-                          Flexible(
-                            child: DropdownMenu(
-                              width: 180,
-                              selectOnly: true,
-                              onSelected: _onTaskStatusChange,
-                              textStyle: AppTypography.bodySm,
-                              trailingIcon: const Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                color: AppColors.primary,
+                        ),
+                        SizedBox(
+                          width: 160,
+                          child: TextButton(
+                            style: TextButton.styleFrom(
+                              backgroundColor: AppColors.primary.withValues(
+                                alpha: 0.05,
                               ),
-                              selectedTrailingIcon: const Icon(
-                                Icons.keyboard_arrow_up_rounded,
-                                color: AppColors.primary,
-                              ),
-                              initialSelection: _taskStatus,
-                              menuStyle: MenuStyle(
-                                backgroundColor: WidgetStateProperty.all(
-                                  AppColors.surfaceContainerLow,
-                                ),
-
-                                elevation: WidgetStateProperty.all(8),
-                                shape: WidgetStateProperty.all(
-                                  RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
+                              overlayColor: AppColors.primary,
+                            ),
+                            onPressed: () async {
+                              final selected = await showDatePicker(
+                                context: context,
+                                initialDate: _dueDate ?? DateTime.now(),
+                                firstDate: DateTime(2000),
+                                lastDate: DateTime(2040),
+                              );
+                              _onDueDateChange(selected);
+                            },
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _dueDate == null
+                                      ? "Choose"
+                                      : formatDate(_dueDate!),
+                                  style: AppTypography.codeLabel.copyWith(
+                                    color: AppColors.primary,
                                   ),
                                 ),
-                                // ТЕ САМЫЕ ОТСТУПЫ: задаем внутренние отступы для всего контейнера меню
-                                padding: WidgetStateProperty.all(
-                                  EdgeInsets.all(
-                                    8,
-                                  ), // Элементы внутри меню не будут прижаты к его краям
-                                ),
-                              ),
-                              inputDecorationTheme:
-                                  AppButtonStyles.baseInputDecoration,
-                              dropdownMenuEntries: [
-                                ...TaskStatus.values.map((e) {
-                                  return DropdownMenuEntry(
-                                    value: e,
-                                    label: e.name,
-                                    //style: AppButtonStyles.menuButtonStyle(),
-                                  );
-                                }),
+                                const Icon(Icons.calendar_today, size: 16),
+                                if (_dueDate != null)
+                                  GestureDetector(
+                                    onTap: () => _onDueDateChange(null),
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(left: 4),
+                                      child: Icon(
+                                        Icons.close,
+                                        size: 16,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
-                        ],
-                      ),
-                      SizedBox(height: AppMargins.sm),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Projects',
-                            style: AppTypography.codeLabel.copyWith(
-                              color: Colors.white,
-                            ),
-                          ),
-
-                          Flexible(
-                            child: StreamBuilder<List<Project>>(
-                              stream: widget.projects,
-                              builder: (_, snapshot) {
-                                // if (snapshot.connectionState ==
-                                //     ConnectionState.waiting) {
-                                //   return Text("Waiting...");
-                                // }
-                                final projectsAsync = snapshot.data;
-                                return DropdownMenu<String?>(
-                                  // 1. Настройка текста внутри меню
-                                  textStyle: AppTypography.bodySm,
-                                  hintText: "Choose project",
-                                  width: 180,
-                                  // 2. Настройка цвета стрелочки (как на image_adb2e3.png, она имеет оттенок primary)
-                                  trailingIcon: const Icon(
-                                    Icons.keyboard_arrow_down_rounded,
-                                    color: AppColors.primary,
-                                  ),
-                                  selectedTrailingIcon: const Icon(
-                                    Icons.keyboard_arrow_up_rounded,
-                                    color: AppColors.primary,
-                                  ),
-
-                                  // 3. Стилизация самой плашки (поля ввода)
-                                  inputDecorationTheme:
-                                      AppButtonStyles.baseInputDecoration,
-                                  // 4. Стилизация выпадающего списка (всплывающего окна)
-                                  menuStyle: MenuStyle(
-                                    backgroundColor: WidgetStateProperty.all(
-                                      AppColors.surfaceContainer,
-                                    ),
-                                    shape: WidgetStateProperty.all(
-                                      RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                    ),
-                                  ),
-
-                                  // Данные (для примера)
-                                  //initialValue: 'System Core v2',
-                                  dropdownMenuEntries: [
-                                    DropdownMenuEntry<String?>(
-                                      label: "No project",
-                                      value: null,
-                                      style: AppButtonStyles.menuButtonStyle(),
-                                    ),
-
-                                    if (projectsAsync != null)
-                                      ...projectsAsync.map((project) {
-                                        return DropdownMenuEntry<String?>(
-                                          style:
-                                              AppButtonStyles.menuButtonStyle(
-                                                bgColor: parseHexColor(
-                                                  project.color,
-                                                ),
-                                              ),
-                                          value: project.id,
-                                          label: project.name,
-                                          labelWidget: Row(
-                                            children: [
-                                              Icon(
-                                                Icons.circle,
-                                                size: 12,
-                                                color: parseHexColor(
-                                                  project.color,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Flexible(
-                                                child: Text(
-                                                  project.name,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      }),
-                                  ],
-                                  onSelected: _onProjectChange,
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: AppMargins.sm),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'DueDate',
-                              style: AppTypography.codeLabel.copyWith(
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-
-                          SizedBox(
-                            width: 160,
-                            child: TextButton(
-                              style: TextButton.styleFrom(
-                                backgroundColor: AppColors.primary.withValues(
-                                  alpha: 0.05,
-                                ),
-                                overlayColor: AppColors.primary,
-                              ),
-                              onPressed: () async {
-                                final selected = await showDatePicker(
-                                  context: context,
-                                  initialDate: _dueDate ?? DateTime.now(),
-                                  firstDate: DateTime(2000),
-                                  lastDate: DateTime(2040),
-                                );
-
-                                _onDueDateChange(selected);
-                              },
-                              child: Row(
-                                //mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceAround,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    _dueDate == null
-                                        ? "Choose"
-                                        : formatDate(_dueDate!),
-                                    style: AppTypography.codeLabel.copyWith(
-                                      color: AppColors.primary,
-                                    ),
-                                  ),
-                                  const Icon(Icons.calendar_today, size: 16),
-                                  if (_dueDate != null)
-                                    GestureDetector(
-                                      onTap: () => _onDueDateChange(null),
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(left: 4),
-                                        child: Icon(
-                                          Icons.close,
-                                          size: 16,
-                                          color: AppColors.primary,
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                if (isEditMode)
-                  ElevatedButton(
-                    style: AppButtonStyles.saveButton,
-                    onPressed: _deleteTask,
-                    child: Text("Delete task"),
-                  ),
-              ],
-            ),
+              ),
+              if (isEditMode)
+                ElevatedButton(
+                  style: AppButtonStyles.saveButton,
+                  onPressed: _deleteTask,
+                  child: Text("Delete task"),
+                ),
+            ],
           ),
+          crossFadeState: maxProgress > 0.1
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
+        ),
       ],
     );
   }
@@ -725,6 +717,54 @@ class BaseContainer extends StatelessWidget {
       ),
       padding: EdgeInsets.all(AppSpacing.xl),
       child: child,
+    );
+  }
+}
+
+class _QuickActionChip extends StatelessWidget {
+  const _QuickActionChip(
+    this.icon,
+    this.label, {
+    required this.isActive,
+    required this.onPressed,
+    required this.onCancel,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final VoidCallback onPressed;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isActive ? AppColors.primaryContainer : Colors.white70;
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.overdueGlow : AppColors.surfaceContainer,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive ? AppColors.overdueGlow : AppColors.inputGlass,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              onPressed: onCancel,
+              icon: Icon(isActive ? Icons.close : icon, size: 16, color: color),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              splashRadius: 16,
+            ),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(color: color, fontSize: 12)),
+          ],
+        ),
+      ),
     );
   }
 }
