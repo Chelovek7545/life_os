@@ -20,7 +20,7 @@ final testTask = Task.blank().copyWith(
 );
 
 @Preview()
-Widget Preview0() => MaterialApp(
+Widget preview0() => MaterialApp(
   theme: ThemeData.light(),
   home: TaskCard(
     projectTitle: '5m reel',
@@ -42,7 +42,7 @@ Widget newPreview() => MaterialApp(
 );
 
 @Preview()
-Widget Preview1() => MaterialApp(
+Widget preview1() => MaterialApp(
   theme: ThemeData.light(),
   home: TaskCard(
     projectTitle: '5m reel',
@@ -54,7 +54,7 @@ Widget Preview1() => MaterialApp(
 );
 
 @Preview()
-Widget Preview2() => MaterialApp(
+Widget preview2() => MaterialApp(
   theme: ThemeData.light(),
   home: TaskCard(
     projectTitle: '5m reel',

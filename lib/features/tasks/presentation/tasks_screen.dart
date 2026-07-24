@@ -14,6 +14,7 @@ import 'package:life_os/features/tasks/domain/task_filter_config.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
+import 'package:life_os/features/tasks/presentation/components/date_header.dart';
 import 'package:life_os/features/tasks/presentation/components/day_calendar.dart';
 import 'package:life_os/features/tasks/presentation/components/timeline.dart';
 import 'package:life_os/features/tasks/presentation/task_state.dart';
@@ -23,7 +24,8 @@ const double _kFormExpandedHeight = 1000.0;
 const double _kHeaderHeight = 40.0;
 const double _kPeriodTabsHeight = 45.0;
 const double _kCalendarHeight = 86.0;
-const double _kTimelineTopPadding = 60.0;
+const double _kDateHeaderHeight = 60.0;
+const double _kTimelineTopPadding = 60.0 + _kDateHeaderHeight;
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({
@@ -42,7 +44,7 @@ class TasksScreen extends StatefulWidget {
 class _TasksScreenState extends State<TasksScreen> {
   bool _isEventMode = false;
   bool _showCalendar = true;
-  bool _lastFormVisible = false;
+  //bool _lastFormVisible = false;
 
   @override
   void dispose() {
@@ -118,7 +120,9 @@ class _TasksScreenState extends State<TasksScreen> {
         List<TaskEvent> events = [];
         state.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          empty: (_, _) {events = [];},
+          empty: (_, _) {
+            events = [];
+          },
           error: (message) => Center(child: Text(message)),
           loaded: (items, _, _, _) {
             events = items
@@ -135,17 +139,14 @@ class _TasksScreenState extends State<TasksScreen> {
                   ),
                 )
                 .toList(growable: false);
-
           },
         );
-      
 
-            return TimelineBody(
-              events: events,
-              topPadding: _kTimelineTopPadding,
-              onEventChanged: _updateEvent,
-            );
-        
+        return TimelineBody(
+          events: events,
+          topPadding: _kTimelineTopPadding,
+          onEventChanged: _updateEvent,
+        );
       },
     );
   }
@@ -165,16 +166,25 @@ class _TasksScreenState extends State<TasksScreen> {
             onModeChanged: _onModeChanged,
           ),
           const SizedBox(height: AppSpacing.sm),
-          if (!_isEventMode)
-            StreamBuilder<TaskFilterConfig>(
-              stream: widget.viewModel.currentFilter,
-              initialData: widget.viewModel.currentFilterValue,
-              builder: (context, snapshot) {
-                final currentFilter =
-                    snapshot.data ?? widget.viewModel.currentFilterValue;
 
-                return Column(
-                  children: [
+          StreamBuilder<TaskFilterConfig>(
+            stream: widget.viewModel.currentFilter,
+            initialData: widget.viewModel.currentFilterValue,
+            builder: (context, snapshot) {
+              final currentFilter =
+                  snapshot.data ?? widget.viewModel.currentFilterValue;
+
+              return Column(
+                children: [
+                  if (_isEventMode)
+                    DateHeader(
+                      anchorDate: currentFilter.anchorDate,
+                      onDateChange: (value) => widget.viewModel.updateFilter(
+                        (old) => old.copyWith(anchorDate: value),
+                      ),
+                    ),
+
+                  if (!_isEventMode) ...[
                     SegmentedPillControl(
                       tabs: const ['Day', 'Week', 'Month'],
                       currentIdx: currentFilter.period.index,
@@ -192,9 +202,10 @@ class _TasksScreenState extends State<TasksScreen> {
                       ),
                     ],
                   ],
-                );
-              },
-            ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
@@ -241,7 +252,7 @@ class _TasksScreenState extends State<TasksScreen> {
       Colors.black,
       Colors.transparent,
     ],
-    stops: [0.0, 0.15, 0.96, 1.0],
+    stops: [0.0, 0.20, 0.96, 1.0],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
@@ -387,50 +398,52 @@ class _TaskListState extends State<_TaskList> {
     _items.addAll(widget.items);
   }
 
-@override
-void didUpdateWidget(_TaskList oldWidget) {
-  super.didUpdateWidget(oldWidget);
-  
-  final oldIds = oldWidget.items.map((e) => e.task.id).toSet();
-  final newIds = widget.items.map((e) => e.task.id).toSet();
+  @override
+  void didUpdateWidget(_TaskList oldWidget) {
+    super.didUpdateWidget(oldWidget);
 
-  // 1. Удаляем несуществующие элементы
-  for (int i = _items.length - 1; i >= 0; i--) {
-    if (!newIds.contains(_items[i].task.id)) {
-      final removed = _items.removeAt(i);
-      _listKey.currentState?.removeItem(
-        i,
-        (context, animation) => SizeTransition(
-          sizeFactor: animation,
-          alignment: Alignment.topCenter,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _buildCard(removed),
+    final oldIds = oldWidget.items.map((e) => e.task.id).toSet();
+    final newIds = widget.items.map((e) => e.task.id).toSet();
+
+    // 1. Удаляем несуществующие элементы
+    for (int i = _items.length - 1; i >= 0; i--) {
+      if (!newIds.contains(_items[i].task.id)) {
+        final removed = _items.removeAt(i);
+        _listKey.currentState?.removeItem(
+          i,
+          (context, animation) => SizeTransition(
+            sizeFactor: animation,
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildCard(removed),
+            ),
           ),
-        ),
-        duration: const Duration(milliseconds: 300),
-      );
-    }
-  }
-
-  // 2. Вставляем новые элементы или ОБНОВЛЯЕМ существующие
-  for (int i = 0; i < widget.items.length; i++) {
-    final newItem = widget.items[i];
-    if (!oldIds.contains(newItem.task.id)) {
-      _items.insert(i, newItem);
-      _listKey.currentState?.insertItem(i);
-    } else {
-      // КЛЮЧЕВОЙ МОМЕНТ: Заменяем объект в _items, чтобы обновить title, completed статус и т.д.
-      final indexInLocalList = _items.indexWhere((e) => e.task.id == newItem.task.id);
-      if (indexInLocalList != -1) {
-        _items[indexInLocalList] = newItem;
+          duration: const Duration(milliseconds: 300),
+        );
       }
     }
-  }
 
-  // Вызываем setState, чтобы UI перерисовал обновленные карточки
-  setState(() {});
-}
+    // 2. Вставляем новые элементы или ОБНОВЛЯЕМ существующие
+    for (int i = 0; i < widget.items.length; i++) {
+      final newItem = widget.items[i];
+      if (!oldIds.contains(newItem.task.id)) {
+        _items.insert(i, newItem);
+        _listKey.currentState?.insertItem(i);
+      } else {
+        // КЛЮЧЕВОЙ МОМЕНТ: Заменяем объект в _items, чтобы обновить title, completed статус и т.д.
+        final indexInLocalList = _items.indexWhere(
+          (e) => e.task.id == newItem.task.id,
+        );
+        if (indexInLocalList != -1) {
+          _items[indexInLocalList] = newItem;
+        }
+      }
+    }
+
+    // Вызываем setState, чтобы UI перерисовал обновленные карточки
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -698,7 +711,10 @@ class _TasksHeaderState extends State<_TasksHeader>
                                 style: IconButton.styleFrom(
                                   visualDensity: VisualDensity.compact,
                                 ),
-                                onPressed: () => widget.vm.deleteSelectedTask().then((i)=> widget.vm.clearTaskSelection()),
+                                onPressed: () =>
+                                    widget.vm.deleteSelectedTask().then(
+                                      (i) => widget.vm.clearTaskSelection(),
+                                    ),
                                 icon: const Icon(Icons.delete_forever),
                               ),
                               Padding(
