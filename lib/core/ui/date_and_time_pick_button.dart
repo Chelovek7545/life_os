@@ -13,7 +13,7 @@ Widget dateAndTimePickButton(
   required ValueChanged<DateTime?> onDateChange,
   required bool Function(DateTime) validate,
 }) {
-  void _chooseDate() async {
+  void chooseDate() async {
     final dt = await chooseDateOnly(context, date);
     if (dt != null) {
       if (validate(dt)) {
@@ -53,7 +53,7 @@ Widget dateAndTimePickButton(
           child: OutlinedButton(
             style: AppButtonStyles.baseButtonStyle,
 
-            onPressed: _chooseDate,
+            onPressed: chooseDate,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,

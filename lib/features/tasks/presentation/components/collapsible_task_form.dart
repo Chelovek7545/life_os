@@ -186,20 +186,22 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     setState(() => _endsAt = selected);
   }
 
-  bool _validateEndsAt(date) {
+
+  //Валидация: если после либо если у одного только дата, то мы сравниваем по началу дня(одно и тоже начало должно быть)
+  bool _validateEndsAt(DateTime date) {
     if (_startsAt != null) {
       return date.isAfter(_startsAt!) ||
-          date.isDateOnly &&
+          (date.isDateOnly || _startsAt!.isDateOnly ) &&
               date.startOfDay.isAtSameMomentAs(_startsAt!.startOfDay);
     } else {
       return true;
     }
   }
 
-  bool _validateStartsAt(date) {
+  bool _validateStartsAt(DateTime date) {
     if (_endsAt != null) {
       return date.isBefore(_endsAt!) ||
-          date.isDateOnly &&
+          (date.isDateOnly || _endsAt!.isDateOnly ) &&
               date.startOfDay.isAtSameMomentAs(_endsAt!.startOfDay);
     } else {
       return true;
@@ -408,7 +410,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                           context,
                           _startsAt,
                         );
-                        if (_validateStartsAt(selected)) {
+                        if (selected != null && _validateStartsAt(selected)) {
                           _onStartsAtChange(selected);
                         }
                       },
@@ -425,7 +427,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                       isActive: _endsAt != null,
                       onPressed: () async {
                         final selected = await chooseDateOnly(context, _endsAt);
-                        if (_validateEndsAt(selected)) {
+                        if (selected != null && _validateEndsAt(selected)) {
                           _onEndsAtChange(selected);
                         }
                       },

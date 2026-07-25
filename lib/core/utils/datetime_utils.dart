@@ -4,7 +4,7 @@
   Future<DateTime?> chooseTimeForDate(BuildContext context, DateTime date) async {
     final TimeOfDay? selectedTime = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(date!),
+      initialTime: TimeOfDay.fromDateTime(date),
     );
 
     if (selectedTime != null) {
@@ -19,7 +19,7 @@
     }
   }
 
-Future<DateTime?> chooseDateOnly( context, DateTime? date,) async {
+Future<DateTime?> chooseDateOnly(BuildContext context, DateTime? date,) async {
     final selected = await showDatePicker(
       context: context,
       initialDate: date ?? DateTime.now(),
