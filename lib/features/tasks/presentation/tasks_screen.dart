@@ -7,6 +7,7 @@ import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/ui/segmented_pill_controller.dart';
 import 'package:life_os/core/ui/task_card.dart';
+import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/core/utils/wrapped.dart';
@@ -322,7 +323,7 @@ class _TasksScreenState extends State<TasksScreen> {
     final overlayHeight =
         _kHeaderHeight +
         _kPeriodTabsHeight +
-        AppSpacing.sm * 2  +
+        AppSpacing.sm * 2 +
         (_showCalendar ? _kCalendarHeight + AppSpacing.sm : 0);
 
     return StreamBuilder<bool>(
@@ -469,6 +470,9 @@ class _TaskListState extends State<_TaskList> {
     return TaskCard(
       key: ValueKey(item.task.id),
       task: item.task,
+      leftBorderColor: item.project != null
+          ? parseHexColor(item.project!.color)
+          : null,
       isOverdue: item.task.dueDate?.isBefore(widget.today) ?? false,
       onCheckChanged: () => widget.onToggleTask(item.task),
       onLongPress: () => widget.onEditTask(item),
@@ -667,7 +671,6 @@ class _TasksHeaderState extends State<_TasksHeader>
       //mainAxisAlignment: MainAxisAlignment.center,
       children: [
         IconButton(
-
           onPressed: () {},
           icon: const Icon(Icons.settings_outlined, color: Colors.white),
         ),
@@ -703,7 +706,8 @@ class _TasksHeaderState extends State<_TasksHeader>
                             children: [
                               IconButton(
                                 style: IconButton.styleFrom(
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
 
                                   visualDensity: VisualDensity.compact,
                                 ),
@@ -712,7 +716,8 @@ class _TasksHeaderState extends State<_TasksHeader>
                               ),
                               IconButton(
                                 style: IconButton.styleFrom(
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
 
                                   visualDensity: VisualDensity.compact,
                                 ),

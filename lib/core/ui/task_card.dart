@@ -161,220 +161,202 @@ class _TaskCardState extends State<TaskCard>
                   ]
                 : null,
           ),
-          child: Stack(
-            children: [
-              Positioned(
-                left: 10,
-                top: 40,
-                bottom: 40,
-                right: 100,
-                child: Container(
-                  decoration: widget.leftBorderColor != null
-                      ? BoxDecoration(
-                          borderRadius: BorderRadius.circular(AppRadius.md + 1),
-                          color: widget.leftBorderColor!.withValues(alpha: 0.3),
-                        )
-                      : null,
-                ),
-              ),
-              ClipRect(
-                child: Stack(
-                  children: [
-                    Positioned(
-                      left: 4,
-                      top: 14,
-                      bottom: 14,
-                      child: Container(
-                        width: 7,
-                        decoration: BoxDecoration(
-                          color: Colors.amber,
-                          borderRadius: BorderRadius.circular(AppRadius.full),
-                        ),
-                      ),
+          child: ClipRect(
+            child: Stack(
+              children: [
+                Positioned(
+                  left: 4,
+                  top: 14,
+                  bottom: 14,
+                  child: Container(
+                    width: 7,
+                    decoration: BoxDecoration(
+                      color: widget.leftBorderColor ?? AppColors.onSurfaceVariant,
+                      borderRadius: BorderRadius.circular(AppRadius.full),
                     ),
-                    GlassPanel(
-                                      borderRadius: AppRadius.lg,
-                padding: EdgeInsets.zero,
-                borderColor: widget.isSelected
-                    ? const Color(0xFFB8FF63).withValues(alpha: 0.4)
-                    : widget.isOverdue
-                    ? AppColors.primaryContainer
-                    : null,
-                      child: Padding(
-                        padding: const EdgeInsets.all(22),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            GestureDetector(
-                              onTap: widget.onCheckChanged,
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 150),
-                                width: 24,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: widget.task.isCompleted
-                                      ? AppColors.primaryContainer
-                                      : Colors.transparent,
-                                  border: Border.all(
-                                    color: widget.task.isCompleted
-                                        ? AppColors.primaryContainer
-                                        : (widget.isSelected
-                                              ? const Color(
-                                                  0xFFB8FF63,
-                                                ).withValues(alpha: 0.4)
-                                              : widget.isOverdue
-                                              ? AppColors.primaryContainer
-                                              : AppColors.borderGlass),
-                                    width: 2,
-                                  ),
-                                ),
-                                child: widget.task.isCompleted
-                                    ? const Icon(
-                                        Icons.check,
-                                        size: 14,
-                                        color: Colors.white,
-                                      )
-                                    : null,
+                  ),
+                ),
+                GlassPanel(
+                                  borderRadius: AppRadius.lg,
+            padding: EdgeInsets.zero,
+            borderColor: widget.isSelected
+                ? const Color(0xFFB8FF63).withValues(alpha: 0.4)
+                : widget.isOverdue
+                ? AppColors.primaryContainer
+                : null,
+                  child: Padding(
+                    padding: const EdgeInsets.all(22),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: widget.onCheckChanged,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: widget.task.isCompleted
+                                  ? AppColors.primaryContainer
+                                  : Colors.transparent,
+                              border: Border.all(
+                                color: widget.task.isCompleted
+                                    ? AppColors.primaryContainer
+                                    : (widget.isSelected
+                                          ? const Color(
+                                              0xFFB8FF63,
+                                            ).withValues(alpha: 0.4)
+                                          : widget.isOverdue
+                                          ? AppColors.primaryContainer
+                                          : AppColors.borderGlass),
+                                width: 2,
                               ),
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    widget.task.title,
-                                    style: AppTypography.bodyMd.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: widget.isOverdue
-                                          ? AppColors.primaryContainer
-                                          : Colors.white,
-                                    ),
+                            child: widget.task.isCompleted
+                                ? const Icon(
+                                    Icons.check,
+                                    size: 14,
+                                    color: Colors.white,
+                                  )
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.task.title,
+                                style: AppTypography.bodyMd.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: widget.isOverdue
+                                      ? AppColors.primaryContainer
+                                      : Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              if (widget.projectTitle != null)
+                                Text(
+                                  widget.projectTitle!,
+                                  style: AppTypography.bodySm.copyWith(
+                                    color: AppColors.onSurfaceVariant
+                                        .withValues(alpha: 0.7),
                                   ),
-                                  const SizedBox(height: 4),
-                                  if (widget.projectTitle != null)
+                                ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.schedule,
+                                    size: 12,
+                                    color: widget.isOverdue
+                                        ? AppColors.primaryContainer
+                                        : AppColors.onSurfaceVariant,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  if (widget.task.dueDate != null)
                                     Text(
-                                      widget.projectTitle!,
-                                      style: AppTypography.bodySm.copyWith(
-                                        color: AppColors.onSurfaceVariant
-                                            .withValues(alpha: 0.7),
-                                      ),
-                                    ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.schedule,
-                                        size: 12,
-                                        color: widget.isOverdue
-                                            ? AppColors.primaryContainer
-                                            : AppColors.onSurfaceVariant,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      if (widget.task.dueDate != null)
-                                        Text(
-                                          formatDate(widget.task.dueDate!),
-                                          style: AppTypography.codeLabel
-                                              .copyWith(
-                                                color: widget.isOverdue
-                                                    ? AppColors.primaryContainer
-                                                    : AppColors
-                                                          .onSurfaceVariant,
-                                              ),
-                                        ),
-                                      if (widget.task.tags.isNotEmpty) ...[
-                                        const SizedBox(width: 12),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
+                                      formatDate(widget.task.dueDate!),
+                                      style: AppTypography.codeLabel
+                                          .copyWith(
                                             color: widget.isOverdue
                                                 ? AppColors.primaryContainer
-                                                      .withValues(alpha: 0.2)
-                                                : AppColors.surfaceGlass,
-                                            borderRadius: BorderRadius.circular(
-                                              4,
-                                            ),
+                                                : AppColors
+                                                      .onSurfaceVariant,
                                           ),
-                                          child: Wrap(
-                                            spacing: 12,
-                                            runSpacing: 8,
-                                            children: widget.task.tags
-                                                .map(
-                                                  (link) => SemanticTag(
-                                                    label: link.name,
-                                                    accentColor: Colors.black,
-                                                  ),
-                                                )
-                                                .toList(),
-                                          ),
+                                    ),
+                                  if (widget.task.tags.isNotEmpty) ...[
+                                    const SizedBox(width: 12),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: widget.isOverdue
+                                            ? AppColors.primaryContainer
+                                                  .withValues(alpha: 0.2)
+                                            : AppColors.surfaceGlass,
+                                        borderRadius: BorderRadius.circular(
+                                          4,
                                         ),
-                                      ],
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Icon(
-                              Icons.drag_indicator,
-                              color: AppColors.onSurfaceVariant.withValues(
-                                alpha: 0.4,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: AnimatedBuilder(
-                        animation: _controller,
-                        builder: (context, child) {
-                          return Transform.translate(
-                            offset: Offset(
-                              _deleteWidth * (1 - _controller.value),
-                              0,
-                            ),
-                            child: GestureDetector(
-                              onTap: () {
-                                _close();
-                                widget.onDelete?.call();
-                              },
-                              child: Container(
-                                width: _deleteWidth,
-                                decoration: BoxDecoration(
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.primaryContainer,
-                                      blurRadius: _controller.value * 40,
+                                      ),
+                                      child: Wrap(
+                                        spacing: 12,
+                                        runSpacing: 8,
+                                        children: widget.task.tags
+                                            .map(
+                                              (link) => SemanticTag(
+                                                label: link.name,
+                                                accentColor: Colors.black,
+                                              ),
+                                            )
+                                            .toList(),
+                                      ),
                                     ),
                                   ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.drag_indicator,
+                          color: AppColors.onSurfaceVariant.withValues(
+                            alpha: 0.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: AnimatedBuilder(
+                    animation: _controller,
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(
+                          _deleteWidth * (1 - _controller.value),
+                          0,
+                        ),
+                        child: GestureDetector(
+                          onTap: () {
+                            _close();
+                            widget.onDelete?.call();
+                          },
+                          child: Container(
+                            width: _deleteWidth,
+                            decoration: BoxDecoration(
+                              boxShadow: [
+                                BoxShadow(
                                   color: AppColors.primaryContainer,
-                                  borderRadius: BorderRadius.circular(
-                                    AppRadius.md,
-                                  ),
+                                  blurRadius: _controller.value * 40,
                                 ),
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.delete_outlined,
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
+                              ],
+                              color: AppColors.primaryContainer,
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.md,
                               ),
                             ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.delete_outlined,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
