@@ -285,6 +285,12 @@ class TasksViewModel {
       }
     }
 
+  Future<void> markSelectedAsDone() async {
+    for (final t in selectedTasks) {
+      await _repository.updateTask(t.copyWith(status: TaskStatus.done));
+    }
+  }
+
   void dispose() {
     _combineSubscription?.cancel();
     _uiStateController.close();

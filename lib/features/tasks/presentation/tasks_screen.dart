@@ -686,85 +686,199 @@ class _TasksHeaderState extends State<_TasksHeader>
           ),
         ),
         Spacer(),
-
         GlassPanel(
           padding: EdgeInsets.all(4),
 
-          child: Row(
-            children: [
-              StreamBuilder(
-                stream: widget.vm.state,
-                builder: (_, snap) {
-                  Widget? ico;
-                  if (snap.hasData) {
-                    snap.data!.when(
-                      loading: () {},
-                      empty: (_, _) {},
-                      loaded: (_, selected, _, _) {
-                        if (selected.isNotEmpty) {
-                          ico = Row(
-                            children: [
-                              IconButton(
-                                style: IconButton.styleFrom(
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
 
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                onPressed: () => widget.vm.clearTaskSelection(),
-                                icon: const Icon(Icons.clear),
+              child: Row(
+                children: [
+                  StreamBuilder(
+                    stream: widget.vm.state,
+                    builder: (_, snap) {
+                      Widget? ico;
+                      if (snap.hasData) {
+                        snap.data!.when(
+                          loading: () {},
+                          empty: (_, _) {},
+                          loaded: (_, selected, _, _) {
+                            if (selected.isEmpty) return null;
+                            final screenWidth = MediaQuery.sizeOf(
+                              context,
+                            ).width;
+                            final int maxVisibleActions = switch (screenWidth) {
+                              < 400 => 1,
+                              < 480 => 2,
+                              < 600 => 3,
+                              _ => 4, // Для больших экранов
+                            };
+
+                            // Список всех имеющихся действий
+                            final actions = [
+                              _SelectionAction(
+                                icon: Icons.clear,
+                                label: 'Clear selection',
+                                onTap: () => widget.vm.clearTaskSelection(),
                               ),
-                              IconButton(
-                                style: IconButton.styleFrom(
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                onPressed: () =>
+                              _SelectionAction(
+                                icon: Icons.delete_forever,
+                                label: 'Delete',
+                                onTap: () =>
                                     widget.vm.deleteSelectedTask().then(
-                                      (i) => widget.vm.clearTaskSelection(),
+                                      (_) => widget.vm.clearTaskSelection(),
                                     ),
-                                icon: const Icon(Icons.delete_forever),
                               ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                child: Text(
-                                  selected.length.toString(),
-                                  style: AppTypography.bodyMd,
-                                ),
+                              _SelectionAction(
+                                icon: Icons.done_all,
+                                label: "mark Done",
+                                onTap: () => widget.vm.markSelectedAsDone(),
                               ),
-                            ],
-                          );
-                        }
-                      },
-                      error: (_) {},
-                    );
-                  }
+                              // Сюда можно добавлять новые кнопки (например: Архив, Завершить и т.д.)
+                            ];
 
-                  return AnimatedSize(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeInOut,
-                    child: ico ?? const SizedBox.shrink(),
-                  );
-                },
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding: const EdgeInsets.all(5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.full),
+                            final bool isOverflowed =
+                                actions.length > maxVisibleActions;
+                            final visibleActions = isOverflowed
+                                ? actions.take(maxVisibleActions - 1).toList()
+                                : actions;
+                            final overflowActions = isOverflowed
+                                ? actions.skip(maxVisibleActions - 1).toList()
+                                : <_SelectionAction>[];
+
+                            ico = Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // 1. Отображаем основные (видимые) кнопки
+                                ...visibleActions.map(
+                                  (action) => IconButton(
+                                    style: IconButton.styleFrom(
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    onPressed: action.onTap,
+                                    icon: Icon(action.icon),
+                                  ),
+                                ),
+
+                                // 2. Отображаем меню "3 точки" для переполнения
+                                if (isOverflowed)
+                                  Theme(
+                                    // Убираем стандартные подсветки и сплеши, чтобы сохранить чистый вид
+                                    data: Theme.of(context).copyWith(
+                                      highlightColor: Colors.transparent,
+                                      splashColor: AppColors.primaryContainer
+                                          .withValues(alpha: 0.1),
+                                      hoverColor: Colors.transparent
+                                      
+                                    ),
+                                    child: PopupMenuButton<_SelectionAction>(
+                                      // Стиль выпадающего контейнера
+                                      color: Colors.black.withValues(
+                                        alpha: 0,
+                                      ), // Тёмный полупрозрачный фон
+                                      elevation: 10,
+                                      shadowColor: AppColors.surface,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(
+                                          AppRadius.xl,
+                                        ),
+                                        side: BorderSide(
+                                          color: Colors.white.withValues(
+                                            alpha: 0,
+                                          ), // Тонкая матовая рамка
+                                          width: 1,
+                                        ),
+                                      ),
+                                      clipBehavior: Clip
+                                          .antiAlias, // Чтобы блюр не вылезал за границы
+                                      style: ButtonStyle(
+                                        visualDensity: VisualDensity.compact,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      icon: const Icon(Icons.more_vert),
+                                      onSelected: (action) => action.onTap(),
+                                      itemBuilder: (context) => overflowActions
+                                          .map(
+                                            (
+                                              action,
+                                            ) => PopupMenuItem<_SelectionAction>(
+                                              value: action,
+                                              height: 44,
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 7,
+                                                  ),
+                                              child: GlassPanel(
+                                                padding: EdgeInsets.all(8),
+                                                child: Row(
+                                                  //mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      action.icon,
+                                                      
+                                                      color: Colors.white
+                                                          .withValues(alpha: 0.9),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Text(
+                                                      action.label,
+                                                      style: AppTypography.bodySm
+                                                          .copyWith(
+                                                            color: Colors.white
+                                                                .withValues(
+                                                                  alpha: 0.9,
+                                                                ),
+                                                          ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                  ),
+                                // 3. Счетчик выделенных элементов
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  child: Text(
+                                    selected.length.toString(),
+                                    style: AppTypography.bodyMd,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                          error: (_) {},
+                        );
+                      }
+
+                      return AnimatedSize(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeInOut,
+                        child: ico ?? const SizedBox.shrink(),
+                      );
+                    },
                   ),
-                  visualDensity: VisualDensity.compact,
-                ),
-                onPressed: widget.onAddPressed,
-                child: const Icon(Icons.add),
-              ),
-            ],
-          ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.all(5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.full),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: widget.onAddPressed,
+                    child: const Icon(Icons.add),
+                  ),
+                ],
+              )
+
         ),
       ],
     );
@@ -808,4 +922,16 @@ class CalendarRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SelectionAction {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _SelectionAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 }
