@@ -3,6 +3,7 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/empty_placeholder.dart';
+import 'package:life_os/core/ui/glassPopUpMenuButton.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/ui/segmented_pill_controller.dart';
@@ -714,12 +715,12 @@ class _TasksHeaderState extends State<_TasksHeader>
 
                             // Список всех имеющихся действий
                             final actions = [
-                              _SelectionAction(
+                              PopUpMenuAction(
                                 icon: Icons.clear,
                                 label: 'Clear selection',
                                 onTap: () => widget.vm.clearTaskSelection(),
                               ),
-                              _SelectionAction(
+                              PopUpMenuAction(
                                 icon: Icons.delete_forever,
                                 label: 'Delete',
                                 onTap: () =>
@@ -727,10 +728,11 @@ class _TasksHeaderState extends State<_TasksHeader>
                                       (_) => widget.vm.clearTaskSelection(),
                                     ),
                               ),
-                              _SelectionAction(
+                              PopUpMenuAction(
                                 icon: Icons.done_all,
                                 label: "mark Done",
-                                onTap: () => widget.vm.markSelectedAsDone(),
+                                onTap: () => widget.vm.markSelectedAsDone().then(
+                                      (_) => widget.vm.clearTaskSelection()),
                               ),
                               // Сюда можно добавлять новые кнопки (например: Архив, Завершить и т.д.)
                             ];
@@ -742,7 +744,7 @@ class _TasksHeaderState extends State<_TasksHeader>
                                 : actions;
                             final overflowActions = isOverflowed
                                 ? actions.skip(maxVisibleActions - 1).toList()
-                                : <_SelectionAction>[];
+                                : <PopUpMenuAction>[];
 
                             ico = Row(
                               mainAxisSize: MainAxisSize.min,
@@ -762,84 +764,7 @@ class _TasksHeaderState extends State<_TasksHeader>
 
                                 // 2. Отображаем меню "3 точки" для переполнения
                                 if (isOverflowed)
-                                  Theme(
-                                    // Убираем стандартные подсветки и сплеши, чтобы сохранить чистый вид
-                                    data: Theme.of(context).copyWith(
-                                      highlightColor: Colors.transparent,
-                                      splashColor: AppColors.primaryContainer
-                                          .withValues(alpha: 0.1),
-                                      hoverColor: Colors.transparent
-                                      
-                                    ),
-                                    child: PopupMenuButton<_SelectionAction>(
-                                      // Стиль выпадающего контейнера
-                                      color: Colors.black.withValues(
-                                        alpha: 0,
-                                      ), // Тёмный полупрозрачный фон
-                                      elevation: 10,
-                                      shadowColor: AppColors.surface,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(
-                                          AppRadius.xl,
-                                        ),
-                                        side: BorderSide(
-                                          color: Colors.white.withValues(
-                                            alpha: 0,
-                                          ), // Тонкая матовая рамка
-                                          width: 1,
-                                        ),
-                                      ),
-                                      clipBehavior: Clip
-                                          .antiAlias, // Чтобы блюр не вылезал за границы
-                                      style: ButtonStyle(
-                                        visualDensity: VisualDensity.compact,
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                      icon: const Icon(Icons.more_vert),
-                                      onSelected: (action) => action.onTap(),
-                                      itemBuilder: (context) => overflowActions
-                                          .map(
-                                            (
-                                              action,
-                                            ) => PopupMenuItem<_SelectionAction>(
-                                              value: action,
-                                              height: 44,
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 7,
-                                                  ),
-                                              child: GlassPanel(
-                                                padding: EdgeInsets.all(8),
-                                                child: Row(
-                                                  //mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    Icon(
-                                                      action.icon,
-                                                      
-                                                      color: Colors.white
-                                                          .withValues(alpha: 0.9),
-                                                    ),
-                                                    const SizedBox(width: 10),
-                                                    Text(
-                                                      action.label,
-                                                      style: AppTypography.bodySm
-                                                          .copyWith(
-                                                            color: Colors.white
-                                                                .withValues(
-                                                                  alpha: 0.9,
-                                                                ),
-                                                          ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          )
-                                          .toList(),
-                                    ),
-                                  ),
+                                  GlassPopUpMenuButton(overflowActions: overflowActions),
                                 // 3. Счетчик выделенных элементов
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
@@ -885,6 +810,7 @@ class _TasksHeaderState extends State<_TasksHeader>
   }
 }
 
+
 class CalendarRow extends StatelessWidget {
   const CalendarRow({
     super.key,
@@ -922,16 +848,4 @@ class CalendarRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SelectionAction {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  const _SelectionAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
 }
