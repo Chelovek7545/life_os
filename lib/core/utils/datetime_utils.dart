@@ -60,7 +60,7 @@ List<DateTime> getDatesForWeek(DateTime anchorDate) {
 
 extension DateTimeStartOfDay on DateTime {
   // Возвращает дату в начале дня (00:00:00), чтобы сравнивать только дни
-  DateTime get startOfDay => DateTime(year, month, day);
+  DateTime get startOfDay => DateTime(year, month, day).add(const Duration(milliseconds: 1));
 }
 
 extension DateTimeDurationInMinutes on DateTime {
