@@ -115,6 +115,11 @@ void main() {
       await tester.pumpWidget(createWidget());
       await tester.pump();
 
+      // Scroll down to render the second card (ListView is lazy)
+      final listView = find.byType(ListView);
+      await tester.drag(listView, const Offset(0, -500));
+      await tester.pump();
+
       expect(find.byType(ProjectCard), findsNWidgets(2));
     });
 

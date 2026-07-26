@@ -38,6 +38,7 @@ void main() {
           onDelete: (_) {},
           projects: projectsStream.stream,
           isEditMode: isEditMode,
+          onFormVisibilityChanged: (_) {},
         ),
       );
     }

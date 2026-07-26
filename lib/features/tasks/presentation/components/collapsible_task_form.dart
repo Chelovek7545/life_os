@@ -366,7 +366,9 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   }
 
   Widget _buildFormContent(double midProgress, double maxProgress) {
-    return Column(
+    return Material(
+      type: MaterialType.transparency,
+      child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Opacity(
@@ -750,6 +752,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
               : CrossFadeState.showFirst,
         ),
       ],
+      ),
     );
   }
 }
