@@ -24,6 +24,7 @@ class SegmentedPillControl extends StatelessWidget {
         : -1.0 + (currentIdx * (2.0 / (totalTabs - 1)));
 
     return Container(
+      width: 550,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: AppColors.surfaceContainer,

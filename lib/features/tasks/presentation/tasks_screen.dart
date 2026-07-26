@@ -194,13 +194,16 @@ class _TasksScreenState extends State<TasksScreen> {
                     ),
                     if (currentFilter.period == DatePeriod.day) ...[
                       const SizedBox(height: AppSpacing.sm),
-                      CalendarRow(
-                        selectedDate: currentFilter.anchorDate,
-                        onDaySelected: (date) {
-                          widget.viewModel.updateFilter(
-                            (old) => old.copyWith(anchorDate: date),
-                          );
-                        },
+                      SizedBox(
+                        width: 540,
+                        child: CalendarRow(
+                          selectedDate: currentFilter.anchorDate,
+                          onDaySelected: (date) {
+                            widget.viewModel.updateFilter(
+                              (old) => old.copyWith(anchorDate: date),
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ],
@@ -339,8 +342,11 @@ class _TasksScreenState extends State<TasksScreen> {
         final today = DateTime.now().startOfDay;
 
         return Stack(
+          alignment: AlignmentDirectional.topCenter,
           children: [
-            Padding(
+
+            Container(
+              width: 550,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: ShaderMask(
                 shaderCallback: maskingFadeGradient.createShader,
@@ -828,6 +834,7 @@ class CalendarRow extends StatelessWidget {
     return SizedBox(
       height: 90,
       child: ListView.separated(
+        
         clipBehavior: Clip.none,
         scrollDirection: Axis.horizontal,
         itemCount: weekDates.length,
