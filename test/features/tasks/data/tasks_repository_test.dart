@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
@@ -52,6 +53,34 @@ void main() {
         final result = await repository.getById('task-1');
 
         expect(result, isNull);
+        verify(mockDao.getById('task-1')).called(1);
+      });
+
+      test('returns task when found and converts via toDomain', () async {
+        final now = DateTime.now();
+        final daoModel = TaskModel(
+          id: 'task-1',
+          title: 'Found Task',
+          description: 'Desc',
+          status: TaskStatus.inProgress,
+          createdAt: now,
+          updatedAt: now,
+          startsAt: now,
+          endsAt: now.add(const Duration(hours: 1)),
+          timerSeconds: 600,
+          priority: 0,
+          effortWeight: 1.5,
+        );
+        when(mockDao.getById('task-1'))
+            .thenAnswer((_) async => daoModel);
+
+        final result = await repository.getById('task-1');
+
+        expect(result, isNotNull);
+        expect(result!.id, 'task-1');
+        expect(result.title, 'Found Task');
+        expect(result.status, TaskStatus.inProgress);
+        expect(result.startsAt, now);
         verify(mockDao.getById('task-1')).called(1);
       });
     });

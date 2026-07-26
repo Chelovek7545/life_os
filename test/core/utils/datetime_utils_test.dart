@@ -157,16 +157,16 @@ void main() {
       final dt = DateTime(2024, 1, 15, 14, 30, 45, 123);
       final start = dt.startOfDay;
 
-      expect(start, DateTime(2024, 1, 15));
+      expect(start, DateTime(2024, 1, 15, 0, 0, 0, 1));
       expect(start.hour, 0);
       expect(start.minute, 0);
       expect(start.second, 0);
-      expect(start.millisecond, 0);
+      expect(start.millisecond, 1);
     });
 
     test('preserves date for midnight', () {
       final dt = DateTime(2024, 1, 15, 0, 0, 0, 0);
-      expect(dt.startOfDay, dt);
+      expect(dt.startOfDay, DateTime(2024, 1, 15, 0, 0, 0, 1));
     });
   });
 

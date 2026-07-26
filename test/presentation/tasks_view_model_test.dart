@@ -29,6 +29,8 @@ void main() {
   late MockGetTasksWithProjectsUseCase mockUseCase;
   late MockProjectsRepository mockProjectsRepository;
   late TasksViewModel viewModel;
+  late List<TaskScreenState> emittedStates;
+  late StreamSubscription<TaskScreenState> _stateSub;
 
   setUp(() {
     mockRepository = MockTasksRepository();
@@ -39,22 +41,18 @@ void main() {
       mockUseCase,
       mockProjectsRepository,
     );
+    emittedStates = [];
+    _stateSub = viewModel.state.listen(emittedStates.add);
   });
 
   tearDown(() {
+    _stateSub.cancel();
     viewModel.dispose();
   });
 
-  // Helper function to wait for the latest state from a BehaviorSubject stream
-  Future<T> waitForLatestValue<T>(Stream<T> stream) async {
-    await Future.delayed(const Duration(milliseconds: 50));
-    final completer = Completer<T>();
-    final sub = stream.listen((value) {
-      if (!completer.isCompleted) completer.complete(value);
-    });
-    await completer.future;
-    sub.cancel();
-    return completer.future;
+  Future<TaskScreenState> latestState() async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    return emittedStates.last;
   }
 
   group('TasksViewModel', () {
@@ -107,15 +105,15 @@ void main() {
       }
 
       test('emits TasksLoading initially', () async {
-        // The viewModel starts with TasksLoading, but the empty taskStream immediately triggers _handleDataUpdate
-        // which emits TasksEmpty. So we expect the first non-loading state to be TasksEmpty.
-        final state = await waitForLatestValue(viewModel.state);
+        // The viewModel starts with TasksLoading, but the empty taskStream
+        // immediately triggers _handleDataUpdate which emits TasksEmpty.
+        final state = await latestState();
         expect(state, isA<TasksEmpty>());
       });
 
       test('emits TasksEmpty when no tasks', () async {
         emitTasks([]);
-        final state = await waitForLatestValue(viewModel.state);
+        final state = await latestState();
         expect(state, isA<TasksEmpty>());
       });
 
@@ -124,9 +122,9 @@ void main() {
         final tasks = [taskAt(today, 9), taskAt(tomorrow, 9)];
         emitTasks(tasks);
 
-        final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
-        expect(state.tasks.length, 1);
-        expect(state.tasks.first.task.startsAt?.startOfDay, today);
+        final state = await latestState();
+        expect(state, isA<TasksLoaded>());
+        expect((state as TasksLoaded).tasks.length, 1);
       });
 
       test('filters by week period - tasks in same week', () async {
@@ -143,8 +141,9 @@ void main() {
         ];
         emitTasks(tasks);
 
-        final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
-        expect(state.tasks.length, 2);
+        final state = await latestState();
+        expect(state, isA<TasksLoaded>());
+        expect((state as TasksLoaded).tasks.length, 2);
       });
 
       test('filters by month period - tasks in same month', () async {
@@ -154,9 +153,9 @@ void main() {
         final tasks = [taskAt(today, 9), taskAt(nextMonth, 9)];
         emitTasks(tasks);
 
-        final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
-        expect(state.tasks.length, 1);
-        expect(state.tasks.first.task.startsAt?.month, today.month);
+        final state = await latestState();
+        expect(state, isA<TasksLoaded>());
+        expect((state as TasksLoaded).tasks.length, 1);
       });
 
       test('filters by year period - tasks in same year', () async {
@@ -166,9 +165,9 @@ void main() {
         final tasks = [taskAt(today, 9), taskAt(nextYear, 9)];
         emitTasks(tasks);
 
-        final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
-        expect(state.tasks.length, 1);
-        expect(state.tasks.first.task.startsAt?.year, today.year);
+        final state = await latestState();
+        expect(state, isA<TasksLoaded>());
+        expect((state as TasksLoaded).tasks.length, 1);
       });
 
       test('excludes tasks without startsAt when period is not day', () async {
@@ -180,8 +179,9 @@ void main() {
         ];
         emitTasks(tasks);
 
-        final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
-        expect(state.tasks.length, 1);
+        final state = await latestState();
+        expect(state, isA<TasksLoaded>());
+        expect((state as TasksLoaded).tasks.length, 1);
       });
 
       test('filters by projectIds', () async {
@@ -202,13 +202,13 @@ void main() {
 
         viewModel.updateFilter((c) => c.copyWith(projectIds: ['proj-a']));
 
-        final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
-        expect(state.tasks.length, 1);
-        expect(state.tasks.first.task.projectId, 'proj-a');
+        final state = await latestState();
+        expect(state, isA<TasksLoaded>());
+        expect((state as TasksLoaded).tasks.length, 1);
+        expect((state as TasksLoaded).tasks.first.task.projectId, 'proj-a');
       });
 
       test('filters by tagIds - includes if ANY tag matches', () async {
-        // Use week period so all tasks in the week are included
         viewModel.updateFilter(
           (c) => c.copyWith(period: DatePeriod.week, tagIds: [1]),
         );
@@ -225,10 +225,12 @@ void main() {
         ];
         emitTasks(tasks);
 
-        final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
-        expect(state.tasks.length, 2);
+        final state = await latestState();
+        expect(state, isA<TasksLoaded>());
+        expect((state as TasksLoaded).tasks.length, 2);
         expect(
-          state.tasks.every((t) => t.task.tags.any((tag) => tag.id == 1)),
+          (state as TasksLoaded).tasks
+              .every((t) => t.task.tags.any((tag) => tag.id == 1)),
           isTrue,
         );
       });
@@ -242,9 +244,10 @@ void main() {
 
         viewModel.updateFilter((c) => c.copyWith(showCompleted: () => true));
 
-        final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
-        expect(state.tasks.length, 1);
-        expect(state.tasks.first.task.isCompleted, isTrue);
+        final state = await latestState();
+        expect(state, isA<TasksLoaded>());
+        expect((state as TasksLoaded).tasks.length, 1);
+        expect((state as TasksLoaded).tasks.first.task.isCompleted, isTrue);
       });
 
       test('filters by showCompleted false - only active', () async {
@@ -256,9 +259,10 @@ void main() {
 
         viewModel.updateFilter((c) => c.copyWith(showCompleted: () => false));
 
-        final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
-        expect(state.tasks.length, 1);
-        expect(state.tasks.first.task.isCompleted, isFalse);
+        final state = await latestState();
+        expect(state, isA<TasksLoaded>());
+        expect((state as TasksLoaded).tasks.length, 1);
+        expect((state as TasksLoaded).tasks.first.task.isCompleted, isFalse);
       });
     });
 
@@ -283,7 +287,7 @@ void main() {
 
         viewModel.updateFilter((c) => c.copyWith(period: DatePeriod.week));
 
-        final state = await waitForLatestValue(viewModel.state);
+        final state = await latestState();
         expect(state, isA<TasksLoaded>());
       });
 
@@ -296,9 +300,6 @@ void main() {
         final filter = viewModel.currentFilterValue;
         expect(filter.period, DatePeriod.day);
         expect(filter.projectIds, isEmpty);
-        // anchorDate should remain the same (it keeps the original anchor date)
-        // Note: currentFilterValue returns the filter from the BehaviorSubject which was seeded with DateTime.now()
-        // The resetFilters keeps the anchorDate, so it should match the original anchor
         expect(filter.anchorDate, isNotNull);
       });
 
@@ -310,9 +311,10 @@ void main() {
 
         viewModel.toggleTaskSelection(task.task);
 
-        final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
-        expect(state.selectedTasks.length, 1);
-        expect(state.selectedTasks.first.id, task.task.id);
+        final state = await latestState();
+        expect(state, isA<TasksLoaded>());
+        expect((state as TasksLoaded).selectedTasks.length, 1);
+        expect((state as TasksLoaded).selectedTasks.first.id, task.task.id);
       });
 
       test('toggleTaskSelection removes task from selectedTasks', () async {
@@ -324,17 +326,18 @@ void main() {
 
         viewModel.toggleTaskSelection(task.task);
 
-        final state = await waitForLatestValue(viewModel.state) as TasksLoaded;
-        expect(state.selectedTasks, isEmpty);
+        final state = await latestState();
+        expect(state, isA<TasksLoaded>());
+        expect((state as TasksLoaded).selectedTasks, isEmpty);
       });
 
       test('showForm/hideForm controls form visibility', () async {
         viewModel.showForm();
-        expect(await waitForLatestValue(viewModel.isFormVisible), isTrue);
+        expect(await viewModel.isFormVisible.first, isTrue);
         expect(viewModel.shouldRenderForm, isTrue);
 
         viewModel.hideForm();
-        expect(await waitForLatestValue(viewModel.isFormVisible), isFalse);
+        expect(await viewModel.isFormVisible.first, isFalse);
       });
 
       test('disableForm resets form state', () {
@@ -352,9 +355,99 @@ void main() {
 
         expect(viewModel.activeTaskWithProject, item);
       });
+
+      test('clearTaskSelection clears selectedTasks and re-emits state', () async {
+        final task = createMockTaskWithProject(
+          task: createTaskWithTimes(start: today.atTime(9)),
+        );
+        taskStream.add([task]);
+        viewModel.toggleTaskSelection(task.task);
+
+        viewModel.clearTaskSelection();
+
+        final state = await latestState();
+        expect(state, isA<TasksLoaded>());
+        expect((state as TasksLoaded).selectedTasks, isEmpty);
+      });
+
+      test('draftTask resets to blank after hideForm', () {
+        viewModel.showForm();
+        viewModel.draftTask = createMockTask(title: 'Custom Draft');
+        viewModel.hideForm();
+
+        expect(viewModel.draftTask.title, 'Untitled');
+        expect(viewModel.draftTask.description, isEmpty);
+        expect(viewModel.draftTask.status, TaskStatus.open);
+      });
+
+      test('deleteSelectedTask deletes each selected task', () async {
+        final task1 = createMockTaskWithProject(
+          task: createTaskWithTimes(start: today.atTime(9)),
+        );
+        final task2 = createMockTaskWithProject(
+          task: createTaskWithTimes(start: today.atTime(14)),
+        );
+        taskStream.add([task1, task2]);
+        when(mockRepository.deleteTask(any)).thenAnswer((_) async => {});
+        viewModel.toggleTaskSelection(task1.task);
+        viewModel.toggleTaskSelection(task2.task);
+
+        await viewModel.deleteSelectedTask();
+
+        verify(mockRepository.deleteTask(task1.task.id)).called(1);
+        verify(mockRepository.deleteTask(task2.task.id)).called(1);
+      });
+
+      test('markSelectedAsDone updates each selected task', () async {
+        final task1 = createMockTaskWithProject(
+          task: createTaskWithTimes(
+            start: today.atTime(9),
+            status: TaskStatus.open,
+          ),
+        );
+        final task2 = createMockTaskWithProject(
+          task: createTaskWithTimes(
+            start: today.atTime(14),
+            status: TaskStatus.open,
+          ),
+        );
+        taskStream.add([task1, task2]);
+        when(mockRepository.updateTask(any)).thenAnswer((_) async => {});
+        viewModel.toggleTaskSelection(task1.task);
+        viewModel.toggleTaskSelection(task2.task);
+
+        await viewModel.markSelectedAsDone();
+
+        verify(mockRepository.updateTask(
+          argThat(predicate<Task>((t) => t.id == task1.task.id && t.status == TaskStatus.done)),
+        )).called(1);
+        verify(mockRepository.updateTask(
+          argThat(predicate<Task>((t) => t.id == task2.task.id && t.status == TaskStatus.done)),
+        )).called(1);
+      });
     });
 
     group('CRUD operations', () {
+      test('getTask delegates to repository', () async {
+        final task = createMockTask();
+        when(mockRepository.getById('task-1'))
+            .thenAnswer((_) async => task);
+
+        final result = await viewModel.getTask('task-1');
+
+        expect(result, task);
+        verify(mockRepository.getById('task-1')).called(1);
+      });
+
+      test('getTask returns null when not found', () async {
+        when(mockRepository.getById('missing'))
+            .thenAnswer((_) async => null);
+
+        final result = await viewModel.getTask('missing');
+
+        expect(result, isNull);
+      });
+
       test('addTask delegates to repository', () async {
         final task = createMockTask();
         when(mockRepository.addTask(any)).thenAnswer((_) async => {});

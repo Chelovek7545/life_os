@@ -113,6 +113,25 @@ void main() {
       });
     });
 
+    group('equality', () {
+      test('same instance is equal to itself', () {
+        final project = Project.create(name: 'Test');
+        expect(project, project);
+      });
+
+      test('different instances with same fields are not equal', () {
+        final a = Project.create(name: 'Same');
+        final b = Project.create(name: 'Same');
+        expect(a == b, isFalse);
+      });
+
+      test('hashCodes of different instances differ', () {
+        final a = Project.create(name: 'A');
+        final b = Project.create(name: 'B');
+        expect(a.hashCode == b.hashCode, isFalse);
+      });
+    });
+
     test('different projects have unique ids', () {
       final p1 = Project.create(name: 'A');
       final p2 = Project.create(name: 'B');

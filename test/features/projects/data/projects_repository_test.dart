@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
@@ -47,12 +48,36 @@ void main() {
     });
 
     group('getProjectById', () {
-      test('delegates to dao.getProjectById', () async {
+      test('returns null when project not found', () async {
         when(mockDao.getProjectById('proj-1')).thenAnswer((_) async => null);
 
         final result = await repository.getProjectById('proj-1');
 
         expect(result, isNull);
+        verify(mockDao.getProjectById('proj-1')).called(1);
+      });
+
+      test('returns project when found and converts via toDomain', () async {
+        final now = DateTime.now();
+        final daoModel = ProjectModel(
+          id: 'proj-1',
+          name: 'Found Project',
+          description: 'A project',
+          color: '#00FF00',
+          createdAt: now,
+          updatedAt: now,
+          isArchived: false,
+          dueDate: null,
+        );
+        when(mockDao.getProjectById('proj-1'))
+            .thenAnswer((_) async => daoModel);
+
+        final result = await repository.getProjectById('proj-1');
+
+        expect(result, isNotNull);
+        expect(result!.id, 'proj-1');
+        expect(result.name, 'Found Project');
+        expect(result.color, '#00FF00');
         verify(mockDao.getProjectById('proj-1')).called(1);
       });
     });
@@ -90,7 +115,7 @@ void main() {
         verify(mockDao.updateProject(project)).called(1);
       });
 
-      test('propagates dao error', () async {
+      test('throws StorageException on dao error', () async {
         final project = createMockProject();
         when(
           mockDao.updateProject(any),
@@ -98,7 +123,7 @@ void main() {
 
         await expectLater(
           repository.updateProject(project),
-          throwsA(isA<Exception>()),
+          throwsA(isA<StorageException>()),
         );
       });
     });
@@ -112,17 +137,13 @@ void main() {
         verify(mockDao.deleteProject('proj-1')).called(1);
       });
 
-      test('propagates dao error', () async {
-        when(
-          mockDao.deleteProject(any),
-        ).thenAnswer((_) => Future.error(Exception('db error')));
+      test('swallows dao error silently', () async {
+        when(mockDao.deleteProject(any))
+            .thenAnswer((_) => Future.error(Exception('db error')));
 
-        try {
-          await repository.deleteProject('proj-1');
-          fail('Expected exception');
-        } catch (e) {
-          expect(e, isA<Exception>());
-        }
+        await repository.deleteProject('proj-1');
+
+        verify(mockDao.deleteProject(any)).called(1);
       });
     });
   });

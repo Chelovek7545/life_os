@@ -158,6 +158,25 @@ void main() {
       });
     });
 
+    group('equality', () {
+      test('same instance is equal to itself', () {
+        final task = Task.blank();
+        expect(task, task);
+      });
+
+      test('different instances with same fields are not equal', () {
+        final a = Task.blank();
+        final b = Task.blank();
+        expect(a == b, isFalse);
+      });
+
+      test('hashCodes of different instances differ', () {
+        final a = Task.blank();
+        final b = Task.blank();
+        expect(a.hashCode == b.hashCode, isFalse);
+      });
+    });
+
     group('TaskStatus', () {
       test('has expected values', () {
         expect(TaskStatus.values, [

@@ -135,8 +135,16 @@ class TasksViewModel {
 
       // 1. Фильтр по ДАТЕ и ПЕРИОДУ
       if (task.startsAt != null) {
-        final taskDay = task.startsAt!.startOfDay;
-        final anchorDay = filter.anchorDate.startOfDay;
+        final taskDay = DateTime(
+          task.startsAt!.year,
+          task.startsAt!.month,
+          task.startsAt!.day,
+        );
+        final anchorDay = DateTime(
+          filter.anchorDate.year,
+          filter.anchorDate.month,
+          filter.anchorDate.day,
+        );
 
         final bool dateMatches = switch (filter.period) {
           DatePeriod.day => taskDay.isAtSameMomentAs(anchorDay),
