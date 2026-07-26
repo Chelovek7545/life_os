@@ -246,6 +246,7 @@ class _TaskCardState extends State<TaskCard>
                                   ),
                                 ),
                               const SizedBox(height: 8),
+                                                                if (widget.task.dueDate != null)
                               Row(
                                 children: [
                                   Icon(
@@ -256,7 +257,7 @@ class _TaskCardState extends State<TaskCard>
                                         : AppColors.onSurfaceVariant,
                                   ),
                                   const SizedBox(width: 4),
-                                  if (widget.task.dueDate != null)
+
                                     Text(
                                       formatDate(widget.task.dueDate!),
                                       style: AppTypography.codeLabel

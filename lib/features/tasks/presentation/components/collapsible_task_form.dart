@@ -604,6 +604,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                             builder: (_, snapshot) {
                               final projectsAsync = snapshot.data;
                               return DropdownMenu<String?>(
+                                initialSelection: _selectedProjectId,
                                 textStyle: AppTypography.bodySm,
                                 hintText: "Choose project",
                                 width: 180,
