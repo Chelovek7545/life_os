@@ -638,6 +638,7 @@ class _WeekDaySection extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: TaskCard(
                   key: ValueKey(item.task.id),
+                  leftBorderColor:  item.project != null?  parseHexColor(item.project!.color) : null,
                   task: item.task,
                   onCheckChanged: () => onToggleTask(item.task),
                   onLongPress: () => onEditTask(item),

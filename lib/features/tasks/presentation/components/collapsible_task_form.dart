@@ -604,6 +604,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                             builder: (_, snapshot) {
                               final projectsAsync = snapshot.data;
                               return DropdownMenu<String?>(
+                                //key чтобы перестраивалось меню и был виден initial 
+                                key: ValueKey('project_${_selectedProjectId}_${projectsAsync?.length ?? 0}'),
                                 initialSelection: _selectedProjectId,
                                 textStyle: AppTypography.bodySm,
                                 hintText: "Choose project",
