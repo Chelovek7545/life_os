@@ -1,3 +1,42 @@
+  import 'package:flutter/material.dart';
+
+
+  Future<DateTime?> chooseTimeForDate(BuildContext context, DateTime date) async {
+    final TimeOfDay? selectedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(date),
+    );
+
+    if (selectedTime != null) {
+      return DateTime(
+        date.year,
+        date.month,
+        date.day,
+        selectedTime.hour,
+        selectedTime.minute,
+      );
+
+    }
+  }
+
+Future<DateTime?> chooseDateOnly(BuildContext context, DateTime? date,) async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: date ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2040),
+    );
+    final dt =
+        date?.copyWith(
+          year: selected?.year,
+          month: selected?.month,
+          day: selected?.day,
+        ) ??
+        selected?.add(const Duration(milliseconds: 1));
+    return dt;
+  }
+
+
 bool isDateInSameWeek(DateTime date, DateTime anchorDate) {
   // Find Monday of the anchor date's week
   final anchorWeekStart = getWeekStart(anchorDate);
@@ -21,7 +60,7 @@ List<DateTime> getDatesForWeek(DateTime anchorDate) {
 
 extension DateTimeStartOfDay on DateTime {
   // Возвращает дату в начале дня (00:00:00), чтобы сравнивать только дни
-  DateTime get startOfDay => DateTime(year, month, day);
+  DateTime get startOfDay => DateTime(year, month, day).add(const Duration(milliseconds: 1));
 }
 
 extension DateTimeDurationInMinutes on DateTime {

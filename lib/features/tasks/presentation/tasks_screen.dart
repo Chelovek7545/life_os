@@ -3,9 +3,12 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/empty_placeholder.dart';
+import 'package:life_os/core/ui/glassPopUpMenuButton.dart';
+import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/ui/segmented_pill_controller.dart';
 import 'package:life_os/core/ui/task_card.dart';
+import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/core/utils/wrapped.dart';
@@ -13,16 +16,18 @@ import 'package:life_os/features/tasks/domain/task_filter_config.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
+import 'package:life_os/features/tasks/presentation/components/date_header.dart';
 import 'package:life_os/features/tasks/presentation/components/day_calendar.dart';
 import 'package:life_os/features/tasks/presentation/components/timeline.dart';
 import 'package:life_os/features/tasks/presentation/task_state.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
 
 const double _kFormExpandedHeight = 1000.0;
-const double _kHeaderHeight = 40.0;
+const double _kHeaderHeight = 42.0;
 const double _kPeriodTabsHeight = 45.0;
-const double _kCalendarHeight = 86.0;
-const double _kTimelineTopPadding = 60.0;
+const double _kCalendarHeight = 90.0;
+const double _kDateHeaderHeight = 60.0;
+const double _kTimelineTopPadding = 60.0 + _kDateHeaderHeight;
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({
@@ -41,7 +46,7 @@ class TasksScreen extends StatefulWidget {
 class _TasksScreenState extends State<TasksScreen> {
   bool _isEventMode = false;
   bool _showCalendar = true;
-  bool _lastFormVisible = false;
+  //bool _lastFormVisible = false;
 
   @override
   void dispose() {
@@ -77,8 +82,10 @@ class _TasksScreenState extends State<TasksScreen> {
                 onToggleTask: widget.viewModel.toggleTask,
                 onEditTask: _openTaskEditor,
                 onToggleSelection: widget.viewModel.toggleTaskSelection,
+                onDeleteTask: widget.viewModel.deleteTask,
               ),
-              _ => _TaskList(
+              DatePeriod.day => _TaskList(
+                key: ValueKey(widget.viewModel.currentFilterValue.anchorDate),
                 items: items,
                 selectedIds: selectedIds,
                 overlayHeight: overlayHeight,
@@ -86,6 +93,18 @@ class _TasksScreenState extends State<TasksScreen> {
                 onToggleTask: widget.viewModel.toggleTask,
                 onEditTask: _openTaskEditor,
                 onToggleSelection: widget.viewModel.toggleTaskSelection,
+                onDeleteTask: widget.viewModel.deleteTask,
+              ),
+              _ => _TaskList(
+                key: ValueKey(widget.viewModel.currentFilterValue.anchorDate),
+                items: items,
+                selectedIds: selectedIds,
+                overlayHeight: overlayHeight,
+                today: today,
+                onToggleTask: widget.viewModel.toggleTask,
+                onEditTask: _openTaskEditor,
+                onToggleSelection: widget.viewModel.toggleTaskSelection,
+                onDeleteTask: widget.viewModel.deleteTask,
               ),
             };
           },
@@ -100,13 +119,15 @@ class _TasksScreenState extends State<TasksScreen> {
       initialData: const TasksLoading(),
       builder: (context, snapshot) {
         final state = snapshot.data ?? const TasksLoading();
-
-        return state.when(
+        List<TaskEvent> events = [];
+        state.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          empty: (_, _) => const EmptyPlaceholder(),
+          empty: (_, _) {
+            events = [];
+          },
           error: (message) => Center(child: Text(message)),
           loaded: (items, _, _, _) {
-            final events = items
+            events = items
                 .where((item) {
                   final startsAt = item.task.startsAt;
                   return startsAt != null && !startsAt.isDateOnly;
@@ -120,17 +141,13 @@ class _TasksScreenState extends State<TasksScreen> {
                   ),
                 )
                 .toList(growable: false);
-
-            if (events.isEmpty) {
-              return const EmptyPlaceholder();
-            }
-
-            return TimelineBody(
-              events: events,
-              topPadding: _kTimelineTopPadding,
-              onEventChanged: _updateEvent,
-            );
           },
+        );
+
+        return TimelineBody(
+          events: events,
+          topPadding: _kTimelineTopPadding,
+          onEventChanged: _updateEvent,
         );
       },
     );
@@ -144,22 +161,32 @@ class _TasksScreenState extends State<TasksScreen> {
         children: [
           const SizedBox(height: AppSpacing.sm),
           _TasksHeader(
+            vm: widget.viewModel,
             onAddPressed: isFormVisible
                 ? widget.viewModel.hideForm
                 : widget.viewModel.showForm,
             onModeChanged: _onModeChanged,
           ),
           const SizedBox(height: AppSpacing.sm),
-          if (!_isEventMode)
-            StreamBuilder<TaskFilterConfig>(
-              stream: widget.viewModel.currentFilter,
-              initialData: widget.viewModel.currentFilterValue,
-              builder: (context, snapshot) {
-                final currentFilter =
-                    snapshot.data ?? widget.viewModel.currentFilterValue;
 
-                return Column(
-                  children: [
+          StreamBuilder<TaskFilterConfig>(
+            stream: widget.viewModel.currentFilter,
+            initialData: widget.viewModel.currentFilterValue,
+            builder: (context, snapshot) {
+              final currentFilter =
+                  snapshot.data ?? widget.viewModel.currentFilterValue;
+
+              return Column(
+                children: [
+                  if (_isEventMode)
+                    DateHeader(
+                      anchorDate: currentFilter.anchorDate,
+                      onDateChange: (value) => widget.viewModel.updateFilter(
+                        (old) => old.copyWith(anchorDate: value),
+                      ),
+                    ),
+
+                  if (!_isEventMode) ...[
                     SegmentedPillControl(
                       tabs: const ['Day', 'Week', 'Month'],
                       currentIdx: currentFilter.period.index,
@@ -167,19 +194,23 @@ class _TasksScreenState extends State<TasksScreen> {
                     ),
                     if (currentFilter.period == DatePeriod.day) ...[
                       const SizedBox(height: AppSpacing.sm),
-                      CalendarRow(
-                        selectedDate: currentFilter.anchorDate,
-                        onDaySelected: (date) {
-                          widget.viewModel.updateFilter(
-                            (old) => old.copyWith(anchorDate: date),
-                          );
-                        },
+                      SizedBox(
+                        width: 540,
+                        child: CalendarRow(
+                          selectedDate: currentFilter.anchorDate,
+                          onDaySelected: (date) {
+                            widget.viewModel.updateFilter(
+                              (old) => old.copyWith(anchorDate: date),
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ],
-                );
-              },
-            ),
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
@@ -200,7 +231,8 @@ class _TasksScreenState extends State<TasksScreen> {
       },
       child: widget.viewModel.shouldRenderForm
           ? CollapsibleTaskForm(
-              onFormVisibilityChanged: (value) => widget.onFormVisibilityChanged?.call(value),
+              onFormVisibilityChanged: (value) =>
+                  widget.onFormVisibilityChanged?.call(value),
               onCancel: widget.viewModel.hideForm,
               height: MediaQuery.sizeOf(context).height * 0.8,
               task:
@@ -225,7 +257,7 @@ class _TasksScreenState extends State<TasksScreen> {
       Colors.black,
       Colors.transparent,
     ],
-    stops: [0.0, 0.15, 0.96, 1.0],
+    stops: [0.0, 0.20, 0.96, 1.0],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
@@ -296,7 +328,7 @@ class _TasksScreenState extends State<TasksScreen> {
         _kHeaderHeight +
         _kPeriodTabsHeight +
         AppSpacing.sm * 2 +
-        (_showCalendar ? _kCalendarHeight + AppSpacing.sm + AppSpacing.md : 0);
+        (_showCalendar ? _kCalendarHeight + AppSpacing.sm : 0);
 
     return StreamBuilder<bool>(
       stream: widget.viewModel.isFormVisible,
@@ -310,34 +342,37 @@ class _TasksScreenState extends State<TasksScreen> {
         final today = DateTime.now().startOfDay;
 
         return Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: ShaderMask(
-                  shaderCallback: maskingFadeGradient.createShader,
-                  blendMode: BlendMode.dstIn,
-                  child: IndexedStack(
-                    index: _isEventMode ? 1 : 0,
-                    children: [
-                      _buildTaskBody(overlayHeight, today),
-                      _buildEventBody(),
-                    ],
-                  ),
+          alignment: AlignmentDirectional.topCenter,
+          children: [
+
+            Container(
+              width: 550,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: ShaderMask(
+                shaderCallback: maskingFadeGradient.createShader,
+                blendMode: BlendMode.dstIn,
+                child: IndexedStack(
+                  index: _isEventMode ? 1 : 0,
+                  children: [
+                    _buildTaskBody(overlayHeight, today),
+                    _buildEventBody(),
+                  ],
                 ),
               ),
-              _buildHeaderPanel(isFormVisible),
-              _buildTaskForm(context, isFormVisible),
-            ],
-          )
-        ;
+            ),
+            _buildHeaderPanel(isFormVisible),
+            _buildTaskForm(context, isFormVisible),
+          ],
+        );
       },
     );
   }
 }
 
 //TaskList
-class _TaskList extends StatelessWidget {
+class _TaskList extends StatefulWidget {
   const _TaskList({
+    super.key,
     required this.items,
     required this.selectedIds,
     required this.overlayHeight,
@@ -345,6 +380,7 @@ class _TaskList extends StatelessWidget {
     required this.onToggleTask,
     required this.onEditTask,
     required this.onToggleSelection,
+    required this.onDeleteTask,
   });
 
   final List<TaskWithProject> items;
@@ -354,27 +390,104 @@ class _TaskList extends StatelessWidget {
   final ValueChanged<Task> onToggleTask;
   final ValueChanged<TaskWithProject> onEditTask;
   final ValueChanged<Task> onToggleSelection;
+  final ValueChanged<String> onDeleteTask;
+
+  @override
+  State<_TaskList> createState() => _TaskListState();
+}
+
+class _TaskListState extends State<_TaskList> {
+  final _listKey = GlobalKey<AnimatedListState>();
+  final _items = <TaskWithProject>[];
+
+  @override
+  void initState() {
+    super.initState();
+    _items.addAll(widget.items);
+  }
+
+  @override
+  void didUpdateWidget(_TaskList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    final oldIds = oldWidget.items.map((e) => e.task.id).toSet();
+    final newIds = widget.items.map((e) => e.task.id).toSet();
+
+    // 1. Удаляем несуществующие элементы
+    for (int i = _items.length - 1; i >= 0; i--) {
+      if (!newIds.contains(_items[i].task.id)) {
+        final removed = _items.removeAt(i);
+        _listKey.currentState?.removeItem(
+          i,
+          (context, animation) => SizeTransition(
+            sizeFactor: animation,
+            alignment: Alignment.topCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _buildCard(removed),
+            ),
+          ),
+          duration: const Duration(milliseconds: 300),
+        );
+      }
+    }
+
+    // 2. Вставляем новые элементы или ОБНОВЛЯЕМ существующие
+    for (int i = 0; i < widget.items.length; i++) {
+      final newItem = widget.items[i];
+      if (!oldIds.contains(newItem.task.id)) {
+        _items.insert(i, newItem);
+        _listKey.currentState?.insertItem(i);
+      } else {
+        // КЛЮЧЕВОЙ МОМЕНТ: Заменяем объект в _items, чтобы обновить title, completed статус и т.д.
+        final indexInLocalList = _items.indexWhere(
+          (e) => e.task.id == newItem.task.id,
+        );
+        if (indexInLocalList != -1) {
+          _items[indexInLocalList] = newItem;
+        }
+      }
+    }
+
+    // Вызываем setState, чтобы UI перерисовал обновленные карточки
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
-      padding: EdgeInsets.symmetric(vertical: overlayHeight + AppSpacing.sm),
-      itemCount: items.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return TaskCard(
-          key: ValueKey(item.task.id),
-          task: item.task,
-          isOverdue: item.task.dueDate?.isBefore(today) ?? false,
-          onCheckChanged: () => onToggleTask(item.task),
-          onLongPress: () => onEditTask(item),
-          projectTitle: item.project?.name,
-          isSelected: selectedIds.contains(item.task.id),
-          onSelected: () => onToggleSelection(item.task),
-          onTap: () {},
+    return AnimatedList(
+      key: _listKey,
+      initialItemCount: _items.length,
+      padding: EdgeInsets.symmetric(
+        vertical: widget.overlayHeight + AppSpacing.sm,
+      ),
+      itemBuilder: (context, index, animation) {
+        return SizeTransition(
+          sizeFactor: animation,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _buildCard(_items[index]),
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildCard(TaskWithProject item) {
+    return TaskCard(
+      key: ValueKey(item.task.id),
+      task: item.task,
+      leftBorderColor: item.project != null
+          ? parseHexColor(item.project!.color)
+          : null,
+      isOverdue: item.task.dueDate?.isBefore(widget.today) ?? false,
+      onCheckChanged: () => widget.onToggleTask(item.task),
+      onLongPress: () => widget.onEditTask(item),
+      onDelete: () => widget.onDeleteTask(item.task.id),
+      projectTitle: item.project?.name,
+      isSelected: widget.selectedIds.contains(item.task.id),
+      onSelected: () => widget.onToggleSelection(item.task),
+      onTap: () {},
     );
   }
 }
@@ -389,6 +502,7 @@ class _WeekTasksList extends StatelessWidget {
     required this.onToggleTask,
     required this.onEditTask,
     required this.onToggleSelection,
+    required this.onDeleteTask,
   });
 
   final List<TaskWithProject> items;
@@ -398,6 +512,7 @@ class _WeekTasksList extends StatelessWidget {
   final ValueChanged<Task> onToggleTask;
   final ValueChanged<TaskWithProject> onEditTask;
   final ValueChanged<Task> onToggleSelection;
+  final ValueChanged<String> onDeleteTask;
 
   @override
   Widget build(BuildContext context) {
@@ -428,6 +543,7 @@ class _WeekTasksList extends StatelessWidget {
           onToggleTask: onToggleTask,
           onEditTask: onEditTask,
           onToggleSelection: onToggleSelection,
+          onDeleteTask: onDeleteTask,
         );
       },
     );
@@ -443,6 +559,7 @@ class _WeekDaySection extends StatelessWidget {
     required this.onToggleTask,
     required this.onEditTask,
     required this.onToggleSelection,
+    required this.onDeleteTask,
   });
 
   final DateTime date;
@@ -452,6 +569,7 @@ class _WeekDaySection extends StatelessWidget {
   final ValueChanged<Task> onToggleTask;
   final ValueChanged<TaskWithProject> onEditTask;
   final ValueChanged<Task> onToggleSelection;
+  final ValueChanged<String> onDeleteTask;
 
   @override
   Widget build(BuildContext context) {
@@ -520,9 +638,11 @@ class _WeekDaySection extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: TaskCard(
                   key: ValueKey(item.task.id),
+                  leftBorderColor:  item.project != null?  parseHexColor(item.project!.color) : null,
                   task: item.task,
                   onCheckChanged: () => onToggleTask(item.task),
                   onLongPress: () => onEditTask(item),
+                  onDelete: () => onDeleteTask(item.task.id),
                   projectTitle: item.project?.name,
                   isSelected: selectedIds.contains(item.task.id),
                   onSelected: () => onToggleSelection(item.task),
@@ -537,21 +657,32 @@ class _WeekDaySection extends StatelessWidget {
 }
 
 // Header elements
-class _TasksHeader extends StatelessWidget {
-  const _TasksHeader({required this.onAddPressed, required this.onModeChanged});
-
+class _TasksHeader extends StatefulWidget {
+  const _TasksHeader({
+    required this.onAddPressed,
+    required this.onModeChanged,
+    required this.vm,
+  });
+  final TasksViewModel vm;
   final VoidCallback onAddPressed;
   final ValueChanged<int> onModeChanged;
 
   @override
+  State<_TasksHeader> createState() => _TasksHeaderState();
+}
+
+class _TasksHeaderState extends State<_TasksHeader>
+    with SingleTickerProviderStateMixin {
+  @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      //mainAxisAlignment: MainAxisAlignment.center,
       children: [
         IconButton(
           onPressed: () {},
           icon: const Icon(Icons.settings_outlined, color: Colors.white),
         ),
+        Spacer(),
         SizedBox(
           width: 150,
           child: PillSwitcher(
@@ -559,24 +690,133 @@ class _TasksHeader extends StatelessWidget {
             paddingBetweenOptions: 1,
             innerPadding: 1,
             options: const [Icon(Icons.check_box), Icon(Icons.event)],
-            onSelectionChanged: onModeChanged,
+            onSelectionChanged: widget.onModeChanged,
           ),
         ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            padding: const EdgeInsets.all(5),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.full),
-            ),
-            visualDensity: VisualDensity.compact,
-          ),
-          onPressed: onAddPressed,
-          child: const Icon(Icons.add),
+        Spacer(),
+        GlassPanel(
+          padding: EdgeInsets.all(4),
+
+
+              child: Row(
+                children: [
+                  StreamBuilder(
+                    stream: widget.vm.state,
+                    builder: (_, snap) {
+                      Widget? ico;
+                      if (snap.hasData) {
+                        snap.data!.when(
+                          loading: () {},
+                          empty: (_, _) {},
+                          loaded: (_, selected, _, _) {
+                            if (selected.isEmpty) return null;
+                            final screenWidth = MediaQuery.sizeOf(
+                              context,
+                            ).width;
+                            final int maxVisibleActions = switch (screenWidth) {
+                              < 400 => 1,
+                              < 480 => 2,
+                              < 600 => 3,
+                              _ => 4, // Для больших экранов
+                            };
+
+                            // Список всех имеющихся действий
+                            final actions = [
+                              PopUpMenuAction(
+                                icon: Icons.clear,
+                                label: 'Clear selection',
+                                onTap: () => widget.vm.clearTaskSelection(),
+                              ),
+                              PopUpMenuAction(
+                                icon: Icons.delete_forever,
+                                label: 'Delete',
+                                onTap: () =>
+                                    widget.vm.deleteSelectedTask().then(
+                                      (_) => widget.vm.clearTaskSelection(),
+                                    ),
+                              ),
+                              PopUpMenuAction(
+                                icon: Icons.done_all,
+                                label: "mark Done",
+                                onTap: () => widget.vm.markSelectedAsDone().then(
+                                      (_) => widget.vm.clearTaskSelection()),
+                              ),
+                              // Сюда можно добавлять новые кнопки (например: Архив, Завершить и т.д.)
+                            ];
+
+                            final bool isOverflowed =
+                                actions.length > maxVisibleActions;
+                            final visibleActions = isOverflowed
+                                ? actions.take(maxVisibleActions - 1).toList()
+                                : actions;
+                            final overflowActions = isOverflowed
+                                ? actions.skip(maxVisibleActions - 1).toList()
+                                : <PopUpMenuAction>[];
+
+                            ico = Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // 1. Отображаем основные (видимые) кнопки
+                                ...visibleActions.map(
+                                  (action) => IconButton(
+                                    style: IconButton.styleFrom(
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    onPressed: action.onTap,
+                                    icon: Icon(action.icon),
+                                  ),
+                                ),
+
+                                // 2. Отображаем меню "3 точки" для переполнения
+                                if (isOverflowed)
+                                  GlassPopUpMenuButton(overflowActions: overflowActions),
+                                // 3. Счетчик выделенных элементов
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  child: Text(
+                                    selected.length.toString(),
+                                    style: AppTypography.bodyMd,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                          error: (_) {},
+                        );
+                      }
+
+                      return AnimatedSize(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeInOut,
+                        child: ico ?? const SizedBox.shrink(),
+                      );
+                    },
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.all(5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.full),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: widget.onAddPressed,
+                    child: const Icon(Icons.add),
+                  ),
+                ],
+              )
+
         ),
       ],
     );
   }
 }
+
 
 class CalendarRow extends StatelessWidget {
   const CalendarRow({
@@ -595,6 +835,7 @@ class CalendarRow extends StatelessWidget {
     return SizedBox(
       height: 90,
       child: ListView.separated(
+        
         clipBehavior: Clip.none,
         scrollDirection: Axis.horizontal,
         itemCount: weekDates.length,

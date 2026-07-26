@@ -6,12 +6,14 @@ class GlassPanel extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
   final double borderRadius;
+  final Color? borderColor;
 
   const GlassPanel({
     super.key,
     required this.child,
     this.padding,
     this.borderRadius = 24.0, // По умолчанию rounded-3xl (24px)
+    this.borderColor, 
   });
 
   @override
@@ -25,7 +27,7 @@ class GlassPanel extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.surfaceGlass,
             borderRadius: BorderRadius.circular(borderRadius),
-            border: Border.all(color: AppColors.borderGlass, width: 1.0),
+            border: Border.all(color: borderColor ?? AppColors.borderGlass, width: 1.0),
           ),
           child: child,
         ),

@@ -177,9 +177,17 @@ class TasksViewModel {
       return true;
     }).toList();
 
-    if (filteredTasks.isEmpty) {
-      _uiStateController.add(TasksEmpty());
-    } else {
+    if (filteredTasks.isEmpty && selectedTasks.isEmpty) {
+  _uiStateController.add(TasksEmpty());
+} else if (filteredTasks.isEmpty) {
+  _uiStateController.add(
+    TasksLoaded(
+      curTask: null,
+      tasks: [],
+      selectedTasks: List.from(selectedTasks),
+    ),
+  );
+}  else {
       // Передаем первую актуальную задачу как curTask, и весь отфильтрованный список
       _uiStateController.add(
         TasksLoaded(
@@ -187,6 +195,24 @@ class TasksViewModel {
           tasks:
               filteredTasks, // Важно: TasksLoaded теперь должен принимать List<TaskWithProject>
           selectedTasks: List.from(selectedTasks),
+        ),
+      );
+    }
+  }
+
+  void clearTaskSelection(){
+    final currentState = _uiStateController.value;
+    selectedTasks.clear();
+
+    if (currentState is TasksLoaded) {
+      // Если стейт уже загружен, просто проталкиваем в него обновленный selectedTasks.
+      // Передаем исходный (неотфильтрованный) список из Use Case здесь не нужно,
+      // мы можем перевыпустить текущие задачи с новым списком выделения.
+      _uiStateController.add(
+        TasksLoaded(
+          curTask: currentState.curTask,
+          tasks: currentState.tasks, // Оставляем текущие отфильтрованные задачи
+          selectedTasks: []
         ),
       );
     }
@@ -253,10 +279,24 @@ class TasksViewModel {
     await _repository.deleteTask(id);
   }
 
+    Future<void> deleteSelectedTask() async {
+      for(final t in selectedTasks){
+        await _repository.deleteTask(t.id);
+      }
+    }
+
+  Future<void> markSelectedAsDone() async {
+    for (final t in selectedTasks) {
+      await _repository.updateTask(t.copyWith(status: TaskStatus.done));
+    }
+  }
+
   void dispose() {
     _combineSubscription?.cancel();
     _uiStateController.close();
     _isFormVisibleController.close();
     _filterController.close();
   }
+
+
 }

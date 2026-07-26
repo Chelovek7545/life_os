@@ -24,6 +24,16 @@ class AppTypography {
         color: Colors.white,
       );
 
+    static TextStyle headlineMd =
+      // GoogleFonts.spaceGrotesk(
+TextStyle(
+        fontFamily: 'SpaceGrotesk',
+        fontSize: 28,
+        height: 1.2,
+        fontWeight: FontWeight.w600,
+        color: Colors.white,
+      );
+
   static TextStyle headlineLgMobile =
       //GoogleFonts.spaceGrotesk(
       TextStyle(
