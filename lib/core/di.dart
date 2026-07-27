@@ -77,4 +77,11 @@ class DependencyContainer {
     // moodViewModel = MoodViewModel(moodRepository, AiMoodAnalyzer(apiClient));
     // aiCoachViewModel = AiCoachViewModel(aiRepository);
   }
+
+  void dispose() {
+    tasksViewModel.dispose();
+    dashboardViewModel.dispose();
+    projectViewModel.dispose();
+    database.close();
+  }
 }

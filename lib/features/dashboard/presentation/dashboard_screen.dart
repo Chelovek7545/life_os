@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/features/dashboard/presentation/dashboard_view_model.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -7,8 +8,11 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    final padding = EdgeInsets.all(isLandscape ? AppMargins.lg : AppMargins.xl);
+
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: padding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -16,23 +20,31 @@ class DashboardScreen extends StatelessWidget {
             'Overview',
             style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: isLandscape ? 16 : 24),
           Expanded(
             child: StreamBuilder(
               stream: viewModel.state,
               builder: (context, asyncSnapshot) {
                 if (asyncSnapshot.connectionState == ConnectionState.waiting) {
-                  return CircularProgressIndicator();
+                  return const CircularProgressIndicator();
                 }
 
                 return asyncSnapshot.data!.when(
-                  initial: () => Center(child: Text("initial")),
-                  loading: () => Center(child: CircularProgressIndicator()),
+                  initial: () => const Center(child: Text("initial")),
+                  loading: () => const Center(child: CircularProgressIndicator()),
                   error: (e) => Text(e),
                   loaded: (items) {
                     return LayoutBuilder(
                       builder: (context, constraints) {
-                        int crossAxisCount = constraints.maxWidth > 600 ? 3 : 2;
+                        final width = constraints.maxWidth;
+                        int crossAxisCount;
+                        if (width > 900) {
+                          crossAxisCount = 4;
+                        } else if (width > 600) {
+                          crossAxisCount = 3;
+                        } else {
+                          crossAxisCount = 2;
+                        }
 
                         return GridView.builder(
                           gridDelegate:

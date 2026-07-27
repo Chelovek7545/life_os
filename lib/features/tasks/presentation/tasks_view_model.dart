@@ -37,6 +37,26 @@ import 'package:rxdart/rxdart.dart';
 //   const TaskMonthFilter(this.anchorDate);
 // }
 
+class TasksUiFlags {
+  final bool isFormVisible;
+  final bool isEventMode;
+
+  const TasksUiFlags({
+    this.isFormVisible = false,
+    this.isEventMode = false,
+  });
+
+  TasksUiFlags copyWith({
+    bool? isFormVisible,
+    bool? isEventMode,
+  }) {
+    return TasksUiFlags(
+      isFormVisible: isFormVisible ?? this.isFormVisible,
+      isEventMode: isEventMode ?? this.isEventMode,
+    );
+  }
+}
+
 class TasksViewModel {
   final TasksRepository _repository;
   final GetTasksWithProjectsUseCase _taskWithProjectUseCase;
@@ -54,21 +74,26 @@ class TasksViewModel {
   Stream<TaskScreenState> get state => _uiStateController.stream;
 
   // 2. Видимость нижней формы создания задачи
-  final BehaviorSubject<bool> _isFormVisibleController =
-      BehaviorSubject<bool>.seeded(false);
-  Stream<bool> get isFormVisible => _isFormVisibleController.stream;
+  final BehaviorSubject<TasksUiFlags> _uiFlagsController =
+      BehaviorSubject<TasksUiFlags>.seeded(TasksUiFlags());
+  Stream<TasksUiFlags> get uiFlags => _uiFlagsController.stream;
+  TasksUiFlags get currentUiFlags => _uiFlagsController.value;
+
+
 
   TaskWithProject? activeTaskWithProject;
   Task draftTask = Task.blank();
   bool shouldRenderForm = false;
 
   void showForm() {
+    if (_uiFlagsController.isClosed) return;
     shouldRenderForm = true;
-    _isFormVisibleController.add(true);
+    _uiFlagsController.add(currentUiFlags.copyWith(isFormVisible: true));
   }
 
   void hideForm() {
-    _isFormVisibleController.add(false);
+    if (_uiFlagsController.isClosed) return;
+    _uiFlagsController.add(currentUiFlags.copyWith(isFormVisible: false));
     draftTask = Task.blank();
   }
 
@@ -92,10 +117,19 @@ class TasksViewModel {
   // 4. Выбранные задачи
   final List<Task> selectedTasks = [];
 
+  
+
   // Метод для UI: обновить только часть фильтра
+  bool isEventMode = false;
+  // Хелперы для управления флагами
+  void toggleEventMode() {
+    if (_uiFlagsController.isClosed) return;
+    _uiFlagsController.add(currentUiFlags.copyWith(isEventMode: !currentUiFlags.isEventMode));
+  }
   void updateFilter(
     TaskFilterConfig Function(TaskFilterConfig oldConfig) updater,
   ) {
+    if (_filterController.isClosed) return;
     _filterController.add(updater(_filterController.value));
   }
 
@@ -104,6 +138,9 @@ class TasksViewModel {
   }
 
   void initialize() {
+    //Отменять существующую подписку перед созданием ново
+    _combineSubscription?.cancel();
+
     // Используем Rx.combineLatest2, чтобы пересчитывать отфильтрованный список задач
     // каждый раз, когда меняются либо данные в БД, либо пользователь переключает вкладку (день/неделя/месяц)
     _combineSubscription =
@@ -124,6 +161,7 @@ class TasksViewModel {
 
   // Логика фильтрации и отправки состояния в UI
   void _handleDataUpdate(List<TaskWithProject> tasks, TaskFilterConfig filter) {
+    if (_uiStateController.isClosed) return;
     if (tasks.isEmpty) {
       _uiStateController.add(TasksEmpty());
       return;
@@ -186,16 +224,16 @@ class TasksViewModel {
     }).toList();
 
     if (filteredTasks.isEmpty && selectedTasks.isEmpty) {
-  _uiStateController.add(TasksEmpty());
-} else if (filteredTasks.isEmpty) {
-  _uiStateController.add(
-    TasksLoaded(
-      curTask: null,
-      tasks: [],
-      selectedTasks: List.from(selectedTasks),
-    ),
-  );
-}  else {
+      _uiStateController.add(TasksEmpty());
+    } else if (filteredTasks.isEmpty) {
+      _uiStateController.add(
+        TasksLoaded(
+          curTask: null,
+          tasks: [],
+          selectedTasks: List.from(selectedTasks),
+        ),
+      );
+    } else {
       // Передаем первую актуальную задачу как curTask, и весь отфильтрованный список
       _uiStateController.add(
         TasksLoaded(
@@ -208,7 +246,8 @@ class TasksViewModel {
     }
   }
 
-  void clearTaskSelection(){
+  void clearTaskSelection() {
+    if (_uiStateController.isClosed) return;
     final currentState = _uiStateController.value;
     selectedTasks.clear();
 
@@ -220,13 +259,14 @@ class TasksViewModel {
         TasksLoaded(
           curTask: currentState.curTask,
           tasks: currentState.tasks, // Оставляем текущие отфильтрованные задачи
-          selectedTasks: []
+          selectedTasks: [],
         ),
       );
     }
   }
 
   void toggleTaskSelection(Task task) {
+    if (_uiStateController.isClosed) return;
     // Логика добавления/удаления из списка selectedTasks
     // ...
 
@@ -254,9 +294,10 @@ class TasksViewModel {
   }
 
   // ---UI ЛОГИКА ---
-  void startEditingTask(TaskWithProject item) {
+void startEditingTask(TaskWithProject item) {
     activeTaskWithProject = item;
-  }
+    draftTask = item.task;  // ← копируем задачу в draft при начале редактирования
+}
 
   // --- Бизнес-логика (CUD операции) ---
   // ВАЖНО: Мы убрали ручной вызов _emitUiState() из этих методов.
@@ -287,11 +328,11 @@ class TasksViewModel {
     await _repository.deleteTask(id);
   }
 
-    Future<void> deleteSelectedTask() async {
-      for(final t in selectedTasks){
-        await _repository.deleteTask(t.id);
-      }
+  Future<void> deleteSelectedTask() async {
+    for (final t in selectedTasks) {
+      await _repository.deleteTask(t.id);
     }
+  }
 
   Future<void> markSelectedAsDone() async {
     for (final t in selectedTasks) {
@@ -302,9 +343,7 @@ class TasksViewModel {
   void dispose() {
     _combineSubscription?.cancel();
     _uiStateController.close();
-    _isFormVisibleController.close();
+    _uiFlagsController.close();
     _filterController.close();
   }
-
-
 }

@@ -8,11 +8,13 @@ class PillSwitcher extends StatefulWidget {
   final double? outerPadding;
   final double? paddingBetweenOptions;
   final double? innerPadding;
+  final int selectedIndex;
 
   const PillSwitcher({
     super.key,
     required this.options,
     required this.onSelectionChanged,
+    required this.selectedIndex,
     this.outerPadding,
     this.paddingBetweenOptions,
     this.innerPadding,
@@ -23,7 +25,6 @@ class PillSwitcher extends StatefulWidget {
 }
 
 class _PillSwitcherState extends State<PillSwitcher> {
-  int selectedIndex = 0;
 
   BorderRadius radiusForIndex(int index, Radius inner, Radius outer) {
     if (index == 0) {
@@ -59,14 +60,13 @@ class _PillSwitcherState extends State<PillSwitcher> {
       child: Row(
         //mainAxisSize: MainAxisSize.max,
         children: List.generate(widget.options.length, (index) {
-          final isSelected = index == selectedIndex;
+          final isSelected = index == widget.selectedIndex;
           final child = widget.options[index];
           return Flexible(
             child: Padding(
               padding: EdgeInsets.all(widget.paddingBetweenOptions ?? 1),
               child: GestureDetector(
-                onTap: () {
-                  setState(() => selectedIndex = index);
+                onTap: () {;
                   widget.onSelectionChanged(index);
                 },
                 child: AnimatedContainer(

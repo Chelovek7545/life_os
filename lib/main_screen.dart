@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:life_os/animated_indexed_stack.dart';
 import 'package:life_os/core/di.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
@@ -20,9 +21,37 @@ class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
   bool _resizeToAvoidBottomInset = true;
 
-  //static const _titles = ['Main', 'Projects & Routines', 'Timer', 'Ресурсы'];
+  // 1. Фиксируем список страниц в памяти ОДИН раз!
+  late final List<Widget> _pages;
 
-  //final List<Widget> _screens =
+  @override
+  void initState() {
+    super.initState();
+    // Инициализируем экраны единоразово при загрузке виджета
+    _pages = [
+      DashboardScreen(
+        viewModel: widget.diContainer.dashboardViewModel,
+      ),
+      TasksScreen(
+        viewModel: widget.diContainer.tasksViewModel,
+        onFormVisibilityChanged: (visible) {
+          if (_resizeToAvoidBottomInset != visible) {
+            setState(() {
+              _resizeToAvoidBottomInset = visible;
+            });
+          }
+        },
+      ),
+      ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
+      const ResourcesScreen(),
+    ];
+  }
+
+  @override
+  void dispose() {
+    widget.diContainer.dispose();
+    super.dispose();
+  }
 
   void _onItemTapped(int index) {
     setState(() {
@@ -32,34 +61,188 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
+
+    final mainArea = AnimatedIndexedStack(
+      index: _selectedIndex,
+      duration: const Duration(milliseconds: 250),
+      children: _pages,
+    );
+
     return SafeArea(
       child: Scaffold(
+        bottomNavigationBar: isLandscape
+            ? null
+            : SlidingNavBar(
+                selectedIndex: _selectedIndex,
+                onTap: _onItemTapped,
+              ),
+        backgroundColor: AppColors.surfaceDim,
+        resizeToAvoidBottomInset: _resizeToAvoidBottomInset,
         
-          backgroundColor: AppColors.surfaceDim,
-          resizeToAvoidBottomInset: _resizeToAvoidBottomInset,
-        body: IndexedStack(
-          index: _selectedIndex,
+        // 2. Единая структура дерева виджетов!
+        // body ВСЕГДА начинается с Row. В портретном режиме NavRail просто исчезает,
+        // а Expanded(child: mainArea) остается на своем месте в дереве.
+        body: Row(
           children: [
-            DashboardScreen(viewModel: widget.diContainer.dashboardViewModel),
-            TasksScreen(
-              viewModel: widget.diContainer.tasksViewModel,
-              onFormVisibilityChanged: (visible) {
-                _resizeToAvoidBottomInset = visible;
-                setState(() {
-                  
-                });
-              },
-            ),
-            ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
-            ResourcesScreen(),
+            if (isLandscape)
+              _LandscapeNavRail(
+                selectedIndex: _selectedIndex,
+                onTap: _onItemTapped,
+              ),
+            Expanded(child: mainArea),
           ],
         ),
-        bottomNavigationBar: SafeArea(
-          child: SlidingNavBar(
-            selectedIndex: _selectedIndex,
-            onTap: _onItemTapped,
+      ),
+    );
+  }
+}
+class _LandscapeNavRail extends StatelessWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
+
+  const _LandscapeNavRail({required this.selectedIndex, required this.onTap});
+
+  static const itemCount = 4;
+
+  static const items = [
+    (Icons.bolt_rounded, 'PULSE'),
+    (Icons.format_list_bulleted_rounded, 'TASKS'),
+    (Icons.hub_outlined, 'PROJECTS'),
+    (Icons.menu_book_rounded, 'LIBRARY'),
+  ];
+
+  final itemHeight = 74.5;
+  final double navBarWidth = 80.0;
+
+  @override
+  Widget build(BuildContext context) {
+    // Высота навигационной панели
+
+    return Container(
+      width: navBarWidth,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceDim,
+        // borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppColors.borderGlass),
+      ),
+      child: Stack(
+        alignment: AlignmentGeometry.center,
+        children: [
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+            top: itemHeight * selectedIndex,
+            left: 0,
+            right: 0,
+            child: Container(
+              margin: EdgeInsets.symmetric(vertical: itemHeight * 0.05),
+              height: 70,
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.borderGlass),
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppRadius.full),
+              ),
+            ),
           ),
-        ),
+
+          Column(
+            children: List.generate(itemCount, (index) {
+              bool selected = selectedIndex == index;
+              return Padding(
+                padding: EdgeInsetsGeometry.symmetric(vertical: 16),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => onTap(index),
+                  child: AnimatedScale(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOutBack,
+                    scale: selected ? 1.05 : 1.0,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            boxShadow: [
+                              if (selected)
+                                BoxShadow(
+                                  color: const Color.fromARGB(
+                                    255,
+                                    255,
+                                    68,
+                                    0,
+                                  ).withValues(alpha: 0.6),
+                                  blurRadius: 15,
+                                  spreadRadius: -4,
+                                ),
+                            ],
+                          ),
+                          child: Icon(
+                            items[index].$1,
+                            color: selected
+                                ? AppColors.primaryContainer
+                                : AppColors.onBackground,
+
+                            size: 26,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          items[index].$2,
+                          style: AppTypography.codeLabel.copyWith(
+                            color: selected
+                                ? AppColors.primaryContainer
+                                : AppColors.onBackground,
+                            shadows: [
+                              if (selected)
+                                Shadow(
+                                  color: const Color.fromARGB(
+                                    255,
+                                    255,
+                                    68,
+                                    0,
+                                  ).withValues(alpha: 0.8),
+                                  blurRadius: 20,
+                                ),
+                            ],
+                            fontSize: 10,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        AnimatedOpacity(
+                          opacity: selected ? 1 : 0,
+                          duration: const Duration(milliseconds: 200),
+                          child: Container(
+                            height: 2.5,
+                            width: 20,
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryContainer,
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color.fromARGB(
+                                    255,
+                                    255,
+                                    68,
+                                    0,
+                                  ).withValues(alpha: 0.6),
+                                  blurRadius: 15,
+                                  spreadRadius: -4,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
       ),
     );
   }

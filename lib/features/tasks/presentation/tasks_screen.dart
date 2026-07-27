@@ -3,6 +3,7 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/empty_placeholder.dart';
+import 'package:life_os/core/ui/fixed_fade_mask.dart';
 import 'package:life_os/core/ui/glassPopUpMenuButton.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
@@ -40,17 +41,15 @@ class TasksScreen extends StatefulWidget {
   final ValueChanged<bool>? onFormVisibilityChanged;
 
   @override
-  State<TasksScreen> createState() => _TasksScreenState();
+  State<TasksScreen> createState() => TasksScreenState();
 }
 
-class _TasksScreenState extends State<TasksScreen> {
-  bool _isEventMode = false;
+class TasksScreenState extends State<TasksScreen> {
   bool _showCalendar = true;
   //bool _lastFormVisible = false;
 
   @override
   void dispose() {
-    widget.viewModel.dispose();
     super.dispose();
   }
 
@@ -153,47 +152,61 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  Widget _buildHeaderPanel(bool isFormVisible) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: AppSpacing.sm),
-          _TasksHeader(
-            vm: widget.viewModel,
-            onAddPressed: isFormVisible
-                ? widget.viewModel.hideForm
-                : widget.viewModel.showForm,
-            onModeChanged: _onModeChanged,
-          ),
-          const SizedBox(height: AppSpacing.sm),
+  Widget _buildHeaderPanel(bool isFormVisible, bool isLandscape, bool _isEventMode) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: AppSpacing.sm),
+        _TasksHeader(
+          vm: widget.viewModel,
+          onAddPressed: isFormVisible
+              ? widget.viewModel.hideForm
+              : widget.viewModel.showForm,
+          onModeChanged: _onModeChanged,
+        ),
+        const SizedBox(height: AppSpacing.sm),
 
-          StreamBuilder<TaskFilterConfig>(
-            stream: widget.viewModel.currentFilter,
-            initialData: widget.viewModel.currentFilterValue,
-            builder: (context, snapshot) {
-              final currentFilter =
-                  snapshot.data ?? widget.viewModel.currentFilterValue;
+        StreamBuilder<TaskFilterConfig>(
+          stream: widget.viewModel.currentFilter,
+          initialData: widget.viewModel.currentFilterValue,
+          builder: (context, snapshot) {
+            final currentFilter =
+                snapshot.data ?? widget.viewModel.currentFilterValue;
 
-              return Column(
-                children: [
-                  if (_isEventMode)
-                    DateHeader(
-                      anchorDate: currentFilter.anchorDate,
-                      onDateChange: (value) => widget.viewModel.updateFilter(
-                        (old) => old.copyWith(anchorDate: value),
-                      ),
+            return Column(
+              children: [
+                if (_isEventMode)
+                  DateHeader(
+                    anchorDate: currentFilter.anchorDate,
+                    onDateChange: (value) => widget.viewModel.updateFilter(
+                      (old) => old.copyWith(anchorDate: value),
+                    ),
+                  ),
+
+                if (!_isEventMode) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppMargins.sm,
                     ),
 
-                  if (!_isEventMode) ...[
-                    SegmentedPillControl(
+                    child: SegmentedPillControl(
                       tabs: const ['Day', 'Week', 'Month'],
                       currentIdx: currentFilter.period.index,
                       onTabChanged: _onPeriodChanged,
                     ),
-                    if (currentFilter.period == DatePeriod.day) ...[
-                      const SizedBox(height: AppSpacing.sm),
+                  ),
+                  if (currentFilter.period == DatePeriod.day) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    if (isLandscape)
+                      CalendarRow(
+                        selectedDate: currentFilter.anchorDate,
+                        onDaySelected: (date) {
+                          widget.viewModel.updateFilter(
+                            (old) => old.copyWith(anchorDate: date),
+                          );
+                        },
+                      )
+                    else
                       SizedBox(
                         width: 540,
                         child: CalendarRow(
@@ -205,14 +218,13 @@ class _TasksScreenState extends State<TasksScreen> {
                           },
                         ),
                       ),
-                    ],
                   ],
                 ],
-              );
-            },
-          ),
-        ],
-      ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -230,37 +242,10 @@ class _TasksScreenState extends State<TasksScreen> {
         }
       },
       child: widget.viewModel.shouldRenderForm
-          ? CollapsibleTaskForm(
-              onFormVisibilityChanged: (value) =>
-                  widget.onFormVisibilityChanged?.call(value),
-              onCancel: widget.viewModel.hideForm,
-              height: MediaQuery.sizeOf(context).height * 0.8,
-              task:
-                  widget.viewModel.activeTaskWithProject?.task ??
-                  widget.viewModel.draftTask,
-              projects: widget.viewModel.watchProjects(),
-              isEditMode: widget.viewModel.activeTaskWithProject != null,
-              onDelete: (taskId) {
-                widget.viewModel.deleteTask(taskId);
-                widget.viewModel.hideForm();
-              },
-              onSubmit: _submitTask,
-            )
+          ? _buildForm()
           : const SizedBox.shrink(),
     );
   }
-
-  static const Gradient maskingFadeGradient = LinearGradient(
-    colors: [
-      Colors.transparent,
-      Colors.black,
-      Colors.black,
-      Colors.transparent,
-    ],
-    stops: [0.0, 0.20, 0.96, 1.0],
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-  );
 
   void _openTaskEditor(TaskWithProject item) {
     widget.viewModel.startEditingTask(item);
@@ -269,7 +254,7 @@ class _TasksScreenState extends State<TasksScreen> {
 
   void _onModeChanged(int index) {
     _onPeriodChanged(0);
-    setState(() => _isEventMode = index == 1);
+    widget.viewModel.toggleEventMode();
   }
 
   void _onPeriodChanged(int index) {
@@ -322,47 +307,135 @@ class _TasksScreenState extends State<TasksScreen> {
     widget.viewModel.hideForm();
   }
 
+    static const Gradient maskingFadeGradient = LinearGradient(
+    colors: [
+      Colors.transparent,
+      Colors.black,
+      Colors.black,
+      Colors.transparent,
+    ],
+    stops: [0.0, 0.20, 0.96, 1.0],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
+
   @override
   Widget build(BuildContext context) {
+    final isLandscape =
+        MediaQuery.of(context).orientation == Orientation.landscape;
     final overlayHeight =
         _kHeaderHeight +
         _kPeriodTabsHeight +
         AppSpacing.sm * 2 +
         (_showCalendar ? _kCalendarHeight + AppSpacing.sm : 0);
 
-    return StreamBuilder<bool>(
-      stream: widget.viewModel.isFormVisible,
-      initialData: false,
+    return StreamBuilder<TasksUiFlags>(
+      stream: widget.viewModel.uiFlags,
+      initialData: TasksUiFlags(),
       builder: (context, snapshot) {
-        final isFormVisible = snapshot.data ?? false;
-        // if (isFormVisible != _lastFormVisible) {
-        //   _lastFormVisible = isFormVisible;
-        //   widget.onFormVisibilityChanged?.call(isFormVisible);
-        // }
+        final uiFlags = snapshot.data ?? TasksUiFlags();
         final today = DateTime.now().startOfDay;
 
-        return Stack(
-          alignment: AlignmentDirectional.topCenter,
-          children: [
+        if (isLandscape) {
+          return _buildLandscapeLayout(overlayHeight, today, uiFlags.isFormVisible, uiFlags.isEventMode);
+        }
+        return _buildPortraitLayout(overlayHeight, today, uiFlags.isFormVisible, uiFlags.isEventMode);
+      },
+    );
+  }
 
-            Container(
-              width: 550,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: ShaderMask(
-                shaderCallback: maskingFadeGradient.createShader,
-                blendMode: BlendMode.dstIn,
-                child: IndexedStack(
-                  index: _isEventMode ? 1 : 0,
-                  children: [
-                    _buildTaskBody(overlayHeight, today),
-                    _buildEventBody(),
-                  ],
-                ),
+  Widget _buildPortraitLayout(
+    double overlayHeight,
+    DateTime today,
+    bool isFormVisible,
+    bool _isEventMode
+  ) {
+    return Stack(
+      alignment: AlignmentDirectional.topCenter,
+      children: [
+        ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: 550),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: FixedVerticalFadeMask(
+              topFade: 100,
+              child: IndexedStack(
+                index: _isEventMode ? 1 : 0,
+                children: [
+                  _buildTaskBody(overlayHeight, today),
+                  _buildEventBody(),
+                ],
               ),
             ),
-            _buildHeaderPanel(isFormVisible),
-            _buildTaskForm(context, isFormVisible),
-          ],
+          ),
+        ),
+        _buildHeaderPanel(isFormVisible, false, _isEventMode),
+        _buildTaskForm(context, isFormVisible),
+      ],
+    );
+  }
+
+  Widget _buildLandscapeLayout(
+    double overlayHeight,
+    DateTime today,
+    bool isFormVisible,
+    bool _isEventMode
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          child: Stack(
+            alignment: AlignmentDirectional.topCenter,
+            children: [
+              ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: 550),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: FixedVerticalFadeMask(
+                    topFade: 100,
+                    bottomFade: 10,
+                    child: IndexedStack(
+                      index: _isEventMode ? 1 : 0,
+                      children: [
+                        _buildTaskBody(overlayHeight, today),
+                        _buildEventBody(),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              _buildHeaderPanel(isFormVisible, false, _isEventMode),
+            ],
+          ),
+        ),
+        if (isFormVisible)
+          SizedBox(width: 400, child: _buildForm(forceExpanded: true)),
+      ],
+    );
+  }
+
+  Widget _buildForm({bool forceExpanded = false}) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return CollapsibleTaskForm(
+          onChanged: (draft) {
+            widget.viewModel.draftTask = draft;
+          },
+          forceExpanded: forceExpanded,
+          onFormVisibilityChanged: (value) =>
+              widget.onFormVisibilityChanged?.call(value),
+          onCancel: widget.viewModel.hideForm,
+          height: forceExpanded
+              ? constraints.maxHeight
+              : MediaQuery.sizeOf(context).height * 0.8,
+          task: widget.viewModel.draftTask,
+          projects: widget.viewModel.watchProjects(),
+          isEditMode: widget.viewModel.activeTaskWithProject != null,
+          onDelete: (taskId) {
+            widget.viewModel.deleteTask(taskId);
+            widget.viewModel.hideForm();
+          },
+          onSubmit: _submitTask,
         );
       },
     );
@@ -638,7 +711,9 @@ class _WeekDaySection extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: TaskCard(
                   key: ValueKey(item.task.id),
-                  leftBorderColor:  item.project != null?  parseHexColor(item.project!.color) : null,
+                  leftBorderColor: item.project != null
+                      ? parseHexColor(item.project!.color)
+                      : null,
                   task: item.task,
                   onCheckChanged: () => onToggleTask(item.task),
                   onLongPress: () => onEditTask(item),
@@ -675,148 +750,150 @@ class _TasksHeaderState extends State<_TasksHeader>
     with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
-    return Row(
-      //mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          onPressed: () {},
-          icon: const Icon(Icons.settings_outlined, color: Colors.white),
-        ),
-        Spacer(),
-        SizedBox(
-          width: 150,
-          child: PillSwitcher(
-            outerPadding: 1,
-            paddingBetweenOptions: 1,
-            innerPadding: 1,
-            options: const [Icon(Icons.check_box), Icon(Icons.event)],
-            onSelectionChanged: widget.onModeChanged,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppMargins.xs),
+      child: Row(
+        //mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            onPressed: () {},
+            icon: const Icon(Icons.settings_outlined, color: Colors.white),
           ),
-        ),
-        Spacer(),
-        GlassPanel(
-          padding: EdgeInsets.all(4),
+          Spacer(),
+          SizedBox(
+            width: 150,
+            child: PillSwitcher(
+              selectedIndex: widget.vm.currentUiFlags.isEventMode ? 1 : 0,
+              outerPadding: 1,
+              paddingBetweenOptions: 1,
+              innerPadding: 1,
+              options: const [Icon(Icons.check_box), Icon(Icons.event)],
+              onSelectionChanged: widget.onModeChanged,
+            ),
+          ),
+          Spacer(),
+          GlassPanel(
+            padding: EdgeInsets.all(4),
 
+            child: Row(
+              children: [
+                StreamBuilder(
+                  stream: widget.vm.state,
+                  builder: (_, snap) {
+                    Widget? ico;
+                    if (snap.hasData) {
+                      snap.data!.when(
+                        loading: () {},
+                        empty: (_, _) {},
+                        loaded: (_, selected, _, _) {
+                          if (selected.isEmpty) return null;
+                          
+                          final screenWidth = MediaQuery.sizeOf(context).width;
+                          final int maxVisibleActions = switch (screenWidth) {
+                            < 400 => 1,
+                            < 480 => 2,
+                            < 600 => 3,
+                            _ => 4, // Для больших экранов
+                          };
 
-              child: Row(
-                children: [
-                  StreamBuilder(
-                    stream: widget.vm.state,
-                    builder: (_, snap) {
-                      Widget? ico;
-                      if (snap.hasData) {
-                        snap.data!.when(
-                          loading: () {},
-                          empty: (_, _) {},
-                          loaded: (_, selected, _, _) {
-                            if (selected.isEmpty) return null;
-                            final screenWidth = MediaQuery.sizeOf(
-                              context,
-                            ).width;
-                            final int maxVisibleActions = switch (screenWidth) {
-                              < 400 => 1,
-                              < 480 => 2,
-                              < 600 => 3,
-                              _ => 4, // Для больших экранов
-                            };
-
-                            // Список всех имеющихся действий
-                            final actions = [
-                              PopUpMenuAction(
-                                icon: Icons.clear,
-                                label: 'Clear selection',
-                                onTap: () => widget.vm.clearTaskSelection(),
+                          // Список всех имеющихся действий
+                          final actions = [
+                            PopUpMenuAction(
+                              icon: Icons.clear,
+                              label: 'Clear selection',
+                              onTap: () => widget.vm.clearTaskSelection(),
+                            ),
+                            PopUpMenuAction(
+                              icon: Icons.delete_forever,
+                              label: 'Delete',
+                              onTap: () => widget.vm.deleteSelectedTask().then(
+                                (_) => widget.vm.clearTaskSelection(),
                               ),
-                              PopUpMenuAction(
-                                icon: Icons.delete_forever,
-                                label: 'Delete',
-                                onTap: () =>
-                                    widget.vm.deleteSelectedTask().then(
-                                      (_) => widget.vm.clearTaskSelection(),
-                                    ),
+                            ),
+                            PopUpMenuAction(
+                              icon: Icons.done_all,
+                              label: "mark Done",
+                              onTap: () => widget.vm.markSelectedAsDone().then(
+                                (_) => widget.vm.clearTaskSelection(),
                               ),
-                              PopUpMenuAction(
-                                icon: Icons.done_all,
-                                label: "mark Done",
-                                onTap: () => widget.vm.markSelectedAsDone().then(
-                                      (_) => widget.vm.clearTaskSelection()),
-                              ),
-                              // Сюда можно добавлять новые кнопки (например: Архив, Завершить и т.д.)
-                            ];
+                            ),
+                            // Сюда можно добавлять новые кнопки (например: Архив, Завершить и т.д.)
+                          ];
 
-                            final bool isOverflowed =
-                                actions.length > maxVisibleActions;
-                            final visibleActions = isOverflowed
-                                ? actions.take(maxVisibleActions - 1).toList()
-                                : actions;
-                            final overflowActions = isOverflowed
-                                ? actions.skip(maxVisibleActions - 1).toList()
-                                : <PopUpMenuAction>[];
+                          final bool isOverflowed =
+                              actions.length > maxVisibleActions;
+                          final visibleActions = isOverflowed
+                              ? actions.take(maxVisibleActions - 1).toList()
+                              : actions;
+                          final overflowActions = isOverflowed
+                              ? actions.skip(maxVisibleActions - 1).toList()
+                              : <PopUpMenuAction>[];
 
-                            ico = Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // 1. Отображаем основные (видимые) кнопки
-                                ...visibleActions.map(
-                                  (action) => IconButton(
-                                    style: IconButton.styleFrom(
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                      visualDensity: VisualDensity.compact,
-                                    ),
-                                    onPressed: action.onTap,
-                                    icon: Icon(action.icon),
+                          ico = Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // 1. Отображаем основные (видимые) кнопки
+                              ...visibleActions.map(
+                                (action) => IconButton(
+                                  style: IconButton.styleFrom(
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    visualDensity: VisualDensity.compact,
                                   ),
+                                  onPressed: action.onTap,
+                                  icon: Icon(action.icon),
                                 ),
+                              ),
 
-                                // 2. Отображаем меню "3 точки" для переполнения
-                                if (isOverflowed)
-                                  GlassPopUpMenuButton(overflowActions: overflowActions),
-                                // 3. Счетчик выделенных элементов
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                  ),
-                                  child: Text(
-                                    selected.length.toString(),
-                                    style: AppTypography.bodyMd,
-                                  ),
+                              // 2. Отображаем меню "3 точки" для переполнения
+                              if (isOverflowed)
+                                GlassPopUpMenuButton(
+                                  overflowActions: overflowActions,
                                 ),
-                              ],
-                            );
-                          },
-                          error: (_) {},
-                        );
-                      }
-
-                      return AnimatedSize(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeInOut,
-                        child: ico ?? const SizedBox.shrink(),
+                              // 3. Счетчик выделенных элементов
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                ),
+                                child: Text(
+                                  selected.length.toString(),
+                                  style: AppTypography.bodyMd,
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                        error: (_) {},
                       );
-                    },
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      padding: const EdgeInsets.all(5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.full),
-                      ),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    onPressed: widget.onAddPressed,
-                    child: const Icon(Icons.add),
-                  ),
-                ],
-              )
+                    }
 
-        ),
-      ],
+                    return AnimatedSize(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeInOut,
+                      child: ico ?? const SizedBox.shrink(),
+                    );
+                  },
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: const EdgeInsets.all(5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.full),
+                    ),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: widget.onAddPressed,
+                  child: const Icon(Icons.add),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
-
 
 class CalendarRow extends StatelessWidget {
   const CalendarRow({
@@ -828,31 +905,47 @@ class CalendarRow extends StatelessWidget {
   final DateTime selectedDate;
   final ValueChanged<DateTime> onDaySelected;
 
+  static const Gradient maskingFadeGradient = LinearGradient(
+    colors: [
+      Colors.black45,
+      Colors.black,
+      Colors.black,
+      Colors.black45,
+    ],
+    stops: [0.0, 0.02, 0.98, 1.0],
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+  );
+
   @override
   Widget build(BuildContext context) {
     final weekDates = getDatesForWeek(selectedDate);
 
     return SizedBox(
       height: 90,
-      child: ListView.separated(
-        
-        clipBehavior: Clip.none,
-        scrollDirection: Axis.horizontal,
-        itemCount: weekDates.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 12),
-        itemBuilder: (context, index) {
-          final date = weekDates[index];
-          final isSelected = date.startOfDay.isAtSameMomentAs(
-            selectedDate.startOfDay,
-          );
+      child: ShaderMask(
+        shaderCallback: maskingFadeGradient.createShader,
+        blendMode: BlendMode.dstIn,
+        child: ListView.separated(
+          padding: const EdgeInsets.symmetric(horizontal: AppMargins.sm),
+          clipBehavior: Clip.hardEdge,
+          scrollDirection: Axis.horizontal,
+          itemCount: weekDates.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 12),
+          itemBuilder: (context, index) {
+            final date = weekDates[index];
+            final isSelected = date.startOfDay.isAtSameMomentAs(
+              selectedDate.startOfDay,
+            );
 
-          return DateTimelineCard(
-            weekday: getWeekDayName(date.weekday),
-            day: '${date.day}',
-            isSelected: isSelected,
-            onTap: () => onDaySelected(date),
-          );
-        },
+            return DateTimelineCard(
+              weekday: getWeekDayName(date.weekday),
+              day: '${date.day}',
+              isSelected: isSelected,
+              onTap: () => onDaySelected(date),
+            );
+          },
+        ),
       ),
     );
   }

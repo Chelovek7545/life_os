@@ -25,6 +25,8 @@ class CollapsibleTaskForm extends StatefulWidget {
     required this.isEditMode,
     required this.onDelete,
     required this.onFormVisibilityChanged,
+    required this.onChanged,
+    this.forceExpanded = false,
   });
 
   final OnTaskSubmit onSubmit;
@@ -35,6 +37,10 @@ class CollapsibleTaskForm extends StatefulWidget {
   final bool isEditMode;
   final double height;
   final ValueChanged<bool>? onFormVisibilityChanged;
+  final bool forceExpanded;
+
+  //Нужно при чтобы хранить значения при изменении ориентации
+  final ValueChanged<Task>? onChanged;
 
   @override
   State<CollapsibleTaskForm> createState() => _CollapsibleTaskFormState();
@@ -60,14 +66,38 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
 
   bool get isEditMode => widget.isEditMode;
 
+  bool _isUpdating = false;
+  void _emitChanged() {
+    if (_isUpdating) return;
+    widget.onChanged?.call(
+      widget.task.copyWith(
+        title: _titleController.text.trim().isEmpty
+            ? 'Untitled'
+            : _titleController.text.trim(),
+        description: _descController.text.trim(),
+        projectId: Wrapped(_selectedProjectId),
+        startsAt: Wrapped(_startsAt),
+        endsAt: Wrapped(_endsAt),
+        dueDate: Wrapped(_dueDate),
+        status: _taskStatus,
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     _maxHeight = widget.height;
 
-    // Стартуем сразу в развернутом виде, если это редактирование, либо на минимуме
-    _currentHeight = widget.isEditMode ? _maxHeight : _midHeight;
+    if (widget.forceExpanded) {
+      _currentHeight = _maxHeight;
+    } else {
+      // Стартуем сразу в развернутом виде, если это редактирование, либо на минимуме
+      _currentHeight = widget.isEditMode ? _maxHeight : _midHeight;
+    }
     _initFields();
+    _titleController.addListener(() => _emitChanged());
+    _descController.addListener(() => _emitChanged());
   }
 
   @override
@@ -80,6 +110,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   }
 
   void _initFields() {
+    _isUpdating = true;
     _titleController.text = widget.task.title;
     _descController.text = widget.task.description;
     _selectedProjectId = widget.task.projectId;
@@ -87,6 +118,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     _endsAt = widget.task.endsAt;
     _dueDate = widget.task.dueDate;
     _taskStatus = widget.task.status;
+    _isUpdating = false;
   }
 
   @override
@@ -164,25 +196,30 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     setState(() {
       _selectedProjectId = newValue;
     });
+    _emitChanged();
   }
 
   void _onTaskStatusChange(TaskStatus? v) {
     setState(() {
       _taskStatus = v ?? _taskStatus;
     });
+    _emitChanged();
   }
 
   void _onDueDateChange(DateTime? selected) {
     setState(() => _dueDate = selected);
+    _emitChanged();
   }
 
   //WORKING WITH DATES
   void _onStartsAtChange(DateTime? selected) {
     setState(() => _startsAt = selected);
+    _emitChanged();
   }
 
   void _onEndsAtChange(DateTime? selected) {
     setState(() => _endsAt = selected);
+    _emitChanged();
   }
 
   //Валидация: если после либо если у одного только дата, то мы сравниваем по началу дня(одно и тоже начало должно быть)
@@ -208,12 +245,9 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
 
   @override
   Widget build(BuildContext context) {
-    // Вычисляем общий прогресс раскрытия (от 0.0 до 1.0) для базовых анимаций шапки
-    // final double totalProgress =
-    //     ((_currentHeight - _minHeight) / (_maxHeight - _minHeight)).clamp(
-    //       0.0,
-    //       1.0,
-    //     );
+    if (widget.forceExpanded) {
+      return _buildForceExpanded(context);
+    }
 
     // ВЫЧИСЛЯЕМ ПАРАМЕТРЫ ДЛЯ ИЗМЕНЕНИЯ ИНТЕРФЕЙСА:
     // Прогресс раскрытия от минимума до среднее состояния (0.0 -> 1.0)
@@ -248,8 +282,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
             color: Color.lerp(
               AppColors.surface,
               AppColors.surfaceDim,
-
-              //Theme.of(context).cardColor,
               maxProgress,
             ), // Пример: меняем цвет фона от высоты
             borderRadius: BorderRadius.vertical(
@@ -264,7 +296,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
             ],
           ),
           child: Column(
-            //mainAxisSize: MainAxisSize.min,
             children: [
               // ЗОНА ДЛЯ ПЕРЕТАСКИВАНИЯ (ХЭНДЛ)
               GestureDetector(
@@ -301,7 +332,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                           ),
                         ),
                       ),
-
                       Expanded(
                         flex: 1,
                         child: Column(
@@ -325,7 +355,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                           ],
                         ),
                       ),
-
                       Expanded(
                         flex: 1,
                         child: Align(
@@ -365,393 +394,465 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     );
   }
 
+  Widget _buildForceExpanded(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: AppColors.borderGlass,
+          strokeAlign: BorderSide.strokeAlignOutside,
+        ),
+        color: AppColors.surfaceDim,
+        borderRadius: BorderRadius.horizontal(
+          left: Radius.circular(AppSpacing.xxl),
+        ),
+      ),
+      child: Column(
+        children: [
+          _buildPanelHeader(),
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+              child: _buildFormContent(1.0, 1.0),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPanelHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.borderGlass)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => widget.onCancel(),
+            icon: const Icon(Icons.close),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              isEditMode ? 'Edit task' : 'New task',
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+          FilledButton(
+            style: AppButtonStyles.saveButton,
+            onPressed: () => _submitTask(),
+            child: Text(
+              "Save",
+              style: AppTypography.bodySm.copyWith(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFormContent(double midProgress, double maxProgress) {
     return Material(
       type: MaterialType.transparency,
       child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Opacity(
-          opacity: midProgress,
-          child: Transform.scale(
-            scale:
-                0.95 +
-                (0.05 * midProgress), // Слегка увеличивается при открытии
-            child: TextField(
-              controller: _titleController,
-              decoration: const InputDecoration(
-                //fillColor: AppColors.surfaceContainer,
-                labelText: 'Название задачи',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.task_alt),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Opacity(
+            opacity: midProgress,
+            child: Transform.scale(
+              scale:
+                  0.95 +
+                  (0.05 * midProgress), // Слегка увеличивается при открытии
+              child: TextField(
+                controller: _titleController,
+                decoration: const InputDecoration(
+                  //fillColor: AppColors.surfaceContainer,
+                  labelText: 'Название задачи',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.task_alt),
+                ),
               ),
             ),
           ),
-        ),
 
-        AnimatedCrossFade(
-          duration: const Duration(milliseconds: 200),
-          firstChild: SizedBox(
-            width: double.infinity,
-            child: Padding(
-              padding: EdgeInsets.only(top: 8),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
+          AnimatedCrossFade(
+            duration: const Duration(milliseconds: 200),
+            firstChild: SizedBox(
+              width: double.infinity,
+              child: Padding(
+                padding: EdgeInsets.only(top: 8),
                 child: SingleChildScrollView(
-                  child: Row(
-                    children: [
-                      _QuickActionChip(
-                        Icons.calendar_month,
-                        _startsAt == null
-                            ? "Set day"
-                            : '${formatDate(_startsAt!)} ${_endsAt != null && _startsAt!.startOfDay != _endsAt!.startOfDay ? "- ${formatDate(_endsAt!)}" : ""}',
-                        isActive: _startsAt != null,
-                        onPressed: () async {
-                          final selected = await chooseDateOnly(
-                            context,
-                            _startsAt,
-                          );
-                          if (selected != null) {
-                            _onStartsAtChange(
-                              selected.copyWith(
-                                hour: _startsAt?.hour,
-                                minute: _startsAt?.minute,
-                              ),
+                  scrollDirection: Axis.horizontal,
+                  child: SingleChildScrollView(
+                    child: Row(
+                      children: [
+                        _QuickActionChip(
+                          Icons.calendar_month,
+                          _startsAt == null
+                              ? "Set day"
+                              : '${formatDate(_startsAt!)} ${_endsAt != null && _startsAt!.startOfDay != _endsAt!.startOfDay ? "- ${formatDate(_endsAt!)}" : ""}',
+                          isActive: _startsAt != null,
+                          onPressed: () async {
+                            final selected = await chooseDateOnly(
+                              context,
+                              _startsAt,
                             );
-                            _onEndsAtChange(
-                              selected.copyWith(
-                                hour: _endsAt?.hour,
-                                minute: _endsAt?.minute,
-                              ),
+                            if (selected != null) {
+                              _onStartsAtChange(
+                                selected.copyWith(
+                                  hour: _startsAt?.hour,
+                                  minute: _startsAt?.minute,
+                                ),
+                              );
+                              _onEndsAtChange(
+                                selected.copyWith(
+                                  hour: _endsAt?.hour,
+                                  minute: _endsAt?.minute,
+                                ),
+                              );
+                            }
+                          },
+                          onCancel: () {
+                            _onStartsAtChange(null);
+                            _onEndsAtChange(null);
+                          },
+                        ),
+                        SizedBox(width: AppSpacing.sm),
+
+                        _QuickActionChip(
+                          Icons.access_time,
+                          _startsAt != null && !_startsAt!.isDateOnly
+                              ? formatTimeOfDate(_startsAt!)
+                              : "Set start time",
+                          isActive: _startsAt != null && !_startsAt!.isDateOnly,
+                          onPressed: () async {
+                            if (_startsAt == null) return;
+                            final selected = await chooseTimeForDate(
+                              context,
+                              _startsAt!,
                             );
-                          }
-                        },
-                        onCancel: () {
-                          _onStartsAtChange(null);
-                          _onEndsAtChange(null);
-                        },
-                      ),
-                      SizedBox(width: AppSpacing.sm),
+                            if (selected != null &&
+                                _validateStartsAt(selected)) {
+                              _onStartsAtChange(selected);
+                            }
+                          },
+                          onCancel: () =>
+                              _onStartsAtChange(_startsAt!.startOfDay),
+                        ),
+                        SizedBox(width: AppSpacing.sm),
 
-                      _QuickActionChip(
-                        Icons.access_time,
-                        _startsAt != null && !_startsAt!.isDateOnly
-                            ? formatTimeOfDate(_startsAt!)
-                            : "Set start time",
-                        isActive: _startsAt != null && !_startsAt!.isDateOnly,
-                        onPressed: () async {
-                          if (_startsAt == null) return;
-                          final selected = await chooseTimeForDate(
-                            context,
-                            _startsAt!,
-                          );
-                          if (selected != null && _validateStartsAt(selected)) {
-                            _onStartsAtChange(selected);
-                          }
-                        },
-                        onCancel: () =>
-                            _onStartsAtChange(_startsAt!.startOfDay),
-                      ),
-                      SizedBox(width: AppSpacing.sm),
+                        Text('-'),
+                        SizedBox(width: AppSpacing.sm),
 
-                      Text('-'),
-                      SizedBox(width: AppSpacing.sm),
+                        _QuickActionChip(
+                          Icons.access_time,
+                          _endsAt != null && !_endsAt!.isDateOnly
+                              ? formatTimeOfDate(_endsAt!)
+                              : "Set end time",
+                          isActive: _endsAt != null && !_endsAt!.isDateOnly,
+                          onPressed: () async {
+                            if (_endsAt == null && _startsAt == null) return;
 
-                      _QuickActionChip(
-                        Icons.access_time,
-                        _endsAt != null && !_endsAt!.isDateOnly
-                            ? formatTimeOfDate(_endsAt!)
-                            : "Set end time",
-                        isActive: _endsAt != null && !_endsAt!.isDateOnly,
-                        onPressed: () async {
-                          if (_endsAt == null && _startsAt == null) return;
-
-                          final selected = await chooseTimeForDate(
-                            context,
-                            _endsAt ?? _startsAt!,
-                          );
-                          if (selected != null && _validateEndsAt(selected)) {
-                            _onEndsAtChange(
-                              _startsAt?.copyWith(
-                                hour: selected.hour,
-                                minute: selected.minute,
-                              ),
+                            final selected = await chooseTimeForDate(
+                              context,
+                              _endsAt ?? _startsAt!,
                             );
-                          }
-                        },
-                        onCancel: () => _onEndsAtChange(_endsAt?.startOfDay),
-                      ),
-                    ],
+                            if (selected != null && _validateEndsAt(selected)) {
+                              _onEndsAtChange(
+                                _startsAt?.copyWith(
+                                  hour: selected.hour,
+                                  minute: selected.minute,
+                                ),
+                              );
+                            }
+                          },
+                          onCancel: () => _onEndsAtChange(_endsAt?.startOfDay),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-          secondChild: Column(
-            //crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 16),
-              TextField(
-                controller: _descController,
-                minLines: 3,
-                maxLines: 10,
-                decoration: InputDecoration(
-                  fillColor: AppColors.surface,
-                  hoverColor: AppColors.surfaceBright,
-                  labelText: 'Description',
-                  prefixIcon: const Icon(Icons.description),
+            secondChild: Column(
+              //crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _descController,
+                  minLines: 3,
+                  maxLines: 10,
+                  decoration: InputDecoration(
+                    fillColor: AppColors.surface,
+                    hoverColor: AppColors.surfaceBright,
+                    labelText: 'Description',
+                    prefixIcon: const Icon(Icons.description),
+                  ),
                 ),
-              ),
-              SizedBox(height: AppMargins.md),
-              Row(
-                children: [
-                  Expanded(
-                    child: dateAndTimePickButton(
-                      context,
-                      label: "Starts at",
-                      date: _startsAt,
-                      onDateChange: _onStartsAtChange,
-                      validate: _validateStartsAt,
-                    ),
-                  ),
-                  SizedBox(
-                    width: AppMargins.lg,
-                    child: Center(child: Text("-")),
-                  ),
-                  Expanded(
-                    child: Column(
-                      children: [
-                        dateAndTimePickButton(
-                          context,
-                          label: "Ends at",
-                          date: _endsAt,
-                          onDateChange: _onEndsAtChange,
-                          validate: _validateEndsAt,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppMargins.lg),
-              BaseContainer(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                SizedBox(height: AppMargins.md),
+                Row(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Status',
-                          style: AppTypography.codeLabel.copyWith(
-                            color: Colors.white,
-                          ),
-                        ),
-                        Flexible(
-                          child: DropdownMenu(
-                            width: 180,
-                            selectOnly: true,
-                            onSelected: _onTaskStatusChange,
-                            textStyle: AppTypography.bodySm,
-                            trailingIcon: const Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              color: AppColors.primary,
-                            ),
-                            selectedTrailingIcon: const Icon(
-                              Icons.keyboard_arrow_up_rounded,
-                              color: AppColors.primary,
-                            ),
-                            initialSelection: _taskStatus,
-                            menuStyle: MenuStyle(
-                              backgroundColor: WidgetStateProperty.all(
-                                AppColors.surfaceContainerLow,
-                              ),
-                              elevation: WidgetStateProperty.all(8),
-                              shape: WidgetStateProperty.all(
-                                RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                              padding: WidgetStateProperty.all(
-                                EdgeInsets.all(8),
-                              ),
-                            ),
-                            inputDecorationTheme:
-                                AppButtonStyles.baseInputDecoration,
-                            dropdownMenuEntries: [
-                              ...TaskStatus.values.map((e) {
-                                return DropdownMenuEntry(
-                                  value: e,
-                                  label: e.name,
-                                );
-                              }),
-                            ],
-                          ),
-                        ),
-                      ],
+                    Expanded(
+                      child: dateAndTimePickButton(
+                        context,
+                        label: "Starts at",
+                        date: _startsAt,
+                        onDateChange: _onStartsAtChange,
+                        validate: _validateStartsAt,
+                      ),
                     ),
-                    SizedBox(height: AppMargins.sm),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Projects',
-                          style: AppTypography.codeLabel.copyWith(
-                            color: Colors.white,
-                          ),
-                        ),
-                        Flexible(
-                          child: StreamBuilder<List<Project>>(
-                            stream: widget.projects,
-                            builder: (_, snapshot) {
-                              final projectsAsync = snapshot.data;
-                              return DropdownMenu<String?>(
-                                //key чтобы перестраивалось меню и был виден initial 
-                                key: ValueKey('project_${_selectedProjectId}_${projectsAsync?.length ?? 0}'),
-                                initialSelection: _selectedProjectId,
-                                textStyle: AppTypography.bodySm,
-                                hintText: "Choose project",
-                                width: 180,
-                                trailingIcon: const Icon(
-                                  Icons.keyboard_arrow_down_rounded,
-                                  color: AppColors.primary,
-                                ),
-                                selectedTrailingIcon: const Icon(
-                                  Icons.keyboard_arrow_up_rounded,
-                                  color: AppColors.primary,
-                                ),
-                                inputDecorationTheme:
-                                    AppButtonStyles.baseInputDecoration,
-                                menuStyle: MenuStyle(
-                                  backgroundColor: WidgetStateProperty.all(
-                                    AppColors.surfaceContainer,
-                                  ),
-                                  shape: WidgetStateProperty.all(
-                                    RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                  ),
-                                ),
-                                dropdownMenuEntries: [
-                                  DropdownMenuEntry<String?>(
-                                    label: "No project",
-                                    value: null,
-                                    style: AppButtonStyles.menuButtonStyle(),
-                                  ),
-                                  if (projectsAsync != null)
-                                    ...projectsAsync.map((project) {
-                                      return DropdownMenuEntry<String?>(
-                                        style: AppButtonStyles.menuButtonStyle(
-                                          bgColor: parseHexColor(project.color),
-                                        ),
-                                        value: project.id,
-                                        label: project.name,
-                                        labelWidget: Row(
-                                          children: [
-                                            Icon(
-                                              Icons.circle,
-                                              size: 12,
-                                              color: parseHexColor(
-                                                project.color,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Flexible(
-                                              child: Text(
-                                                project.name,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    }),
-                                ],
-                                onSelected: _onProjectChange,
-                              );
-                            },
-                          ),
-                        ),
-                      ],
+                    SizedBox(
+                      width: AppMargins.lg,
+                      child: Center(child: Text("-")),
                     ),
-                    SizedBox(height: AppMargins.sm),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'DueDate',
+                    Expanded(
+                      child: Column(
+                        children: [
+                          dateAndTimePickButton(
+                            context,
+                            label: "Ends at",
+                            date: _endsAt,
+                            onDateChange: _onEndsAtChange,
+                            validate: _validateEndsAt,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppMargins.lg),
+                BaseContainer(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Status',
                             style: AppTypography.codeLabel.copyWith(
                               color: Colors.white,
                             ),
                           ),
-                        ),
-                        SizedBox(
-                          width: 160,
-                          child: TextButton(
-                            style: TextButton.styleFrom(
-                              backgroundColor: AppColors.primary.withValues(
-                                alpha: 0.05,
+                          Flexible(
+                            child: DropdownMenu(
+                              width: 180,
+                              selectOnly: true,
+                              onSelected: _onTaskStatusChange,
+                              textStyle: AppTypography.bodySm,
+                              trailingIcon: const Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: AppColors.primary,
                               ),
-                              overlayColor: AppColors.primary,
-                            ),
-                            onPressed: () async {
-                              final selected = await showDatePicker(
-                                context: context,
-                                initialDate: _dueDate ?? DateTime.now(),
-                                firstDate: DateTime(2000),
-                                lastDate: DateTime(2040),
-                              );
-                              _onDueDateChange(selected);
-                            },
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceAround,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _dueDate == null
-                                      ? "Choose"
-                                      : formatDate(_dueDate!),
-                                  style: AppTypography.codeLabel.copyWith(
-                                    color: AppColors.primary,
+                              selectedTrailingIcon: const Icon(
+                                Icons.keyboard_arrow_up_rounded,
+                                color: AppColors.primary,
+                              ),
+                              initialSelection: _taskStatus,
+                              menuStyle: MenuStyle(
+                                backgroundColor: WidgetStateProperty.all(
+                                  AppColors.surfaceContainerLow,
+                                ),
+                                elevation: WidgetStateProperty.all(8),
+                                shape: WidgetStateProperty.all(
+                                  RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
                                   ),
                                 ),
-                                const Icon(Icons.calendar_today, size: 16),
-                                if (_dueDate != null)
-                                  GestureDetector(
-                                    onTap: () => _onDueDateChange(null),
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(left: 4),
-                                      child: Icon(
-                                        Icons.close,
-                                        size: 16,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                  ),
+                                padding: WidgetStateProperty.all(
+                                  EdgeInsets.all(8),
+                                ),
+                              ),
+                              inputDecorationTheme:
+                                  AppButtonStyles.baseInputDecoration,
+                              dropdownMenuEntries: [
+                                ...TaskStatus.values.map((e) {
+                                  return DropdownMenuEntry(
+                                    value: e,
+                                    label: e.name,
+                                  );
+                                }),
                               ],
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                      SizedBox(height: AppMargins.sm),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Projects',
+                            style: AppTypography.codeLabel.copyWith(
+                              color: Colors.white,
+                            ),
+                          ),
+                          Flexible(
+                            child: StreamBuilder<List<Project>>(
+                              stream: widget.projects,
+                              builder: (_, snapshot) {
+                                final projectsAsync = snapshot.data;
+                                return DropdownMenu<String?>(
+                                  //key чтобы перестраивалось меню и был виден initial
+                                  key: ValueKey(
+                                    'project_${_selectedProjectId}_${projectsAsync?.length ?? 0}',
+                                  ),
+                                  initialSelection: _selectedProjectId,
+                                  textStyle: AppTypography.bodySm,
+                                  hintText: "Choose project",
+                                  width: 180,
+                                  trailingIcon: const Icon(
+                                    Icons.keyboard_arrow_down_rounded,
+                                    color: AppColors.primary,
+                                  ),
+                                  selectedTrailingIcon: const Icon(
+                                    Icons.keyboard_arrow_up_rounded,
+                                    color: AppColors.primary,
+                                  ),
+                                  inputDecorationTheme:
+                                      AppButtonStyles.baseInputDecoration,
+                                  menuStyle: MenuStyle(
+                                    backgroundColor: WidgetStateProperty.all(
+                                      AppColors.surfaceContainer,
+                                    ),
+                                    shape: WidgetStateProperty.all(
+                                      RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                    ),
+                                  ),
+                                  dropdownMenuEntries: [
+                                    DropdownMenuEntry<String?>(
+                                      label: "No project",
+                                      value: null,
+                                      style: AppButtonStyles.menuButtonStyle(),
+                                    ),
+                                    if (projectsAsync != null)
+                                      ...projectsAsync.map((project) {
+                                        return DropdownMenuEntry<String?>(
+                                          style:
+                                              AppButtonStyles.menuButtonStyle(
+                                                bgColor: parseHexColor(
+                                                  project.color,
+                                                ),
+                                              ),
+                                          value: project.id,
+                                          label: project.name,
+                                          labelWidget: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.circle,
+                                                size: 12,
+                                                color: parseHexColor(
+                                                  project.color,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Flexible(
+                                                child: Text(
+                                                  project.name,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }),
+                                  ],
+                                  onSelected: _onProjectChange,
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: AppMargins.sm),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'DueDate',
+                              style: AppTypography.codeLabel.copyWith(
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 160,
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                backgroundColor: AppColors.primary.withValues(
+                                  alpha: 0.05,
+                                ),
+                                overlayColor: AppColors.primary,
+                              ),
+                              onPressed: () async {
+                                final selected = await showDatePicker(
+                                  context: context,
+                                  initialDate: _dueDate ?? DateTime.now(),
+                                  firstDate: DateTime(2000),
+                                  lastDate: DateTime(2040),
+                                );
+                                _onDueDateChange(selected);
+                              },
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceAround,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    _dueDate == null
+                                        ? "Choose"
+                                        : formatDate(_dueDate!),
+                                    style: AppTypography.codeLabel.copyWith(
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                  const Icon(Icons.calendar_today, size: 16),
+                                  if (_dueDate != null)
+                                    GestureDetector(
+                                      onTap: () => _onDueDateChange(null),
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(left: 4),
+                                        child: Icon(
+                                          Icons.close,
+                                          size: 16,
+                                          color: AppColors.primary,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              if (isEditMode)
-                ElevatedButton(
-                  style: AppButtonStyles.saveButton,
-                  onPressed: _deleteTask,
-                  child: Text("Delete task"),
-                ),
-            ],
+                if (isEditMode)
+                  ElevatedButton(
+                    style: AppButtonStyles.saveButton,
+                    onPressed: _deleteTask,
+                    child: Text("Delete task"),
+                  ),
+              ],
+            ),
+            crossFadeState: maxProgress > 0.1
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
           ),
-          crossFadeState: maxProgress > 0.1
-              ? CrossFadeState.showSecond
-              : CrossFadeState.showFirst,
-        ),
-      ],
+        ],
       ),
     );
   }
