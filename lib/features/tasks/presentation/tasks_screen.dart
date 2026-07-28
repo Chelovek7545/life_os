@@ -204,18 +204,9 @@ class TasksScreenState extends State<TasksScreen> {
                   ),
                   if (currentFilter.period == DatePeriod.day) ...[
                     const SizedBox(height: AppSpacing.sm),
-                    if (isLandscape)
-                      CalendarRow(
-                        selectedDate: currentFilter.anchorDate,
-                        onDaySelected: (date) {
-                          widget.viewModel.updateFilter(
-                            (old) => old.copyWith(anchorDate: date),
-                          );
-                        },
-                      )
-                    else
+
                       SizedBox(
-                        width: 540,
+                        width: 550,
                         child: CalendarRow(
                           selectedDate: currentFilter.anchorDate,
                           onDaySelected: (date) {
@@ -957,42 +948,31 @@ class CalendarRow extends StatelessWidget {
   final DateTime selectedDate;
   final ValueChanged<DateTime> onDaySelected;
 
-  static const Gradient maskingFadeGradient = LinearGradient(
-    colors: [Colors.black45, Colors.black, Colors.black, Colors.black45],
-    stops: [0.0, 0.02, 0.98, 1.0],
-    begin: Alignment.centerLeft,
-    end: Alignment.centerRight,
-  );
-
   @override
   Widget build(BuildContext context) {
     final weekDates = getDatesForWeek(selectedDate);
 
     return SizedBox(
       height: 90,
-      child: ShaderMask(
-        shaderCallback: maskingFadeGradient.createShader,
-        blendMode: BlendMode.dstIn,
-        child: ListView.separated(
-          padding: const EdgeInsets.symmetric(horizontal: AppMargins.sm),
-          clipBehavior: Clip.hardEdge,
-          scrollDirection: Axis.horizontal,
-          itemCount: weekDates.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 12),
-          itemBuilder: (context, index) {
-            final date = weekDates[index];
-            final isSelected = date.startOfDay.isAtSameMomentAs(
-              selectedDate.startOfDay,
-            );
-
-            return DateTimelineCard(
-              weekday: getWeekDayName(date.weekday),
-              day: '${date.day}',
-              isSelected: isSelected,
-              onTap: () => onDaySelected(date),
-            );
-          },
-        ),
+      child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: AppMargins.sm),
+        clipBehavior: Clip.hardEdge,
+        scrollDirection: Axis.horizontal,
+        itemCount: weekDates.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final date = weekDates[index];
+          final isSelected = date.startOfDay.isAtSameMomentAs(
+            selectedDate.startOfDay,
+          );
+      
+          return DateTimelineCard(
+            weekday: getWeekDayName(date.weekday),
+            day: '${date.day}',
+            isSelected: isSelected,
+            onTap: () => onDaySelected(date),
+          );
+        },
       ),
     );
   }
