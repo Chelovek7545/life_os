@@ -8,6 +8,7 @@ import 'package:life_os/core/ui/glassPopUpMenuButton.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/ui/segmented_pill_controller.dart';
+import 'package:life_os/core/ui/resizable_panel.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
@@ -409,7 +410,12 @@ class TasksScreenState extends State<TasksScreen> {
           ),
         ),
         if (isFormVisible)
-          SizedBox(width: 400, child: _buildForm(forceExpanded: true)),
+          ResizablePanel(
+            initialWidth: 400,
+            minWidth: 340,
+            maxWidth: 500,
+            child: _buildForm(forceExpanded: true),
+          ),
       ],
     );
   }

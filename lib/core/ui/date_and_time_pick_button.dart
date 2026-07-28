@@ -51,8 +51,12 @@ Widget dateAndTimePickButton(
         child: AspectRatio(
           aspectRatio: 5 / 6,
           child: OutlinedButton(
-            style: AppButtonStyles.baseButtonStyle,
-
+            style: OutlinedButton.styleFrom(
+              overlayColor: AppColors.inputGlass,
+              padding: EdgeInsets.all(16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            
             onPressed: chooseDate,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
