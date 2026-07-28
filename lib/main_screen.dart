@@ -72,6 +72,7 @@ class _MainScreenState extends State<MainScreen> {
 
     return SafeArea(
       child: Scaffold(
+        
         bottomNavigationBar: isLandscape
             ? null
             : SlidingNavBar(

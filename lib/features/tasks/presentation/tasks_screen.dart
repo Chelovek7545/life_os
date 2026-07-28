@@ -774,7 +774,6 @@ class _TasksHeaderState extends State<_TasksHeader>
           Spacer(),
           GlassPanel(
             padding: EdgeInsets.all(4),
-
             child: Row(
               children: [
                 StreamBuilder(
@@ -795,7 +794,7 @@ class _TasksHeaderState extends State<_TasksHeader>
                             < 600 => 3,
                             _ => 4, // Для больших экранов
                           };
-
+            
                           // Список всех имеющихся действий
                           final actions = [
                             PopUpMenuAction(
@@ -819,7 +818,7 @@ class _TasksHeaderState extends State<_TasksHeader>
                             ),
                             // Сюда можно добавлять новые кнопки (например: Архив, Завершить и т.д.)
                           ];
-
+            
                           final bool isOverflowed =
                               actions.length > maxVisibleActions;
                           final visibleActions = isOverflowed
@@ -828,7 +827,7 @@ class _TasksHeaderState extends State<_TasksHeader>
                           final overflowActions = isOverflowed
                               ? actions.skip(maxVisibleActions - 1).toList()
                               : <PopUpMenuAction>[];
-
+            
                           ico = Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -844,7 +843,7 @@ class _TasksHeaderState extends State<_TasksHeader>
                                   icon: Icon(action.icon),
                                 ),
                               ),
-
+            
                               // 2. Отображаем меню "3 точки" для переполнения
                               if (isOverflowed)
                                 GlassPopUpMenuButton(
@@ -866,7 +865,7 @@ class _TasksHeaderState extends State<_TasksHeader>
                         error: (_) {},
                       );
                     }
-
+            
                     return AnimatedSize(
                       duration: const Duration(milliseconds: 200),
                       curve: Curves.easeInOut,

@@ -32,6 +32,14 @@ static void my_application_activate(GApplication* application) {
   // in case the window manager does more exotic layout, e.g. tiling.
   // If running on Wayland assume the header bar will work (may need changing
   // if future cases occur).
+
+  // Set minimum size (e.g., 800 x 600)
+  gtk_widget_set_size_request(GTK_WIDGET(window), 800, 1200);
+
+  // ... rest of the application activation code
+  gtk_widget_show(GTK_WIDGET(window));
+
+
   gboolean use_header_bar = TRUE;
 #ifdef GDK_WINDOWING_X11
   GdkScreen* screen = gtk_window_get_screen(window);
