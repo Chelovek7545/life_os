@@ -402,9 +402,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
           strokeAlign: BorderSide.strokeAlignOutside,
         ),
         color: AppColors.surfaceDim,
-        borderRadius: BorderRadius.horizontal(
-          left: Radius.circular(AppSpacing.xxl),
-        ),
+
       ),
       child: Column(
         children: [

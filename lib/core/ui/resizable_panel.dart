@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:life_os/core/theme/app_colors.dart';
 
 class ResizablePanel extends StatefulWidget {
   final Widget child;
@@ -61,10 +62,10 @@ class _ResizablePanelState extends State<ResizablePanel> {
                   padding: const EdgeInsets.symmetric(horizontal: 3),
                   color: Colors.transparent,
                   child: Container(
-                    width: 3,
+                    width: 2,
                     decoration: BoxDecoration(
                       color: _isHovering
-                          ? Colors.blue.withValues(alpha: 0.4)
+                          ? AppColors.secondary.withValues(alpha: 0.4)
                           : Colors.grey.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(2),
                     ),

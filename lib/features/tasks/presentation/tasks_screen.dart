@@ -24,7 +24,7 @@ import 'package:life_os/features/tasks/presentation/components/timeline.dart';
 import 'package:life_os/features/tasks/presentation/task_state.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
 
-const double _kFormExpandedHeight = 1000.0;
+
 const double _kHeaderHeight = 42.0;
 const double _kPeriodTabsHeight = 45.0;
 const double _kCalendarHeight = 90.0;
@@ -153,13 +153,19 @@ class TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  Widget _buildHeaderPanel(bool isFormVisible, bool isLandscape, bool _isEventMode) {
+  Widget _buildHeaderPanel(
+    bool isFormVisible,
+    bool isLandscape,
+    bool _isEventMode,
+    double tasksScreenWidth,
+  ) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: AppSpacing.sm),
         _TasksHeader(
           vm: widget.viewModel,
+          tasksScreenWidth: tasksScreenWidth,
           onAddPressed: isFormVisible
               ? widget.viewModel.hideForm
               : widget.viewModel.showForm,
@@ -229,12 +235,15 @@ class TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  Widget _buildTaskForm(BuildContext context, bool isFormVisible) {
+  Widget _buildTaskForm(BuildContext context, bool isFormVisible, double width) {
+    
+    double _kFormExpandedHeight = MediaQuery.sizeOf(context).height * 0.8;
+
     return AnimatedPositioned(
       duration: const Duration(milliseconds: 600),
-      curve: Curves.easeInOut,
-      left: 0,
       right: 0,
+      width: width,
+      curve: Curves.easeInOut,
       bottom: isFormVisible ? 0 : -_kFormExpandedHeight,
       height: _kFormExpandedHeight,
       onEnd: () {
@@ -308,7 +317,7 @@ class TasksScreenState extends State<TasksScreen> {
     widget.viewModel.hideForm();
   }
 
-    static const Gradient maskingFadeGradient = LinearGradient(
+  static const Gradient maskingFadeGradient = LinearGradient(
     colors: [
       Colors.transparent,
       Colors.black,
@@ -324,6 +333,7 @@ class TasksScreenState extends State<TasksScreen> {
   Widget build(BuildContext context) {
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
+    
     final overlayHeight =
         _kHeaderHeight +
         _kPeriodTabsHeight +
@@ -338,9 +348,19 @@ class TasksScreenState extends State<TasksScreen> {
         final today = DateTime.now().startOfDay;
 
         if (isLandscape) {
-          return _buildLandscapeLayout(overlayHeight, today, uiFlags.isFormVisible, uiFlags.isEventMode);
+          return _buildLandscapeLayout(
+            overlayHeight,
+            today,
+            uiFlags.isFormVisible,
+            uiFlags.isEventMode,
+          );
         }
-        return _buildPortraitLayout(overlayHeight, today, uiFlags.isFormVisible, uiFlags.isEventMode);
+        return _buildPortraitLayout(
+          overlayHeight,
+          today,
+          uiFlags.isFormVisible,
+          uiFlags.isEventMode,
+        );
       },
     );
   }
@@ -349,7 +369,8 @@ class TasksScreenState extends State<TasksScreen> {
     double overlayHeight,
     DateTime today,
     bool isFormVisible,
-    bool _isEventMode
+    bool _isEventMode,
+
   ) {
     return Stack(
       alignment: AlignmentDirectional.topCenter,
@@ -370,53 +391,76 @@ class TasksScreenState extends State<TasksScreen> {
             ),
           ),
         ),
-        _buildHeaderPanel(isFormVisible, false, _isEventMode),
-        _buildTaskForm(context, isFormVisible),
+        _buildHeaderPanel(isFormVisible, false, _isEventMode, 0),
+        _buildTaskForm(context, isFormVisible, MediaQuery.sizeOf(context).width),
       ],
     );
   }
 
+  double _panelWidth = 350;
   Widget _buildLandscapeLayout(
     double overlayHeight,
     DateTime today,
     bool isFormVisible,
-    bool _isEventMode
+    bool _isEventMode,
   ) {
-    return Row(
-      children: [
-        Expanded(
-          child: Stack(
-            alignment: AlignmentDirectional.topCenter,
-            children: [
-              ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: 550),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: FixedVerticalFadeMask(
-                    topFade: 100,
-                    bottomFade: 10,
-                    child: IndexedStack(
-                      index: _isEventMode ? 1 : 0,
-                      children: [
-                        _buildTaskBody(overlayHeight, today),
-                        _buildEventBody(),
-                      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final totalWidth = constraints.maxWidth;
+        // Ширина левой части = totalWidth - ширина панели (если видна)
+        final leftWidth = isFormVisible
+            ? totalWidth -
+                  _panelWidth // _panelWidth храним в State
+            : totalWidth;
+
+        //print(leftWidth);
+        //print(totalWidth);
+        //print(_panelWidth);
+        return Row(
+          children: [
+            Expanded(
+              child: Stack(
+                alignment: AlignmentDirectional.topCenter,
+                children: [
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: 550),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: FixedVerticalFadeMask(
+                        topFade: 100,
+                        bottomFade: 10,
+                        child: IndexedStack(
+                          index: _isEventMode ? 1 : 0,
+                          children: [
+                            _buildTaskBody(overlayHeight, today),
+                            _buildEventBody(),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  _buildHeaderPanel(
+                    isFormVisible,
+                    false,
+                    _isEventMode,
+                    leftWidth,
+                  ),
+                  if (isFormVisible && leftWidth <= 330)
+                    _buildTaskForm(context, isFormVisible, 310),
+                ],
               ),
-              _buildHeaderPanel(isFormVisible, false, _isEventMode),
-            ],
-          ),
-        ),
-        if (isFormVisible)
-          ResizablePanel(
-            initialWidth: 400,
-            minWidth: 340,
-            maxWidth: 500,
-            child: _buildForm(forceExpanded: true),
-          ),
-      ],
+            ),
+            if (isFormVisible && leftWidth > 330)
+              ResizablePanel(
+                initialWidth: _panelWidth,
+                minWidth: 310,
+                maxWidth: 500,
+                onWidthChanged: (w) => setState(() => _panelWidth = w),
+                child: _buildForm(forceExpanded: true),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -743,10 +787,12 @@ class _TasksHeader extends StatefulWidget {
     required this.onAddPressed,
     required this.onModeChanged,
     required this.vm,
+    required this.tasksScreenWidth,
   });
   final TasksViewModel vm;
   final VoidCallback onAddPressed;
   final ValueChanged<int> onModeChanged;
+  final double tasksScreenWidth;
 
   @override
   State<_TasksHeader> createState() => _TasksHeaderState();
@@ -792,15 +838,16 @@ class _TasksHeaderState extends State<_TasksHeader>
                         empty: (_, _) {},
                         loaded: (_, selected, _, _) {
                           if (selected.isEmpty) return null;
-                          
-                          final screenWidth = MediaQuery.sizeOf(context).width;
+
+                          final screenWidth = widget.tasksScreenWidth;
+                          //MediaQuery.sizeOf(context).width
                           final int maxVisibleActions = switch (screenWidth) {
                             < 400 => 1,
                             < 480 => 2,
                             < 600 => 3,
                             _ => 4, // Для больших экранов
                           };
-            
+
                           // Список всех имеющихся действий
                           final actions = [
                             PopUpMenuAction(
@@ -824,7 +871,7 @@ class _TasksHeaderState extends State<_TasksHeader>
                             ),
                             // Сюда можно добавлять новые кнопки (например: Архив, Завершить и т.д.)
                           ];
-            
+
                           final bool isOverflowed =
                               actions.length > maxVisibleActions;
                           final visibleActions = isOverflowed
@@ -833,7 +880,7 @@ class _TasksHeaderState extends State<_TasksHeader>
                           final overflowActions = isOverflowed
                               ? actions.skip(maxVisibleActions - 1).toList()
                               : <PopUpMenuAction>[];
-            
+
                           ico = Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -849,7 +896,7 @@ class _TasksHeaderState extends State<_TasksHeader>
                                   icon: Icon(action.icon),
                                 ),
                               ),
-            
+
                               // 2. Отображаем меню "3 точки" для переполнения
                               if (isOverflowed)
                                 GlassPopUpMenuButton(
@@ -871,7 +918,7 @@ class _TasksHeaderState extends State<_TasksHeader>
                         error: (_) {},
                       );
                     }
-            
+
                     return AnimatedSize(
                       duration: const Duration(milliseconds: 200),
                       curve: Curves.easeInOut,
@@ -911,12 +958,7 @@ class CalendarRow extends StatelessWidget {
   final ValueChanged<DateTime> onDaySelected;
 
   static const Gradient maskingFadeGradient = LinearGradient(
-    colors: [
-      Colors.black45,
-      Colors.black,
-      Colors.black,
-      Colors.black45,
-    ],
+    colors: [Colors.black45, Colors.black, Colors.black, Colors.black45],
     stops: [0.0, 0.02, 0.98, 1.0],
     begin: Alignment.centerLeft,
     end: Alignment.centerRight,
