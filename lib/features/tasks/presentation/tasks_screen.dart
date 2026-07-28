@@ -391,7 +391,7 @@ class TasksScreenState extends State<TasksScreen> {
             ),
           ),
         ),
-        _buildHeaderPanel(isFormVisible, false, _isEventMode, 0),
+        _buildHeaderPanel(isFormVisible, false, _isEventMode, MediaQuery.sizeOf(context).width),
         _buildTaskForm(context, isFormVisible, MediaQuery.sizeOf(context).width),
       ],
     );
@@ -805,7 +805,7 @@ class _TasksHeaderState extends State<_TasksHeader>
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppMargins.xs),
       child: Row(
-        //mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           IconButton(
             onPressed: () {},
