@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/theme/app_spacing.dart';
+import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 const _orange = Color(0xFFFF5C00);
@@ -17,7 +20,7 @@ class TaskEvent {
     required this.title,
     required this.startMinutes,
     required this.durationMinutes,
-    this.isActive = false,
+    this.isCompleted = false,
     this.accentColor = const Color(0xFF2A2A2A),
   });
 
@@ -25,7 +28,7 @@ class TaskEvent {
   final String title;
   final int startMinutes;
   final int durationMinutes;
-  final bool isActive;
+  final bool isCompleted;
   final Color accentColor;
 
   int get endMinutes => startMinutes + durationMinutes;
@@ -36,13 +39,17 @@ class TaskEvent {
   TimeOfDay get endTime =>
       TimeOfDay(hour: endMinutes ~/ 60, minute: endMinutes % 60);
 
-  TaskEvent copyWith({int? startMinutes, int? durationMinutes}) {
+  TaskEvent copyWith({
+    int? startMinutes,
+    int? durationMinutes,
+    bool? isCompleted,
+  }) {
     return TaskEvent(
       task: task,
       title: title,
       startMinutes: startMinutes ?? this.startMinutes,
       durationMinutes: durationMinutes ?? this.durationMinutes,
-      isActive: isActive,
+      isCompleted: isCompleted ?? this.isCompleted,
       accentColor: accentColor,
     );
   }
@@ -53,6 +60,7 @@ class TimelineBody extends StatefulWidget {
     super.key,
     required this.events,
     required this.onEventChanged,
+    required this.onToggleTask,
     required this.topPadding,
   });
 
@@ -60,6 +68,7 @@ class TimelineBody extends StatefulWidget {
   final double topPadding;
   final void Function(Task task, {int? startMinutes, int? durationMinutes})
   onEventChanged;
+  final void Function(Task task) onToggleTask;
 
   @override
   State<TimelineBody> createState() => _TimelineBodyState();
@@ -376,6 +385,7 @@ class _TimelineBodyState extends State<TimelineBody> {
           onResizeStart: (details) => _onResizeStart(event, details),
           onResizeUpdate: (details) => _onResizeUpdate(event, details),
           onResizeEnd: (details) => _onResizeEnd(event, details),
+          onToggleTask: () => widget.onToggleTask(event.task),
           ghostStart: isInteracting ? _ghostStart : null,
           ghostDuration: isInteracting ? _ghostDuration : null,
         ),
@@ -396,6 +406,7 @@ class _EventTile extends StatelessWidget {
     required this.onResizeStart,
     required this.onResizeUpdate,
     required this.onResizeEnd,
+    required this.onToggleTask,
     this.ghostStart,
     this.ghostDuration,
   });
@@ -410,6 +421,7 @@ class _EventTile extends StatelessWidget {
   final ValueChanged<DragStartDetails> onResizeStart;
   final ValueChanged<DragUpdateDetails> onResizeUpdate;
   final ValueChanged<DragEndDetails> onResizeEnd;
+  final VoidCallback onToggleTask;
   final int? ghostStart;
   final int? ghostDuration;
 
@@ -436,6 +448,7 @@ class _EventTile extends StatelessWidget {
 
     return Stack(
       children: [
+
         GestureDetector(
           onVerticalDragStart: onDragStart,
           onVerticalDragUpdate: onDragUpdate,
@@ -444,13 +457,15 @@ class _EventTile extends StatelessWidget {
             duration: const Duration(milliseconds: 80),
             padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
             decoration: BoxDecoration(
-              color: event.isActive
-                  ? const Color(0xFF1C1006)
-                  : const Color(0xFF1E1E1E),
+              color: event.isCompleted
+                  ? AppColors.surface
+                  : AppColors.surfaceContainer,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isInteracting ? accent.withValues(alpha: 0.9) : accent,
-                width: isInteracting ? 2 : (event.isActive ? 1.5 : 1),
+                color: isInteracting
+                    ? accent.withValues(alpha: 0.9)
+                    : AppColors.surfaceContainerHigh,
+                width: isInteracting ? 1.5 : (event.isCompleted ? 0.5 : 1),
               ),
               boxShadow: isInteracting
                   ? [
@@ -464,8 +479,15 @@ class _EventTile extends StatelessWidget {
             ),
             child: Row(
               children: [
-                _StatusDot(isActive: event.isActive, accent: accent),
-                const SizedBox(width: 10),
+                SizedBox(width: AppSpacing.sm),
+
+                CheckDot(
+                  isCompleted: event.isCompleted,
+                  onCheckChanged: onToggleTask,
+                  isSelected: false,
+                  isOverdue: false,
+                ),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -476,7 +498,14 @@ class _EventTile extends StatelessWidget {
                           event.title,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: event.isActive ? accent : Colors.white,
+                            decorationThickness: 2,
+                            decorationColor: event.isCompleted
+                                ? AppColors.primaryContainer
+                                : Colors.white,
+                            decoration: event.isCompleted
+                                ? TextDecoration.lineThrough
+                                : TextDecoration.none,
+                            color: event.isCompleted ? accent : Colors.white,
                             fontWeight: FontWeight.w500,
                             fontSize: 14,
                           ),
@@ -531,15 +560,28 @@ class _EventTile extends StatelessWidget {
             ),
           ),
         ),
+        Positioned(
+          top: 10,
+          bottom: 10,
+          left: 7,
+          child: Container(
+
+            width: 6,
+            decoration: BoxDecoration(
+              color: accent,
+              borderRadius: BorderRadius.circular(AppRadius.full),
+            ),
+          ),
+        ),
       ],
     );
   }
 }
 
 class _StatusDot extends StatelessWidget {
-  const _StatusDot({required this.isActive, required this.accent});
+  const _StatusDot({required this.isCompleted, required this.accent});
 
-  final bool isActive;
+  final bool isCompleted;
   final Color accent;
 
   @override
@@ -550,11 +592,11 @@ class _StatusDot extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         border: Border.all(
-          color: isActive ? accent : Colors.white38,
+          color: isCompleted ? accent : Colors.white38,
           width: 1.5,
         ),
       ),
-      child: isActive
+      child: isCompleted
           ? Center(
               child: DecoratedBox(
                 decoration: BoxDecoration(

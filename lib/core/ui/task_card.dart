@@ -171,56 +171,30 @@ class _TaskCardState extends State<TaskCard>
                   child: Container(
                     width: 7,
                     decoration: BoxDecoration(
-                      color: widget.leftBorderColor ?? AppColors.onSurfaceVariant,
+                      color:
+                          widget.leftBorderColor ?? AppColors.onSurfaceVariant,
                       borderRadius: BorderRadius.circular(AppRadius.full),
                     ),
                   ),
                 ),
                 GlassPanel(
-                                  borderRadius: AppRadius.lg,
-            padding: EdgeInsets.zero,
-            borderColor: widget.isSelected
-                ? const Color(0xFFB8FF63).withValues(alpha: 0.4)
-                : widget.isOverdue
-                ? AppColors.primaryContainer
-                : null,
+                  borderRadius: AppRadius.lg,
+                  padding: EdgeInsets.zero,
+                  borderColor: widget.isSelected
+                      ? const Color(0xFFB8FF63).withValues(alpha: 0.4)
+                      : widget.isOverdue
+                      ? AppColors.primaryContainer
+                      : null,
                   child: Padding(
                     padding: const EdgeInsets.all(22),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        GestureDetector(
-                          onTap: widget.onCheckChanged,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 150),
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: widget.task.isCompleted
-                                  ? AppColors.primaryContainer
-                                  : Colors.transparent,
-                              border: Border.all(
-                                color: widget.task.isCompleted
-                                    ? AppColors.primaryContainer
-                                    : (widget.isSelected
-                                          ? const Color(
-                                              0xFFB8FF63,
-                                            ).withValues(alpha: 0.4)
-                                          : widget.isOverdue
-                                          ? AppColors.primaryContainer
-                                          : AppColors.borderGlass),
-                                width: 2,
-                              ),
-                            ),
-                            child: widget.task.isCompleted
-                                ? const Icon(
-                                    Icons.check,
-                                    size: 14,
-                                    color: Colors.white,
-                                  )
-                                : null,
-                          ),
+                        CheckDot(
+                          isCompleted: widget.task.isCompleted,
+                          isOverdue: widget.isOverdue,
+                          isSelected: widget.isSelected,
+                          onCheckChanged: () => widget.onCheckChanged?.call(),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
@@ -246,60 +220,58 @@ class _TaskCardState extends State<TaskCard>
                                   ),
                                 ),
                               const SizedBox(height: 8),
-                                                                if (widget.task.dueDate != null)
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.schedule,
-                                    size: 12,
-                                    color: widget.isOverdue
-                                        ? AppColors.primaryContainer
-                                        : AppColors.onSurfaceVariant,
-                                  ),
-                                  const SizedBox(width: 4),
+                              if (widget.task.dueDate != null)
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.schedule,
+                                      size: 12,
+                                      color: widget.isOverdue
+                                          ? AppColors.primaryContainer
+                                          : AppColors.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(width: 4),
 
                                     Text(
                                       formatDate(widget.task.dueDate!),
-                                      style: AppTypography.codeLabel
-                                          .copyWith(
-                                            color: widget.isOverdue
-                                                ? AppColors.primaryContainer
-                                                : AppColors
-                                                      .onSurfaceVariant,
-                                          ),
-                                    ),
-                                  if (widget.task.tags.isNotEmpty) ...[
-                                    const SizedBox(width: 12),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
+                                      style: AppTypography.codeLabel.copyWith(
                                         color: widget.isOverdue
                                             ? AppColors.primaryContainer
-                                                  .withValues(alpha: 0.2)
-                                            : AppColors.surfaceGlass,
-                                        borderRadius: BorderRadius.circular(
-                                          4,
-                                        ),
-                                      ),
-                                      child: Wrap(
-                                        spacing: 12,
-                                        runSpacing: 8,
-                                        children: widget.task.tags
-                                            .map(
-                                              (link) => SemanticTag(
-                                                label: link.name,
-                                                accentColor: Colors.black,
-                                              ),
-                                            )
-                                            .toList(),
+                                            : AppColors.onSurfaceVariant,
                                       ),
                                     ),
+                                    if (widget.task.tags.isNotEmpty) ...[
+                                      const SizedBox(width: 12),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: widget.isOverdue
+                                              ? AppColors.primaryContainer
+                                                    .withValues(alpha: 0.2)
+                                              : AppColors.surfaceGlass,
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Wrap(
+                                          spacing: 12,
+                                          runSpacing: 8,
+                                          children: widget.task.tags
+                                              .map(
+                                                (link) => SemanticTag(
+                                                  label: link.name,
+                                                  accentColor: Colors.black,
+                                                ),
+                                              )
+                                              .toList(),
+                                        ),
+                                      ),
+                                    ],
                                   ],
-                                ],
-                              ),
+                                ),
                             ],
                           ),
                         ),
@@ -340,9 +312,7 @@ class _TaskCardState extends State<TaskCard>
                                 ),
                               ],
                               color: AppColors.primaryContainer,
-                              borderRadius: BorderRadius.circular(
-                                AppRadius.md,
-                              ),
+                              borderRadius: BorderRadius.circular(AppRadius.md),
                             ),
                             alignment: Alignment.center,
                             child: const Icon(
@@ -364,5 +334,49 @@ class _TaskCardState extends State<TaskCard>
     );
 
     return cardContent;
+  }
+}
+
+class CheckDot extends StatelessWidget {
+  const CheckDot({
+    super.key,
+    required this.isCompleted,
+    required this.onCheckChanged,
+    required this.isSelected,
+    required this.isOverdue,
+  });
+
+  final bool isCompleted;
+  final bool isSelected;
+  final bool isOverdue;
+  final VoidCallback onCheckChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onCheckChanged,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: isCompleted ? AppColors.primaryContainer : Colors.transparent,
+          border: Border.all(
+            color: isCompleted
+                ? AppColors.primaryContainer
+                : (isSelected
+                      ? const Color(0xFFB8FF63).withValues(alpha: 0.4)
+                      : isOverdue
+                      ? AppColors.primaryContainer
+                      : AppColors.borderGlass),
+            width: 2,
+          ),
+        ),
+        child: isCompleted
+            ? const Icon(Icons.check, size: 14, color: Colors.white)
+            : null,
+      ),
+    );
   }
 }

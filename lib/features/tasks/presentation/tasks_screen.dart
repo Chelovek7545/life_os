@@ -24,7 +24,6 @@ import 'package:life_os/features/tasks/presentation/components/timeline.dart';
 import 'package:life_os/features/tasks/presentation/task_state.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
 
-
 const double _kHeaderHeight = 42.0;
 const double _kPeriodTabsHeight = 45.0;
 const double _kCalendarHeight = 90.0;
@@ -134,10 +133,14 @@ class TasksScreenState extends State<TasksScreen> {
                 })
                 .map(
                   (item) => TaskEvent(
+                    accentColor: item.project != null
+                        ? parseHexColor(item.project!.color)
+                        : AppColors.onSurface,
                     task: item.task,
                     title: item.task.title,
                     startMinutes: item.task.startsAt!.durationInMinutes,
                     durationMinutes: item.task.duration.inMinutes,
+                    isCompleted: item.task.isCompleted,
                   ),
                 )
                 .toList(growable: false);
@@ -148,6 +151,7 @@ class TasksScreenState extends State<TasksScreen> {
           events: events,
           topPadding: _kTimelineTopPadding,
           onEventChanged: _updateEvent,
+          onToggleTask: widget.viewModel.toggleTask,
         );
       },
     );
@@ -205,17 +209,17 @@ class TasksScreenState extends State<TasksScreen> {
                   if (currentFilter.period == DatePeriod.day) ...[
                     const SizedBox(height: AppSpacing.sm),
 
-                      SizedBox(
-                        width: 550,
-                        child: CalendarRow(
-                          selectedDate: currentFilter.anchorDate,
-                          onDaySelected: (date) {
-                            widget.viewModel.updateFilter(
-                              (old) => old.copyWith(anchorDate: date),
-                            );
-                          },
-                        ),
+                    SizedBox(
+                      width: 550,
+                      child: CalendarRow(
+                        selectedDate: currentFilter.anchorDate,
+                        onDaySelected: (date) {
+                          widget.viewModel.updateFilter(
+                            (old) => old.copyWith(anchorDate: date),
+                          );
+                        },
                       ),
+                    ),
                   ],
                 ],
               ],
@@ -226,8 +230,11 @@ class TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  Widget _buildTaskForm(BuildContext context, bool isFormVisible, double width) {
-    
+  Widget _buildTaskForm(
+    BuildContext context,
+    bool isFormVisible,
+    double width,
+  ) {
     double _kFormExpandedHeight = MediaQuery.sizeOf(context).height * 0.8;
 
     return AnimatedPositioned(
@@ -324,7 +331,7 @@ class TasksScreenState extends State<TasksScreen> {
   Widget build(BuildContext context) {
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
-    
+
     final overlayHeight =
         _kHeaderHeight +
         _kPeriodTabsHeight +
@@ -361,7 +368,6 @@ class TasksScreenState extends State<TasksScreen> {
     DateTime today,
     bool isFormVisible,
     bool _isEventMode,
-
   ) {
     return Stack(
       alignment: AlignmentDirectional.topCenter,
@@ -382,8 +388,17 @@ class TasksScreenState extends State<TasksScreen> {
             ),
           ),
         ),
-        _buildHeaderPanel(isFormVisible, false, _isEventMode, MediaQuery.sizeOf(context).width),
-        _buildTaskForm(context, isFormVisible, MediaQuery.sizeOf(context).width),
+        _buildHeaderPanel(
+          isFormVisible,
+          false,
+          _isEventMode,
+          MediaQuery.sizeOf(context).width,
+        ),
+        _buildTaskForm(
+          context,
+          isFormVisible,
+          MediaQuery.sizeOf(context).width,
+        ),
       ],
     );
   }
@@ -965,7 +980,7 @@ class CalendarRow extends StatelessWidget {
           final isSelected = date.startOfDay.isAtSameMomentAs(
             selectedDate.startOfDay,
           );
-      
+
           return DateTimelineCard(
             weekday: getWeekDayName(date.weekday),
             day: '${date.day}',
