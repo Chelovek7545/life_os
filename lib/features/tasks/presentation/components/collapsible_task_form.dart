@@ -55,11 +55,10 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
 
   // Текущая высота формы
   late double _currentHeight;
-
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _descController = TextEditingController();
   VoidCallback? _onTitleChanged;
   VoidCallback? _onDescChanged;
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _descController = TextEditingController();
   String? _selectedProjectId;
   DateTime? _dueDate;
   DateTime? _startsAt;
@@ -70,26 +69,22 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   bool get isEditMode => widget.isEditMode;
 
   bool _isUpdating = false;
-  Timer? _debounceTimer;
 
   void _emitChanged() {
     if (_isUpdating) return;
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-      widget.onChanged?.call(
-        widget.task.copyWith(
-          title: _titleController.text.trim().isEmpty
-              ? 'Untitled'
-              : _titleController.text.trim(),
-          description: _descController.text.trim(),
-          projectId: Wrapped(_selectedProjectId),
-          startsAt: Wrapped(_startsAt),
-          endsAt: Wrapped(_endsAt),
-          dueDate: Wrapped(_dueDate),
-          status: _taskStatus,
-        ),
-      );
-    });
+    widget.onChanged?.call(
+      widget.task.copyWith(
+        title: _titleController.text.trim().isEmpty
+            ? 'Untitled'
+            : _titleController.text.trim(),
+        description: _descController.text.trim(),
+        projectId: Wrapped(_selectedProjectId),
+        startsAt: Wrapped(_startsAt),
+        endsAt: Wrapped(_endsAt),
+        dueDate: Wrapped(_dueDate),
+        status: _taskStatus,
+      ),
+    );
   }
 
   @override
@@ -133,7 +128,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
     _titleController.removeListener(_onTitleChanged!);
     _descController.removeListener(_onDescChanged!);
     _titleController.dispose();
@@ -313,10 +307,15 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
               // ЗОНА ДЛЯ ПЕРЕТАСКИВАНИЯ (ХЭНДЛ)
               GestureDetector(
                 onVerticalDragUpdate: (details) {
-                  _currentHeight = (_currentHeight - details.delta.dy).clamp(
-                    _minHeight,
-                    _maxHeight,
-                  );
+                  setState(() {
+                    // Изменяем высоту в зависимости от движения пальца/курсора
+                    // Изменение dy инвертировано, так как движение вверх уменьшает Y, но увеличивает высоту
+                    _currentHeight -= details.delta.dy;
+                    _currentHeight = _currentHeight.clamp(
+                      _minHeight,
+                      _maxHeight,
+                    );
+                  });
                 },
                 onVerticalDragEnd: (details) {
                   _snapToPosition(details.primaryVelocity ?? 0);
@@ -410,7 +409,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
           strokeAlign: BorderSide.strokeAlignOutside,
         ),
         color: AppColors.surfaceDim,
-
       ),
       child: Column(
         children: [
@@ -498,94 +496,93 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                      children: [
-                        _QuickActionChip(
-                          Icons.calendar_month,
-                          _startsAt == null
-                              ? "Set day"
-                              : '${formatDate(_startsAt!)} ${_endsAt != null && _startsAt!.startOfDay != _endsAt!.startOfDay ? "- ${formatDate(_endsAt!)}" : ""}',
-                          isActive: _startsAt != null,
-                          onPressed: () async {
-                            final selected = await chooseDateOnly(
-                              context,
-                              _startsAt,
+                    children: [
+                      _QuickActionChip(
+                        Icons.calendar_month,
+                        _startsAt == null
+                            ? "Set day"
+                            : '${formatDate(_startsAt!)} ${_endsAt != null && _startsAt!.startOfDay != _endsAt!.startOfDay ? "- ${formatDate(_endsAt!)}" : ""}',
+                        isActive: _startsAt != null,
+                        onPressed: () async {
+                          final selected = await chooseDateOnly(
+                            context,
+                            _startsAt,
+                          );
+                          if (selected != null) {
+                            _onStartsAtChange(
+                              selected.copyWith(
+                                hour: _startsAt?.hour,
+                                minute: _startsAt?.minute,
+                              ),
                             );
-                            if (selected != null) {
-                              _onStartsAtChange(
-                                selected.copyWith(
-                                  hour: _startsAt?.hour,
-                                  minute: _startsAt?.minute,
-                                ),
-                              );
-                              _onEndsAtChange(
-                                selected.copyWith(
-                                  hour: _endsAt?.hour,
-                                  minute: _endsAt?.minute,
-                                ),
-                              );
-                            }
-                          },
-                          onCancel: () {
-                            _onStartsAtChange(null);
-                            _onEndsAtChange(null);
-                          },
-                        ),
-                        SizedBox(width: AppSpacing.sm),
-
-                        _QuickActionChip(
-                          Icons.access_time,
-                          _startsAt != null && !_startsAt!.isDateOnly
-                              ? formatTimeOfDate(_startsAt!)
-                              : "Set start time",
-                          isActive: _startsAt != null && !_startsAt!.isDateOnly,
-                          onPressed: () async {
-                            if (_startsAt == null) return;
-                            final selected = await chooseTimeForDate(
-                              context,
-                              _startsAt!,
+                            _onEndsAtChange(
+                              selected.copyWith(
+                                hour: _endsAt?.hour,
+                                minute: _endsAt?.minute,
+                              ),
                             );
-                            if (selected != null &&
-                                _validateStartsAt(selected)) {
-                              _onStartsAtChange(selected);
-                            }
-                          },
-                          onCancel: () =>
-                              _onStartsAtChange(_startsAt!.startOfDay),
-                        ),
-                        SizedBox(width: AppSpacing.sm),
+                          }
+                        },
+                        onCancel: () {
+                          _onStartsAtChange(null);
+                          _onEndsAtChange(null);
+                        },
+                      ),
+                      SizedBox(width: AppSpacing.sm),
 
-                        Text('-'),
-                        SizedBox(width: AppSpacing.sm),
+                      _QuickActionChip(
+                        Icons.access_time,
+                        _startsAt != null && !_startsAt!.isDateOnly
+                            ? formatTimeOfDate(_startsAt!)
+                            : "Set start time",
+                        isActive: _startsAt != null && !_startsAt!.isDateOnly,
+                        onPressed: () async {
+                          if (_startsAt == null) return;
+                          final selected = await chooseTimeForDate(
+                            context,
+                            _startsAt!,
+                          );
+                          if (selected != null && _validateStartsAt(selected)) {
+                            _onStartsAtChange(selected);
+                          }
+                        },
+                        onCancel: () =>
+                            _onStartsAtChange(_startsAt!.startOfDay),
+                      ),
+                      SizedBox(width: AppSpacing.sm),
 
-                        _QuickActionChip(
-                          Icons.access_time,
-                          _endsAt != null && !_endsAt!.isDateOnly
-                              ? formatTimeOfDate(_endsAt!)
-                              : "Set end time",
-                          isActive: _endsAt != null && !_endsAt!.isDateOnly,
-                          onPressed: () async {
-                            if (_endsAt == null && _startsAt == null) return;
+                      Text('-'),
+                      SizedBox(width: AppSpacing.sm),
 
-                            final selected = await chooseTimeForDate(
-                              context,
-                              _endsAt ?? _startsAt!,
+                      _QuickActionChip(
+                        Icons.access_time,
+                        _endsAt != null && !_endsAt!.isDateOnly
+                            ? formatTimeOfDate(_endsAt!)
+                            : "Set end time",
+                        isActive: _endsAt != null && !_endsAt!.isDateOnly,
+                        onPressed: () async {
+                          if (_endsAt == null && _startsAt == null) return;
+
+                          final selected = await chooseTimeForDate(
+                            context,
+                            _endsAt ?? _startsAt!,
+                          );
+                          if (selected != null && _validateEndsAt(selected)) {
+                            _onEndsAtChange(
+                              _startsAt?.copyWith(
+                                hour: selected.hour,
+                                minute: selected.minute,
+                              ),
                             );
-                            if (selected != null && _validateEndsAt(selected)) {
-                              _onEndsAtChange(
-                                _startsAt?.copyWith(
-                                  hour: selected.hour,
-                                  minute: selected.minute,
-                                ),
-                              );
-                            }
-                          },
-                          onCancel: () => _onEndsAtChange(_endsAt?.startOfDay),
-                        ),
-                      ],
-                    ),
+                          }
+                        },
+                        onCancel: () => _onEndsAtChange(_endsAt?.startOfDay),
+                      ),
+                    ],
                   ),
                 ),
               ),
+            ),
             secondChild: Column(
               //crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
