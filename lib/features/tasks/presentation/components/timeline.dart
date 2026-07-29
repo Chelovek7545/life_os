@@ -78,6 +78,22 @@ class _TimelineBodyState extends State<TimelineBody> {
   static const _totalMinutes = (_endHour - _startHour) * 60;
   static const _totalHeight = (_endHour - _startHour) * _hourHeight;
 
+  late ScrollController scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    scrollController = ScrollController(
+      initialScrollOffset: (DateTime.now().hour * _hourHeight) - 100,
+    );
+  }
+
+  @override
+  void dispose() {
+    scrollController.dispose();
+    super.dispose();
+  }
+
   String? _draggingId;
   double _dragStartDy = 0;
   int _dragStartMinutes = 0;
@@ -262,9 +278,7 @@ class _TimelineBodyState extends State<TimelineBody> {
           physics: _draggingId != null || _resizingId != null
               ? const NeverScrollableScrollPhysics()
               : const ClampingScrollPhysics(),
-          controller: ScrollController(
-            initialScrollOffset: (DateTime.now().hour * _hourHeight) - 100,
-          ),
+          controller: scrollController,
           padding: EdgeInsets.only(top: widget.topPadding),
           child: SizedBox(
             height: _totalHeight + 24,
@@ -448,7 +462,6 @@ class _EventTile extends StatelessWidget {
 
     return Stack(
       children: [
-
         GestureDetector(
           onVerticalDragStart: onDragStart,
           onVerticalDragUpdate: onDragUpdate,
@@ -565,7 +578,6 @@ class _EventTile extends StatelessWidget {
           bottom: 10,
           left: 7,
           child: Container(
-
             width: 6,
             decoration: BoxDecoration(
               color: accent,

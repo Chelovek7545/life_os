@@ -28,6 +28,7 @@ class DateTimelineCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: GlassPanel(
+        blurLevel: 12,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           //curve: Curves.easeOut,

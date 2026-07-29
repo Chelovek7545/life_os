@@ -66,7 +66,7 @@ class _PillSwitcherState extends State<PillSwitcher> {
             child: Padding(
               padding: EdgeInsets.all(widget.paddingBetweenOptions ?? 1),
               child: GestureDetector(
-                onTap: () {;
+                onTap: () {
                   widget.onSelectionChanged(index);
                 },
                 child: AnimatedContainer(

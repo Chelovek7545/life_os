@@ -7,13 +7,14 @@ class GlassPanel extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final double borderRadius;
   final Color? borderColor;
-
+  final double blurLevel;
   const GlassPanel({
     super.key,
     required this.child,
     this.padding,
     this.borderRadius = 24.0, // По умолчанию rounded-3xl (24px)
-    this.borderColor, 
+    this.borderColor,
+    this.blurLevel = 20,
   });
 
   @override
@@ -21,13 +22,16 @@ class GlassPanel extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+        filter: ImageFilter.blur(sigmaX: blurLevel, sigmaY: blurLevel),
         child: Container(
           padding: padding,
           decoration: BoxDecoration(
             color: AppColors.surfaceGlass,
             borderRadius: BorderRadius.circular(borderRadius),
-            border: Border.all(color: borderColor ?? AppColors.borderGlass, width: 1.0),
+            border: Border.all(
+              color: borderColor ?? AppColors.borderGlass,
+              width: 1.0,
+            ),
           ),
           child: child,
         ),
