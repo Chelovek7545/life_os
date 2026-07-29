@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
@@ -57,6 +58,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
 
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
+  VoidCallback? _onTitleChanged;
+  VoidCallback? _onDescChanged;
   String? _selectedProjectId;
   DateTime? _dueDate;
   DateTime? _startsAt;
@@ -67,21 +70,26 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   bool get isEditMode => widget.isEditMode;
 
   bool _isUpdating = false;
+  Timer? _debounceTimer;
+
   void _emitChanged() {
     if (_isUpdating) return;
-    widget.onChanged?.call(
-      widget.task.copyWith(
-        title: _titleController.text.trim().isEmpty
-            ? 'Untitled'
-            : _titleController.text.trim(),
-        description: _descController.text.trim(),
-        projectId: Wrapped(_selectedProjectId),
-        startsAt: Wrapped(_startsAt),
-        endsAt: Wrapped(_endsAt),
-        dueDate: Wrapped(_dueDate),
-        status: _taskStatus,
-      ),
-    );
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      widget.onChanged?.call(
+        widget.task.copyWith(
+          title: _titleController.text.trim().isEmpty
+              ? 'Untitled'
+              : _titleController.text.trim(),
+          description: _descController.text.trim(),
+          projectId: Wrapped(_selectedProjectId),
+          startsAt: Wrapped(_startsAt),
+          endsAt: Wrapped(_endsAt),
+          dueDate: Wrapped(_dueDate),
+          status: _taskStatus,
+        ),
+      );
+    });
   }
 
   @override
@@ -96,8 +104,10 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
       _currentHeight = widget.isEditMode ? _maxHeight : _midHeight;
     }
     _initFields();
-    _titleController.addListener(() => _emitChanged());
-    _descController.addListener(() => _emitChanged());
+    _onTitleChanged = _emitChanged;
+    _onDescChanged = _emitChanged;
+    _titleController.addListener(_onTitleChanged!);
+    _descController.addListener(_onDescChanged!);
   }
 
   @override
@@ -123,6 +133,9 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
+    _titleController.removeListener(_onTitleChanged!);
+    _descController.removeListener(_onDescChanged!);
     _titleController.dispose();
     _descController.dispose();
     super.dispose();
@@ -300,15 +313,10 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
               // ЗОНА ДЛЯ ПЕРЕТАСКИВАНИЯ (ХЭНДЛ)
               GestureDetector(
                 onVerticalDragUpdate: (details) {
-                  setState(() {
-                    // Изменяем высоту в зависимости от движения пальца/курсора
-                    // Изменение dy инвертировано, так как движение вверх уменьшает Y, но увеличивает высоту
-                    _currentHeight -= details.delta.dy;
-                    _currentHeight = _currentHeight.clamp(
-                      _minHeight,
-                      _maxHeight,
-                    );
-                  });
+                  _currentHeight = (_currentHeight - details.delta.dy).clamp(
+                    _minHeight,
+                    _maxHeight,
+                  );
                 },
                 onVerticalDragEnd: (details) {
                   _snapToPosition(details.primaryVelocity ?? 0);
@@ -462,7 +470,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Opacity(
+          AnimatedOpacity(
+            duration: const Duration(milliseconds: 200),
             opacity: midProgress,
             child: Transform.scale(
               scale:
@@ -488,8 +497,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                 padding: EdgeInsets.only(top: 8),
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  child: SingleChildScrollView(
-                    child: Row(
+                  child: Row(
                       children: [
                         _QuickActionChip(
                           Icons.calendar_month,
@@ -578,7 +586,6 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                   ),
                 ),
               ),
-            ),
             secondChild: Column(
               //crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

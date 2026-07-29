@@ -1,13 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
-import 'package:life_os/core/ui/glass_panel.dart';
 
-// @Preview(group: "DateTimelineCard")
-// Widget newPreview() => MaterialApp(
-//   debugShowCheckedModeBanner: false,
-//   theme: ThemeData.light(),
-//   home: DateTimelineCard(day: "20", isSelected: true, weekday: 'mon'),
-// );
+const _white20 = Color(0x33FFFFFF);
+const _white30 = Color(0x4DFFFFFF);
+const _white80 = Color(0xCCFFFFFF);
 
 class DateTimelineCard extends StatelessWidget {
   final bool isSelected;
@@ -27,13 +23,12 @@ class DateTimelineCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: GlassPanel(
-        blurLevel: 12,
-        child: AnimatedContainer(
+      child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           //curve: Curves.easeOut,
           width: 64,
           decoration: BoxDecoration(
+            color: isSelected ? null : AppColors.surfaceGlass,
             border: Border.all(color: AppColors.borderGlass),
             borderRadius: BorderRadius.circular(24),
 
@@ -47,18 +42,6 @@ class DateTimelineCard extends StatelessWidget {
                     ],
                   )
                 : null,
-            // color: isSelected
-            //     ? Color.fromARGB(255, 255, 105, 35)
-            //     : AppColors.surfaceContainer,
-            // boxShadow: isSelected
-            //     ? [
-            //         BoxShadow(
-            //           color: const Color(0xFF4C6FFF).withOpacity(0.35),
-            //           blurRadius: 20,
-            //           offset: const Offset(0, 8),
-            //         ),
-            //       ]
-            //     : null,
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
@@ -70,31 +53,31 @@ class DateTimelineCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: isSelected
                         ? Colors.white70
-                        : Colors.white.withValues(alpha: 0.2),
+                        : _white20,
                     fontWeight: FontWeight.w500,
                     letterSpacing: 0.8,
                   ),
                 ),
-                Divider(
-                  radius: BorderRadius.circular(2),
-                  color: Colors.white.withValues(alpha: 0.30),
-                  thickness: 2,
-                  indent: 12,
-                  endIndent: 12,
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 12),
+                    height: 2,
+                    decoration: BoxDecoration(
+                      color: _white30,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
                 Text(
                   day.toString(),
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     color: isSelected
                         ? Colors.white
-                        : Colors.white.withValues(alpha: 0.8),
+                        : _white80,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
               ],
             ),
           ),
-        ),
       ),
     );
   }

@@ -86,6 +86,7 @@ class _TimelineBodyState extends State<TimelineBody> {
     scrollController = ScrollController(
       initialScrollOffset: (DateTime.now().hour * _hourHeight) - 100,
     );
+    _hourRows = _buildHourRows();
   }
 
   @override
@@ -94,6 +95,7 @@ class _TimelineBodyState extends State<TimelineBody> {
     super.dispose();
   }
 
+  late final List<Widget> _hourRows;
   String? _draggingId;
   double _dragStartDy = 0;
   int _dragStartMinutes = 0;
@@ -104,6 +106,9 @@ class _TimelineBodyState extends State<TimelineBody> {
 
   int? _ghostStart;
   int? _ghostDuration;
+
+  Map<String, _EventLayoutInfo>? _cachedLayouts;
+  List<TaskEvent>? _cachedEventsForLayout;
 
   Map<String, _EventLayoutInfo> _computeLayout(List<TaskEvent> events) {
     if (events.isEmpty) {
@@ -266,7 +271,11 @@ class _TimelineBodyState extends State<TimelineBody> {
           );
         })
         .toList(growable: false);
-    final layouts = _computeLayout(displayEvents);
+    if (_cachedEventsForLayout != displayEvents) {
+      _cachedLayouts = _computeLayout(displayEvents);
+      _cachedEventsForLayout = displayEvents;
+    }
+    final layouts = _cachedLayouts!;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -285,7 +294,7 @@ class _TimelineBodyState extends State<TimelineBody> {
             child: Stack(
               clipBehavior: Clip.none,
               children: [
-                ..._buildHourRows(),
+                ..._hourRows,
                 ...widget.events.map((event) {
                   final layout =
                       layouts[event.task.id] ?? const _EventLayoutInfo(0, 1);

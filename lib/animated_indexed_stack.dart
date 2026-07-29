@@ -26,8 +26,8 @@ class _AnimatedIndexedStackState extends State<AnimatedIndexedStack>
     _controller = AnimationController(
       vsync: this,
       duration: widget.duration,
+      value: 1.0,
     );
-    _controller.forward();
   }
 
   @override
@@ -46,11 +46,13 @@ class _AnimatedIndexedStackState extends State<AnimatedIndexedStack>
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _controller,
-      child: IndexedStack(
-        index: widget.index,
-        children: widget.children,
+    return RepaintBoundary(
+      child: FadeTransition(
+        opacity: _controller,
+        child: IndexedStack(
+          index: widget.index,
+          children: widget.children,
+        ),
       ),
     );
   }

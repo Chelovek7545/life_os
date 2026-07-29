@@ -1,69 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/widget_previews.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/semantic_tag.dart';
 import 'package:life_os/core/utils/date_format.dart';
-import 'package:life_os/core/utils/wrapped.dart';
-import 'package:life_os/features/tasks/domain/tag_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'glass_panel.dart';
 
-final testTask = Task.blank().copyWith(
-  title: 'jisd jkjfkljdfk;ljkdlf j;akljdkaljkl fj;aklsjfklajafljs',
-  dueDate: Wrapped(DateTime.now()),
-  tags: [
-    'work',
-    'gym',
-  ].map((e) => Tag(id: 1, name: e, colorHex: 183024)).toList(),
-);
-
-@Preview()
-Widget preview0() => MaterialApp(
-  theme: ThemeData.light(),
-  home: TaskCard(
-    projectTitle: '5m reel',
-    task: testTask,
-    isSelected: false,
-    leftBorderColor: Colors.green,
-  ),
-);
-
-@Preview()
-Widget newPreview() => MaterialApp(
-  theme: ThemeData.light(),
-  home: TaskCard(
-    projectTitle: '5m reel',
-    task: testTask,
-    isSelected: true,
-    leftBorderColor: Colors.green,
-  ),
-);
-
-@Preview()
-Widget preview1() => MaterialApp(
-  theme: ThemeData.light(),
-  home: TaskCard(
-    projectTitle: '5m reel',
-    task: testTask.copyWith(status: TaskStatus.done),
-    isSelected: false,
-    leftBorderColor: Colors.green,
-    isOverdue: true,
-  ),
-);
-
-@Preview()
-Widget preview2() => MaterialApp(
-  theme: ThemeData.light(),
-  home: TaskCard(
-    projectTitle: '5m reel',
-    task: testTask.copyWith(status: TaskStatus.done),
-    isSelected: true,
-    leftBorderColor: Colors.green,
-    isOverdue: true,
-  ),
-);
+const _selectedBg = Color(0x1AB8FF63);
+const _selectedBorder = Color(0x66B8FF63);
 
 class TaskCard extends StatefulWidget {
   final String? projectTitle;
@@ -100,6 +45,7 @@ class _TaskCardState extends State<TaskCard>
   late AnimationController _controller;
   static const double _deleteWidth = 76;
   static const double _dragThreshold = 72;
+
 
   @override
   void initState() {
@@ -147,9 +93,9 @@ class _TaskCardState extends State<TaskCard>
         child: AnimatedContainer(
           duration: Duration(milliseconds: 200),
           decoration: BoxDecoration(
-            color: widget.isSelected
-                ? const Color(0xFFB8FF63).withValues(alpha: 0.1)
-                : null,
+          color: widget.isSelected
+              ? _selectedBg
+              : null,
             borderRadius: BorderRadius.circular(AppRadius.lg),
             boxShadow: widget.isOverdue
                 ? [
@@ -181,7 +127,7 @@ class _TaskCardState extends State<TaskCard>
                   borderRadius: AppRadius.lg,
                   padding: EdgeInsets.zero,
                   borderColor: widget.isSelected
-                      ? const Color(0xFFB8FF63).withValues(alpha: 0.4)
+                      ? _selectedBorder
                       : widget.isOverdue
                       ? AppColors.primaryContainer
                       : null,
@@ -285,45 +231,41 @@ class _TaskCardState extends State<TaskCard>
                     ),
                   ),
                 ),
-                Positioned(
-                  top: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: AnimatedBuilder(
-                    animation: _controller,
-                    builder: (context, child) {
-                      return Transform.translate(
-                        offset: Offset(
-                          _deleteWidth * (1 - _controller.value),
-                          0,
-                        ),
-                        child: GestureDetector(
-                          onTap: () {
-                            _close();
-                            widget.onDelete?.call();
-                          },
-                          child: Container(
-                            width: _deleteWidth,
-                            decoration: BoxDecoration(
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primaryContainer,
-                                  blurRadius: _controller.value * 40,
-                                ),
-                              ],
-                              color: AppColors.primaryContainer,
-                              borderRadius: BorderRadius.circular(AppRadius.md),
-                            ),
-                            alignment: Alignment.center,
-                            child: const Icon(
-                              Icons.delete_outlined,
-                              color: Colors.white,
-                              size: 28,
+                RepaintBoundary(
+                  child: Positioned(
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: AnimatedBuilder(
+                      animation: _controller,
+                      builder: (context, child) {
+                        return Transform.translate(
+                          offset: Offset(
+                            _deleteWidth * (1 - _controller.value),
+                            0,
+                          ),
+                          child: GestureDetector(
+                            onTap: () {
+                              _close();
+                              widget.onDelete?.call();
+                            },
+                            child: Container(
+                              width: _deleteWidth,
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryContainer,
+                                borderRadius: BorderRadius.circular(AppRadius.md),
+                              ),
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                Icons.delete_outlined,
+                                color: Colors.white,
+                                size: 28,
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
                 ),
               ],
@@ -363,10 +305,10 @@ class CheckDot extends StatelessWidget {
           shape: BoxShape.circle,
           color: isCompleted ? AppColors.primaryContainer : Colors.transparent,
           border: Border.all(
-            color: isCompleted
-                ? AppColors.primaryContainer
-                : (isSelected
-                      ? const Color(0xFFB8FF63).withValues(alpha: 0.4)
+                  color: isCompleted
+                      ? AppColors.primaryContainer
+                      : (isSelected
+                            ? _selectedBorder
                       : isOverdue
                       ? AppColors.primaryContainer
                       : AppColors.borderGlass),

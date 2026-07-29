@@ -14,7 +14,7 @@ class GlassPanel extends StatelessWidget {
     this.padding,
     this.borderRadius = 24.0, // По умолчанию rounded-3xl (24px)
     this.borderColor,
-    this.blurLevel = 20,
+    this.blurLevel = 8,
   });
 
   @override

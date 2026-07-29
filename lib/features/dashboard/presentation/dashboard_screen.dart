@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
+import 'package:life_os/features/dashboard/presentation/dashboard_screen_state.dart';
 import 'package:life_os/features/dashboard/presentation/dashboard_view_model.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -8,7 +9,7 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    final isLandscape = MediaQuery.orientationOf(context) == Orientation.landscape;
     final padding = EdgeInsets.all(isLandscape ? AppMargins.lg : AppMargins.xl);
 
     return Padding(
@@ -22,7 +23,7 @@ class DashboardScreen extends StatelessWidget {
           ),
           SizedBox(height: isLandscape ? 16 : 24),
           Expanded(
-            child: StreamBuilder(
+            child: StreamBuilder<DashboardScreenState>(
               stream: viewModel.state,
               builder: (context, asyncSnapshot) {
                 if (asyncSnapshot.connectionState == ConnectionState.waiting) {
@@ -53,10 +54,13 @@ class DashboardScreen extends StatelessWidget {
                                 crossAxisSpacing: 8,
                                 mainAxisSpacing: 8,
                               ),
-                          itemBuilder: (context, index) => _Card(
-                            title: items[index].title,
-                            subtitle: items[index].value,
-                            icon: items[index].icon,
+                          itemBuilder: (context, index) => RepaintBoundary(
+                            key: ValueKey(items[index].title),
+                            child: _Card(
+                              title: items[index].title,
+                              subtitle: items[index].value,
+                              icon: items[index].icon,
+                            ),
                           ),
                           itemCount: items.length,
                         );
@@ -86,8 +90,9 @@ class _Card extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Card(
-      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      color: theme.colorScheme.surfaceContainerHighest,
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(36)),
       child: Padding(
@@ -95,7 +100,7 @@ class _Card extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, size: 28, color: Theme.of(context).colorScheme.primary),
+            Icon(icon, size: 28, color: theme.colorScheme.primary),
             const Spacer(),
             Text(
               title,

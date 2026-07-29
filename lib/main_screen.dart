@@ -62,7 +62,7 @@ class _MainScreenState extends State<MainScreen> {
   @override
   Widget build(BuildContext context) {
     final isLandscape =
-        MediaQuery.of(context).orientation == Orientation.landscape;
+        MediaQuery.orientationOf(context) == Orientation.landscape;
 
     final mainArea = AnimatedIndexedStack(
       index: _selectedIndex,
@@ -114,8 +114,8 @@ class _LandscapeNavRail extends StatelessWidget {
     (Icons.menu_book_rounded, 'LIBRARY'),
   ];
 
-  final itemHeight = 74.5;
-  final double navBarWidth = 80.0;
+  static const itemHeight = 74.5;
+  static const double navBarWidth = 80.0;
 
   @override
   Widget build(BuildContext context) {

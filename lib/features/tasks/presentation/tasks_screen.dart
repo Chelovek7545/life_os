@@ -378,13 +378,9 @@ class TasksScreenState extends State<TasksScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: FixedVerticalFadeMask(
               topFade: 100,
-              child: IndexedStack(
-                index: _isEventMode ? 1 : 0,
-                children: [
-                  _buildTaskBody(overlayHeight, today),
-                  _buildEventBody(),
-                ],
-              ),
+              child: _isEventMode
+                  ? _buildEventBody()
+                  : _buildTaskBody(overlayHeight, today),
             ),
           ),
         ),
@@ -435,13 +431,9 @@ class TasksScreenState extends State<TasksScreen> {
                       child: FixedVerticalFadeMask(
                         topFade: 100,
                         bottomFade: 10,
-                        child: IndexedStack(
-                          index: _isEventMode ? 1 : 0,
-                          children: [
-                            _buildTaskBody(overlayHeight, today),
-                            _buildEventBody(),
-                          ],
-                        ),
+                        child: _isEventMode
+                            ? _buildEventBody()
+                            : _buildTaskBody(overlayHeight, today),
                       ),
                     ),
                   ),
@@ -578,8 +570,12 @@ class _TaskListState extends State<_TaskList> {
       }
     }
 
-    // Вызываем setState, чтобы UI перерисовал обновленные карточки
-    setState(() {});
+    // Вызываем setState только если данные действительно изменились
+    final changed = _items.length != widget.items.length ||
+        _items.asMap().entries.any((e) => e.value != widget.items[e.key]);
+    if (changed) {
+      setState(() {});
+    }
   }
 
   @override
@@ -622,7 +618,7 @@ class _TaskListState extends State<_TaskList> {
 }
 
 //Week view
-class _WeekTasksList extends StatelessWidget {
+class _WeekTasksList extends StatefulWidget {
   const _WeekTasksList({
     required this.items,
     required this.selectedIds,
@@ -644,35 +640,57 @@ class _WeekTasksList extends StatelessWidget {
   final ValueChanged<String> onDeleteTask;
 
   @override
-  Widget build(BuildContext context) {
-    final groupedItems = <DateTime, List<TaskWithProject>>{};
-    for (final item in items) {
-      final startsAt = item.task.startsAt;
-      if (startsAt == null) {
-        continue;
-      }
-      groupedItems.putIfAbsent(startsAt.startOfDay, () => []).add(item);
-    }
+  State<_WeekTasksList> createState() => _WeekTasksListState();
+}
 
-    final weekDates = getDatesForWeek(anchorDate);
+class _WeekTasksListState extends State<_WeekTasksList> {
+  Map<DateTime, List<TaskWithProject>> _groupedItems = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _groupedItems = _buildGroupedItems();
+  }
+
+  @override
+  void didUpdateWidget(_WeekTasksList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.items != widget.items) {
+      _groupedItems = _buildGroupedItems();
+    }
+  }
+
+  Map<DateTime, List<TaskWithProject>> _buildGroupedItems() {
+    final grouped = <DateTime, List<TaskWithProject>>{};
+    for (final item in widget.items) {
+      final startsAt = item.task.startsAt;
+      if (startsAt == null) continue;
+      grouped.putIfAbsent(startsAt.startOfDay, () => []).add(item);
+    }
+    return grouped;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final weekDates = getDatesForWeek(widget.anchorDate);
     final today = DateTime.now().startOfDay;
 
     return ListView.builder(
-      padding: EdgeInsets.symmetric(vertical: overlayHeight),
+      padding: EdgeInsets.symmetric(vertical: widget.overlayHeight),
       itemCount: weekDates.length,
       itemBuilder: (context, index) {
         final date = weekDates[index];
-        final dayItems = groupedItems[date.startOfDay] ?? const [];
+        final dayItems = _groupedItems[date.startOfDay] ?? const [];
 
         return _WeekDaySection(
           date: date,
           isToday: date.startOfDay.isAtSameMomentAs(today),
           items: dayItems,
-          selectedIds: selectedIds,
-          onToggleTask: onToggleTask,
-          onEditTask: onEditTask,
-          onToggleSelection: onToggleSelection,
-          onDeleteTask: onDeleteTask,
+          selectedIds: widget.selectedIds,
+          onToggleTask: widget.onToggleTask,
+          onEditTask: widget.onEditTask,
+          onToggleSelection: widget.onToggleSelection,
+          onDeleteTask: widget.onDeleteTask,
         );
       },
     );
@@ -788,7 +806,7 @@ class _WeekDaySection extends StatelessWidget {
 }
 
 // Header elements
-class _TasksHeader extends StatefulWidget {
+class _TasksHeader extends StatelessWidget {
   const _TasksHeader({
     required this.onAddPressed,
     required this.onModeChanged,
@@ -800,12 +818,6 @@ class _TasksHeader extends StatefulWidget {
   final ValueChanged<int> onModeChanged;
   final double tasksScreenWidth;
 
-  @override
-  State<_TasksHeader> createState() => _TasksHeaderState();
-}
-
-class _TasksHeaderState extends State<_TasksHeader>
-    with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -821,12 +833,12 @@ class _TasksHeaderState extends State<_TasksHeader>
           SizedBox(
             width: 150,
             child: PillSwitcher(
-              selectedIndex: widget.vm.currentUiFlags.isEventMode ? 1 : 0,
+              selectedIndex: vm.currentUiFlags.isEventMode ? 1 : 0,
               outerPadding: 1,
               paddingBetweenOptions: 1,
               innerPadding: 1,
               options: const [Icon(Icons.check_box), Icon(Icons.event)],
-              onSelectionChanged: widget.onModeChanged,
+              onSelectionChanged: onModeChanged,
             ),
           ),
           Spacer(),
@@ -835,7 +847,7 @@ class _TasksHeaderState extends State<_TasksHeader>
             child: Row(
               children: [
                 StreamBuilder(
-                  stream: widget.vm.state,
+                  stream: vm.state,
                   builder: (_, snap) {
                     Widget? ico;
                     if (snap.hasData) {
@@ -845,7 +857,7 @@ class _TasksHeaderState extends State<_TasksHeader>
                         loaded: (_, selected, _, _) {
                           if (selected.isEmpty) return null;
 
-                          final screenWidth = widget.tasksScreenWidth;
+                            final screenWidth = tasksScreenWidth;
                           //MediaQuery.sizeOf(context).width
                           final int maxVisibleActions = switch (screenWidth) {
                             < 400 => 1,
@@ -859,20 +871,20 @@ class _TasksHeaderState extends State<_TasksHeader>
                             PopUpMenuAction(
                               icon: Icons.clear,
                               label: 'Clear selection',
-                              onTap: () => widget.vm.clearTaskSelection(),
+                              onTap: () => vm.clearTaskSelection(),
                             ),
                             PopUpMenuAction(
                               icon: Icons.delete_forever,
                               label: 'Delete',
-                              onTap: () => widget.vm.deleteSelectedTask().then(
-                                (_) => widget.vm.clearTaskSelection(),
+                              onTap: () => vm.deleteSelectedTask().then(
+                                (_) => vm.clearTaskSelection(),
                               ),
                             ),
                             PopUpMenuAction(
                               icon: Icons.done_all,
                               label: "mark Done",
-                              onTap: () => widget.vm.markSelectedAsDone().then(
-                                (_) => widget.vm.clearTaskSelection(),
+                              onTap: () => vm.markSelectedAsDone().then(
+                                (_) => vm.clearTaskSelection(),
                               ),
                             ),
                             // Сюда можно добавлять новые кнопки (например: Архив, Завершить и т.д.)
@@ -941,7 +953,7 @@ class _TasksHeaderState extends State<_TasksHeader>
                     ),
                     visualDensity: VisualDensity.compact,
                   ),
-                  onPressed: widget.onAddPressed,
+                  onPressed: onAddPressed,
                   child: const Icon(Icons.add),
                 ),
               ],
