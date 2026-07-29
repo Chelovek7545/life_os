@@ -167,8 +167,10 @@ class TasksViewModel {
       return;
     }
 
-    // Фильтруем задачи в зависимости от выбранного режима
-    final filteredTasks = tasks.where((item) {
+    final scheduled = <TaskWithProject>[];
+    final unscheduled = <TaskWithProject>[];
+
+    for (final item in tasks) {
       final task = item.task;
 
       // 1. Фильтр по ДАТЕ и ПЕРИОДУ
@@ -193,16 +195,14 @@ class TasksViewModel {
           DatePeriod.year => task.startsAt!.year == filter.anchorDate.year,
         };
 
-        if (!dateMatches) return false;
+        if (!dateMatches) continue;
       } else {
-        // Если у задачи нет даты, а у нас выбран жесткий период — скрываем её (или оставляем, на ваш выбор)
-        return false;
       }
 
       // 2. Фильтр по ПРОЕКТАМ (Если список не пустой, проверяем совпадение)
       if (filter.projectIds.isNotEmpty &&
           !filter.projectIds.contains(task.projectId)) {
-        return false;
+        continue;
       }
 
       // 3. Фильтр по ТЕГАМ
@@ -211,36 +211,31 @@ class TasksViewModel {
         final hasSelectedTag = task.tags.any(
           (tag) => filter.tagIds.contains(tag.id),
         );
-        if (!hasSelectedTag) return false;
+        if (!hasSelectedTag) continue;
       }
 
       // 4. Фильтр по СТАТУСУ ВЫПОЛНЕНИЯ
       if (filter.showCompleted != null &&
           task.isCompleted != filter.showCompleted) {
-        return false;
+        continue;
       }
 
-      return true;
-    }).toList();
+      if (task.startsAt != null) {
+        scheduled.add(item);
+      } else {
+        unscheduled.add(item);
+      }
+    }
 
-    if (filteredTasks.isEmpty && selectedTasks.isEmpty) {
+    if (scheduled.isEmpty && unscheduled.isEmpty && selectedTasks.isEmpty) {
       _uiStateController.add(TasksEmpty());
-    } else if (filteredTasks.isEmpty) {
-      _uiStateController.add(
-        TasksLoaded(
-          curTask: null,
-          tasks: [],
-          selectedTasks: List.from(selectedTasks),
-        ),
-      );
     } else {
-      // Передаем первую актуальную задачу как curTask, и весь отфильтрованный список
       _uiStateController.add(
         TasksLoaded(
-          curTask: filteredTasks.first.task,
-          tasks:
-              filteredTasks, // Важно: TasksLoaded теперь должен принимать List<TaskWithProject>
+          curTask: scheduled.isNotEmpty ? scheduled.first.task : null,
+          tasks: scheduled,
           selectedTasks: List.from(selectedTasks),
+          unscheduledTasks: unscheduled,
         ),
       );
     }
@@ -258,6 +253,7 @@ class TasksViewModel {
       _uiStateController.add(
         TasksLoaded(
           curTask: currentState.curTask,
+          unscheduledTasks: currentState.unscheduledTasks,
           tasks: currentState.tasks, // Оставляем текущие отфильтрованные задачи
           selectedTasks: [],
         ),
@@ -284,6 +280,7 @@ class TasksViewModel {
       _uiStateController.add(
         TasksLoaded(
           curTask: currentState.curTask,
+          unscheduledTasks: currentState.unscheduledTasks,
           tasks: currentState.tasks, // Оставляем текущие отфильтрованные задачи
           selectedTasks: List.from(
             selectedTasks,

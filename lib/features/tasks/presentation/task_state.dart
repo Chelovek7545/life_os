@@ -13,6 +13,7 @@ sealed class TaskScreenState {
       List<Task> selectedTasks,
       bool isProcessing,
       Task? curTask,
+      List<TaskWithProject> unscheduledTasks,
     )
     loaded,
     required R Function(String message) error,
@@ -29,8 +30,9 @@ sealed class TaskScreenState {
         selectedTasks: final selectedTasks,
         isProcessing: final isProcessing,
         curTask: final curTask,
+        unscheduledTasks: final unscheduledTasks,
       ) =>
-        loaded(tasks, selectedTasks, isProcessing, curTask),
+        loaded(tasks, selectedTasks, isProcessing, curTask, unscheduledTasks),
       TasksError(message: final message) => error(message),
     };
   }
@@ -44,6 +46,7 @@ sealed class TaskScreenState {
       List<Task> selectedTasks,
       bool isProcessing,
       Task? curTask,
+      List<TaskWithProject> unscheduledTasks,
     )?
     loaded,
     R Function(String message)? error,
@@ -61,8 +64,9 @@ sealed class TaskScreenState {
         selectedTasks: final selectedTasks,
         isProcessing: final isProcessing,
         curTask: final curTask,
+        unscheduledTasks: final unscheduledTasks,
       ) =>
-        loaded?.call(tasks, selectedTasks, isProcessing, curTask) ?? orElse(),
+        loaded?.call(tasks, selectedTasks, isProcessing, curTask, unscheduledTasks) ?? orElse(),
       TasksError(message: final message) => error?.call(message) ?? orElse(),
     };
   }
@@ -91,10 +95,12 @@ final class TasksLoaded extends TaskScreenState {
     required this.selectedTasks,
     this.isProcessing = false,
     this.curTask,
+    this.unscheduledTasks = const [],
   });
 
   final List<Task> selectedTasks;
   final List<TaskWithProject> tasks;
+  final List<TaskWithProject> unscheduledTasks;
   final Task? curTask;
   final bool isProcessing;
 }

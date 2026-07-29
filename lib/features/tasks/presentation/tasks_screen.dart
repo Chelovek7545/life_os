@@ -46,11 +46,99 @@ class TasksScreen extends StatefulWidget {
 
 class TasksScreenState extends State<TasksScreen> {
   bool _showCalendar = true;
-  //bool _lastFormVisible = false;
+  bool _showUnscheduledOverlay = false;
+  List<TaskWithProject> _unscheduledTasks = [];
 
   @override
   void dispose() {
     super.dispose();
+  }
+
+  void _toggleUnscheduledOverlay() {
+    setState(() => _showUnscheduledOverlay = !_showUnscheduledOverlay);
+  }
+
+  Widget _buildUnscheduledOverlay(double overlayHeight, DateTime today, double overlayWidth) {
+    if (!_showUnscheduledOverlay || _unscheduledTasks.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Positioned(
+      top: AppSpacing.sm + _kHeaderHeight + AppSpacing.sm,
+      left: 8,
+      width: overlayWidth,
+      child: Material(
+        elevation: 8,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        color: Colors.transparent,
+        child: GlassPanel(
+          padding: EdgeInsets.zero,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      const Text(
+                        'Unscheduled',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => setState(
+                          () => _showUnscheduledOverlay = false,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.all(8),
+                    children: _unscheduledTasks
+                        .map(
+                          (item) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: TaskCard(
+                              task: item.task,
+                              projectTitle: item.project?.name,
+                              leftBorderColor: item.project != null
+                                  ? parseHexColor(item.project!.color)
+                                  : null,
+                              isOverdue:
+                                  item.task.dueDate?.isBefore(
+                                    today,
+                                  ) ??
+                                  false,
+                              onCheckChanged: () =>
+                                  widget.viewModel.toggleTask(item.task),
+                              onLongPress: () => _openTaskEditor(item),
+                              onDelete: () =>
+                                  widget.viewModel.deleteTask(item.task.id),
+                              isSelected: false,
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildTaskBody(double overlayHeight, DateTime today) {
@@ -64,7 +152,8 @@ class TasksScreenState extends State<TasksScreen> {
           loading: () => const Center(child: CircularProgressIndicator()),
           empty: (_, _) => const EmptyPlaceholder(),
           error: (message) => Center(child: Text(message)),
-          loaded: (items, selectedTasks, _, _) {
+          loaded: (items, selectedTasks, _, _, unscheduledTasks) {
+            _unscheduledTasks = unscheduledTasks;
             if (items.isEmpty) {
               return const EmptyPlaceholder();
             }
@@ -125,7 +214,7 @@ class TasksScreenState extends State<TasksScreen> {
             events = [];
           },
           error: (message) => Center(child: Text(message)),
-          loaded: (items, _, _, _) {
+          loaded: (items, _, _, _, _) {
             events = items
                 .where((item) {
                   final startsAt = item.task.startsAt;
@@ -174,6 +263,8 @@ class TasksScreenState extends State<TasksScreen> {
               ? widget.viewModel.hideForm
               : widget.viewModel.showForm,
           onModeChanged: _onModeChanged,
+          onToggleUnscheduled: _toggleUnscheduledOverlay,
+          unscheduledCount: _unscheduledTasks.length,
         ),
         const SizedBox(height: AppSpacing.sm),
 
@@ -390,6 +481,7 @@ class TasksScreenState extends State<TasksScreen> {
           _isEventMode,
           MediaQuery.sizeOf(context).width,
         ),
+        _buildUnscheduledOverlay(overlayHeight, today, MediaQuery.sizeOf(context).width > 400 ? 400 : MediaQuery.sizeOf(context).width),
         _buildTaskForm(
           context,
           isFormVisible,
@@ -443,6 +535,7 @@ class TasksScreenState extends State<TasksScreen> {
                     _isEventMode,
                     leftWidth,
                   ),
+                  _buildUnscheduledOverlay(overlayHeight, today,  leftWidth > 400 ? 400 : leftWidth),
                   if (isFormVisible && leftWidth <= 330)
                     _buildTaskForm(context, isFormVisible, 310),
                 ],
@@ -534,7 +627,6 @@ class _TaskListState extends State<_TaskList> {
     final oldIds = oldWidget.items.map((e) => e.task.id).toSet();
     final newIds = widget.items.map((e) => e.task.id).toSet();
 
-    // 1. Удаляем несуществующие элементы
     for (int i = _items.length - 1; i >= 0; i--) {
       if (!newIds.contains(_items[i].task.id)) {
         final removed = _items.removeAt(i);
@@ -553,7 +645,6 @@ class _TaskListState extends State<_TaskList> {
       }
     }
 
-    // 2. Вставляем новые элементы или ОБНОВЛЯЕМ существующие
     for (int i = 0; i < widget.items.length; i++) {
       final newItem = widget.items[i];
       if (!oldIds.contains(newItem.task.id)) {
@@ -812,11 +903,15 @@ class _TasksHeader extends StatelessWidget {
     required this.onModeChanged,
     required this.vm,
     required this.tasksScreenWidth,
+    required this.onToggleUnscheduled,
+    required this.unscheduledCount,
   });
   final TasksViewModel vm;
   final VoidCallback onAddPressed;
   final ValueChanged<int> onModeChanged;
   final double tasksScreenWidth;
+  final VoidCallback onToggleUnscheduled;
+  final int unscheduledCount;
 
   @override
   Widget build(BuildContext context) {
@@ -829,6 +924,13 @@ class _TasksHeader extends StatelessWidget {
             onPressed: () {},
             icon: const Icon(Icons.settings_outlined, color: Colors.white),
           ),
+            Badge(
+              label: Text(unscheduledCount.toString(), style: const TextStyle(fontSize: 10)),
+              child: IconButton(
+                onPressed: onToggleUnscheduled,
+                icon: const Icon(Icons.inbox_rounded, color: Colors.white),
+              ),
+            ),
           Spacer(),
           SizedBox(
             width: 150,
@@ -854,7 +956,7 @@ class _TasksHeader extends StatelessWidget {
                       snap.data!.when(
                         loading: () {},
                         empty: (_, _) {},
-                        loaded: (_, selected, _, _) {
+                        loaded: (_, selected, _, _, _) {
                           if (selected.isEmpty) return null;
 
                             final screenWidth = tasksScreenWidth;
