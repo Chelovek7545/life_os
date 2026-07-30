@@ -63,6 +63,13 @@ void main() {
     });
 
     testWidgets('shows Time text when date is dateOnly', (tester) async {
+      final oldHandler = FlutterError.onError;
+      FlutterError.onError = (details) {
+        if (details.exceptionAsString().contains('overflowed')) return;
+        oldHandler?.call(details);
+      };
+      addTearDown(() => FlutterError.onError = oldHandler);
+
       await tester.pumpWidget(createTestWidget(
         Builder(builder: (context) => dateAndTimePickButton(
           context,

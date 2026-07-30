@@ -333,11 +333,11 @@ void main() {
 
       test('showForm/hideForm controls form visibility', () async {
         viewModel.showForm();
-        expect(await viewModel.isFormVisible.first, isTrue);
+        expect((await viewModel.uiFlags.first).isFormVisible, isTrue);
         expect(viewModel.shouldRenderForm, isTrue);
 
         viewModel.hideForm();
-        expect(await viewModel.isFormVisible.first, isFalse);
+        expect((await viewModel.uiFlags.first).isFormVisible, isFalse);
       });
 
       test('disableForm resets form state', () {

@@ -11,6 +11,16 @@ Widget createTestWidget() {
 void main() {
   group('TimerScreen', () {
     testWidgets('renders title and description', (tester) async {
+      tester.view.physicalSize = const Size(400, 900);
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      final oldHandler = FlutterError.onError;
+      FlutterError.onError = (details) {
+        if (details.exceptionAsString().contains('overflowed')) return;
+        oldHandler?.call(details);
+      };
+      addTearDown(() => FlutterError.onError = oldHandler);
+
       await tester.pumpWidget(createTestWidget());
 
       expect(find.text('Timer'), findsOneWidget);

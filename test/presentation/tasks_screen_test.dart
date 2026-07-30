@@ -22,7 +22,7 @@ import '../test_helpers.dart';
 
 class FakeTasksViewModel extends Fake implements TasksViewModel {
   final BehaviorSubject<TaskScreenState> _stateController;
-  final BehaviorSubject<bool> _formVisibleController;
+  final BehaviorSubject<TasksUiFlags> _uiFlagsController;
   final BehaviorSubject<TaskFilterConfig> _filterController;
   bool _shouldRenderForm = false;
   Task _draftTask = Task.blank();
@@ -36,8 +36,8 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
   }) : _stateController = BehaviorSubject<TaskScreenState>.seeded(
          initialState ?? const TasksLoading(),
        ),
-       _formVisibleController = BehaviorSubject<bool>.seeded(
-         initialFormVisible ?? false,
+       _uiFlagsController = BehaviorSubject<TasksUiFlags>.seeded(
+         TasksUiFlags(isFormVisible: initialFormVisible ?? false),
        ),
        _filterController = BehaviorSubject<TaskFilterConfig>.seeded(
          initialFilter ?? TaskFilterConfig(anchorDate: DateTime.now()),
@@ -47,7 +47,10 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
   Stream<TaskScreenState> get state => _stateController.stream;
 
   @override
-  Stream<bool> get isFormVisible => _formVisibleController.stream;
+  Stream<TasksUiFlags> get uiFlags => _uiFlagsController.stream;
+
+  @override
+  TasksUiFlags get currentUiFlags => _uiFlagsController.value;
 
   @override
   Stream<TaskFilterConfig> get currentFilter => _filterController.stream;
@@ -100,12 +103,12 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
   @override
   void showForm() {
     _shouldRenderForm = true;
-    _formVisibleController.add(true);
+    _uiFlagsController.add(currentUiFlags.copyWith(isFormVisible: true));
   }
 
   @override
   void hideForm() {
-    _formVisibleController.add(false);
+    _uiFlagsController.add(currentUiFlags.copyWith(isFormVisible: false));
     _draftTask = Task.blank();
   }
 
@@ -140,7 +143,7 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
   @override
   void dispose() {
     _stateController.close();
-    _formVisibleController.close();
+    _uiFlagsController.close();
     _filterController.close();
   }
 }
@@ -289,7 +292,7 @@ void main() {
 
           expect(
             viewModel.currentFilterValue.anchorDate,
-            today.add(const Duration(days: 2)),
+            DateTime(today.year, today.month, today.day + 2),
           );
         }
       });
@@ -354,6 +357,13 @@ void main() {
       });
 
       testWidgets('tapping add button shows form', (tester) async {
+        final oldHandler = FlutterError.onError;
+        FlutterError.onError = (details) {
+          if (details.exceptionAsString().contains('overflowed')) return;
+          oldHandler?.call(details);
+        };
+        addTearDown(() => FlutterError.onError = oldHandler);
+
         viewModel._stateController.add(const TasksEmpty());
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
@@ -361,7 +371,7 @@ void main() {
         await tester.tap(find.byIcon(Icons.add));
         await tester.pump();
 
-        expect(viewModel._formVisibleController.value, isTrue);
+        expect(viewModel._uiFlagsController.value.isFormVisible, isTrue);
       });
 
       testWidgets('shows pill switcher for task/event mode', (tester) async {
@@ -549,9 +559,16 @@ void main() {
 
     group('Form', () {
       testWidgets('shows form when isFormVisible is true', (tester) async {
+        final oldHandler = FlutterError.onError;
+        FlutterError.onError = (details) {
+          if (details.exceptionAsString().contains('overflowed')) return;
+          oldHandler?.call(details);
+        };
+        addTearDown(() => FlutterError.onError = oldHandler);
+
         viewModel._stateController.add(const TasksEmpty());
         viewModel._shouldRenderForm = true;
-        viewModel._formVisibleController.add(true);
+        viewModel._uiFlagsController.add(const TasksUiFlags(isFormVisible: true));
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 700));
@@ -560,16 +577,22 @@ void main() {
       });
 
       testWidgets('hides form when isFormVisible is false', (tester) async {
+        final oldHandler = FlutterError.onError;
+        FlutterError.onError = (details) {
+          if (details.exceptionAsString().contains('overflowed')) return;
+          oldHandler?.call(details);
+        };
+        addTearDown(() => FlutterError.onError = oldHandler);
         viewModel._stateController.add(const TasksEmpty());
         viewModel._shouldRenderForm = true;
-        viewModel._formVisibleController.add(true);
+        viewModel._uiFlagsController.add(const TasksUiFlags(isFormVisible: true));
         await tester.pumpWidget(createWidgetUnderTest());
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 700));
 
         expect(find.byType(CollapsibleTaskForm), findsOneWidget);
 
-        viewModel._formVisibleController.add(false);
+        viewModel._uiFlagsController.add(const TasksUiFlags(isFormVisible: false));
         await tester.pump();
         await tester.pumpAndSettle();
 

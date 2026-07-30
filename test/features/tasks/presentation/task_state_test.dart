@@ -19,7 +19,7 @@ void main() {
         final result = state.when(
           loading: () => 'loading',
           empty: (_, _) => 'empty',
-          loaded: (_, _, _, _) => 'loaded',
+          loaded: (_, _, _, _, _) => 'loaded',
           error: (_) => 'error',
         );
         expect(result, 'loading');
@@ -37,7 +37,7 @@ void main() {
       test('maybeWhen falls back to orElse when no match', () {
         const state = TasksLoading();
         final result = state.maybeWhen(
-          loaded: (_, _, _, _) => 'loaded',
+          loaded: (_, _, _, _, _) => 'loaded',
           orElse: () => 'orElse',
         );
         expect(result, 'orElse');
@@ -70,7 +70,7 @@ void main() {
         final result = state.when(
           loading: () => 'loading',
           empty: (aiSuggestion, isProcessing) => 'empty:$aiSuggestion',
-          loaded: (_, _, _, _) => 'loaded',
+          loaded: (_, _, _, _, _) => 'loaded',
           error: (_) => 'error',
         );
         expect(result, 'empty:test');
@@ -121,7 +121,7 @@ void main() {
         final result = state.when(
           loading: () => 'loading',
           empty: (_, _) => 'empty',
-          loaded: (t, s, p, c) => 'loaded:${t.length}:${s.length}',
+          loaded: (t, s, p, c, u) => 'loaded:${t.length}:${s.length}',
           error: (_) => 'error',
         );
         expect(result, 'loaded:1:1');
@@ -130,7 +130,7 @@ void main() {
       test('maybeWhen calls loaded callback', () {
         final state = TasksLoaded(tasks: tasks, selectedTasks: []);
         final result = state.maybeWhen(
-          loaded: (_, _, _, _) => 'loaded',
+          loaded: (_, _, _, _, _) => 'loaded',
           orElse: () => 'orElse',
         );
         expect(result, 'loaded');
@@ -156,7 +156,7 @@ void main() {
         final result = state.when(
           loading: () => 'loading',
           empty: (_, _) => 'empty',
-          loaded: (_, _, _, _) => 'loaded',
+          loaded: (_, _, _, _, _) => 'loaded',
           error: (msg) => 'error:$msg',
         );
         expect(result, 'error:fail');

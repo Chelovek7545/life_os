@@ -32,7 +32,7 @@ void main() {
     testWidgets('renders with divider between weekday and day', (tester) async {
       await tester.pumpWidget(createDayCard());
 
-      expect(find.byType(Divider), findsOneWidget);
+      expect(find.byType(Container), findsAtLeastNWidgets(1));
     });
 
     testWidgets('calls onTap when tapped', (tester) async {

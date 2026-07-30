@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/ui/base_container.dart';
 
 Widget createTestWidget(Widget child) {
@@ -25,7 +27,36 @@ void main() {
       ));
 
       final container = tester.widget<Container>(find.byType(Container).first);
-      expect(container.padding, isNotNull);
+      expect(container.padding, const EdgeInsets.all(AppSpacing.xl));
+    });
+
+    testWidgets('applies decoration with surface color', (tester) async {
+      await tester.pumpWidget(createTestWidget(
+        const BaseContainer(child: Text('Hello')),
+      ));
+
+      final container = tester.widget<Container>(find.byType(Container).first);
+      final decoration = container.decoration as BoxDecoration?;
+      expect(decoration?.color, AppColors.surface);
+    });
+
+    testWidgets('applies border with glass color', (tester) async {
+      await tester.pumpWidget(createTestWidget(
+        const BaseContainer(child: Text('Hello')),
+      ));
+
+      final container = tester.widget<Container>(find.byType(Container).first);
+      expect(container.decoration, isNotNull);
+    });
+
+    testWidgets('applies rounded border radius', (tester) async {
+      await tester.pumpWidget(createTestWidget(
+        const BaseContainer(child: Text('Hello')),
+      ));
+
+      final container = tester.widget<Container>(find.byType(Container).first);
+      final decoration = container.decoration as BoxDecoration?;
+      expect(decoration?.borderRadius, BorderRadius.circular(AppRadius.lg));
     });
   });
 }

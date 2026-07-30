@@ -16,6 +16,7 @@ void main() {
         PillSwitcher(
           options: const [Text('Day'), Text('Week'), Text('Month')],
           onSelectionChanged: (_) {},
+          selectedIndex: 0,
         ),
       ));
 
@@ -30,6 +31,7 @@ void main() {
         PillSwitcher(
           options: const [Text('A'), Text('B')],
           onSelectionChanged: (i) => selected = i,
+          selectedIndex: 0,
         ),
       ));
 
@@ -44,6 +46,7 @@ void main() {
         PillSwitcher(
           options: const [Text('X'), Text('Y')],
           onSelectionChanged: (_) {},
+          selectedIndex: 0,
         ),
       ));
 

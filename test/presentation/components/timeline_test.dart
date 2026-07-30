@@ -20,7 +20,6 @@ void main() {
         expect(event.title, 'Test Event');
         expect(event.startMinutes, 540);
         expect(event.durationMinutes, 60);
-        expect(event.isActive, false);
         expect(event.accentColor, const Color(0xFF2A2A2A));
       });
 
@@ -83,13 +82,11 @@ void main() {
           title: 'Test',
           startMinutes: 540,
           durationMinutes: 60,
-          isActive: true,
           accentColor: Colors.red,
         );
 
         final updated = event.copyWith(startMinutes: 600);
 
-        expect(updated.isActive, true);
         expect(updated.accentColor, Colors.red);
       });
     });
@@ -104,6 +101,7 @@ void main() {
               events: events,
               topPadding: 0,
               onEventChanged: (task, {startMinutes, durationMinutes}) {},
+              onToggleTask: (_) {},
             ),
           ),
         );
@@ -130,6 +128,7 @@ void main() {
               events: [event],
               topPadding: 0,
               onEventChanged: (task, {startMinutes, durationMinutes}) {},
+              onToggleTask: (_) {},
             ),
           ),
         );
@@ -162,6 +161,7 @@ void main() {
               events: events,
               topPadding: 0,
               onEventChanged: (task, {startMinutes, durationMinutes}) {},
+              onToggleTask: (_) {},
             ),
           ),
         );
@@ -170,14 +170,13 @@ void main() {
         expect(find.text('Event 2'), findsOneWidget);
       });
 
-      testWidgets('shows active event styling', (tester) async {
+      testWidgets('shows event styling', (tester) async {
         final task = createMockTask();
         final event = TaskEvent(
           task: task,
           title: 'Active Event',
           startMinutes: 540,
           durationMinutes: 60,
-          isActive: true,
         );
 
         await tester.pumpWidget(
@@ -186,6 +185,7 @@ void main() {
               events: [event],
               topPadding: 0,
               onEventChanged: (task, {startMinutes, durationMinutes}) {},
+              onToggleTask: (_) {},
             ),
           ),
         );
@@ -202,6 +202,7 @@ void main() {
               events: events,
               topPadding: 0,
               onEventChanged: (task, {startMinutes, durationMinutes}) {},
+              onToggleTask: (_) {},
             ),
           ),
         );
@@ -227,6 +228,7 @@ void main() {
               events: [event],
               topPadding: 0,
               onEventChanged: (task, {startMinutes, durationMinutes}) {},
+              onToggleTask: (_) {},
             ),
           ),
         );
@@ -250,6 +252,7 @@ void main() {
               events: [event],
               topPadding: 0,
               onEventChanged: (task, {startMinutes, durationMinutes}) {},
+              onToggleTask: (_) {},
             ),
           ),
         );
@@ -273,6 +276,7 @@ void main() {
               events: [event],
               topPadding: 0,
               onEventChanged: (task, {startMinutes, durationMinutes}) {},
+              onToggleTask: (_) {},
             ),
           ),
         );
@@ -292,6 +296,7 @@ void main() {
               events: const [],
               topPadding: 0,
               onEventChanged: (task, {startMinutes, durationMinutes}) {},
+              onToggleTask: (_) {},
             ),
           ),
         );
@@ -308,6 +313,7 @@ void main() {
               events: const [],
               topPadding: 0,
               onEventChanged: (task, {startMinutes, durationMinutes}) {},
+              onToggleTask: (_) {},
             ),
           ),
         );

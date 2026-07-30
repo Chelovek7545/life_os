@@ -39,6 +39,7 @@ void main() {
           projects: projectsStream.stream,
           isEditMode: isEditMode,
           onFormVisibilityChanged: (_) {},
+          onChanged: (_) {},
         ),
       );
     }
