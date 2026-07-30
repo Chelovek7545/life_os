@@ -14,6 +14,7 @@ import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/core/utils/wrapped.dart';
+import 'package:life_os/features/settings/settings_screen.dart';
 import 'package:life_os/features/tasks/domain/task_filter_config.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
@@ -920,10 +921,20 @@ class _TasksHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.settings_outlined, color: Colors.white),
-          ),
+// Внутри TasksScreen (в AppBar или любой кнопке)
+IconButton(
+  icon: const Icon(Icons.settings_outlined),
+  onPressed: () {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => SettingsScreen(
+          // Если настройкам нужен доступ к DI, передаем его или viewModel
+          // viewModel: widget.viewModel.settingsViewModel,
+        ),
+      ),
+    );
+  },
+),
             Badge(
               label: Text(unscheduledCount.toString(), style: const TextStyle(fontSize: 10)),
               child: IconButton(
