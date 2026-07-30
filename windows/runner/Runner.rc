@@ -95,7 +95,7 @@ BEGIN
             VALUE "InternalName", "life_os" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
             VALUE "OriginalFilename", "life_os.exe" "\0"
-            VALUE "ProductName", "life_os" "\0"
+            VALUE "ProductName", "Pulse" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
