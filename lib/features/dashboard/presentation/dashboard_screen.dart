@@ -36,6 +36,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int? _ghostY;
   double? _ghostW;
   double? _ghostH;
+  String? _resizingItemId;
+  Offset _resizeOffset = Offset.zero;
+  int? _resizeStartW;
+  int? _resizeStartH;
 
   @override
   void initState() {
@@ -217,9 +221,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final width = item.w * _cellWidth + (item.w - 1) * _spacing;
     final height = item.h * _cellHeight + (item.h - 1) * _spacing;
     final isThisDragging = _draggingItemId == item.id;
+    final isThisResizing = _resizingItemId == item.id;
 
     final left = isThisDragging ? baseLeft + _dragOffset.dx : baseLeft;
     final top = isThisDragging ? baseTop + _dragOffset.dy : baseTop;
+    final displayWidth =
+        isThisResizing ? (width + _resizeOffset.dx).clamp(_cellWidth, 1e9) : width;
+    final displayHeight =
+        isThisResizing ? (height + _resizeOffset.dy).clamp(_cellHeight, 1e9) : height;
 
     Widget child = DashboardItemWidget(
       item: item,
@@ -229,6 +238,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
       spacing: _spacing,
       onTap: (_) {
         setState(() => _items.removeWhere((i) => i.id == item.id));
+      },
+      onResizeStart: () {
+        setState(() {
+          _resizingItemId = item.id;
+          _resizeOffset = Offset.zero;
+          _resizeStartW = item.w;
+          _resizeStartH = item.h;
+        });
+      },
+      onResizeUpdate: (delta) {
+        setState(() => _resizeOffset = delta);
+      },
+      onResizeEnd: (delta) {
+        final stepX = _cellWidth + _spacing;
+        final stepY = _cellHeight + _spacing;
+        final addedW = (delta.dx / stepX).round();
+        final addedH = (delta.dy / stepY).round();
+        setState(() {
+          item.w = (_resizeStartW! + addedW).clamp(1, _totalColumns);
+          item.h = (_resizeStartH! + addedH).clamp(1, 50);
+          _resizingItemId = null;
+          _resizeOffset = Offset.zero;
+          _resizeStartW = null;
+          _resizeStartH = null;
+        });
       },
     );
 
@@ -280,14 +314,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     return AnimatedPositioned(
-      duration: isThisDragging
+      duration: isThisDragging || isThisResizing
           ? Duration.zero
           : const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
       left: left,
       top: top,
-      width: width,
-      height: height,
+      width: displayWidth,
+      height: displayHeight,
       child: child,
     );
   }

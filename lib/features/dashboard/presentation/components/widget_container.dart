@@ -13,6 +13,9 @@ class DashboardItemWidget extends StatefulWidget {
   final double cellHeight;
   final double spacing;
   final ValueChanged<int>? onTap;
+  final VoidCallback? onResizeStart;
+  final ValueChanged<Offset>? onResizeUpdate;
+  final ValueChanged<Offset>? onResizeEnd;
 
   const DashboardItemWidget({
     super.key,
@@ -22,6 +25,9 @@ class DashboardItemWidget extends StatefulWidget {
     required this.cellHeight,
     required this.spacing,
     this.onTap,
+    this.onResizeStart,
+    this.onResizeUpdate,
+    this.onResizeEnd,
   });
 
   @override
@@ -72,23 +78,21 @@ class _DashboardItemWidgetState extends State<DashboardItemWidget> {
                 right: 0,
                 bottom: 0,
                 child: GestureDetector(
+                  onPanStart: (_) => widget.onResizeStart?.call(),
                   onPanUpdate: (details) {
                     setState(() {
                       _resizeDx += details.delta.dx;
                       _resizeDy += details.delta.dy;
                     });
+                    widget.onResizeUpdate?.call(Offset(_resizeDx, _resizeDy));
                   },
                   onPanEnd: (_) {
-                    final addedW =
-                        (_resizeDx / (widget.cellWidth + widget.spacing)).round();
-                    final addedH =
-                        (_resizeDy / (widget.cellHeight + widget.spacing)).round();
-                    widget.item.w = (widget.item.w + addedW).clamp(1, 12);
-                    widget.item.h = (widget.item.h + addedH).clamp(1, 10);
+                    final delta = Offset(_resizeDx, _resizeDy);
                     setState(() {
                       _resizeDx = 0;
                       _resizeDy = 0;
                     });
+                    widget.onResizeEnd?.call(delta);
                   },
                   child: Container(
                     width: 32,
