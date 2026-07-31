@@ -66,6 +66,8 @@ class DashboardLayoutRepository {
       'timer' => DashboardWidgetType.timer,
       'habits' => DashboardWidgetType.habits,
       'calendar' => DashboardWidgetType.calendar,
+      'statistics' => DashboardWidgetType.statistics,
+      'projects' => DashboardWidgetType.projects,
       _ => DashboardWidgetType.tasks,
     };
   }

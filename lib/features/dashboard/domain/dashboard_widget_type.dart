@@ -4,7 +4,9 @@ enum DashboardWidgetType {
   tasks,
   timer,
   habits,
-  calendar;
+  calendar,
+  statistics,
+  projects;
 
   String get displayName {
     return switch (this) {
@@ -12,6 +14,8 @@ enum DashboardWidgetType {
       DashboardWidgetType.timer => 'Timer',
       DashboardWidgetType.habits => 'Habits',
       DashboardWidgetType.calendar => 'Calendar',
+      DashboardWidgetType.statistics => 'Stats',
+      DashboardWidgetType.projects => 'Projects',
     };
   }
 
@@ -21,6 +25,8 @@ enum DashboardWidgetType {
       DashboardWidgetType.timer => Icons.timer_rounded,
       DashboardWidgetType.habits => Icons.repeat_rounded,
       DashboardWidgetType.calendar => Icons.calendar_month_rounded,
+      DashboardWidgetType.statistics => Icons.bar_chart_rounded,
+      DashboardWidgetType.projects => Icons.hub_outlined,
     };
   }
 
@@ -30,6 +36,8 @@ enum DashboardWidgetType {
       DashboardWidgetType.timer => 4,
       DashboardWidgetType.habits => 4,
       DashboardWidgetType.calendar => 8,
+      DashboardWidgetType.statistics => 4,
+      DashboardWidgetType.projects => 4,
     };
   }
 
@@ -39,6 +47,8 @@ enum DashboardWidgetType {
       DashboardWidgetType.timer => 2,
       DashboardWidgetType.habits => 3,
       DashboardWidgetType.calendar => 2,
+      DashboardWidgetType.statistics => 2,
+      DashboardWidgetType.projects => 2,
     };
   }
 }

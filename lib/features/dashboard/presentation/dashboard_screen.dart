@@ -20,7 +20,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isEditing = false;
   List<DashboardItem> _items = [];
   StreamSubscription<List<DashboardItem>>? _subscription;
-  final int _totalColumns = 12;
+  final int _totalColumns = 8;
+  final int _totalRows = 4;
   final double _cellHeight = 100.0;
   final double _spacing = 12.0;
 
@@ -67,7 +68,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   int get _maxRows {
-    int maxR = 4;
+    int maxR = _totalRows;
     for (final item in _items) {
       if (item.y + item.h > maxR) maxR = item.y + item.h;
     }
@@ -129,9 +130,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           return Stack(
             children: [
               SingleChildScrollView(
-                physics: _isEditing
-                    ? const NeverScrollableScrollPhysics()
-                    : const BouncingScrollPhysics(),
+                physics:  const BouncingScrollPhysics(),
                 child: SizedBox(
                   height: boardHeight,
                   child: Stack(

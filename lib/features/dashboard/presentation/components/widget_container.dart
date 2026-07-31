@@ -3,6 +3,8 @@ import 'package:life_os/features/dashboard/domain/dashboard_item.dart';
 import 'package:life_os/features/dashboard/domain/dashboard_widget_type.dart';
 import 'package:life_os/features/dashboard/presentation/components/widgets/calendar_widget.dart';
 import 'package:life_os/features/dashboard/presentation/components/widgets/habits_widget.dart';
+import 'package:life_os/features/dashboard/presentation/components/widgets/projects_widget.dart';
+import 'package:life_os/features/dashboard/presentation/components/widgets/statistics_widget.dart';
 import 'package:life_os/features/dashboard/presentation/components/widgets/task_list_widget.dart';
 import 'package:life_os/features/dashboard/presentation/components/widgets/timer_widget.dart';
 
@@ -118,6 +120,8 @@ class _DashboardItemWidgetState extends State<DashboardItemWidget> {
       DashboardWidgetType.timer => const TimerWidget(),
       DashboardWidgetType.habits => const HabitsWidget(),
       DashboardWidgetType.calendar => const CalendarWidget(),
+      DashboardWidgetType.statistics => const StatisticsWidget(),
+      DashboardWidgetType.projects => const ProjectsWidget(),
     };
   }
 }
