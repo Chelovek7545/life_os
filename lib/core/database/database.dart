@@ -59,22 +59,8 @@ class Tags extends Table {
   IntColumn get colorHex => integer()(); // Цвет тега
 }
 
-@DataClassName('DashboardWidgetModel')
-class DashboardWidgets extends Table {
-  TextColumn get id => text()();
-  IntColumn get x => integer()();
-  IntColumn get y => integer()();
-  IntColumn get w => integer()();
-  IntColumn get h => integer()();
-  TextColumn get type => text()();
-  TextColumn get config => text().nullable()();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
 // Часть 2: Определение базы данных
-@DriftDatabase(tables: [Tasks, Projects, Tags, TaskTagEntries, DashboardWidgets])
+@DriftDatabase(tables: [Tasks, Projects, Tags, TaskTagEntries])
 class AppDatabase extends _$AppDatabase {
   // Конструктор
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
@@ -86,7 +72,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
@@ -95,8 +81,8 @@ class AppDatabase extends _$AppDatabase {
         await m.createAll();
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        if (from < 2) {
-          await m.createTable(dashboardWidgets);
+        if (from <= 2) {
+          await m.database.customStatement('DROP TABLE IF EXISTS dashboard_widgets');
         }
       },
     );

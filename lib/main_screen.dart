@@ -29,7 +29,7 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     // Инициализируем экраны единоразово при загрузке виджета
     _pages = [
-      const DashboardScreen(),
+      DashboardScreen(viewModel: widget.diContainer.dashboardViewModel),
       TasksScreen(
         viewModel: widget.diContainer.tasksViewModel,
         onFormVisibilityChanged: (visible) {

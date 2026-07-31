@@ -1,26 +1,25 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:life_os/core/di.dart';
 import 'package:life_os/features/dashboard/domain/dashboard_item.dart';
-import 'package:life_os/features/dashboard/domain/dashboard_widget_type.dart';
 import 'package:life_os/features/dashboard/presentation/components/grid_background.dart';
 import 'package:life_os/features/dashboard/presentation/components/widget_container.dart';
 import 'package:life_os/features/dashboard/presentation/components/widget_picker_panel.dart';
-import 'package:life_os/features/dashboard/data/dashboard_widgets_repository.dart';
+import 'package:life_os/features/dashboard/presentation/dashboard_view_model.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final DashboardViewModel viewModel;
+  const DashboardScreen({super.key, required this.viewModel});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  final DashboardWidgetsRepository _repo =
-      DependencyContainer().dashboardWidgetsRepository;
-
   bool _isEditing = false;
   List<DashboardItem> _items = [];
+  StreamSubscription<List<DashboardItem>>? _subscription;
   final int _totalColumns = 12;
   final double _cellHeight = 100.0;
   final double _spacing = 12.0;
@@ -44,31 +43,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _items = widget.viewModel.items;
+    _subscription = widget.viewModel.itemsStream.listen((items) {
+      if (mounted) setState(() => _items = items);
+    });
   }
 
-  Future<void> _load() async {
-    final items = await _repo.loadWidgets();
-    if (items.isEmpty) {
-      await _addDefaults();
-    } else {
-      setState(() => _items = items);
-    }
-  }
-
-  Future<void> _addDefaults() async {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    _items = [
-      DashboardItem(id: 'dft_${now}_0', x: 0, y: 0, w: 8, h: 3, type: DashboardWidgetType.tasks),
-      DashboardItem(id: 'dft_${now}_1', x: 8, y: 0, w: 4, h: 2, type: DashboardWidgetType.timer),
-      DashboardItem(id: 'dft_${now}_2', x: 8, y: 2, w: 4, h: 3, type: DashboardWidgetType.habits),
-      DashboardItem(id: 'dft_${now}_3', x: 0, y: 3, w: 8, h: 2, type: DashboardWidgetType.calendar),
-    ];
-    await _repo.saveAll(_items);
-  }
-
-  Future<void> _saveAll() async {
-    await _repo.saveAll(_items);
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
   }
 
   bool _hasCollision(int x, int y, int w, int h, String ignoreId) {
@@ -96,7 +80,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _exitEditMode() {
     _isEditing = false;
-    _saveAll();
+    widget.viewModel.commitLayout();
     setState(() {});
   }
 
@@ -106,17 +90,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => WidgetPickerPanel(
         onWidgetSelected: (type) {
-          final maxY = _items.isEmpty ? 0 : _items.map((i) => i.y + i.h).reduce((a, b) => a > b ? a : b);
-          final item = DashboardItem(
-            id: '',
-            x: 0,
-            y: maxY,
-            w: type.defaultW,
-            h: type.defaultH,
-            type: type,
-          );
-          _repo.addWidget(item);
-          setState(() => _items.add(item));
+          widget.viewModel.addWidget(type);
         },
       ),
     );
@@ -237,7 +211,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       cellHeight: _cellHeight,
       spacing: _spacing,
       onTap: (_) {
-        setState(() => _items.removeWhere((i) => i.id == item.id));
+        widget.viewModel.removeWidget(item.id);
       },
       onResizeStart: () {
         setState(() {
@@ -255,9 +229,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final stepY = _cellHeight + _spacing;
         final addedW = (delta.dx / stepX).round();
         final addedH = (delta.dy / stepY).round();
+        widget.viewModel.resizeWidget(
+          item.id,
+          (_resizeStartW! + addedW).clamp(1, _totalColumns),
+          (_resizeStartH! + addedH).clamp(1, 50),
+        );
         setState(() {
-          item.w = (_resizeStartW! + addedW).clamp(1, _totalColumns);
-          item.h = (_resizeStartH! + addedH).clamp(1, 50);
           _resizingItemId = null;
           _resizeOffset = Offset.zero;
           _resizeStartW = null;
@@ -314,6 +291,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     return AnimatedPositioned(
+      key: ValueKey(item.id),
       duration: isThisDragging || isThisResizing
           ? Duration.zero
           : const Duration(milliseconds: 200),
@@ -329,15 +307,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _endDrag() {
     if (_dragPointerId == null) return;
     final draggingId = _draggingItemId;
+    final ghostX = _ghostX;
+    final ghostY = _ghostY;
     setState(() {
-      if (draggingId != null && _ghostX != null && _ghostY != null) {
-        for (final item in _items) {
-          if (item.id == draggingId) {
-            item.x = _ghostX!;
-            item.y = _ghostY!;
-            break;
-          }
-        }
+      if (draggingId != null && ghostX != null && ghostY != null) {
+        widget.viewModel.moveWidget(draggingId, ghostX, ghostY);
       }
       _dragPointerId = null;
       _draggingItemId = null;
