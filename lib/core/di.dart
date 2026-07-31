@@ -1,6 +1,7 @@
 // core/di/dependency_container.dart
 import 'package:life_os/core/database/database.dart';
-import 'package:life_os/features/dashboard/presentation/dashboard_view_model.dart';
+import 'package:life_os/features/dashboard/data/dashboard_widgets_dao.dart';
+import 'package:life_os/features/dashboard/data/dashboard_widgets_repository.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
 import 'package:life_os/features/projects/presentation/projects_view_model.dart';
@@ -25,10 +26,12 @@ class DependencyContainer {
   late final ProjectsRepository projectsRepository;
   // late final AiCoachRepository aiRepository;
 
+  late final DashboardWidgetsDao dashboardWidgetsDao;
+  late final DashboardWidgetsRepository dashboardWidgetsRepository;
+
   late final TasksViewModel tasksViewModel;
   // late final MoodViewModel moodViewModel;
   late final ProjectsViewModel projectViewModel;
-  late final DashboardViewModel dashboardViewModel;
   // late final AiCoachViewModel aiCoachViewModel;
   late final GetTasksWithProjectsUseCase taskWithPrjct;
 
@@ -50,18 +53,15 @@ class DependencyContainer {
     //   apiClient,
     // );
 
+    dashboardWidgetsDao = DashboardWidgetsDao(database);
+    dashboardWidgetsRepository = DashboardWidgetsRepository(dashboardWidgetsDao);
+
     taskWithPrjct = GetTasksWithProjectsUseCase(
       tasksRepository,
       projectsRepository,
     );
 
     // aiRepository = AiCoachRepository(apiClient);
-    dashboardViewModel = DashboardViewModel(
-      tasksRepository,
-      projectsRepository,
-    );
-    dashboardViewModel.initialize();
-
     tasksViewModel = TasksViewModel(
       tasksRepository,
       taskWithPrjct,
@@ -80,7 +80,6 @@ class DependencyContainer {
 
   void dispose() {
     tasksViewModel.dispose();
-    dashboardViewModel.dispose();
     projectViewModel.dispose();
     database.close();
   }

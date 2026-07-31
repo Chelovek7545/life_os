@@ -25,7 +25,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final double _spacing = 12.0;
 
   double _cellWidth = 0;
-  final GlobalKey _gridKey = GlobalKey();
+  int? _dragPointerId;
+  String? _draggingItemId;
+  double? _dragStartX;
+  double? _dragStartY;
+  Offset? _dragStartGlobal;
 
   @override
   void initState() {
@@ -147,7 +151,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: SizedBox(
                   height: boardHeight,
                   child: Stack(
-                    key: _gridKey,
                     children: [
                       if (_isEditing)
                         CustomPaint(
@@ -196,74 +199,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
 
     if (_isEditing) {
-      child = Draggable<DashboardItem>(
-        data: item,
-        feedback: Material(
-          color: Colors.transparent,
-          child: Opacity(
-            opacity: 0.7,
-            child: SizedBox(
-              width: width,
-              height: height,
-              child: DashboardItemWidget(
-                item: item,
-                isEditing: true,
-                cellWidth: _cellWidth,
-                cellHeight: _cellHeight,
-                spacing: _spacing,
-              ),
-            ),
-          ),
-        ),
-        childWhenDragging: Opacity(
-          opacity: 0.2,
-          child: DashboardItemWidget(
-            item: item,
-            isEditing: true,
-            cellWidth: _cellWidth,
-            cellHeight: _cellHeight,
-            spacing: _spacing,
-          ),
-        ),
-        dragAnchorStrategy: (_, _, position) {
-          final gridBox =
-              _gridKey.currentContext?.findRenderObject() as RenderBox?;
-          final stepX = _cellWidth + _spacing;
-          final stepY = _cellHeight + _spacing;
-          final anchor = Offset(
-            _spacing + item.x * stepX,
-            _spacing + item.y * stepY,
-          );
-          if (gridBox == null) return position;
-          return position - gridBox.localToGlobal(anchor);
+      child = Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: (event) {
+          final inResizeZone = event.localPosition.dx >= width - 32 &&
+              event.localPosition.dy >= height - 32;
+          final inDeleteZone = event.localPosition.dx >= width - 32 &&
+              event.localPosition.dy <= 32;
+          if (inResizeZone || inDeleteZone) return;
+          _dragPointerId = event.pointer;
+          _draggingItemId = item.id;
+          _dragStartX = item.x.toDouble();
+          _dragStartY = item.y.toDouble();
+          _dragStartGlobal = event.position;
         },
-        onDragEnd: (details) {
-          final gridBox =
-              _gridKey.currentContext?.findRenderObject() as RenderBox?;
-          final gridTopLeft =
-              gridBox?.localToGlobal(Offset.zero) ?? Offset.zero;
+        onPointerMove: (event) {
+          if (event.pointer != _dragPointerId) return;
           final stepX = _cellWidth + _spacing;
           final stepY = _cellHeight + _spacing;
-          final delta = details.offset -
-              gridTopLeft -
-              Offset(_spacing + item.x * stepX, _spacing + item.y * stepY);
-          final newX = (item.x + (delta.dx / stepX).round())
+          final delta = event.position - _dragStartGlobal!;
+          final newX = (_dragStartX! + delta.dx / stepX)
+              .round()
               .clamp(0, _totalColumns - item.w);
-          final newY =
-              (item.y + (delta.dy / stepY).round()).clamp(0, 50);
-          if (!_hasCollision(newX, newY, item.w, item.h, item.id)) {
-            setState(() {
-              item.x = newX;
-              item.y = newY;
-            });
-          }
+          final newY = (_dragStartY! + delta.dy / stepY).round().clamp(0, 50);
+          if (newX == item.x && newY == item.y) return;
+          if (_hasCollision(newX, newY, item.w, item.h, item.id)) return;
+          setState(() {
+            item.x = newX;
+            item.y = newY;
+          });
         },
+        onPointerUp: (_) => _endDrag(),
+        onPointerCancel: (_) => _endDrag(),
         child: child,
       );
     }
 
     return AnimatedPositioned(
-      duration: const Duration(milliseconds: 200),
+      duration: _draggingItemId == item.id
+          ? Duration.zero
+          : const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
       left: left,
       top: top,
@@ -271,6 +246,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       height: height,
       child: child,
     );
+  }
+
+  void _endDrag() {
+    _dragPointerId = null;
+    _draggingItemId = null;
+    _dragStartX = null;
+    _dragStartY = null;
+    _dragStartGlobal = null;
   }
 }
 
