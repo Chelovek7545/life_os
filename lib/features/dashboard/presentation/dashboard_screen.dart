@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:life_os/core/di.dart';
 import 'package:life_os/features/dashboard/domain/dashboard_item.dart';
 import 'package:life_os/features/dashboard/domain/dashboard_widget_type.dart';
@@ -27,9 +28,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _cellWidth = 0;
   int? _dragPointerId;
   String? _draggingItemId;
-  double? _dragStartX;
-  double? _dragStartY;
+  double? _dragStartCellX;
+  double? _dragStartCellY;
   Offset? _dragStartGlobal;
+  Offset _dragOffset = Offset.zero;
+  int? _ghostX;
+  int? _ghostY;
+  double? _ghostW;
+  double? _ghostH;
 
   @override
   void initState() {
@@ -163,6 +169,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           size: Size.infinite,
                         ),
+                      if (_isEditing &&
+                          _draggingItemId != null &&
+                          _ghostX != null &&
+                          _ghostY != null &&
+                          _ghostW != null &&
+                          _ghostH != null)
+                        Positioned(
+                          left: _spacing + _ghostX! * (_cellWidth + _spacing),
+                          top: _spacing + _ghostY! * (_cellHeight + _spacing),
+                          width: _ghostW!,
+                          height: _ghostH!,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.blueAccent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Colors.blueAccent.withValues(alpha: 0.6),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
                       ..._items.map((item) => _buildItemWidget(item)),
                     ],
                   ),
@@ -182,10 +210,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildItemWidget(DashboardItem item) {
-    final left = _spacing + item.x * (_cellWidth + _spacing);
-    final top = _spacing + item.y * (_cellHeight + _spacing);
+    final stepX = _cellWidth + _spacing;
+    final stepY = _cellHeight + _spacing;
+    final baseLeft = _spacing + item.x * stepX;
+    final baseTop = _spacing + item.y * stepY;
     final width = item.w * _cellWidth + (item.w - 1) * _spacing;
     final height = item.h * _cellHeight + (item.h - 1) * _spacing;
+    final isThisDragging = _draggingItemId == item.id;
+
+    final left = isThisDragging ? baseLeft + _dragOffset.dx : baseLeft;
+    final top = isThisDragging ? baseTop + _dragOffset.dy : baseTop;
 
     Widget child = DashboardItemWidget(
       item: item,
@@ -209,24 +243,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
           if (inResizeZone || inDeleteZone) return;
           _dragPointerId = event.pointer;
           _draggingItemId = item.id;
-          _dragStartX = item.x.toDouble();
-          _dragStartY = item.y.toDouble();
+          _dragStartCellX = item.x.toDouble();
+          _dragStartCellY = item.y.toDouble();
           _dragStartGlobal = event.position;
+          _dragOffset = Offset.zero;
+          _ghostX = item.x;
+          _ghostY = item.y;
+          _ghostW = width;
+          _ghostH = height;
+          setState(() {});
         },
         onPointerMove: (event) {
           if (event.pointer != _dragPointerId) return;
-          final stepX = _cellWidth + _spacing;
-          final stepY = _cellHeight + _spacing;
-          final delta = event.position - _dragStartGlobal!;
-          final newX = (_dragStartX! + delta.dx / stepX)
+          final offset = event.position - _dragStartGlobal!;
+          final calculatedX = (_dragStartCellX! + offset.dx / stepX)
               .round()
               .clamp(0, _totalColumns - item.w);
-          final newY = (_dragStartY! + delta.dy / stepY).round().clamp(0, 50);
-          if (newX == item.x && newY == item.y) return;
-          if (_hasCollision(newX, newY, item.w, item.h, item.id)) return;
+          final calculatedY =
+              (_dragStartCellY! + offset.dy / stepY).round().clamp(0, 50);
+          final moved = calculatedX != _ghostX || calculatedY != _ghostY;
           setState(() {
-            item.x = newX;
-            item.y = newY;
+            _dragOffset = offset;
+            if (moved &&
+                !_hasCollision(
+                    calculatedX, calculatedY, item.w, item.h, item.id)) {
+              _ghostX = calculatedX;
+              _ghostY = calculatedY;
+              HapticFeedback.selectionClick();
+            }
           });
         },
         onPointerUp: (_) => _endDrag(),
@@ -236,7 +280,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     return AnimatedPositioned(
-      duration: _draggingItemId == item.id
+      duration: isThisDragging
           ? Duration.zero
           : const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
@@ -249,11 +293,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _endDrag() {
-    _dragPointerId = null;
-    _draggingItemId = null;
-    _dragStartX = null;
-    _dragStartY = null;
-    _dragStartGlobal = null;
+    if (_dragPointerId == null) return;
+    final draggingId = _draggingItemId;
+    setState(() {
+      if (draggingId != null && _ghostX != null && _ghostY != null) {
+        for (final item in _items) {
+          if (item.id == draggingId) {
+            item.x = _ghostX!;
+            item.y = _ghostY!;
+            break;
+          }
+        }
+      }
+      _dragPointerId = null;
+      _draggingItemId = null;
+      _dragStartCellX = null;
+      _dragStartCellY = null;
+      _dragStartGlobal = null;
+      _dragOffset = Offset.zero;
+      _ghostX = null;
+      _ghostY = null;
+      _ghostW = null;
+      _ghostH = null;
+    });
   }
 }
 
