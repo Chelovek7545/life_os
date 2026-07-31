@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/app.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/core/di.dart';
-import 'package:life_os/features/dashboard/presentation/dashboard_view_model.dart';
+import 'package:life_os/features/dashboard/data/dashboard_widgets_dao.dart';
+import 'package:life_os/features/dashboard/data/dashboard_widgets_repository.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
 import 'package:life_os/features/projects/presentation/projects_view_model.dart';
@@ -18,18 +19,21 @@ void main() {
       final db = AppDatabase(NativeDatabase.memory());
       final tasksDao = TasksDao(db);
       final projectsDao = ProjectsDao(db);
+      final dashboardWidgetsDao = DashboardWidgetsDao(db);
       final tasksRepo = TasksRepository(tasksDao);
       final projectsRepo = ProjectsRepository(projectsDao);
+      final dashboardWidgetsRepo = DashboardWidgetsRepository(dashboardWidgetsDao);
       final useCase = GetTasksWithProjectsUseCase(tasksRepo, projectsRepo);
 
       final dc = DependencyContainer();
       dc.database = db;
       dc.tasksDAO = tasksDao;
       dc.projectsDao = projectsDao;
+      dc.dashboardWidgetsDao = dashboardWidgetsDao;
       dc.tasksRepository = tasksRepo;
       dc.projectsRepository = projectsRepo;
+      dc.dashboardWidgetsRepository = dashboardWidgetsRepo;
       dc.taskWithPrjct = useCase;
-      dc.dashboardViewModel = DashboardViewModel(tasksRepo, projectsRepo);
       dc.tasksViewModel = TasksViewModel(tasksRepo, useCase, projectsRepo);
       dc.projectViewModel = ProjectsViewModel(
         repository: projectsRepo,
