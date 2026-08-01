@@ -4,7 +4,7 @@ import 'package:life_os/core/di.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
-import 'package:life_os/features/dashboard/presentation/dashboard_screen.dart';
+import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'package:life_os/features/projects/presentation/projects_screen.dart';
 import 'package:life_os/features/resources/presentation/resources_screen.dart';
 import 'package:life_os/features/tasks/presentation/tasks_screen.dart';
@@ -29,7 +29,7 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     // Инициализируем экраны единоразово при загрузке виджета
     _pages = [
-      DashboardScreen(viewModel: widget.diContainer.dashboardViewModel),
+      LifeGraphScreen(viewModel: widget.diContainer.lifeGraphViewModel),
       TasksScreen(
         viewModel: widget.diContainer.tasksViewModel,
         onFormVisibilityChanged: (visible) {

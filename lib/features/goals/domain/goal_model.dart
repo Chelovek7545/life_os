@@ -1,75 +1,66 @@
-// models/project_model.dart
-import 'package:life_os/core/utils/wrapped.dart';
+// models/goal_model.dart
 import 'package:uuid/uuid.dart';
 
-class Project {
+class Goal {
   final String id;
   final String name;
   final String description;
   final String color;
+  final String sphereId;
+  final DateTime? dueDate;
   final DateTime createdAt;
   final DateTime updatedAt;
-  final DateTime? dueDate;
-  final bool isArchived;
-  final String? goalId;
 
-  Project({
+  Goal({
     required this.id,
     required this.name,
     required this.description,
     required this.color,
+    required this.sphereId,
+    this.dueDate,
     required this.createdAt,
     required this.updatedAt,
-
-    this.dueDate,
-
-    this.goalId,
-    this.isArchived = false,
   });
 
-  // Для создания нового проекта
-  factory Project.create({
+  factory Goal.create({
     required String name,
+    required String sphereId,
     String description = '',
-    String color = '#4A90D9',
-    String? goalId,
+    String color = '#E8A838',
+    DateTime? dueDate,
   }) {
     final now = DateTime.now();
-    return Project(
-      id: Uuid().v4(),
+    return Goal(
+      id: const Uuid().v4(),
       name: name,
       description: description,
       color: color,
+      sphereId: sphereId,
+      dueDate: dueDate,
       createdAt: now,
       updatedAt: now,
-      isArchived: false,
-      goalId: goalId,
     );
   }
 
-  // Копирование с изменениями
-  Project copyWith({
+  Goal copyWith({
     String? id,
     String? name,
     String? description,
     String? color,
+    String? sphereId,
+    DateTime? dueDate,
     DateTime? createdAt,
     DateTime? updatedAt,
-    Wrapped<DateTime?>? dueDate,
-    Wrapped<String?>? goalId,
-    bool? isArchived,
   }) {
-    return Project(
+    return Goal(
       id: id ?? this.id,
       name: name ?? this.name,
       description: description ?? this.description,
       color: color ?? this.color,
+      sphereId: sphereId ?? this.sphereId,
+      dueDate: dueDate ?? this.dueDate,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
-      dueDate: dueDate != null ? dueDate.value : this.dueDate,
-
-      isArchived: isArchived ?? this.isArchived,
-      goalId: goalId != null ? goalId.value : this.goalId,
     );
   }
 }

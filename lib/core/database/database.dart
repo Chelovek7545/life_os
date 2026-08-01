@@ -52,6 +52,34 @@ class Projects extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('GoalModel')
+class Goals extends Table {
+  TextColumn get id => text()(); // UUID
+  TextColumn get name => text()(); // используем name вместо title
+  TextColumn get description => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  
+  TextColumn get color => text()(); // Hex color, например "#FF5733"
+  DateTimeColumn get dueDate => dateTime().nullable()();
+  TextColumn get sphereId => text().nullable()(); // FK к Spheres
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('SphereModel')
+class Spheres extends Table {
+  TextColumn get id => text()(); // UUID
+  TextColumn get name => text()();
+  TextColumn get color => text()(); // Hex color, например "#FF5733"
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DataClassName('TagModel')
 class Tags extends Table {
   IntColumn get id => integer().autoIncrement()();
@@ -60,7 +88,7 @@ class Tags extends Table {
 }
 
 // Часть 2: Определение базы данных
-@DriftDatabase(tables: [Tasks, Projects, Tags, TaskTagEntries])
+@DriftDatabase(tables: [Tasks, Projects, Tags, TaskTagEntries, Goals, Spheres])
 class AppDatabase extends _$AppDatabase {
   // Конструктор
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
@@ -72,7 +100,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration {
@@ -83,6 +111,38 @@ class AppDatabase extends _$AppDatabase {
       onUpgrade: (Migrator m, int from, int to) async {
         if (from <= 2) {
           await m.database.customStatement('DROP TABLE IF EXISTS dashboard_widgets');
+        }
+        if (from <= 4) {
+          // Миграция v4 была сломана: зависела от несуществующей таблицы `spaces`
+          // (в v3 её не было) и создавала таблицы с camelCase-колонками, тогда
+          // как drift ожидает snake_case. Здесь делаем всё идемпотентно:
+          // чистим мусор от сломанной миграции и создаём таблицы корректно.
+          await m.database.customStatement('DROP TABLE IF EXISTS spheres_new');
+          await m.database.customStatement('DROP TABLE IF EXISTS goals_new');
+          await m.database.customStatement('DROP TABLE IF EXISTS spaces');
+          await m.database.customStatement('''
+            CREATE TABLE IF NOT EXISTS "spheres" (
+              "id" TEXT NOT NULL,
+              "name" TEXT NOT NULL,
+              "color" TEXT NOT NULL,
+              "created_at" TEXT NOT NULL,
+              "updated_at" TEXT NOT NULL,
+              PRIMARY KEY ("id")
+            )
+          ''');
+          await m.database.customStatement('''
+            CREATE TABLE IF NOT EXISTS "goals" (
+              "id" TEXT NOT NULL,
+              "name" TEXT NOT NULL,
+              "description" TEXT NOT NULL,
+              "created_at" TEXT NOT NULL,
+              "updated_at" TEXT NOT NULL,
+              "color" TEXT NOT NULL,
+              "due_date" TEXT NULL,
+              "sphere_id" TEXT NULL,
+              PRIMARY KEY ("id")
+            )
+          ''');
         }
       },
     );
