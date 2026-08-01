@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/presentation/components/graph_edges_painter.dart';
-import 'package:life_os/features/lifegraph/presentation/components/graph_node_widget.dart';
+import 'package:life_os/features/lifegraph/presentation/components/graph_grid_painter.dart';
+import 'package:life_os/features/lifegraph/presentation/components/graph_hud_button.dart';
+import 'package:life_os/features/lifegraph/presentation/components/graph_node_card.dart';
+import 'package:life_os/features/lifegraph/presentation/components/graph_node_sizes.dart';
 import 'package:life_os/features/lifegraph/presentation/components/node_edit_dialog.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
@@ -17,24 +20,220 @@ class LifeGraphScreen extends StatefulWidget {
   State<LifeGraphScreen> createState() => _LifeGraphScreenState();
 }
 
-class _LifeGraphScreenState extends State<LifeGraphScreen> {
+class _LifeGraphScreenState extends State<LifeGraphScreen>
+    with TickerProviderStateMixin {
   late final TransformationController _transformationController;
+  final GlobalKey _viewerKey = GlobalKey();
+
+  late final AnimationController _revealCtrl;
+  late final CurvedAnimation _revealCurved;
+  Map<String, double> _reveals = {};
+  final Set<String> _seenIds = {};
+
+  late final AnimationController _flyCtrl;
+  Animation<Matrix4>? _flyAnim;
+
   String? _centeredSphereId;
   String? _dragNodeId;
-  Offset _dragDelta = Offset.zero;
-  Offset _origin = Offset.zero;
+  final ValueNotifier<Offset> _dragDelta = ValueNotifier(Offset.zero);
+  final Map<String, Offset> _dragTargets = {};
 
   @override
   void initState() {
     super.initState();
     _transformationController = TransformationController();
+    _revealCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 750));
+    _revealCurved = CurvedAnimation(parent: _revealCtrl, curve: Curves.easeOutCubic);
+    _revealCtrl.addListener(_onRevealTick);
+    _flyCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
   }
 
   @override
   void dispose() {
+    _revealCtrl.dispose();
+    _flyCtrl.dispose();
+    _dragDelta.dispose();
     _transformationController.dispose();
     super.dispose();
   }
+
+  // ── Камера ─────────────────────────────────────────────────────────────────
+
+  RenderBox? get _viewerBox =>
+      _viewerKey.currentContext?.findRenderObject() as RenderBox?;
+
+  void _flyTo(Matrix4 target) {
+    _flyAnim?.removeListener(_applyFly);
+    _flyAnim = Matrix4Tween(begin: _transformationController.value.clone(), end: target).animate(
+      CurvedAnimation(parent: _flyCtrl, curve: Curves.easeInOutCubic),
+    )..addListener(_applyFly);
+    _flyCtrl.forward(from: 0);
+  }
+
+  void _applyFly() => _transformationController.value = _flyAnim!.value;
+
+  void _fitView({bool animate = true}) {
+    final nodes = widget.viewModel.graph.nodes;
+    final box = _viewerBox;
+    if (nodes.isEmpty || box == null) return;
+
+    var rect = Rect.fromLTWH(
+      nodes.first.x,
+      nodes.first.y,
+      graphNodeWidth(nodes.first.type),
+      graphNodeHeight(nodes.first.type),
+    );
+    for (final n in nodes) {
+      rect = rect.expandToInclude(
+        Rect.fromLTWH(n.x, n.y, graphNodeWidth(n.type), graphNodeHeight(n.type)),
+      );
+    }
+    rect = rect.inflate(150);
+
+    final vp = box.size;
+    final s = math.min(vp.width / rect.width, vp.height / rect.height).clamp(0.25, 1.2);
+    final m = Matrix4.translationValues(
+      vp.width / 2 - s * rect.center.dx,
+      vp.height / 2 - s * rect.center.dy,
+      0,
+    )..multiply(Matrix4.diagonal3Values(s, s, 1));
+    animate ? _flyTo(m) : _transformationController.value = m;
+  }
+
+  void _zoomBy(double f) {
+    final box = _viewerBox;
+    if (box == null) return;
+    final s0 = _transformationController.value.getMaxScaleOnAxis();
+    final s1 = (s0 * f).clamp(0.25, 3.0);
+    f = s1 / s0;
+
+    final c = _transformationController.toScene(box.size.center(Offset.zero));
+    final around = Matrix4.translationValues(c.dx, c.dy, 0)
+      ..multiply(Matrix4.diagonal3Values(f, f, 1))
+      ..multiply(Matrix4.translationValues(-c.dx, -c.dy, 0));
+    _flyTo(_transformationController.value.clone()..multiply(around));
+  }
+
+  // ── Reveal-анимация рёбер ──────────────────────────────────────────────────
+
+  void _syncReveals(GraphData graph) {
+    final currentIds = <String>{for (final n in graph.nodes) n.id};
+    var needAnim = false;
+    for (final n in graph.nodes) {
+      if (n.parentId != null && !_seenIds.contains(n.id)) {
+        _reveals['${n.parentId}>${n.id}'] = 0;
+        needAnim = true;
+      }
+    }
+    _seenIds
+      ..retainAll(currentIds)
+      ..addAll(currentIds);
+    if (needAnim) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _revealCtrl.forward(from: 0);
+      });
+    }
+  }
+
+  void _onRevealTick() {
+    final v = _revealCurved.value;
+    var dirty = false;
+    final copy = Map<String, double>.of(_reveals);
+    for (final k in copy.keys) {
+      if (copy[k]! < 1) {
+        copy[k] = v;
+        dirty = true;
+      }
+    }
+    if (dirty) {
+      _reveals = copy;
+      setState(() {});
+    }
+  }
+
+  Map<String, int> _depthOf(List<GraphNode> nodes) {
+    final depth = <String, int>{};
+    for (final n in nodes) {
+      if (n.parentId == null) depth[n.id] = 0;
+    }
+    var grew = true;
+    while (grew) {
+      grew = false;
+      for (final n in nodes) {
+        final p = n.parentId;
+        if (p != null && depth.containsKey(p) && !depth.containsKey(n.id)) {
+          depth[n.id] = depth[p]! + 1;
+          grew = true;
+        }
+      }
+    }
+    return depth;
+  }
+
+  // ── Drag нод ───────────────────────────────────────────────────────────────
+
+  void _handleDragStart(GraphNode node) {
+    _dragTargets.remove(node.id);
+    _dragDelta.value = Offset.zero;
+    setState(() {
+      _dragNodeId = node.id;
+    });
+  }
+
+  void _handlePanUpdate(GraphNode node, double dx, double dy) {
+    if (_dragNodeId == null) return;
+    // Клампим визуальную позицию ноды внутрь мирового канваса, чтобы она
+    // не уходила за границы и не становилась «мёртвой» для жестов.
+    final maxX = graphWorldSize - graphNodeWidth(node.type) - graphWorldMargin;
+    final maxY = graphWorldSize - graphNodeHeight(node.type) - graphWorldMargin;
+    final base = Offset(node.x, node.y);
+    final current = base + _dragDelta.value;
+    final target = Offset(
+      (current.dx + dx).clamp(graphWorldMargin, maxX),
+      (current.dy + dy).clamp(graphWorldMargin, maxY),
+    );
+    _dragDelta.value = target - base;
+  }
+
+  void _handleDragEnd(GraphNode node) {
+    final delta = _dragDelta.value;
+    if (delta == Offset.zero) {
+      _dragTargets.remove(node.id);
+      setState(() {
+        _dragNodeId = null;
+      });
+      return;
+    }
+    // Не сбрасываем overlay: нода остаётся на месте сброса до тех пор,
+    // пока граф не подтвердит сохранённую позицию (см. _resolvePendingDrag).
+    final target = Offset(node.x + delta.dx, node.y + delta.dy);
+    _dragTargets[node.id] = target;
+    widget.viewModel.moveNode(node.id, target.dx, target.dy);
+  }
+
+  /// Снимает overlay перетаскивания, когда граф подтвердил сохранённую позицию.
+  /// Вызывается в билде, поэтому нода рендерится сразу по данным графа,
+  /// без промежуточного кадра со старой позицией.
+  void _resolvePendingDrag(GraphData graph) {
+    final id = _dragNodeId;
+    if (id == null) return;
+    final pending = _dragTargets[id];
+    if (pending == null) return;
+    for (final n in graph.nodes) {
+      if (n.id == id) {
+        if ((n.x - pending.dx).abs() < 0.5 && (n.y - pending.dy).abs() < 0.5) {
+          _dragTargets.remove(id);
+          _dragNodeId = null;
+        }
+        return;
+      }
+    }
+    // Нода исчезла из графа — снимаем overlay.
+    _dragTargets.remove(id);
+    _dragNodeId = null;
+  }
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -88,30 +287,11 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
             builder: (context, constraints) {
               final sphereId = widget.viewModel.currentSphereId;
 
-              // Ноды с учётом живого перетаскивания (для канваса и рёбер)
-              final displayNodes = graph.nodes.map((node) {
-                final drag = node.id == _dragNodeId ? _dragDelta : Offset.zero;
-                if (drag == Offset.zero) return node;
-                return node.copyWith(x: node.x + drag.dx, y: node.y + drag.dy);
-              }).toList();
-
-              // Начало координат канваса: уезжает влево/вверх, когда ноды выходят
-              // за 0, чтобы вся область всегда попадала в контейнер и ноды были
-              // кликабельны.
-              var minX = 0.0;
-              var minY = 0.0;
-              for (final node in graph.nodes) {
-                if (node.x < minX) minX = node.x;
-                if (node.y < minY) minY = node.y;
-              }
-              final newOrigin = Offset(
-                minX < 0 ? minX - 400 : 0.0,
-                minY < 0 ? minY - 400 : 0.0,
-              );
-
-              if (graph.nodes.isNotEmpty && sphereId != null && _centeredSphereId != sphereId) {
+              final isNewSphere = sphereId != null && _centeredSphereId != sphereId;
+              if (isNewSphere) {
                 _centeredSphereId = sphereId;
-                _origin = newOrigin;
+                _reveals.clear();
+                _seenIds.clear();
                 WidgetsBinding.instance.addPostFrameCallback((_) {
                   if (!mounted) return;
                   var root = graph.nodes.first;
@@ -121,72 +301,188 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                       break;
                     }
                   }
-                  final tx = constraints.maxWidth / 2 - (root.x - _origin.dx);
-                  final ty = constraints.maxHeight / 2 - (root.y - _origin.dy);
+                  final tx = constraints.maxWidth / 2 - root.x;
+                  final ty = constraints.maxHeight / 2 - root.y;
                   _transformationController.value = Matrix4.translationValues(tx, ty, 0);
                 });
-              } else if (newOrigin != _origin && _dragNodeId == null) {
-                // Канвас расширился влево/вверх — компенсируем сдвиг
-                // трансформацией, чтобы картинка не прыгала.
-                final delta = newOrigin - _origin;
-                _origin = newOrigin;
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  _transformationController.value = _transformationController.value.clone()
-                    ..multiply(Matrix4.translationValues(delta.dx, delta.dy, 0));
-                });
               }
 
-              // Размер канваса: включает крайние ноды (с drag) и запас 400
-              var maxX = 0.0;
-              var maxY = 0.0;
-              for (final node in displayNodes) {
-                if (node.x > maxX) maxX = node.x;
-                if (node.y > maxY) maxY = node.y;
-              }
-              final canvasW = math.max(800.0, (maxX + 400) - _origin.dx);
-              final canvasH = math.max(800.0, (maxY + 400) - _origin.dy);
+              _resolvePendingDrag(graph);
+              _syncReveals(graph);
+              final depthMap = _depthOf(graph.nodes);
+              final stagger = isNewSphere;
 
-              return InteractiveViewer(
-                transformationController: _transformationController,
-                constrained: false,
-                boundaryMargin: const EdgeInsets.all(double.infinity),
-                minScale: 0.3,
-                maxScale: 3.0,
-                child: Container(
-                  color: Colors.amber,
-                  child: Stack(
-                    alignment: AlignmentGeometry.center,
-                    clipBehavior: Clip.none,
-                    children: [
-                      // Рёбра
-                      CustomPaint(
-                        painter: GraphEdgesPainter(
-                          nodes: displayNodes
-                              .map((n) => n.copyWith(
-                                    x: n.x - _origin.dx,
-                                    y: n.y - _origin.dy,
-                                  ))
-                              .toList(),
-                          edges: graph.edges,
-                          transformation: _transformationController.value,
+              final count = graph.nodes.length;
+              final linkCount = graph.edges.length;
+
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: InteractiveViewer(
+                      key: _viewerKey,
+                      transformationController: _transformationController,
+                      constrained: false,
+                      boundaryMargin: const EdgeInsets.all(double.infinity),
+                      minScale: 0.25,
+                      maxScale: 3.0,
+                      child: SizedBox(
+                        width: graphWorldSize,
+                        height: graphWorldSize,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            // Точечная сетка + двойной тап — новая сфера.
+                            Positioned.fill(
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onDoubleTap: _showCreateSphereDialog,
+                                child: const CustomPaint(painter: GraphGridPainter()),
+                              ),
+                            ),
+                            // Рёбра.
+                            Positioned.fill(
+                              child: IgnorePointer(
+                                child: ValueListenableBuilder<Offset>(
+                                  valueListenable: _dragDelta,
+                                  builder: (context, delta, _) {
+                                    final edgeNodes = graph.nodes
+                                        .map((n) => n.copyWith(
+                                              x: n.x + (n.id == _dragNodeId ? delta.dx : 0),
+                                              y: n.y + (n.id == _dragNodeId ? delta.dy : 0),
+                                            ))
+                                        .toList();
+                                    return CustomPaint(
+                                      painter: GraphEdgesPainter(
+                                        nodes: edgeNodes,
+                                        edges: graph.edges,
+                                        reveals: _reveals,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                            // Ноды.
+                            for (final node in graph.nodes)
+                              Positioned(
+                                key: ValueKey(node.id),
+                                left: node.x,
+                                top: node.y,
+                                width: graphNodeWidth(node.type),
+                                height: graphNodeHeight(node.type),
+                                child: ValueListenableBuilder<Offset>(
+                                  valueListenable: _dragDelta,
+                                  builder: (context, delta, child) =>
+                                      Transform.translate(
+                                    offset: node.id == _dragNodeId ? delta : Offset.zero,
+                                    child: child,
+                                  ),
+                                  child: GraphNodeCard(
+                                    node: node,
+                                    showAddButton: !node.isLeaf,
+                                    delayMs: stagger
+                                        ? math.min((depthMap[node.id] ?? 0) * 90, 600)
+                                        : 0,
+                                    onTap: () => _showEditDialog(context, node),
+                                    onAddChild: () => _showAddChildDialog(context, node),
+                                    onDelete: () => _showEditDialog(context, node),
+                                    onDragStart: (_) => _handleDragStart(node),
+                                    onDragUpdate: (d) =>
+                                        _handlePanUpdate(node, d.delta.dx, d.delta.dy),
+                                    onDragEnd: (_) => _handleDragEnd(node),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
-                        size: Size(canvasW, canvasH),
                       ),
-                      // Ноды
-                      ...graph.nodes.map((node) => _NodeWrapper(
-                        node: node,
-                        origin: _origin,
-                        dragOffset: node.id == _dragNodeId ? _dragDelta : Offset.zero,
-                        onTap: () => _showEditDialog(context, node),
-                        onDragStart: () => _handleDragStart(node),
-                        onPanUpdate: _handlePanUpdate,
-                        onDragEnd: () => _handleDragEnd(node),
-                        onAddChild: () => _showAddChildDialog(context, node),
-                      )),
-                    ],
+                    ),
                   ),
-                ),
+
+                  // Счётчики + подсказка (слева снизу).
+                  Positioned(
+                    left: 18,
+                    bottom: 18,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _GlassChip(
+                          child: Text(
+                            '$count ${_plural(count, 'нода', 'ноды', 'нод')} · '
+                            '$linkCount ${_plural(linkCount, 'связь', 'связи', 'связей')}',
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.onSurfaceVariant,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _GlassChip(
+                          child: const Text(
+                            'тап — редактировать · перетащить — переместить · '
+                            '«+» на ноде — добавить ребёнка',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              color: AppColors.onSurfaceVariant,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Зум-кластер (справа снизу).
+                  Positioned(
+                    right: 18,
+                    bottom: 18,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ValueListenableBuilder<Matrix4>(
+                          valueListenable: _transformationController,
+                          builder: (context, m, _) => Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceContainer.withValues(alpha: 0.85),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.borderGlass),
+                            ),
+                            child: Text(
+                              '${(m.getMaxScaleOnAxis() * 100).round()}%',
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.onSurfaceVariant,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ),
+                        ),
+                        GraphHudButton(
+                          icon: Icons.add,
+                          onTap: () => _zoomBy(1.25),
+                          tooltip: 'Приблизить',
+                        ),
+                        const SizedBox(height: 8),
+                        GraphHudButton(
+                          icon: Icons.remove,
+                          onTap: () => _zoomBy(0.8),
+                          tooltip: 'Отдалить',
+                        ),
+                        const SizedBox(height: 8),
+                        GraphHudButton(
+                          icon: Icons.fit_screen,
+                          onTap: _fitView,
+                          tooltip: 'Показать весь граф',
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               );
             },
           );
@@ -195,30 +491,15 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     );
   }
 
-  void _handleDragStart(GraphNode node) {
-    setState(() {
-      _dragNodeId = node.id;
-      _dragDelta = Offset.zero;
-    });
+  String _plural(int n, String one, String few, String many) {
+    final mod10 = n % 10;
+    final mod100 = n % 100;
+    if (mod10 == 1 && mod100 != 11) return one;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+    return many;
   }
 
-  void _handlePanUpdate(double dx, double dy) {
-    if (_dragNodeId == null) return;
-    setState(() {
-      _dragDelta += Offset(dx, dy);
-    });
-  }
-
-  void _handleDragEnd(GraphNode node) {
-    final delta = _dragDelta;
-    setState(() {
-      _dragNodeId = null;
-      _dragDelta = Offset.zero;
-    });
-    if (delta != Offset.zero) {
-      widget.viewModel.moveNode(node.id, node.x + delta.dx, node.y + delta.dy);
-    }
-  }
+  // ── Диалоги ────────────────────────────────────────────────────────────────
 
   void _showCreateSphereDialog() {
     final controller = TextEditingController();
@@ -343,6 +624,27 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   ];
 }
 
+class _GlassChip extends StatelessWidget {
+  final Widget child;
+  const _GlassChip({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainer.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.borderGlass),
+        boxShadow: const [
+          BoxShadow(color: Color(0x33000000), blurRadius: 12, offset: Offset(0, 4)),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
 class _EmptyState extends StatelessWidget {
   final VoidCallback onCreate;
   const _EmptyState({required this.onCreate});
@@ -365,46 +667,6 @@ class _EmptyState extends StatelessWidget {
             onPressed: onCreate,
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _NodeWrapper extends StatelessWidget {
-  final GraphNode node;
-  final Offset origin;
-  final Offset dragOffset;
-  final VoidCallback onTap;
-  final VoidCallback onDragStart;
-  final void Function(double, double) onPanUpdate;
-  final VoidCallback onDragEnd;
-  final VoidCallback onAddChild;
-
-  const _NodeWrapper({
-    required this.node,
-    this.origin = Offset.zero,
-    this.dragOffset = Offset.zero,
-    required this.onTap,
-    required this.onDragStart,
-    required this.onPanUpdate,
-    required this.onDragEnd,
-    required this.onAddChild,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      left: node.x - origin.dx + dragOffset.dx,
-      top: node.y - origin.dy + dragOffset.dy,
-      child: GestureDetector(
-        onTap: onTap,
-        onPanStart: (_) => onDragStart(),
-        onPanUpdate: (details) => onPanUpdate(details.delta.dx, details.delta.dy),
-        onPanEnd: (_) => onDragEnd(),
-        child: GraphNodeWidget(
-          node: node,
-          onAddChild: node.isLeaf ? null : onAddChild,
-        ),
       ),
     );
   }

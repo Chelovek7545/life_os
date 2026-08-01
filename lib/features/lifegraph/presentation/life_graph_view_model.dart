@@ -13,6 +13,7 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
+import 'package:life_os/features/lifegraph/presentation/components/graph_node_sizes.dart';
 import 'package:rxdart/rxdart.dart';
 
 class LifeGraphViewModel {
@@ -214,12 +215,35 @@ class LifeGraphViewModel {
   }
 
   /// Перемещает ноду (drag end) — сохраняет позицию.
+  /// Позиция клампается внутрь мирового канваса, чтобы нода не уходила
+  /// за границы (0..worldSize). Сначала оптимистично обновляет граф,
+  /// чтобы нода не «отпрыгивала» на старую позицию на время записи в БД.
   Future<void> moveNode(String id, double x, double y) async {
     if (_currentSphereId == null) return;
-    _positions[id] = Offset(x, y);
-    await positionsRepository.savePositions(_currentSphereId!, _positions);
+    final node = _nodeById(id);
+    if (node == null) return;
+    final pos = _clampPosition(node, Offset(x, y));
+    _positions[id] = pos;
     // Локально обновляем граф для мгновенного отклика
     _emitUpdatedGraph();
+    await positionsRepository.savePositions(_currentSphereId!, _positions);
+  }
+
+  GraphNode? _nodeById(String id) {
+    for (final n in graph.nodes) {
+      if (n.id == id) return n;
+    }
+    return null;
+  }
+
+  /// Клампит позицию внутрь мирового канваса с учётом размера ноды.
+  Offset _clampPosition(GraphNode node, Offset pos) {
+    final maxX = graphWorldSize - graphNodeWidth(node.type) - graphWorldMargin;
+    final maxY = graphWorldSize - graphNodeHeight(node.type) - graphWorldMargin;
+    return Offset(
+      pos.dx.clamp(graphWorldMargin, maxX),
+      pos.dy.clamp(graphWorldMargin, maxY),
+    );
   }
 
   void _emitUpdatedGraph() {
@@ -269,7 +293,9 @@ class LifeGraphViewModel {
 
     final laidOut = nodes.map((node) {
       final pos = positions[node.id];
-      return pos != null ? node.copyWith(x: pos.dx, y: pos.dy) : node;
+      if (pos == null) return node;
+      final clamped = _clampPosition(node, pos);
+      return node.copyWith(x: clamped.dx, y: clamped.dy);
     }).toList();
     return GraphData(nodes: laidOut, edges: data.edges);
   }

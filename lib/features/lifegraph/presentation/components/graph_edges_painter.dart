@@ -1,24 +1,26 @@
+import 'dart:math' as math;
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
+import 'package:life_os/features/lifegraph/presentation/components/graph_node_sizes.dart';
 
+/// Безье-рёбра в стиле канваса v1: плавные дуги от правого края родителя
+/// к левому краю ребёнка, градиент цвета родителя -> ребёнка, мягкое свечение
+/// и опциональная reveal-анимация прорисовки (ключ 'parentId>childId').
 class GraphEdgesPainter extends CustomPainter {
   final List<GraphNode> nodes;
   final List<GraphEdge> edges;
-  final Matrix4 transformation;
+  final Map<String, double> reveals;
 
-  GraphEdgesPainter({
+  const GraphEdgesPainter({
     required this.nodes,
     required this.edges,
-    required this.transformation,
+    this.reveals = const {},
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.15)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-
     final nodeMap = {for (final n in nodes) n.id: n};
 
     for (final edge in edges) {
@@ -26,42 +28,59 @@ class GraphEdgesPainter extends CustomPainter {
       final to = nodeMap[edge.toId];
       if (from == null || to == null) continue;
 
-      // Центр нод
-      final fromCenter = Offset(from.x + _nodeWidth(from) / 2, from.y + _nodeHeight(from) / 2);
-      final toCenter = Offset(to.x + _nodeWidth(to) / 2, to.y + _nodeHeight(to) / 2);
+      final a = Offset(from.x + graphNodeWidth(from.type) + 18, from.y + graphNodeHeight(from.type) / 2);
+      final b = Offset(to.x - 8, to.y + graphNodeHeight(to.type) / 2);
 
-      canvas.drawLine(fromCenter, toCenter, paint);
+      final dx = math.max(56.0, (b.dx - a.dx) * 0.55);
+      final path = Path()
+        ..moveTo(a.dx, a.dy)
+        ..cubicTo(a.dx + dx, a.dy, b.dx - dx, b.dy, b.dx, b.dy);
+
+      final reveal = reveals['${edge.fromId}>${edge.toId}'] ?? 1;
+      Path drawn = path;
+      ui.PathMetric? pm;
+      if (reveal < 1) {
+        pm = path.computeMetrics().first;
+        drawn = pm.extractPath(0, pm.length * reveal);
+      }
+
+      final cFrom = _colorOf(from);
+      final cTo = _colorOf(to);
+
+      // Мягкое под-свечение.
+      canvas.drawPath(
+        drawn,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = 8
+          ..color = cTo.withValues(alpha: 0.10),
+      );
+
+      // Градиентная линия: цвет родителя -> цвет ребёнка.
+      canvas.drawPath(
+        drawn,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = 2.4
+          ..shader = ui.Gradient.linear(a, b, [cFrom.withValues(alpha: 0.55), cTo]),
+      );
+
+      // Искра на кончике прорисовки.
+      if (reveal < 1 && pm != null) {
+        final tip = pm.getTangentForOffset(pm.length * reveal)?.position ?? b;
+        canvas.drawCircle(tip, 7, Paint()..color = Colors.white.withValues(alpha: 0.18));
+        canvas.drawCircle(tip, 3.2, Paint()..color = Colors.white);
+      }
     }
   }
 
-  double _nodeWidth(GraphNode node) {
-    switch (node.type) {
-      case GraphNodeType.sphere:
-        return 140;
-      case GraphNodeType.goal:
-        return 180;
-      case GraphNodeType.project:
-        return 180;
-      case GraphNodeType.task:
-        return 160;
-    }
-  }
-
-  double _nodeHeight(GraphNode node) {
-    switch (node.type) {
-      case GraphNodeType.sphere:
-        return 140;
-      case GraphNodeType.goal:
-        return 100;
-      case GraphNodeType.project:
-        return 100;
-      case GraphNodeType.task:
-        return 80;
-    }
-  }
+  Color _colorOf(GraphNode n) => Color(int.parse(n.color.replaceFirst('#', '0xFF')));
 
   @override
-  bool shouldRepaint(covariant GraphEdgesPainter oldDelegate) {
-    return oldDelegate.nodes != nodes || oldDelegate.edges != edges || oldDelegate.transformation != transformation;
-  }
+  bool shouldRepaint(covariant GraphEdgesPainter oldDelegate) =>
+      !identical(oldDelegate.nodes, nodes) ||
+      !identical(oldDelegate.edges, edges) ||
+      !identical(oldDelegate.reveals, reveals);
 }
