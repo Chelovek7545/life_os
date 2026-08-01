@@ -16,6 +16,9 @@ import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart'
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:rxdart/rxdart.dart';
 
+/// Состояние автосохранения позиций графа.
+enum GraphSaveStatus { draft, saving, saved }
+
 class LifeGraphViewModel {
   LifeGraphViewModel({
     required this.spheresRepository,
@@ -39,6 +42,15 @@ class LifeGraphViewModel {
   String? _currentSphereId;
   String? get currentSphereId => _currentSphereId;
 
+  bool _initialized = false;
+
+  /// true после первой эмиссии списка сфер — экран может сменить сплэш.
+  bool get initialized => _initialized;
+
+  /// Статус автосохранения позиций (для бейджа draft / saving… / saved).
+  final ValueNotifier<GraphSaveStatus> saveStatus =
+      ValueNotifier(GraphSaveStatus.draft);
+
   final BehaviorSubject<GraphData> _graphSubject = BehaviorSubject<GraphData>.seeded(GraphData.empty());
   Stream<GraphData> get graphStream => _graphSubject.stream;
   GraphData get graph => _graphSubject.value;
@@ -51,14 +63,23 @@ class LifeGraphViewModel {
   StreamSubscription? _graphSubscription;
   StreamSubscription? _spheresSubscription;
   Timer? _savePositionsTimer;
+  String? _lastSphereId;
+  bool _disposed = false;
 
-  /// Инициализация: загружает список сфер и выбирает первую (или создаёт новую).
+  /// Инициализация: загружает список сфер и восстанавливает последнюю
+  /// просматриваемую сферу (либо выбирает первую).
   Future<void> initialize() async {
+    _lastSphereId = await positionsRepository.loadLastSphereId();
     _spheresSubscription = spheresRepository.watchAllSpheres().listen(
       (spheres) {
         _spheresSubject.add(spheres);
+        _initialized = true;
         if (spheres.isNotEmpty && _currentSphereId == null) {
-          _switchToSphere(spheres.first.id);
+          final last = _lastSphereId;
+          final target = (last != null && spheres.any((s) => s.id == last))
+              ? last
+              : spheres.first.id;
+          _switchToSphere(target);
         }
       },
       onError: (e) => debugPrint('Spheres stream error: $e'),
@@ -73,7 +94,9 @@ class LifeGraphViewModel {
   Future<void> _switchToSphere(String sphereId) async {
     _currentSphereId = sphereId;
     _cancelPendingSave();
+    await positionsRepository.saveLastSphereId(sphereId);
     await _loadPositions(sphereId);
+    saveStatus.value = GraphSaveStatus.saved;
     _graphSubscription?.cancel();
     _graphSubscription = graphBuilder.watchGraph(sphereId).listen(
       (data) {
@@ -419,20 +442,24 @@ class LifeGraphViewModel {
   }
 
   /// Откладывает сохранение позиций на ~400 мс, чтобы не писать в
-  /// SharedPreferences каждый кадр перетаскивания.
+  /// хранилище каждый кадр перетаскивания. Бейдж: saving… → saved.
   Future<void> _scheduleSavePositions() async {
     _cancelPendingSave();
-    _savePositionsTimer = Timer(const Duration(milliseconds: 400), () {
+    saveStatus.value = GraphSaveStatus.saving;
+    _savePositionsTimer = Timer(const Duration(milliseconds: 400), () async {
       final sphereId = _currentSphereId;
       if (sphereId == null) return;
-      positionsRepository.savePositions(sphereId, Map.of(_positions));
+      await positionsRepository.savePositions(sphereId, Map.of(_positions));
+      if (!_disposed) saveStatus.value = GraphSaveStatus.saved;
     });
   }
 
   void dispose() {
+    _disposed = true;
     _cancelPendingSave();
     _graphSubscription?.cancel();
     _spheresSubscription?.cancel();
+    saveStatus.dispose();
     _graphSubject.close();
     _spheresSubject.close();
   }

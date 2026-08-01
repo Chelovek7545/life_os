@@ -31,6 +31,6 @@ double graphNodeHeight(GraphNodeType type) {
     case GraphNodeType.project:
       return 100;
     case GraphNodeType.task:
-      return 80;
+      return 120;
   }
 }

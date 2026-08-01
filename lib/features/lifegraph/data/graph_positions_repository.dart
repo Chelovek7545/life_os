@@ -1,27 +1,33 @@
-import 'dart:convert';
 import 'dart:ui';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Хранилище позиций нод графа в SharedPreferences.
+import 'package:life_os/features/lifegraph/data/graph_store.dart';
+import 'package:life_os/features/lifegraph/presentation/v1.dart' as graph;
+
+/// Хранилище позиций нод графа (layout) поверх контракта [graph.GraphStore].
 ///
-/// Каждый граф (сфера) имеет свой JSON-документ:
-/// key = 'graph_positions:sphereId'
-/// value = { "version": 1, "entities": { "entityId": {"x": 100.0, "y": 200.0} } }
+/// Конкретный бэкенд (prefs / файл / БД / сервер) подменяется одной
+/// реализацией [graph.GraphStore] — позиции при этом не привязаны к prefs.
+///
+/// Каждый граф (сфера) — отдельный слот со снимком:
+/// `{ "v": 1, "entities": { "entityId": {"x": 100.0, "y": 200.0} } }`.
 class GraphPositionsRepository {
-  static const String _keyPrefix = 'graph_positions:';
+  GraphPositionsRepository({graph.GraphStore? store})
+      : _store = store ?? const PrefsGraphStore(prefix: 'graph_positions');
+
+  final graph.GraphStore _store;
+
   static const int _version = 1;
+  static const String _lastSphereKey = 'life_graph.last_sphere';
 
   /// Загружает позиции для графа (сферы).
   /// Возвращает null, если позиций ещё нет.
   Future<Map<String, Offset>?> loadPositions(String sphereId) async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('$_keyPrefix$sphereId');
-    if (raw == null) return null;
+    final snap = await _store.load(sphereId);
+    if (snap == null || snap['v'] != _version) return null;
     try {
-      final json = jsonDecode(raw) as Map<String, dynamic>;
-      if (json['version'] != _version) return null;
-      final entities = json['entities'] as Map<String, dynamic>?;
+      final entities = snap['entities'] as Map<String, dynamic>?;
       if (entities == null) return null;
       return entities.map((id, data) {
         final map = data as Map<String, dynamic>;
@@ -37,20 +43,29 @@ class GraphPositionsRepository {
 
   /// Сохраняет позиции для графа.
   Future<void> savePositions(String sphereId, Map<String, Offset> positions) async {
-    final prefs = await SharedPreferences.getInstance();
-    final json = jsonEncode({
-      'version': _version,
+    await _store.save(sphereId, {
+      'v': _version,
       'entities': positions.map((id, offset) => MapEntry(id, {
         'x': offset.dx,
         'y': offset.dy,
       })),
     });
-    await prefs.setString('$_keyPrefix$sphereId', json);
   }
 
   /// Удаляет позиции графа (например, при удалении сферы).
   Future<void> deletePositions(String sphereId) async {
+    await _store.delete(sphereId);
+  }
+
+  // ── App-state (не слот графа): какая сфера открыта последней ─────────────
+
+  Future<String?> loadLastSphereId() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('$_keyPrefix$sphereId');
+    return prefs.getString(_lastSphereKey);
+  }
+
+  Future<void> saveLastSphereId(String sphereId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_lastSphereKey, sphereId);
   }
 }
