@@ -25,6 +25,9 @@ class LifeGraphViewModel {
     required this.graphBuilder,
   });
 
+  /// Координата центра мира: корень (сфера) размещается здесь, если нет сохранённой позиции.
+  static const double worldCenter = 2000.0;
+
   final SpheresRepository spheresRepository;
   final GoalsRepository goalsRepository;
   final ProjectsRepository projectsRepository;
@@ -71,12 +74,7 @@ class LifeGraphViewModel {
     _graphSubscription?.cancel();
     _graphSubscription = graphBuilder.watchGraph(sphereId).listen(
       (data) {
-        // Накладываем сохранённые позиции
-        final positionedNodes = data.nodes.map((node) {
-          final pos = _positions[node.id];
-          return pos != null ? node.copyWith(x: pos.dx, y: pos.dy) : node;
-        }).toList();
-        _graphSubject.add(GraphData(nodes: positionedNodes, edges: data.edges));
+        _graphSubject.add(_applyLayout(data));
       },
       onError: (e) => debugPrint('Graph stream error: $e'),
     );
@@ -107,7 +105,7 @@ class LifeGraphViewModel {
   }) async {
     if (_currentSphereId == null) return;
     final parentNode = graph.nodes.firstWhere((n) => n.id == parentId, orElse: () => throw StateError('Parent not found'));
-    final parentPos = _positions[parentId] ?? Offset.zero;
+    final parentPos = Offset(parentNode.x, parentNode.y);
 
     switch (parentNode.type) {
       case GraphNodeType.sphere:
@@ -225,12 +223,55 @@ class LifeGraphViewModel {
   }
 
   void _emitUpdatedGraph() {
-    final data = graph;
-    final positionedNodes = data.nodes.map((node) {
-      final pos = _positions[node.id];
+    _graphSubject.add(_applyLayout(graph));
+  }
+
+  /// Накладывает на ноды финальные позиции: сохранённую из [_positions],
+  /// либо автопозицию через BFS от корня (дети вправо, веером по Y).
+  GraphData _applyLayout(GraphData data) {
+    final nodes = data.nodes;
+    if (nodes.isEmpty) return data;
+
+    GraphNode? root;
+    for (final node in nodes) {
+      if (node.parentId == null) {
+        root = node;
+        break;
+      }
+    }
+    if (root == null) return data;
+
+    final childrenOf = <String, List<GraphNode>>{};
+    for (final node in nodes) {
+      if (node.parentId != null) {
+        childrenOf.putIfAbsent(node.parentId!, () => []).add(node);
+      }
+    }
+
+    final positions = <String, Offset>{
+      root.id: _positions[root.id] ?? const Offset(worldCenter, worldCenter),
+    };
+    final queue = <GraphNode>[root];
+    while (queue.isNotEmpty) {
+      final parent = queue.removeAt(0);
+      final kids = childrenOf[parent.id] ?? const <GraphNode>[];
+      final n = kids.length;
+      final parentPos = positions[parent.id]!;
+      for (var i = 0; i < n; i++) {
+        final kid = kids[i];
+        final saved = _positions[kid.id];
+        final pos = saved ??
+            Offset(parentPos.dx + 280, parentPos.dy + (i - (n - 1) / 2) * 160);
+        positions[kid.id] = pos;
+        queue.add(kid);
+      }
+    }
+
+    final laidOut = nodes.map((node) {
+      final pos = positions[node.id];
       return pos != null ? node.copyWith(x: pos.dx, y: pos.dy) : node;
     }).toList();
-    _graphSubject.add(GraphData(nodes: positionedNodes, edges: data.edges));
+    return GraphData(nodes: laidOut, edges: data.edges);
   }
 
   /// Удаляет ноду с выбором: каскадно (поддерево) или только ноду (дети становятся осиротевшими).

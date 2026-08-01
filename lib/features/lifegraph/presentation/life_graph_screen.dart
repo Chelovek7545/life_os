@@ -19,6 +19,10 @@ class LifeGraphScreen extends StatefulWidget {
 
 class _LifeGraphScreenState extends State<LifeGraphScreen> {
   late final TransformationController _transformationController;
+  String? _centeredSphereId;
+  String? _dragNodeId;
+  Offset _dragDelta = Offset.zero;
+  Offset _origin = Offset.zero;
 
   @override
   void initState() {
@@ -80,52 +84,140 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
             return _EmptyState(onCreate: () => widget.viewModel.createSphere(name: 'Моя жизнь'));
           }
 
-          var maxX = 0.0;
-          var maxY = 0.0;
-          for (final node in graph.nodes) {
-            if (node.x > maxX) maxX = node.x;
-            if (node.y > maxY) maxY = node.y;
-          }
-          final canvasW = math.max(4000.0, maxX + 1200);
-          final canvasH = math.max(4000.0, maxY + 1200);
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final sphereId = widget.viewModel.currentSphereId;
 
-          return InteractiveViewer(
-            transformationController: _transformationController,
-            constrained: false,
-            boundaryMargin: const EdgeInsets.all(double.infinity),
-            minScale: 0.3,
-            maxScale: 3.0,
-            child: Container(
-              color: Colors.amber,
-              width: canvasW,
-              height: canvasH,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // Рёбра
-                  CustomPaint(
-                    painter: GraphEdgesPainter(
-                      nodes: graph.nodes,
-                      edges: graph.edges,
-                      transformation: _transformationController.value,
-                    ),
-                    size: Size(canvasW, canvasH),
+              // Ноды с учётом живого перетаскивания (для канваса и рёбер)
+              final displayNodes = graph.nodes.map((node) {
+                final drag = node.id == _dragNodeId ? _dragDelta : Offset.zero;
+                if (drag == Offset.zero) return node;
+                return node.copyWith(x: node.x + drag.dx, y: node.y + drag.dy);
+              }).toList();
+
+              // Начало координат канваса: уезжает влево/вверх, когда ноды выходят
+              // за 0, чтобы вся область всегда попадала в контейнер и ноды были
+              // кликабельны.
+              var minX = 0.0;
+              var minY = 0.0;
+              for (final node in graph.nodes) {
+                if (node.x < minX) minX = node.x;
+                if (node.y < minY) minY = node.y;
+              }
+              final newOrigin = Offset(
+                minX < 0 ? minX - 400 : 0.0,
+                minY < 0 ? minY - 400 : 0.0,
+              );
+
+              if (graph.nodes.isNotEmpty && sphereId != null && _centeredSphereId != sphereId) {
+                _centeredSphereId = sphereId;
+                _origin = newOrigin;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  var root = graph.nodes.first;
+                  for (final node in graph.nodes) {
+                    if (node.parentId == null) {
+                      root = node;
+                      break;
+                    }
+                  }
+                  final tx = constraints.maxWidth / 2 - (root.x - _origin.dx);
+                  final ty = constraints.maxHeight / 2 - (root.y - _origin.dy);
+                  _transformationController.value = Matrix4.translationValues(tx, ty, 0);
+                });
+              } else if (newOrigin != _origin && _dragNodeId == null) {
+                // Канвас расширился влево/вверх — компенсируем сдвиг
+                // трансформацией, чтобы картинка не прыгала.
+                final delta = newOrigin - _origin;
+                _origin = newOrigin;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  _transformationController.value = _transformationController.value.clone()
+                    ..multiply(Matrix4.translationValues(delta.dx, delta.dy, 0));
+                });
+              }
+
+              // Размер канваса: включает крайние ноды (с drag) и запас 400
+              var maxX = 0.0;
+              var maxY = 0.0;
+              for (final node in displayNodes) {
+                if (node.x > maxX) maxX = node.x;
+                if (node.y > maxY) maxY = node.y;
+              }
+              final canvasW = math.max(800.0, (maxX + 400) - _origin.dx);
+              final canvasH = math.max(800.0, (maxY + 400) - _origin.dy);
+
+              return InteractiveViewer(
+                transformationController: _transformationController,
+                constrained: false,
+                boundaryMargin: const EdgeInsets.all(double.infinity),
+                minScale: 0.3,
+                maxScale: 3.0,
+                child: Container(
+                  color: Colors.amber,
+                  child: Stack(
+                    alignment: AlignmentGeometry.center,
+                    clipBehavior: Clip.none,
+                    children: [
+                      // Рёбра
+                      CustomPaint(
+                        painter: GraphEdgesPainter(
+                          nodes: displayNodes
+                              .map((n) => n.copyWith(
+                                    x: n.x - _origin.dx,
+                                    y: n.y - _origin.dy,
+                                  ))
+                              .toList(),
+                          edges: graph.edges,
+                          transformation: _transformationController.value,
+                        ),
+                        size: Size(canvasW, canvasH),
+                      ),
+                      // Ноды
+                      ...graph.nodes.map((node) => _NodeWrapper(
+                        node: node,
+                        origin: _origin,
+                        dragOffset: node.id == _dragNodeId ? _dragDelta : Offset.zero,
+                        onTap: () => _showEditDialog(context, node),
+                        onDragStart: () => _handleDragStart(node),
+                        onPanUpdate: _handlePanUpdate,
+                        onDragEnd: () => _handleDragEnd(node),
+                        onAddChild: () => _showAddChildDialog(context, node),
+                      )),
+                    ],
                   ),
-                  // Ноды
-                  ...graph.nodes.map((node) => _NodeWrapper(
-                    node: node,
-                    viewModel: widget.viewModel,
-                    onTap: () => _showEditDialog(context, node),
-                    onDragEnd: (dx, dy) => widget.viewModel.moveNode(node.id, dx, dy),
-                    onAddChild: () => _showAddChildDialog(context, node),
-                  )),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           );
         },
       ),
     );
+  }
+
+  void _handleDragStart(GraphNode node) {
+    setState(() {
+      _dragNodeId = node.id;
+      _dragDelta = Offset.zero;
+    });
+  }
+
+  void _handlePanUpdate(double dx, double dy) {
+    if (_dragNodeId == null) return;
+    setState(() {
+      _dragDelta += Offset(dx, dy);
+    });
+  }
+
+  void _handleDragEnd(GraphNode node) {
+    final delta = _dragDelta;
+    setState(() {
+      _dragNodeId = null;
+      _dragDelta = Offset.zero;
+    });
+    if (delta != Offset.zero) {
+      widget.viewModel.moveNode(node.id, node.x + delta.dx, node.y + delta.dy);
+    }
   }
 
   void _showCreateSphereDialog() {
@@ -280,15 +372,21 @@ class _EmptyState extends StatelessWidget {
 
 class _NodeWrapper extends StatelessWidget {
   final GraphNode node;
-  final LifeGraphViewModel viewModel;
+  final Offset origin;
+  final Offset dragOffset;
   final VoidCallback onTap;
-  final Function(double, double) onDragEnd;
+  final VoidCallback onDragStart;
+  final void Function(double, double) onPanUpdate;
+  final VoidCallback onDragEnd;
   final VoidCallback onAddChild;
 
   const _NodeWrapper({
     required this.node,
-    required this.viewModel,
+    this.origin = Offset.zero,
+    this.dragOffset = Offset.zero,
     required this.onTap,
+    required this.onDragStart,
+    required this.onPanUpdate,
     required this.onDragEnd,
     required this.onAddChild,
   });
@@ -296,11 +394,13 @@ class _NodeWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Positioned(
-      left: node.x,
-      top: node.y,
+      left: node.x - origin.dx + dragOffset.dx,
+      top: node.y - origin.dy + dragOffset.dy,
       child: GestureDetector(
         onTap: onTap,
-        onPanEnd: (details) => onDragEnd(node.x + details.localPosition.dx, node.y + details.localPosition.dy),
+        onPanStart: (_) => onDragStart(),
+        onPanUpdate: (details) => onPanUpdate(details.delta.dx, details.delta.dy),
+        onPanEnd: (_) => onDragEnd(),
         child: GraphNodeWidget(
           node: node,
           onAddChild: node.isLeaf ? null : onAddChild,
