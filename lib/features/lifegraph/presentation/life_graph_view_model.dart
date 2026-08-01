@@ -13,7 +13,7 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
-import 'package:life_os/features/lifegraph/presentation/components/graph_node_sizes.dart';
+import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:rxdart/rxdart.dart';
 
 class LifeGraphViewModel {
@@ -50,6 +50,7 @@ class LifeGraphViewModel {
   final Map<String, Offset> _positions = {};
   StreamSubscription? _graphSubscription;
   StreamSubscription? _spheresSubscription;
+  Timer? _savePositionsTimer;
 
   /// Инициализация: загружает список сфер и выбирает первую (или создаёт новую).
   Future<void> initialize() async {
@@ -71,6 +72,7 @@ class LifeGraphViewModel {
 
   Future<void> _switchToSphere(String sphereId) async {
     _currentSphereId = sphereId;
+    _cancelPendingSave();
     await _loadPositions(sphereId);
     _graphSubscription?.cancel();
     _graphSubscription = graphBuilder.watchGraph(sphereId).listen(
@@ -96,7 +98,7 @@ class LifeGraphViewModel {
     await _switchToSphere(sphere.id);
   }
 
-  /// Добавляет дочернюю ноду к указанному родителю.
+  /// Добавляет дочернюю ноду к указанному родителю (по иерархии сферы).
   Future<void> addChild({
     required String parentId,
     required String title,
@@ -121,7 +123,7 @@ class LifeGraphViewModel {
         // Авто-позиция: справа от сферы
         final newPos = Offset(parentPos.dx + 280, parentPos.dy);
         _positions[goal.id] = newPos;
-        await positionsRepository.savePositions(_currentSphereId!, _positions);
+        await _scheduleSavePositions();
         break;
 
       case GraphNodeType.goal:
@@ -135,7 +137,7 @@ class LifeGraphViewModel {
         await projectsRepository.addProject(project);
         final newPos = Offset(parentPos.dx + 280, parentPos.dy);
         _positions[project.id] = newPos;
-        await positionsRepository.savePositions(_currentSphereId!, _positions);
+        await _scheduleSavePositions();
         break;
 
       case GraphNodeType.project:
@@ -149,7 +151,7 @@ class LifeGraphViewModel {
         await tasksRepository.addTask(task);
         final newPos = Offset(parentPos.dx + 280, parentPos.dy);
         _positions[task.id] = newPos;
-        await positionsRepository.savePositions(_currentSphereId!, _positions);
+        await _scheduleSavePositions();
         break;
 
       case GraphNodeType.task:
@@ -168,7 +170,7 @@ class LifeGraphViewModel {
           id: updated.id,
           name: updated.title,
           color: updated.color,
-          createdAt: DateTime.now(), // TODO: keep original
+          createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         ).copyWith(name: updated.title, color: updated.color);
         await spheresRepository.updateSphere(sphere);
@@ -202,8 +204,6 @@ class LifeGraphViewModel {
 
       case GraphNodeType.task:
         if (updated.taskStatus != null) {
-          // Нужно получить полную задачу из репозитория, чтобы обновить только статус
-          // Для простоты: используем TasksRepository.getById
           final existing = await tasksRepository.getById(updated.id);
           if (existing != null) {
             await tasksRepository.updateTask(existing.copyWith(status: updated.taskStatus!));
@@ -214,10 +214,8 @@ class LifeGraphViewModel {
     // Перестроение графа произойдёт автоматически через стримы
   }
 
-  /// Перемещает ноду (drag end) — сохраняет позицию.
-  /// Позиция клампается внутрь мирового канваса, чтобы нода не уходила
-  /// за границы (0..worldSize). Сначала оптимистично обновляет граф,
-  /// чтобы нода не «отпрыгивала» на старую позицию на время записи в БД.
+  /// Перемещает ноду — оптимистично обновляет граф (чтобы нода не «отпрыгивала»)
+  /// и откладывает запись позиции в хранилище (события приходят каждый кадр драга).
   Future<void> moveNode(String id, double x, double y) async {
     if (_currentSphereId == null) return;
     final node = _nodeById(id);
@@ -226,7 +224,7 @@ class LifeGraphViewModel {
     _positions[id] = pos;
     // Локально обновляем граф для мгновенного отклика
     _emitUpdatedGraph();
-    await positionsRepository.savePositions(_currentSphereId!, _positions);
+    _scheduleSavePositions();
   }
 
   GraphNode? _nodeById(String id) {
@@ -305,10 +303,8 @@ class LifeGraphViewModel {
     if (_currentSphereId == null) return;
 
     if (!keepChildren) {
-      // Каскадное удаление поддерева
       await _deleteSubtree(id);
     } else {
-      // Удаляем только ноду, детей оставляем (становятся осиротевшими — скрываются)
       await _deleteNodeOnly(id);
     }
   }
@@ -320,12 +316,10 @@ class LifeGraphViewModel {
     switch (node.type) {
       case GraphNodeType.sphere:
         await goalsRepository.deleteGoalsBySphere(id);
-        // Проекты и задачи удалятся каскадно через deleteGoalsBySphere -> projects -> tasks
         await spheresRepository.deleteSphere(id);
-        // Удаляем позиции графа
         await positionsRepository.deletePositions(id);
-        // Сбрасываем текущую сферу
         _currentSphereId = null;
+        _cancelPendingSave();
         _positions.clear();
         final spheres = await spheresRepository.getAllSpheres();
         if (spheres.isNotEmpty) {
@@ -336,7 +330,6 @@ class LifeGraphViewModel {
         break;
 
       case GraphNodeType.goal:
-        // Удаляем проекты этой цели -> удалятся задачи
         final goalProjects = graph.nodes.where((n) => n.type == GraphNodeType.project && n.parentId == id).map((p) => p.id).toList();
         for (final pid in goalProjects) {
           await projectsRepository.deleteProject(pid);
@@ -357,7 +350,7 @@ class LifeGraphViewModel {
       case GraphNodeType.task:
         await tasksRepository.deleteTask(id);
         _positions.remove(id);
-        await positionsRepository.savePositions(_currentSphereId!, _positions);
+        await _scheduleSavePositions();
         break;
     }
   }
@@ -367,10 +360,10 @@ class LifeGraphViewModel {
 
     switch (node.type) {
       case GraphNodeType.sphere:
-        // Сфера без детей — просто удаляем сферу, цели остаются (станут осиротевшими)
         await spheresRepository.deleteSphere(id);
         await positionsRepository.deletePositions(id);
         _currentSphereId = null;
+        _cancelPendingSave();
         _positions.clear();
         final spheres = await spheresRepository.getAllSpheres();
         if (spheres.isNotEmpty) {
@@ -382,20 +375,18 @@ class LifeGraphViewModel {
 
       case GraphNodeType.goal:
         await goalsRepository.deleteGoal(id);
-        // Дети (проекты) останутся с goalId = deleted_id -> станут осиротевшими (скроются)
         _removePositions([id]);
         break;
 
       case GraphNodeType.project:
         await projectsRepository.deleteProject(id);
-        // Дети (задачи) останутся с projectId = deleted_id -> осиротевшие (скроются)
         _removePositions([id]);
         break;
 
       case GraphNodeType.task:
         await tasksRepository.deleteTask(id);
         _positions.remove(id);
-        await positionsRepository.savePositions(_currentSphereId!, _positions);
+        await _scheduleSavePositions();
         break;
     }
   }
@@ -417,12 +408,29 @@ class LifeGraphViewModel {
     for (final id in ids) {
       _positions.remove(id);
     }
-    if (_currentSphereId != null) {
-      positionsRepository.savePositions(_currentSphereId!, _positions);
-    }
+    _scheduleSavePositions();
+  }
+
+  // ── Персистентность позиций (с debounce) ──────────────────────────────────
+
+  void _cancelPendingSave() {
+    _savePositionsTimer?.cancel();
+    _savePositionsTimer = null;
+  }
+
+  /// Откладывает сохранение позиций на ~400 мс, чтобы не писать в
+  /// SharedPreferences каждый кадр перетаскивания.
+  Future<void> _scheduleSavePositions() async {
+    _cancelPendingSave();
+    _savePositionsTimer = Timer(const Duration(milliseconds: 400), () {
+      final sphereId = _currentSphereId;
+      if (sphereId == null) return;
+      positionsRepository.savePositions(sphereId, Map.of(_positions));
+    });
   }
 
   void dispose() {
+    _cancelPendingSave();
     _graphSubscription?.cancel();
     _spheresSubscription?.cancel();
     _graphSubject.close();

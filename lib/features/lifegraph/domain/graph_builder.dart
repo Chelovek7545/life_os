@@ -10,8 +10,7 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 
-/// Строит граф для заданной сферы, объединяя стримы из репозиториев
-/// и накладывая сохранённые позиции из JSON.
+/// Строит граф для заданной сферы, объединяя стримы из репозиториев.
 class GraphBuilder {
   GraphBuilder({
     required this.spheresRepository,
@@ -40,16 +39,13 @@ class GraphBuilder {
       projectsRepository.watchAllProjects(),
       tasksRepository.watchTasks(),
       (sphere, goals, allProjects, allTasks) {
-        // Фильтруем проекты и задачи, принадлежащие этому поддереву
+        // Фильтруем проекты и задачи, принадлежащие этому поддереву.
         final goalIds = goals.map((g) => g.id).toSet();
         final projects = allProjects.where((p) => p.goalId != null && goalIds.contains(p.goalId)).toList();
         final projectIds = projects.map((p) => p.id).toSet();
         final tasks = allTasks.where((t) => t.projectId != null && projectIds.contains(t.projectId)).toList();
 
-        // Загружаем позиции
-        // positionsFuture используется в ViewModel для наложения позиций
-
-        // Строим ноды синхронно (позиции наложим асинхронно в ViewModel)
+        // Строим ноды синхронно (позиции наложим асинхронно в ViewModel).
         final nodes = <GraphNode>[];
         final edges = <GraphEdge>[];
 
