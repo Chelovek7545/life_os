@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
-import 'package:life_os/features/lifegraph/presentation/v1.dart' as graph;
+import 'package:life_os/features/lifegraph/graph_view.dart' as graph;
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 /// Карточка ноды в стиле приложения для кастомного nodeBuilder GraphView.
@@ -58,6 +58,8 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
             },
             onPanStart: widget.state.dragStart,
             onPanUpdate: widget.state.dragUpdate,
+            onPanEnd: widget.state.dragEnd,
+            onPanCancel: () => widget.state.dragEnd(DragEndDetails()),
             child: AnimatedScale(
               scale: _hovered ? 1.03 : 1,
               duration: const Duration(milliseconds: 160),
@@ -68,7 +70,7 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                 height: size.height,
                 decoration: BoxDecoration(
                   color: _hovered ? AppColors.surfaceBright : AppColors.surfaceContainer,
-                  borderRadius: BorderRadius.circular(_isSphere ? size.width / 2 : 13),
+                  borderRadius: BorderRadius.circular(13),
                   border: Border.all(
                     color: widget.state.selected ? Colors.white : _accent.withValues(alpha: 0.55),
                     width: widget.state.selected ? 1.6 : 1.2,
@@ -162,32 +164,44 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
   }
 
   Widget _buildSphereContent(GraphNode n) {
-    return Padding(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(_iconOf(n.type), color: _accent, size: 28),
-          const SizedBox(height: 8),
-          Text(
-            n.title,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.onSurface,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              height: 1.15,
-            ),
+    return Center(
+      child: Container(
+        width: 118,
+        height: 118,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: _accent.withValues(alpha: 0.12),
+          border: Border.all(color: _accent.withValues(alpha: 0.55), width: 1.5),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(_iconOf(n.type), color: _accent, size: 30),
+              const SizedBox(height: 8),
+              Text(
+                n.title,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.onSurface,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  height: 1.15,
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildRectContent(GraphNode n) {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
           width: 5,

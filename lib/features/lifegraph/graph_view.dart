@@ -1,12 +1,12 @@
-/// Nodefield — reusable graph canvas.
-/// One widget (GraphView) + one controller (GraphViewController) + one theme.
+/// GraphView — stream-driven graph canvas.
 ///
-/// Drop this file into lib/ (or split by sections into lib/src/) and use:
-///
-///   final controller = GraphViewController();
-///   GraphView(controller: controller, theme: GraphViewTheme.deep);
+/// Data flows in through [GraphView.nodes] (a `Stream<List<GraphNode>>`),
+/// user intent flows out through [GraphView.onAction] as [GraphAction]s.
+/// The widget never owns your data: it renders snapshots, animates the
+/// differences and reports gestures. Requires Dart 3 (sealed classes).
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -14,14 +14,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 // ════════════════════════════════════════════════════════════════════════════
-// 1 · Theme — everything visual lives here
+// 1 · Theme & layout
 // ════════════════════════════════════════════════════════════════════════════
 
 class GraphViewTheme {
-  final List<Color> depthRamp; // node accent by depth
+  final List<Color> depthRamp;
   final Color canvas;
-  final Color ambientA; // top-left glow
-  final Color ambientB; // bottom-right glow
+  final Color ambientA;
+  final Color ambientB;
   final Color gridMinor;
   final Color gridMajor;
   final double gridSpacing;
@@ -87,18 +87,33 @@ class GraphViewTheme {
   );
 }
 
+/// Geometry of the graph. Purely structural — colors live in [GraphViewTheme].
+class GraphLayout {
+  final Size nodeSize;
+  final double levelGap;   // horizontal parent → child distance
+  final double siblingGap; // vertical band step between siblings
+  final Size worldSize;    // pannable canvas extent
+
+  const GraphLayout({
+    this.nodeSize = const Size(176, 68),
+    this.levelGap = 236,
+    this.siblingGap = 112,
+    this.worldSize = const Size(4200, 4200),
+  });
+}
+
 // ════════════════════════════════════════════════════════════════════════════
-// 2 · Data
+// 2 · Data & actions
 // ════════════════════════════════════════════════════════════════════════════
 
+/// One node of the graph. The host owns instances; emit fresh objects
+/// (see [clone]) so the internal diff can see changes.
 class GraphNode {
   final String id;
   final String label;
-
-  final int index;
-  final int depth;
+  final int index;    // creation order — drives the boot stagger
+  final int depth;    // 0 for roots; drives the accent color
   final String? parentId;
-  final Size size; // per-node size; defaults to the controller's nodeSize
   Offset position; // top-left, world coordinates
 
   GraphNode({
@@ -108,40 +123,75 @@ class GraphNode {
     required this.depth,
     required this.parentId,
     required this.position,
-    Size? size,
-  }) : size = size ?? const Size(176, 68);
+  });
 
-    Map<String, dynamic> toJson() => {
-        'id': id,
-        'label': label,
-        'index': index,
-        'depth': depth,
-        'parentId': parentId,
-        'x': position.dx,
-        'y': position.dy,
-        'w': size.width,
-        'h': size.height,
-      };
-
-  factory GraphNode.fromJson(Map<String, dynamic> j) => GraphNode(
-        id: j['id'] as String,
-        label: j['label'] as String? ?? '',
-        index: (j['index'] as num?)?.toInt() ?? 0,
-        depth: (j['depth'] as num?)?.toInt() ?? 0,
-        parentId: j['parentId'] as String?,
-        position: Offset(
-          (j['x'] as num?)?.toDouble() ?? 0,
-          (j['y'] as num?)?.toDouble() ?? 0,
-        ),
-        size: Size(
-          (j['w'] as num?)?.toDouble() ?? 176,
-          (j['h'] as num?)?.toDouble() ?? 68,
-        ),
+  GraphNode clone() => GraphNode(
+        id: id,
+        label: label,
+        index: index,
+        depth: depth,
+        parentId: parentId,
+        position: position,
       );
-
 }
 
-/// Everything a custom node renderer gets from the canvas.
+/// Everything the user can ask the host to do. Sealed, so the host handler
+/// is an exhaustive `switch`. The widget fires these; it never applies them.
+sealed class GraphAction {
+  const GraphAction();
+
+  factory GraphAction.createRoot({Offset? at, String? label}) = CreateRootAction;
+  factory GraphAction.createChild({required String parentId, Offset? at, String? label}) =
+      CreateChildAction;
+  factory GraphAction.move({required String id, required Offset to}) = MoveAction;
+  factory GraphAction.moveEnd({required String id, required Offset to}) = MoveEndAction;
+  factory GraphAction.remove({required String id}) = RemoveAction;
+  factory GraphAction.select(String? id) = SelectAction;
+}
+
+/// Double-tap on empty canvas. [at] is a suggested top-left position.
+class CreateRootAction extends GraphAction {
+  final Offset? at;
+  final String? label;
+  const CreateRootAction({this.at, this.label});
+}
+
+/// Tap on a node's plus button. [at] is where the widget drew its ghost.
+class CreateChildAction extends GraphAction {
+  final String parentId;
+  final Offset? at;
+  final String? label;
+  const CreateChildAction({required this.parentId, this.at, this.label});
+}
+
+/// Continuous, high-frequency, safe to drop. Do NOT persist per event —
+/// treat it as a live cursor and commit on [MoveEndAction].
+class MoveAction extends GraphAction {
+  final String id;
+  final Offset to;
+  const MoveAction({required this.id, required this.to});
+}
+
+/// Drag finished (or cancelled). This is the commit point.
+class MoveEndAction extends GraphAction {
+  final String id;
+  final Offset to;
+  const MoveEndAction({required this.id, required this.to});
+}
+
+/// Long-press / ✕ on a node. Subtree semantics are up to the host.
+class RemoveAction extends GraphAction {
+  final String id;
+  const RemoveAction({required this.id});
+}
+
+/// Selection is view-local; this is informational (e.g. for a side panel).
+class SelectAction extends GraphAction {
+  final String? id;
+  const SelectAction(this.id);
+}
+
+/// What a custom node renderer receives.
 class NodeState {
   final GraphNode node;
   final Size size;
@@ -151,8 +201,9 @@ class NodeState {
   final VoidCallback select;
   final VoidCallback addChild;
   final VoidCallback remove;
-  final GestureDragStartCallback dragStart; // feed global drag details
+  final GestureDragStartCallback dragStart;
   final GestureDragUpdateCallback dragUpdate;
+  final GestureDragEndCallback dragEnd;
 
   const NodeState({
     required this.node,
@@ -165,324 +216,217 @@ class NodeState {
     required this.remove,
     required this.dragStart,
     required this.dragUpdate,
+    required this.dragEnd,
   });
 }
 
 typedef NodeWidgetBuilder = Widget Function(BuildContext context, NodeState state);
 
 // ════════════════════════════════════════════════════════════════════════════
-// 3 · Controller — structure, geometry, imperative camera
+// 3 · Camera — optional imperative handle
 // ════════════════════════════════════════════════════════════════════════════
 
-abstract class _GraphCamera {
+abstract class _CameraDelegate {
   void fitView({required bool animate});
   void zoomBy(double factor);
-  void ensureVisible(Offset scenePoint);
+  void revealNodeById(String id);
 }
 
-class GraphViewController extends ChangeNotifier {
-  GraphViewController({
-    this.nodeSize = const Size(176, 68),
-    this.levelGap = 236,
-    this.siblingGap = 112,
-    this.worldSize = const Size(4200, 4200),
-  });
+/// Imperative camera. Safe to call before attach — calls are no-ops.
+class GraphViewCamera {
+  _CameraDelegate? _delegate;
 
-  /// Geometry (structure-level, not visual).
-  final Size nodeSize;
-  final double levelGap;
-  final double siblingGap;
-  final Size worldSize;
+  bool get isAttached => _delegate != null;
 
-  // Event hooks — assign from the host app.
-  ValueChanged<GraphNode>? onNodeCreated;
-  ValueChanged<GraphNode?>? onSelectionChanged;
-  ValueChanged<GraphNode>? onNodeMoved; // fires continuously while dragging
-  ValueChanged<List<GraphNode>>? onSubtreeRemoved;
+  /// Frames all nodes with padding.
+  void fitView({bool animate = true}) => _delegate?.fitView(animate: animate);
 
-  Map<String, GraphNode> _nodes = {};
-  String? _selectedId;
-  int _ids = 0;
-  int _labels = 0;
-  _GraphCamera? _camera;
+  /// Zoom around the viewport center.
+  void zoomBy(double factor) => _delegate?.zoomBy(factor);
 
-  List<GraphNode> get nodes => _nodes.values.toList();
-  GraphNode? nodeById(String id) => _nodes[id];
-  String? get selectedId => _selectedId;
-  int get linkCount => _nodes.values.where((n) => n.parentId != null).length;
-
-  // ── Mutations ──────────────────────────────────────────────────────────────
-
-  GraphNode addRoot({Offset? at, String? label}) {
-    final index = _labels++;
-    final n = GraphNode(
-      id: 'n${_ids++}',
-      label: label ?? 'Node $index',
-      index: index,
-      depth: 0,
-      parentId: null,
-      size: nodeSize,
-      position: _clamp(at ?? _defaultRootSpot(), nodeSize),
-    );
-    _nodes[n.id] = n;
-    onNodeCreated?.call(n);
-    notifyListeners();
-    _camera?.ensureVisible(n.position + Offset(n.size.width / 2, n.size.height / 2));
-    return n;
-  }
-
-  GraphNode addChild(String parentId, {Offset? at, String? label}) {
-    final p = _nodes[parentId];
-    assert(p != null, 'GraphViewController.addChild: unknown parentId "$parentId"');
-    if (p == null) throw ArgumentError('Unknown parentId "$parentId"');
-
-    final index = _labels++;
-    final siblings = _nodes.values.where((n) => n.parentId == parentId).length;
-    final band = (siblings + 1) ~/ 2;
-    final dy = siblings == 0 ? 0.0 : band * siblingGap * (siblings.isOdd ? 1 : -1);
-
-    final n = GraphNode(
-      id: 'n${_ids++}',
-      label: label ?? 'Node $index',
-      index: index,
-      depth: p.depth + 1,
-      parentId: parentId,
-      size: nodeSize,
-      position: _clamp(at ?? Offset(p.position.dx + nodeSize.width + levelGap, p.position.dy + dy), nodeSize),
-    );
-    _nodes[n.id] = n;
-    onNodeCreated?.call(n);
-    notifyListeners();
-    _camera?.ensureVisible(n.position + Offset(n.size.width / 2, n.size.height / 2));
-    return n;
-  }
-
-  void moveNode(String id, Offset to) {
-    final n = _nodes[id];
-    if (n == null) return;
-    n.position = _clamp(to, n.size);
-    onNodeMoved?.call(n);
-    notifyListeners();
-  }
-
-  void select(String? id) {
-    if (_selectedId == id) return;
-    _selectedId = id;
-    onSelectionChanged?.call(id == null ? null : _nodes[id]);
-    notifyListeners();
-  }
-
-  void removeSubtree(String id) {
-    final doomed = <String>{id};
-    var grew = true;
-    while (grew) {
-      grew = false;
-      for (final n in _nodes.values) {
-        if (n.parentId != null && doomed.contains(n.parentId!) && doomed.add(n.id)) grew = true;
-      }
-    }
-    final removed = [for (final d in doomed) if (_nodes[d] != null) _nodes.remove(d)!];
-    if (doomed.contains(_selectedId)) _selectedId = null;
-    if (removed.isNotEmpty) {
-      onSubtreeRemoved?.call(removed);
-      notifyListeners();
-    }
-  }
-
-  void clear() {
-    _nodes.clear();
-    _selectedId = null;
-    notifyListeners();
-  }
-
-  /// Заменяет весь набор нод (без анимации камеры и авто-позиционирования).
-  /// Используется, когда граф является проекцией внешнего источника данных
-  /// (например, БД): позиции и размеры приходят уже вычисленными.
-  /// Выделение сохраняется, если нода ещё существует.
-  void setGraph(List<GraphNode> nodes) {
-    _nodes.clear();
-    for (final n in nodes) {
-      _nodes[n.id] = n;
-    }
-    if (_selectedId != null && !_nodes.containsKey(_selectedId)) {
-      _selectedId = null;
-    }
-    notifyListeners();
-  }
-
-  // ── Camera (no-ops until the view is attached) ─────────────────────────────
-
-  void fitView({bool animate = true}) => _camera?.fitView(animate: animate);
-  void zoomBy(double factor) => _camera?.zoomBy(factor);
-  void revealNode(String id) {
-    final n = _nodes[id];
-    if (n != null) _camera?.ensureVisible(n.position + Offset(n.size.width / 2, n.size.height / 2));
-  }
-
-  // ── Internals ──────────────────────────────────────────────────────────────
-
-  Offset _defaultRootSpot() {
-    final roots = _nodes.values.where((n) => n.parentId == null).length;
-    return Offset(worldSize.width * 0.32 + (roots % 5) * 60, worldSize.height * 0.40 + roots * 130);
-  }
-
-  Offset _clamp(Offset p, Size size) => Offset(
-        p.dx.clamp(24, worldSize.width - size.width - 24),
-        p.dy.clamp(24, worldSize.height - size.height - 24),
-      );
-
-  void _attach(_GraphCamera camera) {
-    assert(_camera == null, 'A GraphViewController can drive only one GraphView at a time.');
-    _camera = camera;
-  }
-
-  void _detach(_GraphCamera camera) {
-    if (identical(_camera, camera)) _camera = null;
-  }
-
-    /// Снимок графа: узлы + счётчики, чтобы новые id/имена не collided.
-  Map<String, dynamic> exportGraph() => {
-        'v': 1,
-        'nextId': _ids,
-        'nextLabel': _labels,
-        'selectedId': _selectedId,
-        'nodes': [for (final n in _nodes.values) n.toJson()],
-      };
-
-  /// Заменяет текущий граф снимком из [exportGraph].
-  /// Возвращает false, если формат не распознан.
-  bool importGraph(Map<String, dynamic> data) {
-    if (data['v'] != 1) return false;
-    _nodes.clear();
-    for (final raw in (data['nodes'] as List? ?? const [])) {
-      if (raw is Map<String, dynamic>) {
-        final n = GraphNode.fromJson(raw);
-        _nodes[n.id] = n..position = _clamp(n.position, n.size);
-      }
-    }
-    _ids = (data['nextId'] as num?)?.toInt() ?? _nodes.length;
-    _labels = (data['nextLabel'] as num?)?.toInt() ?? _nodes.length;
-    final sel = data['selectedId'] as String?;
-    _selectedId = (sel != null && _nodes.containsKey(sel)) ? sel : null;
-    notifyListeners();
-    return true;
-  }
-
-}
-
-
-/// Контракт персистентности. Реализации: prefs, файл, SQLite, сервер…
-abstract class GraphStore {
-  Future<Map<String, dynamic>?> load(String slot);
-  Future<void> save(String slot, Map<String, dynamic> snapshot);
-  Future<List<String>> slots(); // самые свежие — первыми
-  Future<void> delete(String slot);
+  /// Pans (animated) so the node is inside the viewport.
+  void revealNode(String id) => _delegate?.revealNodeById(id);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 4 · GraphView — the one widget you embed
+// 4 · GraphView
 // ════════════════════════════════════════════════════════════════════════════
 
 class GraphView extends StatefulWidget {
-  final GraphViewController controller;
+  /// Source of truth. Must emit the FULL node list on every event and
+  /// deliver the current state on listen (drift `.watch()` and rxdart
+  /// `BehaviorSubject` both behave this way).
+  final Stream<List<GraphNode>> nodes;
+
+  /// User intent. Wire it to your store/bloc/repository.
+  final ValueChanged<GraphAction>? onAction;
+
   final GraphViewTheme theme;
-
-  /// Custom node renderer. When null, [DefaultNodeCard] is used.
+  final GraphLayout layout;
+  final GraphViewCamera? camera;
   final NodeWidgetBuilder? nodeBuilder;
-
-  final bool showControls;          // built-in zoom cluster
-  final bool doubleTapCreatesRoot;  // double-tap empty canvas
-  final bool longPressDeletes;      // long-press a node to prune its subtree
+  final bool showControls;
+  final bool doubleTapCreatesRoot;
+  final bool longPressDeletes;
   final double minScale;
   final double maxScale;
 
+  /// How long an optimistic ghost waits for the real node before fading out.
+  final Duration ghostTimeout;
+
   const GraphView({
     super.key,
-    required this.controller,
+    required this.nodes,
+    this.onAction,
     this.theme = GraphViewTheme.deep,
+    this.layout = const GraphLayout(),
+    this.camera,
     this.nodeBuilder,
     this.showControls = true,
     this.doubleTapCreatesRoot = true,
     this.longPressDeletes = true,
     this.minScale = 0.25,
     this.maxScale = 2.5,
+    this.ghostTimeout = const Duration(milliseconds: 2500),
   });
 
   @override
   State<GraphView> createState() => _GraphViewState();
 }
 
-class _GraphViewState extends State<GraphView> with TickerProviderStateMixin implements _GraphCamera {
+class _GraphViewState extends State<GraphView>
+    with TickerProviderStateMixin
+    implements _CameraDelegate {
   final TransformationController _ctrl = TransformationController();
   final GlobalKey _viewerKey = GlobalKey();
 
+  final Map<String, GraphNode> _nodes = {};
+  String? _selectedId;
+  String? _draggingId;
+
+  StreamSubscription<List<GraphNode>>? _sub;
+  final List<_Ghost> _ghosts = [];
+  int _ghostSeq = 0;
+
   late final AnimationController _revealCtrl;
   late final CurvedAnimation _revealCurved;
-  final Map<String, double> _reveals = {}; // 'parent>child' -> draw progress
+  final Map<String, double> _reveals = {};
 
   late final AnimationController _flyCtrl;
   Animation<Matrix4>? _flyAnim;
 
   Offset _dragGrab = Offset.zero;
   bool _booted = false;
+  bool _firstEmit = false;
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    widget.controller._attach(this);
-    widget.controller.addListener(_onGraphChanged);
-
+    widget.camera?._delegate = this;   
     _revealCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 750));
     _revealCurved = CurvedAnimation(parent: _revealCtrl, curve: Curves.easeOutCubic);
     _revealCtrl.addListener(_onRevealTick);
     _flyCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
-
-    _onGraphChanged(); // register pre-seeded edges at zero reveal
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      fitView(animate: false);
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) _revealCtrl.forward();
-        if (mounted) setState(() => _booted = true);
-      });
-    });
+    _subscribe(widget.nodes);
   }
 
   @override
   void didUpdateWidget(covariant GraphView old) {
     super.didUpdateWidget(old);
-    if (old.controller != widget.controller) {
-      old.controller._detach(this);
-      old.controller.removeListener(_onGraphChanged);
-      widget.controller._attach(this);
-      widget.controller.addListener(_onGraphChanged);
+  if (old.camera != widget.camera) {
+    old.camera?._delegate = null;           
+    widget.camera?._delegate = this;
+  }
+    if (old.nodes != widget.nodes) {
+      _nodes.clear();
       _reveals.clear();
-      _onGraphChanged();
+      _ghosts.clear();
+      _selectedId = null;
+      _firstEmit = false;
+      _booted = false;
+      _subscribe(widget.nodes);
     }
   }
 
   @override
   void dispose() {
-    widget.controller._detach(this);
-    widget.controller.removeListener(_onGraphChanged);
+    widget.camera?._delegate = null;
+    _sub?.cancel();
     _revealCtrl.dispose();
     _flyCtrl.dispose();
     _ctrl.dispose();
     super.dispose();
   }
 
-  // ── Edge reveal bookkeeping ────────────────────────────────────────────────
+  void _subscribe(Stream<List<GraphNode>> stream) {
+    _sub?.cancel();
+    _sub = stream.listen(
+      _onEmit,
+      onError: (Object e) => debugPrint('GraphView: stream error: $e'),
+    );
+  }
 
-  void _onGraphChanged() {
+  // ── Diff engine ────────────────────────────────────────────────────────────
+
+  void _onEmit(List<GraphNode> incoming) {
+    if (!mounted) return;
+    final byId = {for (final n in incoming) n.id: n};
+    var changed = false;
+
+    for (final id in _nodes.keys.where((id) => !byId.containsKey(id)).toList()) {
+      _nodes.remove(id);
+      changed = true;
+    }
+
+    for (final fresh in byId.values) {
+      final existing = _nodes[fresh.id];
+      if (existing == null) {
+        _nodes[fresh.id] = fresh;
+        changed = true;
+      } else if (existing.label != fresh.label ||
+          existing.parentId != fresh.parentId ||
+          existing.depth != fresh.depth ||
+          existing.index != fresh.index) {
+        _nodes[fresh.id] = fresh;
+        if (fresh.id == _draggingId) fresh.position = existing.position;
+        changed = true;
+      } else if (existing.position != fresh.position && fresh.id != _draggingId) {
+        existing.position = fresh.position;
+        changed = true;
+      }
+    }
+
+    if (_selectedId != null && !_nodes.containsKey(_selectedId)) _selectedId = null;
+    _retireGhosts(byId.values);
+    _syncReveals();
+
+    if (!_firstEmit) {
+      _firstEmit = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _nodes.isNotEmpty) fitView(animate: false);
+        Future.delayed(const Duration(milliseconds: 450), () {
+          if (!mounted) return;
+          _revealCtrl.forward();
+          setState(() => _booted = true);
+        });
+      });
+    }
+
+    if (changed) setState(() {});
+  }
+
+  void _syncReveals() {
     final keys = <String>{};
-    for (final n in widget.controller.nodes) {
+    for (final n in _nodes.values) {
       if (n.parentId != null) keys.add('${n.parentId}>${n.id}');
     }
     final fresh = keys.difference(_reveals.keys.toSet());
     if (fresh.isNotEmpty) {
-      for (final k in fresh) _reveals[k] = 0;
+      for (final k in fresh) {
+        _reveals[k] = 0;
+      }
       if (_booted) _revealCtrl.forward(from: 0);
     }
     _reveals.removeWhere((k, _) => !keys.contains(k));
@@ -498,6 +442,102 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin imp
       }
     }
     if (dirty) setState(() {});
+  }
+
+  // ── Ghosts — optimistic placeholders while the host round-trips ────────────
+
+  void _spawnGhost({required String? parentId, required Offset at, required Color accent}) {
+    _ghosts.add(_Ghost(
+      id: 'g${_ghostSeq++}',
+      parentId: parentId,
+      position: _clamp(at),
+      accent: accent,
+    ));
+    setState(() {});
+  }
+
+  void _retireGhosts(Iterable<GraphNode> incoming) {
+    if (_ghosts.isEmpty) return;
+    final matched = <_Ghost>{};
+    for (final g in _ghosts) {
+      for (final n in incoming) {
+        if (n.parentId == g.parentId && (n.position - g.position).distance < 48) {
+          matched.add(g);
+          break;
+        }
+      }
+    }
+    if (matched.isNotEmpty) {
+      _ghosts.removeWhere(matched.contains);
+      setState(() {});
+    }
+  }
+
+  void _ghostGone(_Ghost g) {
+    if (_ghosts.remove(g)) setState(() {});
+  }
+
+  // ── Actions out ────────────────────────────────────────────────────────────
+
+  void _act(GraphAction a) => widget.onAction?.call(a);
+
+  void _requestChild(GraphNode parent) {
+    HapticFeedback.selectionClick();
+    final pos = _childSpot(parent);
+    _spawnGhost(
+      parentId: parent.id,
+      at: pos,
+      accent: widget.theme.accentFor(parent.depth + 1),
+    );
+    _act(GraphAction.createChild(parentId: parent.id, at: pos));
+  }
+
+  void _requestRoot(Offset scenePoint) {
+    HapticFeedback.selectionClick();
+    final ns = widget.layout.nodeSize;
+    final at = scenePoint - Offset(ns.width / 2, ns.height / 2);
+    _spawnGhost(parentId: null, at: at, accent: widget.theme.accentFor(0));
+    _act(GraphAction.createRoot(at: at));
+  }
+
+  Offset _childSpot(GraphNode parent) {
+    final l = widget.layout;
+    final siblings = _nodes.values.where((n) => n.parentId == parent.id).length;
+    final band = (siblings + 1) ~/ 2;
+    final dy = siblings == 0 ? 0.0 : band * l.siblingGap * (siblings.isOdd ? 1 : -1);
+    return _clamp(Offset(parent.position.dx + l.nodeSize.width + l.levelGap, parent.position.dy + dy));
+  }
+
+  // ── Dragging: optimistic locally, committed via MoveEndAction ──────────────
+
+  void _dragStart(GraphNode n, DragStartDetails d) {
+    _dragGrab = n.position - _sceneFromGlobal(d.globalPosition);
+    _draggingId = n.id;
+    if (_selectedId != n.id) {
+      _selectedId = n.id;
+      _act(GraphAction.select(n.id));
+    }
+    setState(() {});
+  }
+
+  void _dragUpdate(GraphNode n, DragUpdateDetails d) {
+    n.position = _clamp(_sceneFromGlobal(d.globalPosition) + _dragGrab);
+    _act(GraphAction.move(id: n.id, to: n.position));
+    setState(() {});
+  }
+
+  void _dragEnd(GraphNode n) {
+    if (_draggingId == n.id) _draggingId = null;
+    _act(GraphAction.moveEnd(id: n.id, to: n.position));
+  }
+
+  Offset _clamp(Offset pos) {
+    final w = widget.layout.worldSize;
+    final ns = widget.layout.nodeSize;
+    return Offset(
+      pos.dx.clamp(24, w.width - ns.width - 24),
+      pos.dy.clamp(24, w.height - ns.height - 24),
+    );
   }
 
   // ── Camera math ────────────────────────────────────────────────────────────
@@ -522,13 +562,14 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin imp
 
   @override
   void fitView({required bool animate}) {
-    final all = widget.controller.nodes;
+    final all = _nodes.values.toList();
     final box = _viewerBox;
     if (all.isEmpty || box == null) return;
 
-    var rect = Rect.fromLTWH(all.first.position.dx, all.first.position.dy, all.first.size.width, all.first.size.height);
+    final ns = widget.layout.nodeSize;
+    var rect = Rect.fromLTWH(all.first.position.dx, all.first.position.dy, ns.width, ns.height);
     for (final n in all) {
-      rect = rect.expandToInclude(Rect.fromLTWH(n.position.dx, n.position.dy, n.size.width, n.size.height));
+      rect = rect.expandToInclude(Rect.fromLTWH(n.position.dx, n.position.dy, ns.width, ns.height));
     }
     rect = rect.inflate(150);
 
@@ -560,8 +601,7 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin imp
     _flyTo(_ctrl.value.clone()..multiply(around));
   }
 
-  @override
-  void ensureVisible(Offset scenePoint) {
+  void _ensureVisible(Offset scenePoint) {
     final box = _viewerBox;
     if (box == null) return;
     final vp = box.size;
@@ -578,41 +618,43 @@ class _GraphViewState extends State<GraphView> with TickerProviderStateMixin imp
     _flyTo(Matrix4.translationValues(dx, dy, 0)..multiply(_ctrl.value));
   }
 
-  // ── Node interaction plumbing ──────────────────────────────────────────────
-
-  void _dragStart(GraphNode n, DragStartDetails d) {
-    _dragGrab = n.position - _sceneFromGlobal(d.globalPosition);
-    widget.controller.select(n.id);
-  }
-
-  void _dragUpdate(GraphNode n, DragUpdateDetails d) {
-    widget.controller.moveNode(n.id, _sceneFromGlobal(d.globalPosition) + _dragGrab);
-  }
-
-  List<_EdgeSpec> _buildEdges(GraphViewTheme theme, var ctrl) {
-    final out = <_EdgeSpec>[];
-    for (final n in widget.controller.nodes) {
-      if (n.parentId == null) continue;
-      final p = widget.controller.nodeById(n.parentId!);
-      if (p == null) continue;
-out.add(_EdgeSpec(p, n, p.size, n.size, theme.accentFor(p.depth), theme.accentFor(n.depth),
-    _reveals['${p.id}>${n.id}'] ?? 1));
-    }
-    return out;
+  @override
+  void revealNodeById(String id) {
+    final n = _nodes[id];
+    if (n == null) return;
+    final ns = widget.layout.nodeSize;
+    _ensureVisible(n.position + Offset(ns.width / 2, ns.height / 2));
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
+  List<_EdgeSpec> _buildEdges(GraphViewTheme theme) {
+    final out = <_EdgeSpec>[];
+    for (final n in _nodes.values) {
+      if (n.parentId == null) continue;
+      final from = _nodes[n.parentId!];
+      if (from == null) continue;
+      out.add(_EdgeSpec(
+        from,
+        n,
+        widget.layout.nodeSize,
+        theme.accentFor(from.depth),
+        theme.accentFor(n.depth),
+        _reveals['${from.id}>${n.id}'] ?? 1,
+      ));
+    }
+    return out;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = widget.theme;
-    final ctrl = widget.controller;
-    final ns = ctrl.nodeSize;
+    final l = widget.layout;
+    final ns = l.nodeSize;
 
     return ClipRect(
       child: Stack(
         children: [
-          // Ambient layered backdrop.
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -651,76 +693,93 @@ out.add(_EdgeSpec(p, n, p.size, n.size, theme.accentFor(p.depth), theme.accentFo
             ),
           ),
 
-          // The world.
-          ListenableBuilder(
-            listenable: ctrl,
-            builder: (context, _) {
-              return InteractiveViewer(
-                key: _viewerKey,
-                transformationController: _ctrl,
-                constrained: false,
-                minScale: widget.minScale,
-                maxScale: widget.maxScale,
-                child: SizedBox(
-                  width: ctrl.worldSize.width,
-                  height: ctrl.worldSize.height,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => ctrl.select(null),
-                          onDoubleTapDown: widget.doubleTapCreatesRoot
-                              ? (d) {
-                                  HapticFeedback.selectionClick();
-                                  ctrl.addRoot(at: d.localPosition - Offset(ns.width / 2, ns.height / 2));
-                                }
-                              : null,
-                          child: CustomPaint(painter: _GridPainter(theme)),
-                        ),
+          InteractiveViewer(
+            key: _viewerKey,
+            transformationController: _ctrl,
+            constrained: false,
+            minScale: widget.minScale,
+            maxScale: widget.maxScale,
+            child: SizedBox(
+              width: l.worldSize.width,
+              height: l.worldSize.height,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        if (_selectedId != null) {
+                          _selectedId = null;
+                          _act(GraphAction.select(null));
+                          setState(() {});
+                        }
+                      },
+                      onDoubleTapDown: widget.doubleTapCreatesRoot
+                          ? (d) => _requestRoot(d.localPosition)
+                          : null,
+                      child: CustomPaint(painter: _GridPainter(theme)),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: CustomPaint(painter: _EdgesPainter(_buildEdges(theme), theme)),
+                    ),
+                  ),
+
+                  // Ghosts sit under real nodes.
+                  for (final g in _ghosts)
+                    Positioned(
+                      key: ValueKey(g.id),
+                      left: g.position.dx,
+                      top: g.position.dy,
+                      width: ns.width,
+                      height: ns.height,
+                      child: _GhostNode(
+                        ghost: g,
+                        size: ns,
+                        theme: theme,
+                        timeout: widget.ghostTimeout,
+                        onGone: () => _ghostGone(g),
                       ),
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: CustomPaint(painter: _EdgesPainter(_buildEdges(theme, ctrl), theme)),
-                        ),
-                      ),
-                      for (final n in ctrl.nodes)
-                        Positioned(
-                          key: ValueKey(n.id),
-                          left: n.position.dx,
-                          top: n.position.dy,
-                          width: n.size.width,
-                          height: n.size.height,
-                          child: _PopIn(
-                            delayMs: _booted ? 0 : math.min(n.index * 120, 600),
-                            child: (widget.nodeBuilder ?? _defaultBuilder)(
-                              context,
-                              NodeState(
-                                node: n,
-                                size: n.size,
-                                selected: ctrl.selectedId == n.id,
-                                canDelete: widget.longPressDeletes,
-                                accent: theme.accentFor(n.depth),
-                                select: () => ctrl.select(n.id),
-                                addChild: () {
-                                  HapticFeedback.selectionClick();
-                                  ctrl.addChild(n.id);
-                                },
-                                remove: () {
-                                  HapticFeedback.mediumImpact();
-                                  ctrl.removeSubtree(n.id);
-                                },
-                                dragStart: (d) => _dragStart(n, d),
-                                dragUpdate: (d) => _dragUpdate(n, d),
-                              ),
-                            ),
+                    ),
+
+                  for (final n in _nodes.values)
+                    Positioned(
+                      key: ValueKey(n.id),
+                      left: n.position.dx,
+                      top: n.position.dy,
+                      width: ns.width,
+                      height: ns.height,
+                      child: _PopIn(
+                        delayMs: _booted ? 0 : math.min(n.index * 120, 600),
+                        child: (widget.nodeBuilder ?? _defaultBuilder)(
+                          context,
+                          NodeState(
+                            node: n,
+                            size: ns,
+                            selected: _selectedId == n.id,
+                            canDelete: widget.longPressDeletes,
+                            accent: theme.accentFor(n.depth),
+                            select: () {
+                              _selectedId = n.id;
+                              _act(GraphAction.select(n.id));
+                              setState(() {});
+                            },
+                            addChild: () => _requestChild(n),
+                            remove: () {
+                              HapticFeedback.mediumImpact();
+                              _act(GraphAction.remove(id: n.id));
+                            },
+                            dragStart: (d) => _dragStart(n, d),
+                            dragUpdate: (d) => _dragUpdate(n, d),
+                            dragEnd: (_) => _dragEnd(n),
                           ),
                         ),
-                    ],
-                  ),
-                ),
-              );
-            },
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
 
           if (widget.showControls)
@@ -744,8 +803,9 @@ out.add(_EdgeSpec(p, n, p.size, n.size, theme.accentFor(p.depth), theme.accentFo
       DefaultNodeCard(state: state, theme: widget.theme);
 }
 
+
 // ════════════════════════════════════════════════════════════════════════════
-// 5 · Default node renderer (public — reusable from custom builders too)
+// 5 · Default node card
 // ════════════════════════════════════════════════════════════════════════════
 
 class DefaultNodeCard extends StatefulWidget {
@@ -782,6 +842,8 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
             onLongPress: s.canDelete ? s.remove : null,
             onPanStart: s.dragStart,
             onPanUpdate: s.dragUpdate,
+            onPanEnd: s.dragEnd,
+            onPanCancel: () => s.dragEnd(DragEndDetails()),
             child: AnimatedScale(
               scale: _hovered ? 1.03 : 1,
               duration: const Duration(milliseconds: 160),
@@ -856,7 +918,6 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
             ),
           ),
 
-          // Prune — revealed on hover (long-press covers touch).
           if (s.canDelete)
             Positioned(
               top: -9,
@@ -886,7 +947,6 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
               ),
             ),
 
-          // The plus button — grows a child from this node.
           Positioned(
             right: -15,
             top: s.size.height / 2 - 16,
@@ -937,7 +997,6 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
   }
 }
 
-/// Elastic pop-in applied to every node, regardless of the builder.
 class _PopIn extends StatefulWidget {
   final int delayMs;
   final Widget child;
@@ -976,17 +1035,133 @@ class _PopInState extends State<_PopIn> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _fade,
-      child: ScaleTransition(
-        scale: _scale,
-        alignment: Alignment.centerLeft, // grow out of the parent's plus button
-        child: widget.child,
-      ),
+      child: ScaleTransition(scale: _scale, alignment: Alignment.centerLeft, child: widget.child),
     );
   }
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// 6 · Painters
+// 6 · Ghost — optimistic placeholder
+// ════════════════════════════════════════════════════════════════════════════
+
+class _Ghost {
+  final String id;
+  final String? parentId;
+  final Offset position;
+  final Color accent;
+
+  const _Ghost({
+    required this.id,
+    required this.parentId,
+    required this.position,
+    required this.accent,
+  });
+}
+
+class _GhostNode extends StatefulWidget {
+  final _Ghost ghost;
+  final Size size;
+  final GraphViewTheme theme;
+  final Duration timeout;
+  final VoidCallback onGone;
+
+  const _GhostNode({
+    required this.ghost,
+    required this.size,
+    required this.theme,
+    required this.timeout,
+    required this.onGone,
+  });
+
+  @override
+  State<_GhostNode> createState() => _GhostNodeState();
+}
+
+class _GhostNodeState extends State<_GhostNode> with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+  late final Timer _expiry;
+  bool _leaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))
+      ..repeat(reverse: true);
+    _expiry = Timer(widget.timeout, () {
+      if (!mounted) return;
+      setState(() => _leaving = true);
+      Future.delayed(const Duration(milliseconds: 240), widget.onGone);
+    });
+  }
+
+  @override
+  void dispose() {
+    _expiry.cancel();
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final g = widget.ghost;
+    return IgnorePointer(
+      child: AnimatedOpacity(
+        opacity: _leaving ? 0 : 1,
+        duration: const Duration(milliseconds: 220),
+        child: AnimatedBuilder(
+          animation: _pulse,
+          builder: (_, __) {
+            return Opacity(
+              opacity: 0.55 + 0.4 * _pulse.value,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CustomPaint(painter: _DashedBorder(color: g.accent, radius: 13)),
+                  Center(
+                    child: Icon(Icons.add, size: 16, color: g.accent),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _DashedBorder extends CustomPainter {
+  final Color color;
+  final double radius;
+
+  const _DashedBorder({required this.color, required this.radius});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..addRRect(RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)));
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    for (final pm in path.computeMetrics()) {
+      var dist = 0.0;
+      const dash = 7.0, gap = 5.5;
+      while (dist < pm.length) {
+        final end = math.min(dist + dash, pm.length);
+        canvas.drawPath(pm.extractPath(dist, end), paint);
+        dist = end + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedBorder old) => old.color != color;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// 7 · Painters
 // ════════════════════════════════════════════════════════════════════════════
 
 class _GridPainter extends CustomPainter {
@@ -1038,13 +1213,12 @@ class _GridPainter extends CustomPainter {
 class _EdgeSpec {
   final GraphNode from;
   final GraphNode to;
-  final Size fromSize;
-  final Size toSize;
+  final Size nodeSize;
   final Color cFrom;
   final Color cTo;
   final double reveal;
 
-  const _EdgeSpec(this.from, this.to, this.fromSize, this.toSize, this.cFrom, this.cTo, this.reveal);
+  const _EdgeSpec(this.from, this.to, this.nodeSize, this.cFrom, this.cTo, this.reveal);
 }
 
 class _EdgesPainter extends CustomPainter {
@@ -1057,10 +1231,10 @@ class _EdgesPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     for (final e in edges) {
       final a = Offset(
-        e.from.position.dx + e.fromSize.width + 18,
-        e.from.position.dy + e.fromSize.height / 2,
+        e.from.position.dx + e.nodeSize.width + 18,
+        e.from.position.dy + e.nodeSize.height / 2,
       );
-      final b = Offset(e.to.position.dx - 8, e.to.position.dy + e.toSize.height / 2);
+      final b = Offset(e.to.position.dx - 8, e.to.position.dy + e.nodeSize.height / 2);
 
       final dx = math.max(56.0, (b.dx - a.dx) * 0.55);
       final path = Path()
@@ -1074,17 +1248,22 @@ class _EdgesPainter extends CustomPainter {
         drawn = pm.extractPath(0, pm.length * e.reveal);
       }
 
-      canvas.drawPath(drawn, Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = 8
-        ..color = e.cTo.withOpacity(0.12));
-
-      canvas.drawPath(drawn, Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = 2.4
-        ..shader = ui.Gradient.linear(a, b, [e.cFrom.withOpacity(0.55), e.cTo]));
+      canvas.drawPath(
+        drawn,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = 8
+          ..color = e.cTo.withOpacity(0.12),
+      );
+      canvas.drawPath(
+        drawn,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = 2.4
+          ..shader = ui.Gradient.linear(a, b, [e.cFrom.withOpacity(0.55), e.cTo]),
+      );
 
       if (e.reveal < 1 && pm != null) {
         final tip = pm.getTangentForOffset(pm.length * e.reveal)?.position ?? b;
@@ -1098,11 +1277,8 @@ class _EdgesPainter extends CustomPainter {
   bool shouldRepaint(covariant _EdgesPainter old) => true;
 }
 
-
-
-
 // ════════════════════════════════════════════════════════════════════════════
-// 7 · Built-in zoom controls
+// 8 · Built-in zoom controls
 // ════════════════════════════════════════════════════════════════════════════
 
 class _ZoomControls extends StatelessWidget {

@@ -73,7 +73,6 @@ class DependencyContainer {
       goalsRepository: goalsRepository,
       projectsRepository: projectsRepository,
       tasksRepository: tasksRepository,
-      positionsRepository: graphPositionsRepository,
     );
     lifeGraphViewModel = LifeGraphViewModel(
       spheresRepository: spheresRepository,

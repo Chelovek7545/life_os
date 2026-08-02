@@ -8,32 +8,30 @@ import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
-import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 
-/// Строит граф для заданной сферы, объединяя стримы из репозиториев.
+/// Строит список доменных нод для заданной сферы, объединяя стримы
+/// из репозиториев. Рёбра и позиции сюда не входят — их выводит [GraphView].
 class GraphBuilder {
   GraphBuilder({
     required this.spheresRepository,
     required this.goalsRepository,
     required this.projectsRepository,
     required this.tasksRepository,
-    required this.positionsRepository,
   });
 
   final SpheresRepository spheresRepository;
   final GoalsRepository goalsRepository;
   final ProjectsRepository projectsRepository;
   final TasksRepository tasksRepository;
-  final GraphPositionsRepository positionsRepository;
 
-  /// Возвращает стрим GraphData для указанной сферы.
-  Stream<GraphData> watchGraph(String sphereId) {
+  /// Возвращает стрим полного списка нод (сфера — корень) для сферы.
+  Stream<List<GraphNode>> watchGraph(String sphereId) {
     return Rx.combineLatest4<
         Sphere,
         List<Goal>,
         List<Project>,
         List<Task>,
-        GraphData>(
+        List<GraphNode>>(
       spheresRepository.watchAllSpheres().map((list) => list.firstWhere((s) => s.id == sphereId)),
       goalsRepository.watchGoalsBySphere(sphereId),
       projectsRepository.watchAllProjects(),
@@ -45,21 +43,17 @@ class GraphBuilder {
         final projectIds = projects.map((p) => p.id).toSet();
         final tasks = allTasks.where((t) => t.projectId != null && projectIds.contains(t.projectId)).toList();
 
-        // Строим ноды синхронно (позиции наложим асинхронно в ViewModel).
-        final nodes = <GraphNode>[];
-        final edges = <GraphEdge>[];
-
-        // Сфера (корень)
-        nodes.add(GraphNode(
-          id: sphere.id,
-          type: GraphNodeType.sphere,
-          title: sphere.name,
-          subtitle: '',
-          color: sphere.color,
-          parentId: null,
-          x: 0,
-          y: 0,
-        ));
+        final nodes = <GraphNode>[
+          // Сфера (корень)
+          GraphNode(
+            id: sphere.id,
+            type: GraphNodeType.sphere,
+            title: sphere.name,
+            subtitle: '',
+            color: sphere.color,
+            parentId: null,
+          ),
+        ];
 
         // Цели
         for (final goal in goals) {
@@ -70,10 +64,7 @@ class GraphBuilder {
             subtitle: goal.description,
             color: goal.color,
             parentId: sphere.id,
-            x: 0,
-            y: 0,
           ));
-          edges.add(GraphEdge(fromId: sphere.id, toId: goal.id));
         }
 
         // Проекты
@@ -85,12 +76,7 @@ class GraphBuilder {
             subtitle: project.description,
             color: project.color,
             parentId: project.goalId,
-            x: 0,
-            y: 0,
           ));
-          if (project.goalId != null) {
-            edges.add(GraphEdge(fromId: project.goalId!, toId: project.id));
-          }
         }
 
         // Задачи
@@ -102,16 +88,11 @@ class GraphBuilder {
             subtitle: task.description.isEmpty ? 'Нет описания' : task.description,
             color: _taskColor(task.status),
             parentId: task.projectId,
-            x: 0,
-            y: 0,
             taskStatus: task.status,
           ));
-          if (task.projectId != null) {
-            edges.add(GraphEdge(fromId: task.projectId!, toId: task.id));
-          }
         }
 
-        return GraphData(nodes: nodes, edges: edges);
+        return nodes;
       },
     );
   }

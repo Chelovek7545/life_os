@@ -3,8 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
+import 'package:life_os/features/lifegraph/graph_view.dart' as graph;
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
-import 'package:life_os/features/lifegraph/presentation/v1.dart' as graph;
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_card.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
@@ -13,11 +13,10 @@ import 'package:life_os/features/spheres/domain/sphere_model.dart';
 
 /// Экран графа жизни: сфера -> цель -> проект -> задача.
 ///
-/// Граф — это проекция данных из БД. [GraphViewController] (из v1.dart)
-/// используется как «холст»: структура, рёбра, камера и перетаскивание,
-/// а все данные приходят из [LifeGraphViewModel] (позиции накладываются
-/// автоматически или из сохранённых). Правка/добавление/удаление нод
-/// идут напрямую в репозитории через ViewModel.
+/// Граф — это проекция данных из БД. [graph.GraphView] получает список
+/// view-нод стримом из [LifeGraphViewModel] и сам рисует рёбра, анимации,
+/// пан/зум и драг; правка/добавление/удаление идут через [graph.GraphAction]
+/// и диалоги. Позиции нод авто-сохраняются в репозитории через ViewModel.
 class LifeGraphScreen extends StatefulWidget {
   final LifeGraphViewModel viewModel;
 
@@ -28,157 +27,8 @@ class LifeGraphScreen extends StatefulWidget {
 }
 
 class _LifeGraphScreenState extends State<LifeGraphScreen> {
-  late final graph.GraphViewController _controller;
-
-  GraphData _graphData = GraphData.empty();
+  final graph.GraphViewCamera _camera = graph.GraphViewCamera();
   String? _syncedSphereId;
-  bool _syncScheduled = false;
-  GraphData? _pendingData;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = graph.GraphViewController(
-      worldSize: const Size.square(graphWorldSize),
-    );
-    // Перемещение ноды на канвасе сохраняется в ViewModel (с debounce).
-    _controller.onNodeMoved = (n) {
-      widget.viewModel.moveNode(n.id, n.position.dx, n.position.dy);
-    };
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  // ── Синхронизация контроллера с данными из БД ─────────────────────────────
-
-  Map<String, int> _depthsOf(GraphData graph) {
-    final depth = <String, int>{};
-    for (final n in graph.nodes) {
-      if (n.parentId == null) depth[n.id] = 0;
-    }
-    var grew = true;
-    while (grew) {
-      grew = false;
-      for (final n in graph.nodes) {
-        final p = n.parentId;
-        if (p != null && depth.containsKey(p) && !depth.containsKey(n.id)) {
-          depth[n.id] = depth[p]! + 1;
-          grew = true;
-        }
-      }
-    }
-    return depth;
-  }
-
-  GraphNode? _rootOf(GraphData data) {
-    for (final n in data.nodes) {
-      if (n.parentId == null) return n;
-    }
-    return null;
-  }
-
-  /// Контроллер не «моргает» во время перетаскивания: позиции существующих
-  /// нод сохраняются, новые ноды получают позиции из layout'а ViewModel.
-  List<graph.GraphNode> _toViewNodes(GraphData data) {
-    final depth = _depthsOf(data);
-    final existing = {
-      for (final n in _controller.nodes) n.id: n.position,
-    };
-    final out = <graph.GraphNode>[];
-    for (var i = 0; i < data.nodes.length; i++) {
-      final n = data.nodes[i];
-      out.add(graph.GraphNode(
-        id: n.id,
-        label: n.title,
-        index: i,
-        depth: depth[n.id] ?? 0,
-        parentId: n.parentId,
-        size: Size(graphNodeWidth(n.type), graphNodeHeight(n.type)),
-        position: existing[n.id] ?? Offset(n.x, n.y),
-      ));
-    }
-    return out;
-  }
-
-  void _scheduleSync(GraphData data) {
-    // Всегда используем свежайшие данные: если несколько эмиссий пришли в одном
-    // кадре, post-frame колбэк применит последнюю, а не первую (устаревшую).
-    _pendingData = data;
-    if (_syncScheduled) return;
-    _syncScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _syncScheduled = false;
-      final latest = _pendingData;
-      _pendingData = null;
-      if (!mounted || latest == null) return;
-      _syncGraph(latest);
-    });
-  }
-
-  void _syncGraph(GraphData data) {
-    final sphereId = widget.viewModel.currentSphereId;
-    if (sphereId == null) {
-      if (_syncedSphereId != null) {
-        _syncedSphereId = null;
-        _controller.clear();
-      }
-      return;
-    }
-
-    // Пришла ли эмиссия для текущей сферы (или это устаревшие данные прошлого стрима).
-    final root = _rootOf(data);
-    final ready = root != null && root.id == sphereId;
-    final switched = _syncedSphereId != sphereId;
-
-    if (!ready) {
-      // Данные для сферы ещё не пришли — не сбрасываем признак загрузки,
-      // чтобы устаревшая эмиссия старого стрима не вернула спиннер.
-      if (switched) _controller.clear();
-      return;
-    }
-
-    _syncedSphereId = sphereId;
-    _controller.setGraph(_toViewNodes(data));
-
-    if (switched) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _controller.fitView();
-      });
-    }
-  }
-
-  GraphNode _domainOf(String id) {
-    for (final n in _graphData.nodes) {
-      if (n.id == id) return n;
-    }
-    return GraphNode(
-      id: id,
-      type: GraphNodeType.task,
-      title: '',
-      subtitle: '',
-      color: '#9E9E9E',
-      parentId: null,
-      x: 0,
-      y: 0,
-    );
-  }
-
-  Widget _nodeBuilder(BuildContext context, graph.NodeState state) {
-    final node = _domainOf(state.node.id);
-    return GraphNodeCard(
-      state: state,
-      node: node,
-      onTap: () => _showEditDialog(context, node),
-      onAddChild: () => _showAddChildDialog(node),
-      onDelete: () => _showDeleteDialog(node),
-    );
-  }
-
-  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -199,37 +49,47 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       ),
       body: !widget.viewModel.initialized
           ? const _GraphSplash()
-          : StreamBuilder<GraphData>(
+          : StreamBuilder<List<graph.GraphNode>>(
               stream: widget.viewModel.graphStream,
               builder: (context, snapshot) {
-                final data = snapshot.data ?? GraphData.empty();
-                _graphData = data;
-                _scheduleSync(data);
-
+                final nodes = snapshot.data ?? const <graph.GraphNode>[];
                 final sphereId = widget.viewModel.currentSphereId;
                 if (sphereId == null) {
+                  _syncedSphereId = null;
                   return _EmptyState(
                     onCreate: () => _showCreateSphereDialog(),
                   );
                 }
 
+                final ready =
+                    nodes.any((n) => n.parentId == null && n.id == sphereId);
+                if (ready) _maybeFit(sphereId);
                 final stale = _syncedSphereId != sphereId;
 
                 return Stack(
                   children: [
                     Positioned.fill(
                       child: graph.GraphView(
-                        controller: _controller,
+                        nodes: widget.viewModel.graphStream,
+                        onAction: _onAction,
+                        camera: _camera,
                         theme: AppGraphThemes.dark,
+                        layout: appGraphLayout(),
                         nodeBuilder: _nodeBuilder,
                         doubleTapCreatesRoot: false,
                         longPressDeletes: false,
                       ),
                     ),
+                    if (stale)
+                      const Positioned.fill(
+                        child: Center(
+                          child: CircularProgressIndicator(color: AppColors.primary),
+                        ),
+                      ),
                     Positioned(
                       left: 18,
                       bottom: 18,
-                      child: _StatsChip(graph: data),
+                      child: _StatsChip(count: nodes.length),
                     ),
                     Positioned(
                       right: 18,
@@ -240,6 +100,50 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                 );
               },
             ),
+    );
+  }
+
+  /// Как только пришли данные для текущей сферы — вписываем граф в канвас.
+  void _maybeFit(String sphereId) {
+    if (_syncedSphereId == sphereId) return;
+    _syncedSphereId = sphereId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _camera.fitView(animate: false);
+    });
+  }
+
+  // ── Обработка намерений GraphView ─────────────────────────────────────────
+
+  void _onAction(graph.GraphAction action) {
+    switch (action) {
+      case graph.CreateRootAction():
+      case graph.CreateChildAction():
+        // Создание всегда идёт через диалоги (double-tap и «+» отключены).
+        break;
+      case graph.MoveAction(:final id, :final to):
+        // Live-курсор драга: только память, не сохраняем.
+        widget.viewModel.moveNode(id, to.dx, to.dy);
+      case graph.MoveEndAction(:final id, :final to):
+        // Точка коммита — пишем позицию с debounce.
+        widget.viewModel.commitMove(id, to.dx, to.dy);
+      case graph.RemoveAction():
+        break;
+      case graph.SelectAction():
+        break;
+    }
+  }
+
+  // ── Кастомный рендер ноды ─────────────────────────────────────────────────
+
+  Widget _nodeBuilder(BuildContext context, graph.NodeState state) {
+    final node = widget.viewModel.nodeById(state.node.id);
+    if (node == null) return const SizedBox.shrink();
+    return GraphNodeCard(
+      state: state,
+      node: node,
+      onTap: () => _showEditDialog(context, node),
+      onAddChild: () => _showAddChildDialog(node),
+      onDelete: () => _showDeleteDialog(node),
     );
   }
 
@@ -283,12 +187,22 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       context: context,
       builder: (ctx) => AddChildDialog(
         parentNode: parent,
-        onSave: ({required title, required description, color}) {
+        onSave: ({
+          required title,
+          required description,
+          color,
+          dueDate,
+          startsAt,
+          endsAt,
+        }) {
           return widget.viewModel.addChild(
             parentId: parent.id,
             title: title,
             description: description,
             color: color,
+            dueDate: dueDate,
+            startsAt: startsAt,
+            endsAt: endsAt,
           );
         },
       ),
@@ -373,13 +287,13 @@ class _SphereDropdown extends StatelessWidget {
 }
 
 class _StatsChip extends StatelessWidget {
-  final GraphData graph;
+  final int count;
 
-  const _StatsChip({required this.graph});
+  const _StatsChip({required this.count});
 
   @override
   Widget build(BuildContext context) {
-    final nodes = graph.nodes.length;
+    final nodes = count;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(

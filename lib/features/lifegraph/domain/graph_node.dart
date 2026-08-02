@@ -1,7 +1,10 @@
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
+/// Тип ноды графа жизни: сфера -> цель -> проект -> задача.
 enum GraphNodeType { sphere, goal, project, task }
 
+/// Доменная нода графа. Описывает сущность из БД; позиция/рёбра — забота
+/// view-слоя ([GraphView] выводит их сам из [parentId] и layout).
 class GraphNode {
   final String id;
   final GraphNodeType type;
@@ -9,8 +12,6 @@ class GraphNode {
   final String subtitle;
   final String color;
   final String? parentId;
-  final double x;
-  final double y;
   final TaskStatus? taskStatus;
 
   const GraphNode({
@@ -20,11 +21,10 @@ class GraphNode {
     required this.subtitle,
     required this.color,
     this.parentId,
-    required this.x,
-    required this.y,
     this.taskStatus,
   });
 
+  /// Задача — лист, детей не имеет.
   bool get isLeaf => type == GraphNodeType.task;
 
   GraphNode copyWith({
@@ -34,8 +34,6 @@ class GraphNode {
     String? subtitle,
     String? color,
     String? parentId,
-    double? x,
-    double? y,
     TaskStatus? taskStatus,
   }) {
     return GraphNode(
@@ -45,33 +43,7 @@ class GraphNode {
       subtitle: subtitle ?? this.subtitle,
       color: color ?? this.color,
       parentId: parentId ?? this.parentId,
-      x: x ?? this.x,
-      y: y ?? this.y,
       taskStatus: taskStatus ?? this.taskStatus,
     );
   }
-}
-
-class GraphEdge {
-  final String fromId;
-  final String toId;
-
-  const GraphEdge({required this.fromId, required this.toId});
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is GraphEdge && runtimeType == other.runtimeType && fromId == other.fromId && toId == other.toId;
-
-  @override
-  int get hashCode => fromId.hashCode ^ toId.hashCode;
-}
-
-class GraphData {
-  final List<GraphNode> nodes;
-  final List<GraphEdge> edges;
-
-  const GraphData({required this.nodes, required this.edges});
-
-  factory GraphData.empty() => const GraphData(nodes: [], edges: []);
 }

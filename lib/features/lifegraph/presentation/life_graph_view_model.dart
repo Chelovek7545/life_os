@@ -13,6 +13,7 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
+import 'package:life_os/features/lifegraph/graph_view.dart' as gv;
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:rxdart/rxdart.dart';
 
@@ -51,13 +52,18 @@ class LifeGraphViewModel {
   final ValueNotifier<GraphSaveStatus> saveStatus =
       ValueNotifier(GraphSaveStatus.draft);
 
-  final BehaviorSubject<GraphData> _graphSubject = BehaviorSubject<GraphData>.seeded(GraphData.empty());
-  Stream<GraphData> get graphStream => _graphSubject.stream;
-  GraphData get graph => _graphSubject.value;
+  /// Стрим view-нод для [GraphView]. Полный список на каждую эмиссию.
+  final BehaviorSubject<List<gv.GraphNode>> _graphSubject =
+      BehaviorSubject.seeded(const <gv.GraphNode>[]);
+  Stream<List<gv.GraphNode>> get graphStream => _graphSubject.stream;
+  List<gv.GraphNode> get graph => _graphSubject.value;
 
   final BehaviorSubject<List<Sphere>> _spheresSubject = BehaviorSubject<List<Sphere>>.seeded([]);
   Stream<List<Sphere>> get spheresStream => _spheresSubject.stream;
   List<Sphere> get spheres => _spheresSubject.value;
+
+  /// Кэш доменных нод текущей сферы — нужен для CRUD (тип, цвет и т.п.).
+  List<GraphNode> _domainNodes = const [];
 
   final Map<String, Offset> _positions = {};
   StreamSubscription? _graphSubscription;
@@ -97,10 +103,13 @@ class LifeGraphViewModel {
     await positionsRepository.saveLastSphereId(sphereId);
     await _loadPositions(sphereId);
     saveStatus.value = GraphSaveStatus.saved;
+    _domainNodes = const [];
+    _graphSubject.add(const []); // сбрасываем устаревшие данные прошлой сферы
     _graphSubscription?.cancel();
     _graphSubscription = graphBuilder.watchGraph(sphereId).listen(
-      (data) {
-        _graphSubject.add(_applyLayout(data));
+      (nodes) {
+        _domainNodes = nodes;
+        _graphSubject.add(_toViewNodes(nodes));
       },
       onError: (e) => debugPrint('Graph stream error: $e'),
     );
@@ -115,7 +124,7 @@ class LifeGraphViewModel {
   }
 
   /// Создаёт новую сферу и переключается на неё.
-  Future<void> createSphere({required String name, String color = '#4A90D9'}) async {
+  Future<void> createSphere({required String name, String color = '#FFB59C'}) async {
     final sphere = Sphere.create(name: name, color: color);
     await spheresRepository.addSphere(sphere);
     await _switchToSphere(sphere.id);
@@ -128,23 +137,30 @@ class LifeGraphViewModel {
     String description = '',
     String? color,
     DateTime? dueDate,
+    DateTime? startsAt,
+    DateTime? endsAt,
   }) async {
     if (_currentSphereId == null) return;
-    final parentNode = graph.nodes.firstWhere((n) => n.id == parentId, orElse: () => throw StateError('Parent not found'));
-    final parentPos = Offset(parentNode.x, parentNode.y);
+    final parentView = graph.firstWhere(
+      (n) => n.id == parentId,
+      orElse: () => throw StateError('Parent not found'),
+    );
+    // Свежайшая позиция родителя: во время драга не эмитим, поэтому берём из _positions.
+    final parentPos = _positions[parentId] ?? parentView.position;
+    final parentType = _domainNode(parentId).type;
 
-    switch (parentNode.type) {
+    final newPos = _clampPosition(Offset(parentPos.dx + 280, parentPos.dy));
+
+    switch (parentType) {
       case GraphNodeType.sphere:
         // Сфера -> Цель
         final goal = Goal.create(
           name: title,
           sphereId: _currentSphereId!,
           description: description,
-          color: color ?? '#E8A838',
+          color: color ?? '#FF5C00',
         );
         await goalsRepository.addGoal(goal);
-        // Авто-позиция: справа от сферы
-        final newPos = Offset(parentPos.dx + 280, parentPos.dy);
         _positions[goal.id] = newPos;
         await _scheduleSavePositions();
         break;
@@ -158,7 +174,6 @@ class LifeGraphViewModel {
           goalId: parentId,
         );
         await projectsRepository.addProject(project);
-        final newPos = Offset(parentPos.dx + 280, parentPos.dy);
         _positions[project.id] = newPos;
         await _scheduleSavePositions();
         break;
@@ -170,9 +185,11 @@ class LifeGraphViewModel {
           description: description,
           projectId: Wrapped(parentId),
           status: TaskStatus.notStarted,
+          dueDate: Wrapped(dueDate),
+          startsAt: Wrapped(startsAt),
+          endsAt: Wrapped(endsAt),
         );
         await tasksRepository.addTask(task);
-        final newPos = Offset(parentPos.dx + 280, parentPos.dy);
         _positions[task.id] = newPos;
         await _scheduleSavePositions();
         break;
@@ -185,7 +202,7 @@ class LifeGraphViewModel {
 
   /// Обновляет ноду (переименование, описание, цвет, статус задачи).
   Future<void> updateNode(GraphNode updated) async {
-    final current = graph.nodes.firstWhere((n) => n.id == updated.id, orElse: () => throw StateError('Node not found'));
+    final current = _domainNode(updated.id);
 
     switch (current.type) {
       case GraphNodeType.sphere:
@@ -195,7 +212,7 @@ class LifeGraphViewModel {
           color: updated.color,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
-        ).copyWith(name: updated.title, color: updated.color);
+        );
         await spheresRepository.updateSphere(sphere);
         break;
 
@@ -208,7 +225,7 @@ class LifeGraphViewModel {
           sphereId: current.parentId!,
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
-        ).copyWith(name: updated.title, description: updated.subtitle, color: updated.color);
+        );
         await goalsRepository.updateGoal(goal);
         break;
 
@@ -221,7 +238,7 @@ class LifeGraphViewModel {
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
           goalId: current.parentId,
-        ).copyWith(name: updated.title, description: updated.subtitle, color: updated.color);
+        );
         await projectsRepository.updateProject(project);
         break;
 
@@ -237,88 +254,26 @@ class LifeGraphViewModel {
     // Перестроение графа произойдёт автоматически через стримы
   }
 
-  /// Перемещает ноду — оптимистично обновляет граф (чтобы нода не «отпрыгивала»)
-  /// и откладывает запись позиции в хранилище (события приходят каждый кадр драга).
-  Future<void> moveNode(String id, double x, double y) async {
+  /// Live-курсор драга: обновляет позицию в памяти без эмиссии и записи —
+  /// визуально ноду двигает сам [GraphView], запись — в [commitMove].
+  void moveNode(String id, double x, double y) {
     if (_currentSphereId == null) return;
-    final node = _nodeById(id);
-    if (node == null) return;
-    final pos = _clampPosition(node, Offset(x, y));
-    _positions[id] = pos;
-    // Локально обновляем граф для мгновенного отклика
-    _emitUpdatedGraph();
+    _positions[id] = _clampPosition(Offset(x, y));
+  }
+
+  /// Точка коммита драга: сохраняем позицию (с debounce).
+  void commitMove(String id, double x, double y) {
+    if (_currentSphereId == null) return;
+    moveNode(id, x, y);
     _scheduleSavePositions();
   }
 
-  GraphNode? _nodeById(String id) {
-    for (final n in graph.nodes) {
-      if (n.id == id) return n;
-    }
-    return null;
-  }
-
-  /// Клампит позицию внутрь мирового канваса с учётом размера ноды.
-  Offset _clampPosition(GraphNode node, Offset pos) {
-    final maxX = graphWorldSize - graphNodeWidth(node.type) - graphWorldMargin;
-    final maxY = graphWorldSize - graphNodeHeight(node.type) - graphWorldMargin;
+  /// Клампит позицию внутрь мирового канваса.
+  Offset _clampPosition(Offset pos) {
     return Offset(
-      pos.dx.clamp(graphWorldMargin, maxX),
-      pos.dy.clamp(graphWorldMargin, maxY),
+      pos.dx.clamp(graphWorldMargin, graphWorldSize - graphNodeSize.width - graphWorldMargin),
+      pos.dy.clamp(graphWorldMargin, graphWorldSize - graphNodeSize.height - graphWorldMargin),
     );
-  }
-
-  void _emitUpdatedGraph() {
-    _graphSubject.add(_applyLayout(graph));
-  }
-
-  /// Накладывает на ноды финальные позиции: сохранённую из [_positions],
-  /// либо автопозицию через BFS от корня (дети вправо, веером по Y).
-  GraphData _applyLayout(GraphData data) {
-    final nodes = data.nodes;
-    if (nodes.isEmpty) return data;
-
-    GraphNode? root;
-    for (final node in nodes) {
-      if (node.parentId == null) {
-        root = node;
-        break;
-      }
-    }
-    if (root == null) return data;
-
-    final childrenOf = <String, List<GraphNode>>{};
-    for (final node in nodes) {
-      if (node.parentId != null) {
-        childrenOf.putIfAbsent(node.parentId!, () => []).add(node);
-      }
-    }
-
-    final positions = <String, Offset>{
-      root.id: _positions[root.id] ?? const Offset(worldCenter, worldCenter),
-    };
-    final queue = <GraphNode>[root];
-    while (queue.isNotEmpty) {
-      final parent = queue.removeAt(0);
-      final kids = childrenOf[parent.id] ?? const <GraphNode>[];
-      final n = kids.length;
-      final parentPos = positions[parent.id]!;
-      for (var i = 0; i < n; i++) {
-        final kid = kids[i];
-        final saved = _positions[kid.id];
-        final pos = saved ??
-            Offset(parentPos.dx + 280, parentPos.dy + (i - (n - 1) / 2) * 160);
-        positions[kid.id] = pos;
-        queue.add(kid);
-      }
-    }
-
-    final laidOut = nodes.map((node) {
-      final pos = positions[node.id];
-      if (pos == null) return node;
-      final clamped = _clampPosition(node, pos);
-      return node.copyWith(x: clamped.dx, y: clamped.dy);
-    }).toList();
-    return GraphData(nodes: laidOut, edges: data.edges);
   }
 
   /// Удаляет ноду с выбором: каскадно (поддерево) или только ноду (дети становятся осиротевшими).
@@ -333,7 +288,7 @@ class LifeGraphViewModel {
   }
 
   Future<void> _deleteSubtree(String id) async {
-    final node = graph.nodes.firstWhere((n) => n.id == id);
+    final node = _domainNode(id);
     final descendantIds = _getDescendantIds(id);
 
     switch (node.type) {
@@ -344,16 +299,20 @@ class LifeGraphViewModel {
         _currentSphereId = null;
         _cancelPendingSave();
         _positions.clear();
+        _domainNodes = const [];
         final spheres = await spheresRepository.getAllSpheres();
         if (spheres.isNotEmpty) {
           await _switchToSphere(spheres.first.id);
         } else {
-          _graphSubject.add(GraphData.empty());
+          _graphSubject.add(const []);
         }
         break;
 
       case GraphNodeType.goal:
-        final goalProjects = graph.nodes.where((n) => n.type == GraphNodeType.project && n.parentId == id).map((p) => p.id).toList();
+        final goalProjects = _domainNodes
+            .where((n) => n.type == GraphNodeType.project && n.parentId == id)
+            .map((p) => p.id)
+            .toList();
         for (final pid in goalProjects) {
           await projectsRepository.deleteProject(pid);
         }
@@ -362,7 +321,10 @@ class LifeGraphViewModel {
         break;
 
       case GraphNodeType.project:
-        final projectTasks = graph.nodes.where((n) => n.type == GraphNodeType.task && n.parentId == id).map((t) => t.id).toList();
+        final projectTasks = _domainNodes
+            .where((n) => n.type == GraphNodeType.task && n.parentId == id)
+            .map((t) => t.id)
+            .toList();
         for (final tid in projectTasks) {
           await tasksRepository.deleteTask(tid);
         }
@@ -379,7 +341,7 @@ class LifeGraphViewModel {
   }
 
   Future<void> _deleteNodeOnly(String id) async {
-    final node = graph.nodes.firstWhere((n) => n.id == id);
+    final node = _domainNode(id);
 
     switch (node.type) {
       case GraphNodeType.sphere:
@@ -388,11 +350,12 @@ class LifeGraphViewModel {
         _currentSphereId = null;
         _cancelPendingSave();
         _positions.clear();
+        _domainNodes = const [];
         final spheres = await spheresRepository.getAllSpheres();
         if (spheres.isNotEmpty) {
           await _switchToSphere(spheres.first.id);
         } else {
-          _graphSubject.add(GraphData.empty());
+          _graphSubject.add(const []);
         }
         break;
 
@@ -417,12 +380,13 @@ class LifeGraphViewModel {
   List<String> _getDescendantIds(String id) {
     final result = <String>[];
     void collect(String parentId) {
-      final children = graph.nodes.where((n) => n.parentId == parentId).toList();
+      final children = _domainNodes.where((n) => n.parentId == parentId).toList();
       for (final child in children) {
         result.add(child.id);
         collect(child.id);
       }
     }
+
     collect(id);
     return result;
   }
@@ -432,6 +396,99 @@ class LifeGraphViewModel {
       _positions.remove(id);
     }
     _scheduleSavePositions();
+  }
+
+  // ── Маппинг доменных нод -> view-ноды GraphView ────────────────────────────
+
+  GraphNode _domainNode(String id) {
+    for (final n in _domainNodes) {
+      if (n.id == id) return n;
+    }
+    throw StateError('Node not found: $id');
+  }
+
+  /// Доменная нода по id — для кастомного nodeBuilder экрана.
+  GraphNode? nodeById(String id) {
+    for (final n in _domainNodes) {
+      if (n.id == id) return n;
+    }
+    return null;
+  }
+
+  List<gv.GraphNode> _toViewNodes(List<GraphNode> nodes) {
+    if (nodes.isEmpty) return const [];
+    final depth = _depthsOf(nodes);
+    final positions = _layoutPositions(nodes);
+    final out = <gv.GraphNode>[];
+    for (var i = 0; i < nodes.length; i++) {
+      final n = nodes[i];
+      out.add(gv.GraphNode(
+        id: n.id,
+        label: n.title,
+        index: i,
+        depth: depth[n.id] ?? 0,
+        parentId: n.parentId,
+        position: _clampPosition(positions[n.id] ?? Offset.zero),
+      ));
+    }
+    return out;
+  }
+
+  Map<String, int> _depthsOf(List<GraphNode> nodes) {
+    final depth = <String, int>{};
+    for (final n in nodes) {
+      if (n.parentId == null) depth[n.id] = 0;
+    }
+    var grew = true;
+    while (grew) {
+      grew = false;
+      for (final n in nodes) {
+        final p = n.parentId;
+        if (p != null && depth.containsKey(p) && !depth.containsKey(n.id)) {
+          depth[n.id] = depth[p]! + 1;
+          grew = true;
+        }
+      }
+    }
+    return depth;
+  }
+
+  /// Накладывает финальные позиции: сохранённую из [_positions], либо
+  /// автопозицию через BFS от корня (дети вправо, веером по Y).
+  Map<String, Offset> _layoutPositions(List<GraphNode> nodes) {
+    final positions = <String, Offset>{};
+    GraphNode? root;
+    for (final n in nodes) {
+      if (n.parentId == null) {
+        root = n;
+        break;
+      }
+    }
+    if (root == null) return positions;
+
+    final childrenOf = <String, List<GraphNode>>{};
+    for (final n in nodes) {
+      if (n.parentId != null) {
+        childrenOf.putIfAbsent(n.parentId!, () => []).add(n);
+      }
+    }
+
+    positions[root.id] = _positions[root.id] ?? const Offset(worldCenter, worldCenter);
+    final queue = <GraphNode>[root];
+    while (queue.isNotEmpty) {
+      final parent = queue.removeAt(0);
+      final kids = childrenOf[parent.id] ?? const <GraphNode>[];
+      final n = kids.length;
+      final parentPos = positions[parent.id]!;
+      for (var i = 0; i < n; i++) {
+        final kid = kids[i];
+        final pos = _positions[kid.id] ??
+            Offset(parentPos.dx + 280, parentPos.dy + (i - (n - 1) / 2) * 160);
+        positions[kid.id] = pos;
+        queue.add(kid);
+      }
+    }
+    return positions;
   }
 
   // ── Персистентность позиций (с debounce) ──────────────────────────────────

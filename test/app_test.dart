@@ -38,7 +38,6 @@ void main() {
         goalsRepository: goalsRepo,
         projectsRepository: projectsRepo,
         tasksRepository: tasksRepo,
-        positionsRepository: positionsRepo,
       );
 
       final dc = DependencyContainer();

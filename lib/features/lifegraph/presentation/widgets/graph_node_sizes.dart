@@ -1,36 +1,20 @@
-import 'package:life_os/features/lifegraph/domain/graph_node.dart';
+import 'package:flutter/material.dart';
+import 'package:life_os/features/lifegraph/graph_view.dart';
 
-/// Размер мирового канваса (ширина и высота). Ноды клампаются внутрь,
-/// чтобы не уходить в отрицательные координаты за границы канваса.
+/// Единый размер карточки ноды. [GraphView] использует один размер на все узлы
+/// (позиционирование, рёбра, зона тапа) — карточки вписывают контент внутрь.
+const Size graphNodeSize = Size(180, 140);
+
+/// Размер мирового канваса (ширина и высота).
 const double graphWorldSize = 4200.0;
 
 /// Отступ от края канваса при клампинге нод.
 const double graphWorldMargin = 24.0;
 
-/// Ширина карточки ноды (нужна painter'у рёбер, экрану и карточке).
-double graphNodeWidth(GraphNodeType type) {
-  switch (type) {
-    case GraphNodeType.sphere:
-      return 140;
-    case GraphNodeType.goal:
-      return 180;
-    case GraphNodeType.project:
-      return 180;
-    case GraphNodeType.task:
-      return 160;
-  }
-}
-
-/// Высота карточки ноды.
-double graphNodeHeight(GraphNodeType type) {
-  switch (type) {
-    case GraphNodeType.sphere:
-      return 140;
-    case GraphNodeType.goal:
-      return 100;
-    case GraphNodeType.project:
-      return 100;
-    case GraphNodeType.task:
-      return 120;
-  }
-}
+/// Геометрия графа: размер узлов, зазоры, размер мира.
+GraphLayout appGraphLayout() => const GraphLayout(
+      nodeSize: graphNodeSize,
+      levelGap: 236,
+      siblingGap: 112,
+      worldSize: Size.square(graphWorldSize),
+    );

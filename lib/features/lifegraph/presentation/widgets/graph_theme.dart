@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
-import 'package:life_os/features/lifegraph/presentation/v1.dart' as graph;
+import 'package:life_os/features/lifegraph/graph_view.dart' as graph;
 
 /// Тема графа в палитре приложения (тёмная тема PULSE).
 class AppGraphThemes {

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/ui/date_pick_button.dart';
+import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
@@ -190,6 +193,9 @@ class AddChildDialog extends StatefulWidget {
     required String title,
     required String description,
     String? color,
+    DateTime? dueDate,
+    DateTime? startsAt,
+    DateTime? endsAt,
   }) onSave;
 
   const AddChildDialog({
@@ -206,6 +212,9 @@ class _AddChildDialogState extends State<AddChildDialog> {
   final TextEditingController _titleController = TextEditingController();
   String _description = '';
   String? _selectedColor;
+  DateTime? _dueDate;
+  DateTime? _startsAt;
+  DateTime? _endsAt;
   bool _saving = false;
 
   static const List<String> _colors = [
@@ -263,6 +272,58 @@ class _AddChildDialogState extends State<AddChildDialog> {
                   )).toList(),
                 ),
               ],
+              if (isTaskChild) ...[
+                const SizedBox(height: 12),
+                const Text('Начало — конец:', style: TextStyle(color: AppColors.onSurface)),
+                const SizedBox(height: 8),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _TimeChip(
+                        icon: Icons.calendar_month,
+                        label: _startsAt == null
+                            ? 'Set day'
+                            : '${formatDate(_startsAt!)}${_endsAt != null && _startsAt!.startOfDay != _endsAt!.startOfDay ? " - ${formatDate(_endsAt!)}" : ""}',
+                        isActive: _startsAt != null,
+                        onPressed: _pickDay,
+                        onCancel: _clearTimes,
+                      ),
+                      const SizedBox(width: 8),
+                      _TimeChip(
+                        icon: Icons.access_time,
+                        label: _startsAt != null && !_startsAt!.isDateOnly
+                            ? formatTimeOfDate(_startsAt!)
+                            : 'Set start time',
+                        isActive: _startsAt != null && !_startsAt!.isDateOnly,
+                        onPressed: _pickStartTime,
+                        onCancel: _clearStartTime,
+                      ),
+                      const SizedBox(width: 6),
+                      const Text('-', style: TextStyle(color: Colors.white70)),
+                      const SizedBox(width: 6),
+                      _TimeChip(
+                        icon: Icons.access_time,
+                        label: _endsAt != null && !_endsAt!.isDateOnly
+                            ? formatTimeOfDate(_endsAt!)
+                            : 'Set end time',
+                        isActive: _endsAt != null && !_endsAt!.isDateOnly,
+                        onPressed: _pickEndTime,
+                        onCancel: _clearEndTime,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text('Срок выполнения:', style: TextStyle(color: AppColors.onSurface)),
+                const SizedBox(height: 8),
+                datePickButton(
+                  context,
+                  label: 'Выбрать дату',
+                  date: _dueDate,
+                  onDateChange: (d) => setState(() => _dueDate = d),
+                ),
+              ],
             ],
           ),
         ),
@@ -282,6 +343,9 @@ class _AddChildDialogState extends State<AddChildDialog> {
                     title: _titleController.text.trim(),
                     description: _description,
                     color: _selectedColor,
+                    dueDate: _dueDate,
+                    startsAt: _startsAt,
+                    endsAt: _endsAt,
                   );
                   if (context.mounted) Navigator.pop(context);
                 },
@@ -309,10 +373,129 @@ class _AddChildDialogState extends State<AddChildDialog> {
         return '';
     }
   }
+
+  // ── Начало / конец (чипы, как в собранной форме задачи) ─────────────────
+
+  Future<void> _pickDay() async {
+    final selected = await chooseDateOnly(context, _startsAt);
+    if (selected == null || !mounted) return;
+    setState(() {
+      _startsAt = selected.copyWith(
+        hour: _startsAt?.hour,
+        minute: _startsAt?.minute,
+      );
+      _endsAt = selected.copyWith(
+        hour: _endsAt?.hour,
+        minute: _endsAt?.minute,
+      );
+    });
+  }
+
+  void _clearTimes() {
+    setState(() {
+      _startsAt = null;
+      _endsAt = null;
+    });
+  }
+
+  Future<void> _pickStartTime() async {
+    if (_startsAt == null) return;
+    final selected = await chooseTimeForDate(context, _startsAt!);
+    if (selected != null && _validateStart(selected) && mounted) {
+      setState(() => _startsAt = selected);
+    }
+  }
+
+  Future<void> _pickEndTime() async {
+    if (_endsAt == null && _startsAt == null) return;
+    final selected = await chooseTimeForDate(context, _endsAt ?? _startsAt!);
+    if (selected != null && _validateEnd(selected) && mounted) {
+      setState(() {
+        _endsAt = _startsAt?.copyWith(
+          hour: selected.hour,
+          minute: selected.minute,
+        );
+      });
+    }
+  }
+
+  void _clearStartTime() {
+    setState(() => _startsAt = _startsAt?.startOfDay);
+  }
+
+  void _clearEndTime() {
+    setState(() => _endsAt = _endsAt?.startOfDay);
+  }
+
+  bool _validateStart(DateTime date) {
+    if (_endsAt != null) {
+      return date.isBefore(_endsAt!) ||
+          (date.isDateOnly || _endsAt!.isDateOnly) &&
+              date.startOfDay.isAtSameMomentAs(_endsAt!.startOfDay);
+    }
+    return true;
+  }
+
+  bool _validateEnd(DateTime date) {
+    if (_startsAt != null) {
+      return date.isAfter(_startsAt!) ||
+          (date.isDateOnly || _startsAt!.isDateOnly) &&
+              date.startOfDay.isAtSameMomentAs(_startsAt!.startOfDay);
+    }
+    return true;
+  }
 }
 
-class _ColorChip extends StatelessWidget {
-  final String color;
+/// Чип для выбора дня / времени начала и конца (как в собранной форме задачи).
+class _TimeChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final VoidCallback onPressed;
+  final VoidCallback onCancel;
+
+  const _TimeChip({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.onPressed,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isActive ? AppColors.primaryContainer : Colors.white70;
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.overdueGlow : AppColors.surfaceContainer,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive ? AppColors.overdueGlow : AppColors.inputGlass,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              onPressed: onCancel,
+              icon: Icon(isActive ? Icons.close : icon, size: 16, color: color),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              splashRadius: 16,
+            ),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(color: color, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ColorChip extends StatelessWidget {  final String color;
   final bool selected;
   final VoidCallback onTap;
 
