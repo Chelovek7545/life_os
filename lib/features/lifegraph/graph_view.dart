@@ -114,6 +114,7 @@ class GraphNode {
   final int index;    // creation order — drives the boot stagger
   final int depth;    // 0 for roots; drives the accent color
   final String? parentId;
+  final Size size;    // physical footprint of the node
   Offset position; // top-left, world coordinates
 
   GraphNode({
@@ -122,6 +123,7 @@ class GraphNode {
     required this.index,
     required this.depth,
     required this.parentId,
+    this.size = const Size(176, 68),
     required this.position,
   });
 
@@ -131,6 +133,7 @@ class GraphNode {
         index: index,
         depth: depth,
         parentId: parentId,
+        size: size,
         position: position,
       );
 }
@@ -505,7 +508,8 @@ class _GraphViewState extends State<GraphView>
     final siblings = _nodes.values.where((n) => n.parentId == parent.id).length;
     final band = (siblings + 1) ~/ 2;
     final dy = siblings == 0 ? 0.0 : band * l.siblingGap * (siblings.isOdd ? 1 : -1);
-    return _clamp(Offset(parent.position.dx + l.nodeSize.width + l.levelGap, parent.position.dy + dy));
+    return _clamp(
+        Offset(parent.position.dx + parent.size.width + l.levelGap, parent.position.dy + dy));
   }
 
   // ── Dragging: optimistic locally, committed via MoveEndAction ──────────────
@@ -521,7 +525,7 @@ class _GraphViewState extends State<GraphView>
   }
 
   void _dragUpdate(GraphNode n, DragUpdateDetails d) {
-    n.position = _clamp(_sceneFromGlobal(d.globalPosition) + _dragGrab);
+    n.position = _clamp(_sceneFromGlobal(d.globalPosition) + _dragGrab, n.size);
     _act(GraphAction.move(id: n.id, to: n.position));
     setState(() {});
   }
@@ -531,9 +535,9 @@ class _GraphViewState extends State<GraphView>
     _act(GraphAction.moveEnd(id: n.id, to: n.position));
   }
 
-  Offset _clamp(Offset pos) {
+  Offset _clamp(Offset pos, [Size? size]) {
     final w = widget.layout.worldSize;
-    final ns = widget.layout.nodeSize;
+    final ns = size ?? widget.layout.nodeSize;
     return Offset(
       pos.dx.clamp(24, w.width - ns.width - 24),
       pos.dy.clamp(24, w.height - ns.height - 24),
@@ -566,10 +570,11 @@ class _GraphViewState extends State<GraphView>
     final box = _viewerBox;
     if (all.isEmpty || box == null) return;
 
-    final ns = widget.layout.nodeSize;
-    var rect = Rect.fromLTWH(all.first.position.dx, all.first.position.dy, ns.width, ns.height);
+    var rect = Rect.fromLTWH(
+        all.first.position.dx, all.first.position.dy, all.first.size.width, all.first.size.height);
     for (final n in all) {
-      rect = rect.expandToInclude(Rect.fromLTWH(n.position.dx, n.position.dy, ns.width, ns.height));
+      rect = rect.expandToInclude(
+          Rect.fromLTWH(n.position.dx, n.position.dy, n.size.width, n.size.height));
     }
     rect = rect.inflate(150);
 
@@ -622,8 +627,7 @@ class _GraphViewState extends State<GraphView>
   void revealNodeById(String id) {
     final n = _nodes[id];
     if (n == null) return;
-    final ns = widget.layout.nodeSize;
-    _ensureVisible(n.position + Offset(ns.width / 2, ns.height / 2));
+    _ensureVisible(n.position + Offset(n.size.width / 2, n.size.height / 2));
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -637,7 +641,6 @@ class _GraphViewState extends State<GraphView>
       out.add(_EdgeSpec(
         from,
         n,
-        widget.layout.nodeSize,
         theme.accentFor(from.depth),
         theme.accentFor(n.depth),
         _reveals['${from.id}>${n.id}'] ?? 1,
@@ -748,15 +751,15 @@ class _GraphViewState extends State<GraphView>
                       key: ValueKey(n.id),
                       left: n.position.dx,
                       top: n.position.dy,
-                      width: ns.width,
-                      height: ns.height,
+                      width: n.size.width,
+                      height: n.size.height,
                       child: _PopIn(
                         delayMs: _booted ? 0 : math.min(n.index * 120, 600),
                         child: (widget.nodeBuilder ?? _defaultBuilder)(
                           context,
                           NodeState(
                             node: n,
-                            size: ns,
+                            size: n.size,
                             selected: _selectedId == n.id,
                             canDelete: widget.longPressDeletes,
                             accent: theme.accentFor(n.depth),
@@ -1213,12 +1216,11 @@ class _GridPainter extends CustomPainter {
 class _EdgeSpec {
   final GraphNode from;
   final GraphNode to;
-  final Size nodeSize;
   final Color cFrom;
   final Color cTo;
   final double reveal;
 
-  const _EdgeSpec(this.from, this.to, this.nodeSize, this.cFrom, this.cTo, this.reveal);
+  const _EdgeSpec(this.from, this.to, this.cFrom, this.cTo, this.reveal);
 }
 
 class _EdgesPainter extends CustomPainter {
@@ -1231,10 +1233,10 @@ class _EdgesPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     for (final e in edges) {
       final a = Offset(
-        e.from.position.dx + e.nodeSize.width + 18,
-        e.from.position.dy + e.nodeSize.height / 2,
+        e.from.position.dx + e.from.size.width + 18,
+        e.from.position.dy + e.from.size.height / 2,
       );
-      final b = Offset(e.to.position.dx - 8, e.to.position.dy + e.nodeSize.height / 2);
+      final b = Offset(e.to.position.dx - 8, e.to.position.dy + e.to.size.height / 2);
 
       final dx = math.max(56.0, (b.dx - a.dx) * 0.55);
       final path = Path()

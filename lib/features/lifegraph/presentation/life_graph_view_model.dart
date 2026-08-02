@@ -149,7 +149,10 @@ class LifeGraphViewModel {
     final parentPos = _positions[parentId] ?? parentView.position;
     final parentType = _domainNode(parentId).type;
 
-    final newPos = _clampPosition(Offset(parentPos.dx + 280, parentPos.dy));
+    final newPos = _clampPosition(
+      Offset(parentPos.dx + 280, parentPos.dy),
+      graphNodeSizeOf(_childTypeOf(parentType)),
+    );
 
     switch (parentType) {
       case GraphNodeType.sphere:
@@ -258,7 +261,14 @@ class LifeGraphViewModel {
   /// визуально ноду двигает сам [GraphView], запись — в [commitMove].
   void moveNode(String id, double x, double y) {
     if (_currentSphereId == null) return;
-    _positions[id] = _clampPosition(Offset(x, y));
+    Size size = graphNodeSize;
+    for (final n in graph) {
+      if (n.id == id) {
+        size = n.size;
+        break;
+      }
+    }
+    _positions[id] = _clampPosition(Offset(x, y), size);
   }
 
   /// Точка коммита драга: сохраняем позицию (с debounce).
@@ -268,11 +278,11 @@ class LifeGraphViewModel {
     _scheduleSavePositions();
   }
 
-  /// Клампит позицию внутрь мирового канваса.
-  Offset _clampPosition(Offset pos) {
+  /// Клампит позицию внутрь мирового канваса с учётом размера ноды.
+  Offset _clampPosition(Offset pos, Size size) {
     return Offset(
-      pos.dx.clamp(graphWorldMargin, graphWorldSize - graphNodeSize.width - graphWorldMargin),
-      pos.dy.clamp(graphWorldMargin, graphWorldSize - graphNodeSize.height - graphWorldMargin),
+      pos.dx.clamp(graphWorldMargin, graphWorldSize - size.width - graphWorldMargin),
+      pos.dy.clamp(graphWorldMargin, graphWorldSize - size.height - graphWorldMargin),
     );
   }
 
@@ -415,6 +425,20 @@ class LifeGraphViewModel {
     return null;
   }
 
+  /// Тип дочерней ноды следующего уровня иерархии (сфера → цель → проект → задача).
+  GraphNodeType _childTypeOf(GraphNodeType parent) {
+    switch (parent) {
+      case GraphNodeType.sphere:
+        return GraphNodeType.goal;
+      case GraphNodeType.goal:
+        return GraphNodeType.project;
+      case GraphNodeType.project:
+        return GraphNodeType.task;
+      case GraphNodeType.task:
+        return GraphNodeType.task;
+    }
+  }
+
   List<gv.GraphNode> _toViewNodes(List<GraphNode> nodes) {
     if (nodes.isEmpty) return const [];
     final depth = _depthsOf(nodes);
@@ -428,7 +452,8 @@ class LifeGraphViewModel {
         index: i,
         depth: depth[n.id] ?? 0,
         parentId: n.parentId,
-        position: _clampPosition(positions[n.id] ?? Offset.zero),
+        size: graphNodeSizeOf(n.type),
+        position: _clampPosition(positions[n.id] ?? Offset.zero, graphNodeSizeOf(n.type)),
       ));
     }
     return out;

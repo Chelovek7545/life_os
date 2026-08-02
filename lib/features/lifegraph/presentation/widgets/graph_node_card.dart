@@ -70,7 +70,7 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                 height: size.height,
                 decoration: BoxDecoration(
                   color: _hovered ? AppColors.surfaceBright : AppColors.surfaceContainer,
-                  borderRadius: BorderRadius.circular(13),
+                  borderRadius: BorderRadius.circular(_isSphere ? size.width / 2 : 13),
                   border: Border.all(
                     color: widget.state.selected ? Colors.white : _accent.withValues(alpha: 0.55),
                     width: widget.state.selected ? 1.6 : 1.2,
@@ -164,37 +164,35 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
   }
 
   Widget _buildSphereContent(GraphNode n) {
-    return Center(
-      child: Container(
-        width: 118,
-        height: 118,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: _accent.withValues(alpha: 0.12),
-          border: Border.all(color: _accent.withValues(alpha: 0.55), width: 1.5),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(_iconOf(n.type), color: _accent, size: 30),
-              const SizedBox(height: 8),
-              Text(
-                n.title,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.onSurface,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  height: 1.15,
-                ),
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 50,
+            height: 50,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _accent.withValues(alpha: 0.18),
+              border: Border.all(color: _accent.withValues(alpha: 0.6), width: 1.5),
+            ),
+            child: Icon(_iconOf(n.type), color: _accent, size: 24),
           ),
-        ),
+          const SizedBox(height: 7),
+          Text(
+            n.title,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.onSurface,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              height: 1.15,
+            ),
+          ),
+        ],
       ),
     );
   }
