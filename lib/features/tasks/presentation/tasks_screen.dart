@@ -48,7 +48,6 @@ class TasksScreen extends StatefulWidget {
 class TasksScreenState extends State<TasksScreen> {
   bool _showCalendar = true;
   bool _showUnscheduledOverlay = false;
-  List<TaskWithProject> _unscheduledTasks = [];
 
   @override
   void dispose() {
@@ -60,85 +59,100 @@ class TasksScreenState extends State<TasksScreen> {
   }
 
   Widget _buildUnscheduledOverlay(double overlayHeight, DateTime today, double overlayWidth) {
-    if (!_showUnscheduledOverlay || _unscheduledTasks.isEmpty) {
+    if (!_showUnscheduledOverlay) {
       return const SizedBox.shrink();
     }
-    return Positioned(
-      top: AppSpacing.sm + _kHeaderHeight + AppSpacing.sm,
-      left: 8,
-      width: overlayWidth,
-      child: Material(
-        elevation: 8,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        color: Colors.transparent,
-        child: GlassPanel(
-          padding: EdgeInsets.zero,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 400),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
-                  ),
-                  child: Row(
-                    children: [
-                      const Text(
-                        'Unscheduled',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
+    return StreamBuilder<TaskScreenState>(
+      stream: widget.viewModel.state,
+      initialData: const TasksLoading(),
+      builder: (context, snapshot) {
+        final state = snapshot.data ?? const TasksLoading();
+        final unscheduledTasks = state.maybeWhen(
+          loaded: (_, _, _, _, unscheduled) => unscheduled,
+          orElse: () => const <TaskWithProject>[],
+        ) ?? const <TaskWithProject>[];
+        if (unscheduledTasks.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return Positioned(
+          top: AppSpacing.sm + _kHeaderHeight + AppSpacing.sm,
+          left: 8,
+          width: overlayWidth,
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            color: Colors.transparent,
+            child: GlassPanel(
+              padding: EdgeInsets.zero,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 400),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
                       ),
-                      const Spacer(),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => setState(
-                          () => _showUnscheduledOverlay = false,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(height: 1),
-                Flexible(
-                  child: ListView(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.all(8),
-                    children: _unscheduledTasks
-                        .map(
-                          (item) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: TaskCard(
-                              task: item.task,
-                              projectTitle: item.project?.name,
-                              leftBorderColor: item.project != null
-                                  ? parseHexColor(item.project!.color)
-                                  : null,
-                              isOverdue:
-                                  item.task.dueDate?.isBefore(
-                                    today,
-                                  ) ??
-                                  false,
-                              onCheckChanged: () =>
-                                  widget.viewModel.toggleTask(item.task),
-                              onLongPress: () => _openTaskEditor(item),
-                              onDelete: () =>
-                                  widget.viewModel.deleteTask(item.task.id),
-                              isSelected: false,
+                      child: Row(
+                        children: [
+                          const Text(
+                            'Unscheduled',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
                             ),
                           ),
-                        )
-                        .toList(),
-                  ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => setState(
+                              () => _showUnscheduledOverlay = false,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Flexible(
+                      child: ListView(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.all(8),
+                        children: unscheduledTasks
+                            .map(
+                              (item) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: TaskCard(
+                                  task: item.task,
+                                  projectTitle: item.project?.name,
+                                  leftBorderColor: item.project != null
+                                      ? parseHexColor(item.project!.color)
+                                      : null,
+                                  isOverdue:
+                                      item.task.dueDate?.isBefore(
+                                        today,
+                                      ) ??
+                                      false,
+                                  onCheckChanged: () {
+                                    widget.viewModel.toggleTask(item.task);
+                                  },
+                                  onLongPress: () => _openTaskEditor(item),
+                                  onDelete: () =>
+                                      widget.viewModel.deleteTask(item.task.id),
+                                  isSelected: false,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -153,8 +167,7 @@ class TasksScreenState extends State<TasksScreen> {
           loading: () => const Center(child: CircularProgressIndicator()),
           empty: (_, _) => const EmptyPlaceholder(),
           error: (message) => Center(child: Text(message)),
-          loaded: (items, selectedTasks, _, _, unscheduledTasks) {
-            _unscheduledTasks = unscheduledTasks;
+          loaded: (items, selectedTasks, _, _, _) {
             if (items.isEmpty) {
               return const EmptyPlaceholder();
             }
@@ -265,7 +278,6 @@ class TasksScreenState extends State<TasksScreen> {
               : widget.viewModel.showForm,
           onModeChanged: _onModeChanged,
           onToggleUnscheduled: _toggleUnscheduledOverlay,
-          unscheduledCount: _unscheduledTasks.length,
         ),
         const SizedBox(height: AppSpacing.sm),
 
@@ -905,14 +917,12 @@ class _TasksHeader extends StatelessWidget {
     required this.vm,
     required this.tasksScreenWidth,
     required this.onToggleUnscheduled,
-    required this.unscheduledCount,
   });
   final TasksViewModel vm;
   final VoidCallback onAddPressed;
   final ValueChanged<int> onModeChanged;
   final double tasksScreenWidth;
   final VoidCallback onToggleUnscheduled;
-  final int unscheduledCount;
 
   @override
   Widget build(BuildContext context) {
@@ -936,7 +946,21 @@ IconButton(
   },
 ),
             Badge(
-              label: Text(unscheduledCount.toString(), style: const TextStyle(fontSize: 10)),
+              label: StreamBuilder<TaskScreenState>(
+                stream: vm.state,
+                initialData: const TasksLoading(),
+                builder: (context, snap) {
+                  final state = snap.data ?? const TasksLoading();
+                  final count = state.maybeWhen(
+                    loaded: (_, _, _, _, unscheduled) => unscheduled.length,
+                    orElse: () => 0,
+                  );
+                  return Text(
+                    count.toString(),
+                    style: const TextStyle(fontSize: 10),
+                  );
+                },
+              ),
               child: IconButton(
                 onPressed: onToggleUnscheduled,
                 icon: const Icon(Icons.inbox_rounded, color: Colors.white),
