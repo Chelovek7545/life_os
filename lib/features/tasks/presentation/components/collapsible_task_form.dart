@@ -519,6 +519,11 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                               selected.copyWith(
                                 hour: _endsAt?.hour,
                                 minute: _endsAt?.minute,
+                                second: _endsAt?.second,
+                                millisecond: _endsAt?.millisecond,
+                                microsecond: _endsAt?.microsecond
+                                
+
                               ),
                             );
                           }
