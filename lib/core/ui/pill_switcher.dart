@@ -4,6 +4,7 @@ import 'package:life_os/core/theme/app_spacing.dart';
 
 class PillSwitcher extends StatefulWidget {
   final List<Widget> options;
+  final List<Color>? colors;
   final Function(int) onSelectionChanged;
   final double? outerPadding;
   final double? paddingBetweenOptions;
@@ -18,6 +19,7 @@ class PillSwitcher extends StatefulWidget {
     this.outerPadding,
     this.paddingBetweenOptions,
     this.innerPadding,
+    this.colors,
   });
 
   @override
@@ -25,7 +27,6 @@ class PillSwitcher extends StatefulWidget {
 }
 
 class _PillSwitcherState extends State<PillSwitcher> {
-
   BorderRadius radiusForIndex(int index, Radius inner, Radius outer) {
     if (index == 0) {
       return BorderRadius.only(
@@ -74,7 +75,9 @@ class _PillSwitcherState extends State<PillSwitcher> {
                   padding: EdgeInsets.all(widget.innerPadding ?? AppSpacing.md),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppColors.primaryContainer
+                        ? widget.colors != null
+                              ? widget.colors![index]
+                              : AppColors.primaryContainer
                         : AppColors.surfaceContainerLow,
                     borderRadius: radiusForIndex(
                       index,

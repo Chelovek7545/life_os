@@ -93,7 +93,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                     ),
                     Positioned(
                       right: 18,
-                      bottom: 18,
+                      top: 18,
                       child: _SaveBadge(viewModel: widget.viewModel),
                     ),
                   ],

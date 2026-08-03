@@ -1,3 +1,4 @@
+import 'package:life_os/core/utils/color_format.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:life_os/features/spheres/data/spheres_repository.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
@@ -98,15 +99,16 @@ class GraphBuilder {
   }
 
   String _taskColor(TaskStatus status) {
-    switch (status) {
-      case TaskStatus.done:
-        return '#4CAF50';
-      case TaskStatus.inProgress:
-        return '#2196F3';
-      case TaskStatus.notStarted:
-        return '#FF9800';
-      case TaskStatus.open:
-        return '#9E9E9E';
-    }
+    return status.color.toHex();
+    // switch (status) {
+    //   case TaskStatus.done:
+    //     return '#4CAF50';
+    //   case TaskStatus.inProgress:
+    //     return '#2196F3';
+    //   case TaskStatus.notStarted:
+    //     return '#FF9800';
+    //   case TaskStatus.open:
+    //     return '#9E9E9E';
+    // }
   }
 }

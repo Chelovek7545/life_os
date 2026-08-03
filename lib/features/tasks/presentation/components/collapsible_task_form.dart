@@ -678,7 +678,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
                                 ...TaskStatus.values.map((e) {
                                   return DropdownMenuEntry(
                                     value: e,
-                                    label: e.name,
+                                    label: e.title,
                                   );
                                 }),
                               ],

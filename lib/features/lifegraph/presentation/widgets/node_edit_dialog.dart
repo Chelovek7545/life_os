@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/ui/date_pick_button.dart';
+import 'package:life_os/core/ui/glass_panel.dart';
+import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
@@ -31,8 +33,16 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
   TaskStatus? _selectedStatus;
 
   static const List<String> _colors = [
-    '#4A90D9', '#E8A838', '#4CAF50', '#E91E63', '#9C27B0',
-    '#00BCD4', '#FF9800', '#795548', '#607D8B', '#F44336',
+    '#4A90D9',
+    '#E8A838',
+    '#4CAF50',
+    '#E91E63',
+    '#9C27B0',
+    '#00BCD4',
+    '#FF9800',
+    '#795548',
+    '#607D8B',
+    '#F44336',
   ];
 
   @override
@@ -82,30 +92,42 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
               ),
               if (!isTask) ...[
                 const SizedBox(height: 12),
-                const Text('Цвет:', style: TextStyle(color: AppColors.onSurface)),
+                const Text(
+                  'Цвет:',
+                  style: TextStyle(color: AppColors.onSurface),
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: _colors.map((c) => _ColorChip(
-                    color: c,
-                    selected: _selectedColor == c,
-                    onTap: () => setState(() => _selectedColor = c),
-                  )).toList(),
+                  children: _colors
+                      .map(
+                        (c) => _ColorChip(
+                          color: c,
+                          selected: _selectedColor == c,
+                          onTap: () => setState(() => _selectedColor = c),
+                        ),
+                      )
+                      .toList(),
                 ),
               ],
               if (isTask) ...[
                 const SizedBox(height: 12),
-                const Text('Статус:', style: TextStyle(color: AppColors.onSurface)),
+                const Text(
+                  'Status:',
+                  style: TextStyle(color: AppColors.onSurface),
+                ),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: TaskStatus.values.map((s) => _StatusChip(
-                    status: s,
-                    selected: _selectedStatus == s,
-                    onTap: () => setState(() => _selectedStatus = s),
-                  )).toList(),
+                PillSwitcher(
+                  options: TaskStatus.values.map((e) => Icon(e.icon)).toList(),
+                  colors: TaskStatus.values.map((e) => e.color).toList(),
+                  onSelectionChanged: (int p1) {
+                    _selectedStatus = TaskStatus.values[p1];
+                    setState(() {
+                      
+                    });
+                  },
+                  selectedIndex: TaskStatus.values.indexOf(_selectedStatus ?? TaskStatus.open),
                 ),
               ],
             ],
@@ -115,7 +137,10 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
       actions: [
         TextButton.icon(
           icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-          label: const Text('Удалить', style: TextStyle(color: Colors.redAccent)),
+          label: const Text(
+            'Удалить',
+            style: TextStyle(color: Colors.redAccent),
+          ),
           onPressed: () => _confirmDelete(context),
         ),
         TextButton(
@@ -159,8 +184,10 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceContainer,
         title: const Text('Удалить ноду?'),
-        content: Text('Нода "${widget.node.title}" будет удалена. '
-            'Выберите, что сделать с дочерними элементами.'),
+        content: Text(
+          'Нода "${widget.node.title}" будет удалена. '
+          'Выберите, что сделать с дочерними элементами.',
+        ),
         actions: [
           TextButton(
             onPressed: () {
@@ -196,7 +223,8 @@ class AddChildDialog extends StatefulWidget {
     DateTime? dueDate,
     DateTime? startsAt,
     DateTime? endsAt,
-  }) onSave;
+  })
+  onSave;
 
   const AddChildDialog({
     super.key,
@@ -218,8 +246,16 @@ class _AddChildDialogState extends State<AddChildDialog> {
   bool _saving = false;
 
   static const List<String> _colors = [
-    '#4A90D9', '#E8A838', '#4CAF50', '#E91E63', '#9C27B0',
-    '#00BCD4', '#FF9800', '#795548', '#607D8B', '#F44336',
+    '#4A90D9',
+    '#E8A838',
+    '#4CAF50',
+    '#E91E63',
+    '#9C27B0',
+    '#00BCD4',
+    '#FF9800',
+    '#795548',
+    '#607D8B',
+    '#F44336',
   ];
 
   @override
@@ -260,68 +296,90 @@ class _AddChildDialogState extends State<AddChildDialog> {
                   onChanged: (v) => _description = v,
                 ),
                 const SizedBox(height: 12),
-                const Text('Цвет:', style: TextStyle(color: AppColors.onSurface)),
+                const Text(
+                  'Цвет:',
+                  style: TextStyle(color: AppColors.onSurface),
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: _colors.map((c) => _ColorChip(
-                    color: c,
-                    selected: _selectedColor == c,
-                    onTap: () => setState(() => _selectedColor = c),
-                  )).toList(),
+                  children: _colors
+                      .map(
+                        (c) => _ColorChip(
+                          color: c,
+                          selected: _selectedColor == c,
+                          onTap: () => setState(() => _selectedColor = c),
+                        ),
+                      )
+                      .toList(),
                 ),
               ],
               if (isTaskChild) ...[
                 const SizedBox(height: 12),
-                const Text('Начало — конец:', style: TextStyle(color: AppColors.onSurface)),
+                const Text(
+                  'Начало — конец:',
+                  style: TextStyle(color: AppColors.onSurface),
+                ),
                 const SizedBox(height: 8),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _TimeChip(
-                        icon: Icons.calendar_month,
-                        label: _startsAt == null
-                            ? 'Set day'
-                            : '${formatDate(_startsAt!)}${_endsAt != null && _startsAt!.startOfDay != _endsAt!.startOfDay ? " - ${formatDate(_endsAt!)}" : ""}',
-                        isActive: _startsAt != null,
-                        onPressed: _pickDay,
-                        onCancel: _clearTimes,
-                      ),
-                      const SizedBox(width: 8),
-                      _TimeChip(
-                        icon: Icons.access_time,
-                        label: _startsAt != null && !_startsAt!.isDateOnly
-                            ? formatTimeOfDate(_startsAt!)
-                            : 'Set start time',
-                        isActive: _startsAt != null && !_startsAt!.isDateOnly,
-                        onPressed: _pickStartTime,
-                        onCancel: _clearStartTime,
-                      ),
-                      const SizedBox(width: 6),
-                      const Text('-', style: TextStyle(color: Colors.white70)),
-                      const SizedBox(width: 6),
-                      _TimeChip(
-                        icon: Icons.access_time,
-                        label: _endsAt != null && !_endsAt!.isDateOnly
-                            ? formatTimeOfDate(_endsAt!)
-                            : 'Set end time',
-                        isActive: _endsAt != null && !_endsAt!.isDateOnly,
-                        onPressed: _pickEndTime,
-                        onCancel: _clearEndTime,
-                      ),
-                    ],
+                GlassPanel(
+                  blurLevel: 0,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _TimeChip(
+                          icon: Icons.calendar_month,
+                          label: _startsAt == null
+                              ? 'Set day'
+                              : '${formatDate(_startsAt!)}${_endsAt != null && _startsAt!.startOfDay != _endsAt!.startOfDay ? " - ${formatDate(_endsAt!)}" : ""}',
+                          isActive: _startsAt != null,
+                          onPressed: _pickDay,
+                          onCancel: _clearTimes,
+                        ),
+                        const SizedBox(width: 8),
+                        _TimeChip(
+                          icon: Icons.access_time,
+                          label: _startsAt != null && !_startsAt!.isDateOnly
+                              ? formatTimeOfDate(_startsAt!)
+                              : 'Set start time',
+                          isActive: _startsAt != null && !_startsAt!.isDateOnly,
+                          onPressed: _pickStartTime,
+                          onCancel: _clearStartTime,
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          '-',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                        const SizedBox(width: 6),
+                        _TimeChip(
+                          icon: Icons.access_time,
+                          label: _endsAt != null && !_endsAt!.isDateOnly
+                              ? formatTimeOfDate(_endsAt!)
+                              : 'Set end time',
+                          isActive: _endsAt != null && !_endsAt!.isDateOnly,
+                          onPressed: _pickEndTime,
+                          onCancel: _clearEndTime,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text('Срок выполнения:', style: TextStyle(color: AppColors.onSurface)),
+                const Text(
+                  'Срок выполнения:',
+                  style: TextStyle(color: AppColors.onSurface),
+                ),
                 const SizedBox(height: 8),
-                datePickButton(
-                  context,
-                  label: 'Выбрать дату',
-                  date: _dueDate,
-                  onDateChange: (d) => setState(() => _dueDate = d),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: 200),
+                  child: datePickButton(
+                    context,
+                    label: 'Выбрать дату',
+                    date: _dueDate,
+                    onDateChange: (d) => setState(() => _dueDate = d),
+                  ),
                 ),
               ],
             ],
@@ -384,10 +442,7 @@ class _AddChildDialogState extends State<AddChildDialog> {
         hour: _startsAt?.hour,
         minute: _startsAt?.minute,
       );
-      _endsAt = selected.copyWith(
-        hour: _endsAt?.hour,
-        minute: _endsAt?.minute,
-      );
+      _endsAt = selected.copyWith(hour: _endsAt?.hour, minute: _endsAt?.minute);
     });
   }
 
@@ -495,11 +550,16 @@ class _TimeChip extends StatelessWidget {
   }
 }
 
-class _ColorChip extends StatelessWidget {  final String color;
+class _ColorChip extends StatelessWidget {
+  final String color;
   final bool selected;
   final VoidCallback onTap;
 
-  const _ColorChip({required this.color, required this.selected, required this.onTap});
+  const _ColorChip({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -516,13 +576,15 @@ class _ColorChip extends StatelessWidget {  final String color;
             color: selected ? Colors.white : Colors.transparent,
             width: 3,
           ),
-          boxShadow: selected ? [
-            BoxShadow(
-              color: c.withValues(alpha: 0.5),
-              blurRadius: 8,
-              spreadRadius: 2,
-            ),
-          ] : [],
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: c.withValues(alpha: 0.5),
+                    blurRadius: 8,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : [],
         ),
       ),
     );
@@ -534,7 +596,11 @@ class _StatusChip extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _StatusChip({required this.status, required this.selected, required this.onTap});
+  const _StatusChip({
+    required this.status,
+    required this.selected,
+    required this.onTap,
+  });
 
   Color get _color {
     switch (status) {
@@ -572,7 +638,9 @@ class _StatusChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? _color : _color.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: selected ? _color : _color.withValues(alpha: 0.3)),
+          border: Border.all(
+            color: selected ? _color : _color.withValues(alpha: 0.3),
+          ),
         ),
         child: Text(
           _label,
