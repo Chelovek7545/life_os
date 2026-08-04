@@ -4,6 +4,7 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/layout/split_view.dart';
+import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/features/goals/domain/goal_model.dart';
@@ -12,13 +13,21 @@ import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/create_sphere_dialog.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
+import 'package:life_os/features/tasks/domain/task_model.dart';
 
 /// PULSE — список сфер жизни. По тапу открывает [LifeGraphScreen] (граф сферы)
 /// через [Navigator.push]. Создание сферы — кнопкой в AppBar.
 class PulseScreen extends StatelessWidget {
   final LifeGraphViewModel viewModel;
+  final ValueChanged<Task>? onOpenTask;
+  final ValueChanged<Task>? onCompleteTask;
 
-  const PulseScreen({super.key, required this.viewModel});
+  const PulseScreen({
+    super.key,
+    required this.viewModel,
+    this.onOpenTask,
+    this.onCompleteTask,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -35,54 +44,15 @@ class PulseScreen extends StatelessWidget {
           bool isSplit = asyncSnapshot.maxWidth >= 900;
 
           final goalsPanel = _GoalsPanel(viewModel: viewModel);
-
-          final spheresPanel = Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Spacer(),
-                  Text("Spheres", style: AppTypography.headlineLg),
-                  Spacer(),
-                  IconButton(
-                    visualDensity: VisualDensity.compact,
-                    style: AppButtonStyles.menuButtonStyle(),
-                    icon: const Icon(Icons.add, color: Colors.white),
-                    tooltip: 'Новая сфера',
-                    onPressed: () => _showCreateSphereDialog(context),
-                  ),
-                  SizedBox(width: AppMargins.md,)
-                ],
-              ),
-              Flexible(
-                child: StreamBuilder<List<Sphere>>(
-                  stream: viewModel.spheresStream,
-                  initialData: viewModel.spheres,
-                  builder: (context, snapshot) {
-                    final spheres = snapshot.data ?? const <Sphere>[];
-                    if (spheres.isEmpty) {
-                      return _EmptyState(
-                        onCreate: () => _showCreateSphereDialog(context),
-                      );
-                    }
-                    return ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                      itemCount: spheres.length,
-                      separatorBuilder: (_, _) =>
-                          const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final sphere = spheres[index];
-                        return _SphereTile(
-                          sphere: sphere,
-                          viewModel: viewModel,
-                          onTap: () => _openGraph(context, sphere),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
+          final statsPanel = _StatsPanel(
+            viewModel: viewModel,
+            onOpenTask: onOpenTask,
+            onCompleteTask: onCompleteTask,
+          );
+          final spheresPanel = _SpheresPanel(
+            viewModel: viewModel,
+            onCreate: () => _showCreateSphereDialog(context),
+            onOpenSphere: (sphere) => _openGraph(context, sphere),
           );
 
           return isSplit
@@ -99,25 +69,28 @@ class PulseScreen extends StatelessWidget {
                     );
                   },
                   initialWeights: [0.1, 0.8, 0.1],
-                  children: [
-                    goalsPanel,
-                    const Text("Coming soon..."),
-                    spheresPanel,
-                  ],
+                  children: [goalsPanel, statsPanel, spheresPanel],
                 )
-              : Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: goalsPanel),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                      "Coming soon...",
-                      textAlign: TextAlign.center,
+              : ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  children: [
+                    _StatsPanel(
+                      viewModel: viewModel,
+                      expand: false,
+                      onOpenTask: onOpenTask,
+                      onCompleteTask: onCompleteTask,
                     ),
-                  ),
-                  Expanded(child: spheresPanel),
-                ]);
+                    const SizedBox(height: 12),
+                    _GoalsPanel(viewModel: viewModel, expand: false),
+                    const SizedBox(height: 12),
+                    _SpheresPanel(
+                      viewModel: viewModel,
+                      expand: false,
+                      onCreate: () => _showCreateSphereDialog(context),
+                      onOpenSphere: (sphere) => _openGraph(context, sphere),
+                    ),
+                  ],
+                );
         },
       ),
     );
@@ -144,11 +117,55 @@ class PulseScreen extends StatelessWidget {
 /// Панель списка всех целей (display-only). В подзаголовке — имя сферы.
 class _GoalsPanel extends StatelessWidget {
   final LifeGraphViewModel viewModel;
+  final bool expand;
 
-  const _GoalsPanel({required this.viewModel});
+  const _GoalsPanel({required this.viewModel, this.expand = true});
 
   @override
   Widget build(BuildContext context) {
+    final list = StreamBuilder<List<Sphere>>(
+      stream: viewModel.spheresStream,
+      initialData: viewModel.spheres,
+      builder: (context, sphereSnapshot) {
+        final spheres = sphereSnapshot.data ?? const <Sphere>[];
+        final sphereNameOf = <String, String>{
+          for (final s in spheres) s.id: s.name,
+        };
+        return StreamBuilder<List<Goal>>(
+          stream: viewModel.goalsStream,
+          initialData: viewModel.goals,
+          builder: (context, goalSnapshot) {
+            final goals = goalSnapshot.data ?? const <Goal>[];
+            if (goals.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Text(
+                    'Нет целей',
+                    style: TextStyle(color: Colors.white38),
+                  ),
+                ),
+              );
+            }
+            return ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              itemCount: goals.length,
+              shrinkWrap: !expand,
+              physics: expand ? null : const NeverScrollableScrollPhysics(),
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final goal = goals[index];
+                return _GoalTile(
+                  goal: goal,
+                  sphereName: sphereNameOf[goal.sphereId] ?? '',
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+
     return Column(
       children: [
         Row(
@@ -160,46 +177,7 @@ class _GoalsPanel extends StatelessWidget {
             const SizedBox(width: AppMargins.md),
           ],
         ),
-        Flexible(
-          child: StreamBuilder<List<Sphere>>(
-            stream: viewModel.spheresStream,
-            initialData: viewModel.spheres,
-            builder: (context, sphereSnapshot) {
-              final spheres = sphereSnapshot.data ?? const <Sphere>[];
-              final sphereNameOf = <String, String>{
-                for (final s in spheres) s.id: s.name,
-              };
-              return StreamBuilder<List<Goal>>(
-                stream: viewModel.goalsStream,
-                initialData: viewModel.goals,
-                builder: (context, goalSnapshot) {
-                  final goals = goalSnapshot.data ?? const <Goal>[];
-                  if (goals.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'Нет целей',
-                        style: TextStyle(color: Colors.white38),
-                      ),
-                    );
-                  }
-                  return ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                    itemCount: goals.length,
-                    separatorBuilder: (_, _) =>
-                        const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final goal = goals[index];
-                      return _GoalTile(
-                        goal: goal,
-                        sphereName: sphereNameOf[goal.sphereId] ?? '',
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          ),
-        ),
+        if (expand) Flexible(child: list) else list,
       ],
     );
   }
@@ -230,10 +208,7 @@ class _GoalTile extends StatelessWidget {
               shape: BoxShape.circle,
               color: color,
               boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.45),
-                  blurRadius: 10,
-                ),
+                BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 10),
               ],
             ),
           ),
@@ -264,6 +239,370 @@ class _GoalTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Панель списка сфер с кнопкой создания.
+class _SpheresPanel extends StatelessWidget {
+  final LifeGraphViewModel viewModel;
+  final VoidCallback onCreate;
+  final ValueChanged<Sphere> onOpenSphere;
+  final bool expand;
+
+  const _SpheresPanel({
+    required this.viewModel,
+    required this.onCreate,
+    required this.onOpenSphere,
+    this.expand = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final list = StreamBuilder<List<Sphere>>(
+      stream: viewModel.spheresStream,
+      initialData: viewModel.spheres,
+      builder: (context, snapshot) {
+        final spheres = snapshot.data ?? const <Sphere>[];
+        if (spheres.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: _EmptyState(onCreate: onCreate),
+          );
+        }
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          itemCount: spheres.length,
+          shrinkWrap: !expand,
+          physics: expand ? null : const NeverScrollableScrollPhysics(),
+          separatorBuilder: (_, _) => const SizedBox(height: 10),
+          itemBuilder: (context, index) {
+            final sphere = spheres[index];
+            return _SphereTile(
+              sphere: sphere,
+              viewModel: viewModel,
+              onTap: () => onOpenSphere(sphere),
+            );
+          },
+        );
+      },
+    );
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            const Spacer(),
+            Text("Spheres", style: AppTypography.headlineLg),
+            const Spacer(),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              style: AppButtonStyles.menuButtonStyle(),
+              icon: const Icon(Icons.add, color: Colors.white),
+              tooltip: 'Новая сфера',
+              onPressed: onCreate,
+            ),
+            const SizedBox(width: AppMargins.md),
+          ],
+        ),
+        if (expand) Flexible(child: list) else list,
+      ],
+    );
+  }
+}
+
+/// Центральная панель Pulse: активная задача «сейчас» + статистика
+/// выполненных задач за последние 7 дней.
+class _StatsPanel extends StatelessWidget {
+  final LifeGraphViewModel viewModel;
+  final bool expand;
+  final ValueChanged<Task>? onOpenTask;
+  final ValueChanged<Task>? onCompleteTask;
+
+  const _StatsPanel({
+    required this.viewModel,
+    this.expand = true,
+    this.onOpenTask,
+    this.onCompleteTask,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final content = StreamBuilder<List<Task>>(
+      stream: viewModel.tasksStream,
+      initialData: viewModel.tasks,
+      builder: (context, snapshot) {
+        final tasks = snapshot.data ?? const <Task>[];
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Сейчас',
+                style: TextStyle(
+                  color: AppColors.onSurfaceVariant,
+                  fontSize: 11.5,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 6),
+              _ActiveTaskCard(
+                tasks: tasks,
+                onTap: onOpenTask,
+                onComplete: onCompleteTask,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Выполнено за 7 дней',
+                style: TextStyle(
+                  color: AppColors.onSurfaceVariant,
+                  fontSize: 11.5,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _WeekBars(tasks: tasks),
+            ],
+          ),
+        );
+      },
+    );
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            const Spacer(),
+            Text("Stats", style: AppTypography.headlineLg),
+            const Spacer(),
+            const SizedBox(width: AppMargins.md),
+          ],
+        ),
+        const SizedBox(height: 6),
+        if (expand) Expanded(child: content) else content,
+      ],
+    );
+  }
+}
+
+/// Карточка активной задачи (окно времени `startsAt..endsAt` содержит сейчас).
+class _ActiveTaskCard extends StatelessWidget {
+  final List<Task> tasks;
+  final ValueChanged<Task>? onTap;
+  final ValueChanged<Task>? onComplete;
+
+  const _ActiveTaskCard({required this.tasks, this.onTap, this.onComplete});
+
+  Task? get _activeTask {
+    final now = DateTime.now();
+    final candidates =
+        tasks
+            .where(
+              (t) =>
+                  t.startsAt != null &&
+                  t.endsAt != null &&
+                  !t.startsAt!.isAfter(now) &&
+                  !t.endsAt!.isBefore(now),
+            )
+            .toList()
+          ..sort((a, b) {
+            final aProgress = a.status == TaskStatus.inProgress ? 0 : 1;
+            final bProgress = b.status == TaskStatus.inProgress ? 0 : 1;
+            if (aProgress != bProgress) return aProgress.compareTo(bProgress);
+            return a.startsAt!.compareTo(b.startsAt!);
+          });
+    return candidates.isEmpty ? null : candidates.first;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final task = _activeTask;
+    if (task == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainer,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: const Text(
+          'Нет активных задач',
+          style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13),
+        ),
+      );
+    }
+    final status = task.status;
+    final start = formatTimeOfDate(task.startsAt!);
+    final end = formatTimeOfDate(task.endsAt!);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap == null ? null : () => onTap!(task),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceContainer,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: status.color.withValues(alpha: 0.5)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                                    if (onComplete != null)
+                    CheckDot(
+                      isCompleted: status == TaskStatus.done,
+                      onCheckChanged: () => onComplete!(task),
+                      isSelected: false,
+                      isOverdue: false,
+                    ),
+                  SizedBox(width: AppMargins.md,),
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: status.color,
+                      boxShadow: [
+                        BoxShadow(
+                          color: status.color.withValues(alpha: 0.5),
+                          blurRadius: 8,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      task.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.onSurface,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Text(
+                    '$start – $end',
+                    style: const TextStyle(
+                      color: AppColors.onSurfaceVariant,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: status.color.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      status.title,
+                      style: TextStyle(color: status.color, fontSize: 10.5),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Столбчатая диаграмма: сколько задач выполнено за каждый из последних 7 дней.
+class _WeekBars extends StatelessWidget {
+  final List<Task> tasks;
+
+  const _WeekBars({required this.tasks});
+
+  @override
+  Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final days = List<DateTime>.generate(
+      7,
+      (i) => DateTime(today.year, today.month, today.day - (6 - i)),
+    );
+    final counts = <int>[];
+    var maxCount = 0;
+    for (final day in days) {
+      final count = tasks
+          .where(
+            (t) =>
+                t.status == TaskStatus.done &&
+                t.updatedAt.year == day.year &&
+                t.updatedAt.month == day.month &&
+                t.updatedAt.day == day.day,
+          )
+          .length;
+      counts.add(count);
+      if (count > maxCount) maxCount = count;
+    }
+    if (maxCount == 0) maxCount = 1;
+
+    return SizedBox(
+      height: 120,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: List.generate(7, (i) {
+          final count = counts[i];
+          final barHeight = 60.0 * count / maxCount;
+          final isToday =
+              days[i].year == today.year &&
+              days[i].month == today.month &&
+              days[i].day == today.day;
+          return Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Text(
+                  '$count',
+                  style: const TextStyle(
+                    color: AppColors.onSurfaceVariant,
+                    fontSize: 10,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  height: barHeight.clamp(2.0, 60.0).toDouble(),
+                  decoration: BoxDecoration(
+                    color: isToday
+                        ? AppColors.primary
+                        : AppColors.primary.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  getWeekDayName(days[i].weekday),
+                  style: TextStyle(
+                    color: isToday
+                        ? AppColors.primary
+                        : AppColors.onSurfaceVariant,
+                    fontSize: 9.5,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
       ),
     );
   }

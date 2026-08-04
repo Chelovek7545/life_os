@@ -66,6 +66,10 @@ class LifeGraphViewModel {
   Stream<List<Goal>> get goalsStream => _goalsSubject.stream;
   List<Goal> get goals => _goalsSubject.value;
 
+  final BehaviorSubject<List<Task>> _tasksSubject = BehaviorSubject<List<Task>>.seeded([]);
+  Stream<List<Task>> get tasksStream => _tasksSubject.stream;
+  List<Task> get tasks => _tasksSubject.value;
+
   /// Кэш доменных нод текущей сферы — нужен для CRUD (тип, цвет и т.п.).
   List<GraphNode> _domainNodes = const [];
 
@@ -73,6 +77,7 @@ class LifeGraphViewModel {
   StreamSubscription? _graphSubscription;
   StreamSubscription? _spheresSubscription;
   StreamSubscription? _goalsSubscription;
+  StreamSubscription? _tasksSubscription;
   Timer? _savePositionsTimer;
   String? _lastSphereId;
   bool _disposed = false;
@@ -100,6 +105,12 @@ class LifeGraphViewModel {
         _goalsSubject.add(goals);
       },
       onError: (e) => debugPrint('Goals stream error: $e'),
+    );
+    _tasksSubscription = tasksRepository.watchTasks().listen(
+      (tasks) {
+        _tasksSubject.add(tasks);
+      },
+      onError: (e) => debugPrint('Tasks stream error: $e'),
     );
   }
 
@@ -553,9 +564,11 @@ class LifeGraphViewModel {
     _graphSubscription?.cancel();
     _spheresSubscription?.cancel();
     _goalsSubscription?.cancel();
+    _tasksSubscription?.cancel();
     saveStatus.dispose();
     _graphSubject.close();
     _spheresSubject.close();
     _goalsSubject.close();
+    _tasksSubject.close();
   }
 }
