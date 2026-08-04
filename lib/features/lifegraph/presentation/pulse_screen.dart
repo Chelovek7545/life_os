@@ -6,6 +6,7 @@ import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/layout/split_view.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/features/goals/domain/goal_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
@@ -32,56 +33,57 @@ class PulseScreen extends StatelessWidget {
       body: LayoutBuilder(
         builder: (context, asyncSnapshot) {
           bool isSplit = asyncSnapshot.maxWidth >= 900;
-          
-              final spheresPanel = Column(
+
+          final goalsPanel = _GoalsPanel(viewModel: viewModel);
+
+          final spheresPanel = Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      Spacer(),
-                      Text("Spheres", style: AppTypography.headlineLg),
-                      Spacer(),
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        style: AppButtonStyles.menuButtonStyle(),
-                        icon: const Icon(Icons.add, color: Colors.white),
-                        tooltip: 'Новая сфера',
-                        onPressed: () => _showCreateSphereDialog(context),
-                      ),
-                      SizedBox(width: AppMargins.md,)
-                    ],
+                  Spacer(),
+                  Text("Spheres", style: AppTypography.headlineLg),
+                  Spacer(),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    style: AppButtonStyles.menuButtonStyle(),
+                    icon: const Icon(Icons.add, color: Colors.white),
+                    tooltip: 'Новая сфера',
+                    onPressed: () => _showCreateSphereDialog(context),
                   ),
-                  Flexible(
-                    child: StreamBuilder<List<Sphere>>(
-                      stream: viewModel.spheresStream,
-                      initialData: viewModel.spheres,
-                      builder: (context, snapshot) {
-                        final spheres = snapshot.data ?? const <Sphere>[];
-                        if (spheres.isEmpty) {
-                          return _EmptyState(
-                            onCreate: () => _showCreateSphereDialog(context),
-                          );
-                        }
-                        return ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                          itemCount: spheres.length,
-                          separatorBuilder: (_, _) =>
-                              const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final sphere = spheres[index];
-                            return _SphereTile(
-                              sphere: sphere,
-                              viewModel: viewModel,
-                              onTap: () => _openGraph(context, sphere),
-                            );
-                          },
+                  SizedBox(width: AppMargins.md,)
+                ],
+              ),
+              Flexible(
+                child: StreamBuilder<List<Sphere>>(
+                  stream: viewModel.spheresStream,
+                  initialData: viewModel.spheres,
+                  builder: (context, snapshot) {
+                    final spheres = snapshot.data ?? const <Sphere>[];
+                    if (spheres.isEmpty) {
+                      return _EmptyState(
+                        onCreate: () => _showCreateSphereDialog(context),
+                      );
+                    }
+                    return ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                      itemCount: spheres.length,
+                      separatorBuilder: (_, _) =>
+                          const SizedBox(height: 10),
+                      itemBuilder: (context, index) {
+                        final sphere = spheres[index];
+                        return _SphereTile(
+                          sphere: sphere,
+                          viewModel: viewModel,
+                          onTap: () => _openGraph(context, sphere),
                         );
                       },
-                    ),
-                  ),
-                ],
-              );
-          
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
 
           return isSplit
               ? SplitView(
@@ -98,18 +100,23 @@ class PulseScreen extends StatelessWidget {
                   },
                   initialWeights: [0.1, 0.8, 0.1],
                   children: [
-                    
-            const Text("Coming soon..."),
-            const Text("Coming soon..."),
-            spheresPanel
+                    goalsPanel,
+                    const Text("Coming soon..."),
+                    spheresPanel,
                   ],
                 )
               : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                              const Text("Coming soon..."),
-            const Text("Coming soon..."),
-            Expanded(child: spheresPanel)
+                  Expanded(child: goalsPanel),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      "Coming soon...",
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  Expanded(child: spheresPanel),
                 ]);
         },
       ),
@@ -130,6 +137,134 @@ class PulseScreen extends StatelessWidget {
     await showDialog<void>(
       context: context,
       builder: (ctx) => CreateSphereDialog(viewModel: viewModel),
+    );
+  }
+}
+
+/// Панель списка всех целей (display-only). В подзаголовке — имя сферы.
+class _GoalsPanel extends StatelessWidget {
+  final LifeGraphViewModel viewModel;
+
+  const _GoalsPanel({required this.viewModel});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            const Spacer(),
+            Text("Goals", style: AppTypography.headlineLg),
+            const Spacer(),
+            const SizedBox(width: AppMargins.md),
+          ],
+        ),
+        Flexible(
+          child: StreamBuilder<List<Sphere>>(
+            stream: viewModel.spheresStream,
+            initialData: viewModel.spheres,
+            builder: (context, sphereSnapshot) {
+              final spheres = sphereSnapshot.data ?? const <Sphere>[];
+              final sphereNameOf = <String, String>{
+                for (final s in spheres) s.id: s.name,
+              };
+              return StreamBuilder<List<Goal>>(
+                stream: viewModel.goalsStream,
+                initialData: viewModel.goals,
+                builder: (context, goalSnapshot) {
+                  final goals = goalSnapshot.data ?? const <Goal>[];
+                  if (goals.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'Нет целей',
+                        style: TextStyle(color: Colors.white38),
+                      ),
+                    );
+                  }
+                  return ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                    itemCount: goals.length,
+                    separatorBuilder: (_, _) =>
+                        const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final goal = goals[index];
+                      return _GoalTile(
+                        goal: goal,
+                        sphereName: sphereNameOf[goal.sphereId] ?? '',
+                      );
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Строка списка целей: цвет-индикатор, название, имя сферы.
+class _GoalTile extends StatelessWidget {
+  final Goal goal;
+  final String sphereName;
+
+  const _GoalTile({required this.goal, required this.sphereName});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = parseHexColor(goal.color);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainer,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color,
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.45),
+                  blurRadius: 10,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  goal.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.onSurface,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  sphereName.isEmpty ? 'Без сферы' : sphereName,
+                  style: const TextStyle(
+                    color: AppColors.onSurfaceVariant,
+                    fontSize: 11.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
