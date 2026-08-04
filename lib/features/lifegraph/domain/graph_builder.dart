@@ -87,7 +87,7 @@ class GraphBuilder {
             type: GraphNodeType.task,
             title: task.title,
             subtitle: task.description.isEmpty ? 'Нет описания' : task.description,
-            color: _taskColor(task.status),
+            color: projects.firstWhere((v) => v.id == task.projectId).color,
             parentId: task.projectId,
             taskStatus: task.status,
           ));

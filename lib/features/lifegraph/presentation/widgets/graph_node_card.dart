@@ -331,16 +331,7 @@ class _StatusChip extends StatelessWidget {
   }
 
   Color _statusColor(TaskStatus status) {
-    switch (status) {
-      case TaskStatus.done:
-        return Colors.green;
-      case TaskStatus.inProgress:
-        return Colors.blue;
-      case TaskStatus.notStarted:
-        return Colors.orange;
-      case TaskStatus.open:
-        return Colors.grey;
-    }
+    return status.color;
   }
 
   String _statusLabel(TaskStatus status) {

@@ -17,14 +17,14 @@ enum TaskStatus {
     title: 'To Do',
     subtitle: 'Awaiting deployment',
     symbol: '○',
-    color: Colors.red,
+    color: Colors.redAccent,
     icon: Icons.radio_button_unchecked,
   ),
   inProgress(
     title: 'In Progress',
     subtitle: 'Active execution',
     symbol: '▶',
-    color: Colors.lightBlueAccent,
+    color: Colors.amberAccent,
     icon: Icons.hourglass_top, // Заполненный наполовину круг
   ),
   done(
