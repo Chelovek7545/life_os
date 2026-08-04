@@ -5,6 +5,7 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/graph_view.dart' as graph;
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
+import 'package:life_os/features/lifegraph/presentation/widgets/create_sphere_dialog.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_card.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
@@ -36,7 +37,6 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       backgroundColor: AppColors.surfaceDim,
       appBar: AppBar(
         title: const Text('PULSE'),
-        backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
           _SphereDropdown(viewModel: widget.viewModel),
@@ -152,7 +152,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   Future<void> _showCreateSphereDialog() async {
     await showDialog<void>(
       context: context,
-      builder: (ctx) => _CreateSphereDialog(viewModel: widget.viewModel),
+      builder: (ctx) => CreateSphereDialog(viewModel: widget.viewModel),
     );
   }
 
@@ -227,56 +227,6 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
 }
 
 // ── Вспомогательные виджеты ─────────────────────────────────────────────────
-
-/// Диалог создания сферы. Владеет собственным [TextEditingController] и
-/// освобождает его в [dispose] — после полного удаления роута диалога
-/// (когда TextField уже размонтирован), исключая «controller used after disposed».
-class _CreateSphereDialog extends StatefulWidget {
-  final LifeGraphViewModel viewModel;
-
-  const _CreateSphereDialog({required this.viewModel});
-
-  @override
-  State<_CreateSphereDialog> createState() => _CreateSphereDialogState();
-}
-
-class _CreateSphereDialogState extends State<_CreateSphereDialog> {
-  final TextEditingController _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.surfaceContainer,
-      title: const Text('Новая сфера жизни'),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        decoration: const InputDecoration(
-          hintText: 'Название (например: Работа, Семья, Здоровье)',
-        ),
-      ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
-        FilledButton(
-          onPressed: () {
-            final name = _controller.text.trim();
-            if (name.isNotEmpty) {
-              widget.viewModel.createSphere(name: name);
-              Navigator.pop(context);
-            }
-          },
-          child: const Text('Создать'),
-        ),
-      ],
-    );
-  }
-}
 
 class _SphereDropdown extends StatelessWidget {
   final LifeGraphViewModel viewModel;

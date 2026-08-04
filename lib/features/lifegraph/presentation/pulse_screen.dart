@@ -1,0 +1,233 @@
+import 'package:flutter/material.dart';
+import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/theme/app_text_styles.dart';
+import 'package:life_os/core/utils/color_format.dart';
+import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/features/lifegraph/domain/graph_node.dart';
+import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
+import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
+import 'package:life_os/features/lifegraph/presentation/widgets/create_sphere_dialog.dart';
+import 'package:life_os/features/spheres/domain/sphere_model.dart';
+
+/// PULSE — список сфер жизни. По тапу открывает [LifeGraphScreen] (граф сферы)
+/// через [Navigator.push]. Создание сферы — кнопкой в AppBar.
+class PulseScreen extends StatelessWidget {
+  final LifeGraphViewModel viewModel;
+
+  const PulseScreen({super.key, required this.viewModel});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.surfaceDim,
+      appBar: AppBar(
+        title: const Text('PULSE'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add, color: Colors.white),
+            tooltip: 'Новая сфера',
+            onPressed: () => _showCreateSphereDialog(context),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Text("Spheres", style: AppTypography.headlineLg,),
+          Flexible(
+            child: StreamBuilder<List<Sphere>>(
+              stream: viewModel.spheresStream,
+              builder: (context, snapshot) {
+                final spheres = snapshot.data ?? const <Sphere>[];
+                if (spheres.isEmpty) {
+                  return _EmptyState(onCreate: () => _showCreateSphereDialog(context));
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  itemCount: spheres.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 10),
+                  itemBuilder: (context, index) {
+                    final sphere = spheres[index];
+                    return _SphereTile(
+                      sphere: sphere,
+                      viewModel: viewModel,
+                      onTap: () => _openGraph(context, sphere),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openGraph(BuildContext context, Sphere sphere) async {
+    await viewModel.switchSphere(sphere.id);
+    if (!context.mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => LifeGraphScreen(viewModel: viewModel),
+      ),
+    );
+  }
+
+  Future<void> _showCreateSphereDialog(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => CreateSphereDialog(viewModel: viewModel),
+    );
+  }
+}
+
+/// Строка списка сфер: цвет-индикатор, название, счётчик нод и дата создания.
+class _SphereTile extends StatelessWidget {
+  final Sphere sphere;
+  final LifeGraphViewModel viewModel;
+  final VoidCallback onTap;
+
+  const _SphereTile({
+    required this.sphere,
+    required this.viewModel,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = parseHexColor(sphere.color);
+    return Material(
+      color: AppColors.surfaceContainer,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color,
+                  boxShadow: [
+                    BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 10),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      sphere.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.onSurface,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${formatDate(sphere.createdAt)} · создана',
+                      style: const TextStyle(
+                        color: AppColors.onSurfaceVariant,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              _SphereNodeCount(viewModel: viewModel, sphereId: sphere.id),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right_rounded, color: Colors.white38, size: 22),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
+}
+
+/// Счётчик нод сферы (без корня-сферы) через live-стрим графа.
+class _SphereNodeCount extends StatelessWidget {
+  final LifeGraphViewModel viewModel;
+  final String sphereId;
+
+  const _SphereNodeCount({required this.viewModel, required this.sphereId});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<GraphNode>>(
+      stream: viewModel.graphBuilder.watchGraph(sphereId),
+      builder: (context, snapshot) {
+        final content = (snapshot.data?.length ?? 0) - 1;
+        final text = content <= 0
+            ? 'пусто'
+            : '$content ${_plural(content, 'нода', 'ноды', 'нод')}';
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            text,
+            style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 11.5),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _EmptyState extends StatelessWidget {
+  final VoidCallback onCreate;
+
+  const _EmptyState({required this.onCreate});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.public_rounded, size: 64, color: Colors.white38),
+          const SizedBox(height: 16),
+          const Text(
+            'Нет сфер жизни',
+            style: TextStyle(color: Colors.white70, fontSize: 18),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Создайте первую сферу',
+            style: TextStyle(color: Colors.white38),
+          ),
+          const SizedBox(height: 24),
+          FilledButton.icon(
+            icon: const Icon(Icons.add),
+            label: const Text('Создать сферу'),
+            onPressed: onCreate,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _plural(int n, String one, String few, String many) {
+  final mod10 = n % 10;
+  final mod100 = n % 100;
+  if (mod10 == 1 && mod100 != 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
