@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
-import 'package:life_os/features/lifegraph/graph_view.dart' as graph;
+import 'package:life_os/core/ui/graph/graph_view.dart' as graph;
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 /// Карточка ноды в стиле приложения для кастомного nodeBuilder GraphView.

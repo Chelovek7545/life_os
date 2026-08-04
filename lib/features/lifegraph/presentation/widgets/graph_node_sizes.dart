@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
-import 'package:life_os/features/lifegraph/graph_view.dart';
+import 'package:life_os/core/ui/graph/graph_view.dart';
 
 /// Размер ноды в зависимости от её типа.
 Size graphNodeSizeOf(GraphNodeType type) {

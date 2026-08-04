@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
+import 'package:life_os/core/ui/layout/split_view.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
@@ -24,42 +27,85 @@ class PulseScreen extends StatelessWidget {
         title: const Text('PULSE'),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add, color: Colors.white),
-            tooltip: 'Новая сфера',
-            onPressed: () => _showCreateSphereDialog(context),
-          ),
-        ],
+        actions: [],
       ),
-      body: Column(
-        children: [
-          Text("Spheres", style: AppTypography.headlineLg,),
-          Flexible(
-            child: StreamBuilder<List<Sphere>>(
-              stream: viewModel.spheresStream,
-              builder: (context, snapshot) {
-                final spheres = snapshot.data ?? const <Sphere>[];
-                if (spheres.isEmpty) {
-                  return _EmptyState(onCreate: () => _showCreateSphereDialog(context));
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                  itemCount: spheres.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) {
-                    final sphere = spheres[index];
-                    return _SphereTile(
-                      sphere: sphere,
-                      viewModel: viewModel,
-                      onTap: () => _openGraph(context, sphere),
+      body: LayoutBuilder(
+        builder: (context, asyncSnapshot) {
+          bool isSplit = asyncSnapshot.maxWidth >= 900;
+          var children = [
+            const Text("Coming soon..."),
+            const Text("Coming soon..."),
+
+            Expanded(
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Spacer(),
+                      Text("Spheres", style: AppTypography.headlineLg),
+                      Spacer(),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        style: AppButtonStyles.menuButtonStyle(),
+                        icon: const Icon(Icons.add, color: Colors.white),
+                        tooltip: 'Новая сфера',
+                        onPressed: () => _showCreateSphereDialog(context),
+                      ),
+                      SizedBox(width: AppMargins.md,)
+                    ],
+                  ),
+                  Flexible(
+                    child: StreamBuilder<List<Sphere>>(
+                      stream: viewModel.spheresStream,
+                      builder: (context, snapshot) {
+                        final spheres = snapshot.data ?? const <Sphere>[];
+                        if (spheres.isEmpty) {
+                          return _EmptyState(
+                            onCreate: () => _showCreateSphereDialog(context),
+                          );
+                        }
+                        return ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                          itemCount: spheres.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final sphere = spheres[index];
+                            return _SphereTile(
+                              sphere: sphere,
+                              viewModel: viewModel,
+                              onTap: () => _openGraph(context, sphere),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ];
+          return isSplit
+              ? SplitView(
+                  minSizes: [300, 300, 300],
+                  axis: Axis.horizontal,
+                  dividerThickness: 2,
+                  dividerBuilder: (context, dividerIndex, axis) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.borderGlass,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
                     );
                   },
-                );
-              },
-            ),
-          ),
-        ],
+                  initialWeights: [0.1, 0.8, 0.1],
+                  children: children,
+                )
+              : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children);
+        },
       ),
     );
   }
@@ -114,7 +160,10 @@ class _SphereTile extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: color,
                   boxShadow: [
-                    BoxShadow(color: color.withValues(alpha: 0.45), blurRadius: 10),
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.45),
+                      blurRadius: 10,
+                    ),
                   ],
                 ),
               ),
@@ -147,15 +196,17 @@ class _SphereTile extends StatelessWidget {
               const SizedBox(width: 12),
               _SphereNodeCount(viewModel: viewModel, sphereId: sphere.id),
               const SizedBox(width: 6),
-              const Icon(Icons.chevron_right_rounded, color: Colors.white38, size: 22),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.white38,
+                size: 22,
+              ),
             ],
           ),
         ),
       ),
     );
   }
-
-
 }
 
 /// Счётчик нод сферы (без корня-сферы) через live-стрим графа.
@@ -182,7 +233,10 @@ class _SphereNodeCount extends StatelessWidget {
           ),
           child: Text(
             text,
-            style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 11.5),
+            style: const TextStyle(
+              color: AppColors.onSurfaceVariant,
+              fontSize: 11.5,
+            ),
           ),
         );
       },

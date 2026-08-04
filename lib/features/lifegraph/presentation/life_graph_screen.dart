@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
-import 'package:life_os/features/lifegraph/graph_view.dart' as graph;
+import 'package:life_os/core/ui/graph/graph_view.dart' as graph;
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_card.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
