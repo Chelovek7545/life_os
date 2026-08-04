@@ -1324,23 +1324,25 @@ class _ZoomControls extends StatelessWidget {
             ),
           ),
         ),
-        _ControlButton(theme: theme, icon: Icons.add, tooltip: 'Zoom in', onTap: onZoomIn),
+        ControlButton(theme: theme, icon: Icons.add, tooltip: 'Zoom in', onTap: onZoomIn),
         const SizedBox(height: 8),
-        _ControlButton(theme: theme, icon: Icons.remove, tooltip: 'Zoom out', onTap: onZoomOut),
+        ControlButton(theme: theme, icon: Icons.remove, tooltip: 'Zoom out', onTap: onZoomOut),
         const SizedBox(height: 8),
-        _ControlButton(theme: theme, icon: Icons.fit_screen, tooltip: 'Fit graph', onTap: onFit),
+        ControlButton(theme: theme, icon: Icons.fit_screen, tooltip: 'Fit graph', onTap: onFit),
       ],
     );
   }
 }
 
-class _ControlButton extends StatefulWidget {
+/// Круглая кнопка-контрол в стиле графа: иконка, hover, тень.
+class ControlButton extends StatefulWidget {
   final GraphViewTheme theme;
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
 
-  const _ControlButton({
+  const ControlButton({
+    super.key,
     required this.theme,
     required this.icon,
     required this.tooltip,
@@ -1348,10 +1350,10 @@ class _ControlButton extends StatefulWidget {
   });
 
   @override
-  State<_ControlButton> createState() => _ControlButtonState();
+  State<ControlButton> createState() => _ControlButtonState();
 }
 
-class _ControlButtonState extends State<_ControlButton> {
+class _ControlButtonState extends State<ControlButton> {
   bool _hovered = false;
 
   @override

@@ -2,10 +2,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/graph_view.dart' as graph;
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
-import 'package:life_os/features/lifegraph/presentation/widgets/create_sphere_dialog.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_card.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
@@ -35,72 +35,85 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surfaceDim,
-      appBar: AppBar(
-        title: const Text('PULSE'),
-        elevation: 0,
-        actions: [
-          _SphereDropdown(viewModel: widget.viewModel),
-          IconButton(
-            icon: const Icon(Icons.add, color: Colors.white),
-            tooltip: 'Новая сфера',
-            onPressed: _showCreateSphereDialog,
-          ),
-        ],
-      ),
-      body: !widget.viewModel.initialized
-          ? const _GraphSplash()
-          : StreamBuilder<List<graph.GraphNode>>(
-              stream: widget.viewModel.graphStream,
-              builder: (context, snapshot) {
-                final nodes = snapshot.data ?? const <graph.GraphNode>[];
-                final sphereId = widget.viewModel.currentSphereId;
-                if (sphereId == null) {
-                  _syncedSphereId = null;
-                  return _EmptyState(
-                    onCreate: () => _showCreateSphereDialog(),
-                  );
-                }
-
-                final ready =
-                    nodes.any((n) => n.parentId == null && n.id == sphereId);
-                if (ready) _maybeFit(sphereId);
-                final stale = _syncedSphereId != sphereId;
-
-                return Stack(
-                  children: [
-                    Positioned.fill(
-                      child: graph.GraphView(
-                        nodes: widget.viewModel.graphStream,
-                        onAction: _onAction,
-                        camera: _camera,
-                        theme: AppGraphThemes.dark,
-                        layout: appGraphLayout(),
-                        nodeBuilder: _nodeBuilder,
-                        doubleTapCreatesRoot: false,
-                        longPressDeletes: false,
-                      ),
-                    ),
-                    if (stale)
-                      const Positioned.fill(
-                        child: Center(
-                          child: CircularProgressIndicator(color: AppColors.primary),
-                        ),
-                      ),
-                    Positioned(
-                      left: 18,
-                      bottom: 18,
-                      child: _StatsChip(count: nodes.length),
-                    ),
-                    Positioned(
-                      right: 18,
-                      top: 18,
-                      child: _SaveBadge(viewModel: widget.viewModel),
-                    ),
-                  ],
-                );
-              },
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Positioned.fill(child: _buildContent(context)),
+            Positioned(
+              top: 16,
+              left: 16,
+              child: graph.ControlButton(
+                theme: AppGraphThemes.dark,
+                icon: Icons.arrow_back_rounded,
+                tooltip: 'Назад',
+                onTap: () => Navigator.maybePop(context),
+              ),
             ),
+          ],
+        ),
+      ),
     );
+  }
+
+  Widget _buildContent(BuildContext context) {
+    return !widget.viewModel.initialized
+        ? const _GraphSplash()
+        : StreamBuilder<List<graph.GraphNode>>(
+            stream: widget.viewModel.graphStream,
+            builder: (context, snapshot) {
+              final nodes = snapshot.data ?? const <graph.GraphNode>[];
+              final sphereId = widget.viewModel.currentSphereId;
+              if (sphereId == null) {
+                _syncedSphereId = null;
+                return const _EmptyState();
+              }
+
+              final ready = nodes.any((n) => n.parentId == null && n.id == sphereId);
+              if (ready) _maybeFit(sphereId);
+              final stale = _syncedSphereId != sphereId;
+
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: graph.GraphView(
+                      nodes: widget.viewModel.graphStream,
+                      onAction: _onAction,
+                      camera: _camera,
+                      theme: AppGraphThemes.dark,
+                      layout: appGraphLayout(),
+                      nodeBuilder: _nodeBuilder,
+                      doubleTapCreatesRoot: false,
+                      longPressDeletes: false,
+                    ),
+                  ),
+                  if (stale)
+                    const Positioned.fill(
+                      child: Center(
+                        child: CircularProgressIndicator(color: AppColors.primary),
+                      ),
+                    ),
+                  Positioned(
+                    left: 18,
+                    bottom: 18,
+                    child: _StatsChip(count: nodes.length),
+                  ),
+                  Positioned(
+                    right: 18,
+                    top: 18,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        _SphereDropdown(viewModel: widget.viewModel),
+                        const SizedBox(width: 10),
+                        _SaveBadge(viewModel: widget.viewModel),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
   }
 
   /// Как только пришли данные для текущей сферы — вписываем граф в канвас.
@@ -148,13 +161,6 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   }
 
   // ── Диалоги ────────────────────────────────────────────────────────────────
-
-  Future<void> _showCreateSphereDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => CreateSphereDialog(viewModel: widget.viewModel),
-    );
-  }
 
   Future<void> _showAddChildDialog(GraphNode parent) async {
     if (parent.isLeaf) return;
@@ -240,12 +246,20 @@ class _SphereDropdown extends StatelessWidget {
       builder: (context, snapshot) {
         final spheres = snapshot.data ?? [];
         if (spheres.isEmpty) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.only(right: 12),
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          decoration: BoxDecoration(
+            //color: AppColors.surfaceContainer.withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(10),
+            //border: Border.all(color: AppColors.borderGlass),
+            boxShadow: const [
+              BoxShadow(color: Color(0x33000000), blurRadius: 12, offset: Offset(0, 4)),
+            ],
+          ),
           child: DropdownButton<String>(
             value: viewModel.currentSphereId,
             dropdownColor: AppColors.surfaceContainerHigh,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            style: AppTypography.codeLabel,
             underline: const SizedBox(),
             icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
             items: spheres
@@ -302,9 +316,7 @@ class _StatsChip extends StatelessWidget {
 }
 
 class _EmptyState extends StatelessWidget {
-  final VoidCallback onCreate;
-
-  const _EmptyState({required this.onCreate});
+  const _EmptyState();
 
   @override
   Widget build(BuildContext context) {
@@ -315,19 +327,8 @@ class _EmptyState extends StatelessWidget {
           const Icon(Icons.account_tree_rounded, size: 64, color: Colors.white38),
           const SizedBox(height: 16),
           const Text(
-            'Канвас пуст',
+            'Сфера пуста',
             style: TextStyle(color: Colors.white70, fontSize: 18),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Создайте первую сферу жизни',
-            style: TextStyle(color: Colors.white38),
-          ),
-          const SizedBox(height: 24),
-          FilledButton.icon(
-            icon: const Icon(Icons.add),
-            label: const Text('Создать сферу'),
-            onPressed: onCreate,
           ),
         ],
       ),
