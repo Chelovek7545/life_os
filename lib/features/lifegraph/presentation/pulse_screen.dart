@@ -32,12 +32,8 @@ class PulseScreen extends StatelessWidget {
       body: LayoutBuilder(
         builder: (context, asyncSnapshot) {
           bool isSplit = asyncSnapshot.maxWidth >= 900;
-          var children = [
-            const Text("Coming soon..."),
-            const Text("Coming soon..."),
-
-            Expanded(
-              child: Column(
+          
+              final spheresPanel = Column(
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -58,6 +54,7 @@ class PulseScreen extends StatelessWidget {
                   Flexible(
                     child: StreamBuilder<List<Sphere>>(
                       stream: viewModel.spheresStream,
+                      initialData: viewModel.spheres,
                       builder: (context, snapshot) {
                         final spheres = snapshot.data ?? const <Sphere>[];
                         if (spheres.isEmpty) {
@@ -83,9 +80,9 @@ class PulseScreen extends StatelessWidget {
                     ),
                   ),
                 ],
-              ),
-            ),
-          ];
+              );
+          
+
           return isSplit
               ? SplitView(
                   minSizes: [300, 300, 300],
@@ -100,11 +97,20 @@ class PulseScreen extends StatelessWidget {
                     );
                   },
                   initialWeights: [0.1, 0.8, 0.1],
-                  children: children,
+                  children: [
+                    
+            const Text("Coming soon..."),
+            const Text("Coming soon..."),
+            spheresPanel
+                  ],
                 )
               : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: children);
+                children: [
+                              const Text("Coming soon..."),
+            const Text("Coming soon..."),
+            Expanded(child: spheresPanel)
+                ]);
         },
       ),
     );
