@@ -7,6 +7,7 @@ import 'package:life_os/core/ui/layout/split_view.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/goals/domain/goal_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
@@ -14,6 +15,17 @@ import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.da
 import 'package:life_os/features/lifegraph/presentation/widgets/create_sphere_dialog.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
+
+/// Задача идёт прямо сейчас: не выполнена и её окно `startsAt..endsAt`
+/// содержит текущий момент.
+bool _isTaskActiveNow(Task t) {
+  final now = DateTime.now();
+  return t.status != TaskStatus.done &&
+      t.startsAt != null &&
+      t.endsAt != null &&
+      !t.startsAt!.isAfter(now) &&
+      !t.endsAt!.isBefore(now);
+}
 
 /// PULSE — список сфер жизни. По тапу открывает [LifeGraphScreen] (граф сферы)
 /// через [Navigator.push]. Создание сферы — кнопкой в AppBar.
@@ -356,6 +368,21 @@ class _StatsPanel extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               const Text(
+                'Сегодня',
+                style: TextStyle(
+                  color: AppColors.onSurfaceVariant,
+                  fontSize: 11.5,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 10),
+              _TodayTimeline(
+                tasks: tasks,
+                onTap: onOpenTask,
+                onComplete: onCompleteTask,
+              ),
+              const SizedBox(height: 16),
+              const Text(
                 'Выполнено за 7 дней',
                 style: TextStyle(
                   color: AppColors.onSurfaceVariant,
@@ -383,7 +410,10 @@ class _StatsPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 6),
-        if (expand) Expanded(child: content) else content,
+        if (expand)
+          Expanded(child: SingleChildScrollView(child: content))
+        else
+          content,
       ],
     );
   }
@@ -398,23 +428,13 @@ class _ActiveTaskCard extends StatelessWidget {
   const _ActiveTaskCard({required this.tasks, this.onTap, this.onComplete});
 
   Task? get _activeTask {
-    final now = DateTime.now();
-    final candidates =
-        tasks
-            .where(
-              (t) =>
-                  t.startsAt != null &&
-                  t.endsAt != null &&
-                  !t.startsAt!.isAfter(now) &&
-                  !t.endsAt!.isBefore(now),
-            )
-            .toList()
-          ..sort((a, b) {
-            final aProgress = a.status == TaskStatus.inProgress ? 0 : 1;
-            final bProgress = b.status == TaskStatus.inProgress ? 0 : 1;
-            if (aProgress != bProgress) return aProgress.compareTo(bProgress);
-            return a.startsAt!.compareTo(b.startsAt!);
-          });
+    final candidates = tasks.where(_isTaskActiveNow).toList()
+      ..sort((a, b) {
+        final aProgress = a.status == TaskStatus.inProgress ? 0 : 1;
+        final bProgress = b.status == TaskStatus.inProgress ? 0 : 1;
+        if (aProgress != bProgress) return aProgress.compareTo(bProgress);
+        return a.startsAt!.compareTo(b.startsAt!);
+      });
     return candidates.isEmpty ? null : candidates.first;
   }
 
@@ -454,14 +474,14 @@ class _ActiveTaskCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                                    if (onComplete != null)
+                  if (onComplete != null)
                     CheckDot(
                       isCompleted: status == TaskStatus.done,
                       onCheckChanged: () => onComplete!(task),
                       isSelected: false,
                       isOverdue: false,
                     ),
-                  SizedBox(width: AppMargins.md,),
+                  SizedBox(width: AppMargins.md),
                   Container(
                     width: 8,
                     height: 8,
@@ -489,7 +509,6 @@ class _ActiveTaskCard extends StatelessWidget {
                       ),
                     ),
                   ),
-
                 ],
               ),
               const SizedBox(height: 6),
@@ -522,6 +541,208 @@ class _ActiveTaskCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Вертикальная лента задач на сегодня: время, точка на линии, название.
+/// Активная задача выделена цветом, выполненная зачёркнута.
+class _TodayTimeline extends StatelessWidget {
+  final List<Task> tasks;
+  final ValueChanged<Task>? onTap;
+  final ValueChanged<Task>? onComplete;
+
+  const _TodayTimeline({required this.tasks, this.onTap, this.onComplete});
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final todayTasks =
+        tasks
+            .where(
+              (t) =>
+                  t.startsAt != null &&
+                  t.startsAt!.year == today.year &&
+                  t.startsAt!.month == today.month &&
+                  t.startsAt!.day == today.day &&
+                  !t.startsAt!.isDateOnly,
+            )
+            .toList()
+          ..sort((a, b) => a.startsAt!.compareTo(b.startsAt!));
+
+    if (todayTasks.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 4),
+        child: Text(
+          'На сегодня задач нет',
+          style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (var i = 0; i < todayTasks.length; i++) ...[
+          _TimelineRow(
+            task: todayTasks[i],
+            isFirst: i == 0,
+            isLast: i == todayTasks.length - 1,
+            onTap: onTap,
+            onComplete: onComplete,
+          ),
+          if (i < todayTasks.length - 1) const SizedBox(height: 2),
+        ],
+      ],
+    );
+  }
+}
+
+/// Строка ленты: время | линия+точка | название | галочка.
+class _TimelineRow extends StatelessWidget {
+  final Task task;
+  final bool isFirst;
+  final bool isLast;
+  final ValueChanged<Task>? onTap;
+  final ValueChanged<Task>? onComplete;
+
+  const _TimelineRow({
+    required this.task,
+    required this.isFirst,
+    required this.isLast,
+    this.onTap,
+    this.onComplete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final done = task.status == TaskStatus.done;
+    final active = !done && _isTaskActiveNow(task);
+    final accent = task.status.color;
+    final lineColor = AppColors.borderGlass;
+    final dotColor = done
+        ? accent
+        : active
+        ? accent
+        : AppColors.surfaceContainerHigh;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 40,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 7),
+              child: Text(
+                formatTimeOfDate(task.startsAt!),
+                textAlign: TextAlign.right,
+                style: TextStyle(
+                  color: active ? accent : AppColors.onSurfaceVariant,
+                  fontSize: 11.5,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 20,
+            child: Column(
+              children: [
+                if (!isFirst) Container(width: 2, height: 10, color: lineColor),
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: done ? null : dotColor,
+                    border: done ? Border.all(color: dotColor, width: 2) : null,
+                    boxShadow: active
+                        ? [
+                            BoxShadow(
+                              color: dotColor.withValues(alpha: 0.5),
+                              blurRadius: 8,
+                            ),
+                          ]
+                        : null,
+                  ),
+
+                ),
+                if (!isLast)
+                  Expanded(child: Container(width: 2, color: lineColor)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: onTap == null ? null : () => onTap!(task),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        task.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          decoration: done
+                              ? TextDecoration.lineThrough
+                              : TextDecoration.none,
+                          decorationThickness: 1.5,
+                          decorationColor: AppColors.onSurfaceVariant,
+                          color: done
+                              ? AppColors.onSurfaceVariant
+                              : active
+                              ? AppColors.onSurface
+                              : AppColors.onSurface,
+                          fontSize: 14,
+                          fontWeight: active
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    if (active) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'сейчас',
+                          style: TextStyle(color: accent, fontSize: 10),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (onComplete != null)
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              tooltip: done ? 'Вернуть в работу' : 'Завершить задачу',
+              icon: Icon(
+                done ? Icons.check_circle : Icons.check_circle_outline,
+                color: done ? task.status.color : AppColors.onSurfaceVariant,
+                size: 20,
+              ),
+              onPressed: () => onComplete!(task),
+            ),
+        ],
       ),
     );
   }
