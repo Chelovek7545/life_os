@@ -46,7 +46,9 @@ class PulseScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.surfaceDim,
       appBar: AppBar(
-        title: const Text('PULSE'),
+        centerTitle: true,
+        title: Text('PULSE', style: AppTypography.headlineLgMobile,),
+        forceMaterialTransparency: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [],
