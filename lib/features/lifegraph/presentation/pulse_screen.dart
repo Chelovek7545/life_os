@@ -3,6 +3,7 @@ import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
+import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/layout/split_view.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/color_format.dart';
@@ -25,6 +26,18 @@ bool _isTaskActiveNow(Task t) {
       t.endsAt != null &&
       !t.startsAt!.isAfter(now) &&
       !t.endsAt!.isBefore(now);
+}
+
+/// Активная задача «сейчас»: приоритет у in-progress, затем по времени начала.
+Task? _activeTaskOf(List<Task> tasks) {
+  final candidates = tasks.where(_isTaskActiveNow).toList()
+    ..sort((a, b) {
+      final aProgress = a.status == TaskStatus.inProgress ? 0 : 1;
+      final bProgress = b.status == TaskStatus.inProgress ? 0 : 1;
+      if (aProgress != bProgress) return aProgress.compareTo(bProgress);
+      return a.startsAt!.compareTo(b.startsAt!);
+    });
+  return candidates.isEmpty ? null : candidates.first;
 }
 
 /// PULSE — список сфер жизни. По тапу открывает [LifeGraphScreen] (граф сферы)
@@ -207,12 +220,13 @@ class _GoalTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = parseHexColor(goal.color);
-    return Container(
+    
+    return GlassPanel(
+      borderColor: color.withAlpha(20),
+      hasBlur: false,
+    borderRadius: 14,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainer,
-        borderRadius: BorderRadius.circular(14),
-      ),
+
       child: Row(
         children: [
           Container(
@@ -349,26 +363,29 @@ class _StatsPanel extends StatelessWidget {
       initialData: viewModel.tasks,
       builder: (context, snapshot) {
         final tasks = snapshot.data ?? const <Task>[];
+        final activeTask = _activeTaskOf(tasks);
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Сейчас',
-                style: TextStyle(
-                  color: AppColors.onSurfaceVariant,
-                  fontSize: 11.5,
-                  letterSpacing: 0.8,
+              if (activeTask != null) ...[
+                const Text(
+                  'Сейчас',
+                  style: TextStyle(
+                    color: AppColors.onSurfaceVariant,
+                    fontSize: 11.5,
+                    letterSpacing: 0.8,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              _ActiveTaskCard(
-                tasks: tasks,
-                onTap: onOpenTask,
-                onComplete: onCompleteTask,
-              ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 6),
+                _ActiveTaskCard(
+                  task: activeTask,
+                  onTap: onOpenTask,
+                  onComplete: onCompleteTask,
+                ),
+                const SizedBox(height: 16),
+              ],
               const Text(
                 'Сегодня',
                 style: TextStyle(
@@ -384,15 +401,6 @@ class _StatsPanel extends StatelessWidget {
                 onComplete: onCompleteTask,
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Выполнено за 7 дней',
-                style: TextStyle(
-                  color: AppColors.onSurfaceVariant,
-                  fontSize: 11.5,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              const SizedBox(height: 10),
               _WeekBars(tasks: tasks),
             ],
           ),
@@ -423,39 +431,14 @@ class _StatsPanel extends StatelessWidget {
 
 /// Карточка активной задачи (окно времени `startsAt..endsAt` содержит сейчас).
 class _ActiveTaskCard extends StatelessWidget {
-  final List<Task> tasks;
+  final Task task;
   final ValueChanged<Task>? onTap;
   final ValueChanged<Task>? onComplete;
 
-  const _ActiveTaskCard({required this.tasks, this.onTap, this.onComplete});
-
-  Task? get _activeTask {
-    final candidates = tasks.where(_isTaskActiveNow).toList()
-      ..sort((a, b) {
-        final aProgress = a.status == TaskStatus.inProgress ? 0 : 1;
-        final bProgress = b.status == TaskStatus.inProgress ? 0 : 1;
-        if (aProgress != bProgress) return aProgress.compareTo(bProgress);
-        return a.startsAt!.compareTo(b.startsAt!);
-      });
-    return candidates.isEmpty ? null : candidates.first;
-  }
+  const _ActiveTaskCard({required this.task, this.onTap, this.onComplete});
 
   @override
   Widget build(BuildContext context) {
-    final task = _activeTask;
-    if (task == null) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainer,
-          borderRadius: BorderRadius.circular(14),
-        ),
-        child: const Text(
-          'Нет активных задач',
-          style: TextStyle(color: AppColors.onSurfaceVariant, fontSize: 13),
-        ),
-      );
-    }
     final status = task.status;
     final start = formatTimeOfDate(task.startsAt!);
     final end = formatTimeOfDate(task.endsAt!);
@@ -751,10 +734,21 @@ class _TimelineRow extends StatelessWidget {
 }
 
 /// Столбчатая диаграмма: сколько задач выполнено за каждый из последних 7 дней.
-class _WeekBars extends StatelessWidget {
+/// Блок включает заголовок с avg-бейджем, сетку, столбцы и градиент-разделитель.
+class _WeekBars extends StatefulWidget {
   final List<Task> tasks;
 
   const _WeekBars({required this.tasks});
+
+  @override
+  State<_WeekBars> createState() => _WeekBarsState();
+}
+
+class _WeekBarsState extends State<_WeekBars> {
+  static const double _chartHeight = 120;
+  static const double _maxBarHeight = 64;
+
+  int? _hoveredIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -764,9 +758,10 @@ class _WeekBars extends StatelessWidget {
       (i) => DateTime(today.year, today.month, today.day - (6 - i)),
     );
     final counts = <int>[];
+    var total = 0;
     var maxCount = 0;
     for (final day in days) {
-      final count = tasks.where((t) {
+      final count = widget.tasks.where((t) {
         if (t.status != TaskStatus.done) return false;
         final date = t.startsAt ?? t.updatedAt;
         return date.year == day.year &&
@@ -774,58 +769,202 @@ class _WeekBars extends StatelessWidget {
             date.day == day.day;
       }).length;
       counts.add(count);
+      total += count;
       if (count > maxCount) maxCount = count;
     }
     if (maxCount == 0) maxCount = 1;
+    final avg = total / days.length;
 
-    return SizedBox(
-      height: 120,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: List.generate(7, (i) {
-          final count = counts[i];
-          final barHeight = 60.0 * count / maxCount;
-          final isToday =
-              days[i].year == today.year &&
-              days[i].month == today.month &&
-              days[i].day == today.day;
-          return Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  '$count',
-                  style: const TextStyle(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Заголовок: название + avg-бейдж
+        Container(
+          padding: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: AppColors.surfaceContainerHigh),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const Expanded(
+                child: Text(
+                  'ВЫПОЛНЕНО ЗА 7 ДНЕЙ',
+                  style: TextStyle(
                     color: AppColors.onSurfaceVariant,
                     fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.4,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Container(
-                  height: barHeight.clamp(2.0, 60.0).toDouble(),
-                  decoration: BoxDecoration(
-                    color: isToday
-                        ? AppColors.primary
-                        : AppColors.primary.withValues(alpha: 0.35),
-                    borderRadius: BorderRadius.circular(6),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Avg: ${_formatAvg(avg)}/day',
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  getWeekDayName(days[i].weekday),
-                  style: TextStyle(
-                    color: isToday
-                        ? AppColors.primary
-                        : AppColors.onSurfaceVariant,
-                    fontSize: 9.5,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Диаграмма: сетка + столбцы
+        SizedBox(
+          height: _chartHeight,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    for (var i = 0; i < 3; i++)
+                      Container(
+                        height: 1,
+                        color: AppColors.onSurfaceVariant.withValues(alpha: 0.2),
+                      ),
+                  ],
+                ),
+              ),
+              Positioned.fill(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      for (var i = 0; i < 7; i++) ...[
+                        if (i > 0) const SizedBox(width: 6),
+                        Expanded(child: _buildDay(i, days[i], counts[i], maxCount, today)),
+                      ],
+                    ],
                   ),
                 ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Градиент-разделитель
+        Container(
+          height: 2,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.transparent,
+                AppColors.surfaceContainerHigh,
+                Colors.transparent,
               ],
             ),
-          );
-        }),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDay(int index, DateTime day, int count, int maxCount, DateTime today) {
+    final isToday =
+        day.year == today.year && day.month == today.month && day.day == today.day;
+    final hovered = _hoveredIndex == index;
+    final showLabel = count > 0 || hovered;
+
+    final barHeight = count == 0
+        ? 4.0
+        : (_maxBarHeight * count / maxCount).clamp(4.0, _maxBarHeight);
+
+    final Color barColor;
+    if (count == 0) {
+      barColor = AppColors.surfaceContainerHigh;
+    } else if (isToday) {
+      barColor = AppColors.primary;
+    } else if (hovered) {
+      barColor = AppColors.onSurfaceVariant;
+    } else {
+      barColor = AppColors.onSurfaceVariant.withValues(alpha: 0.9);
+    }
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hoveredIndex = index),
+      onExit: (_) => setState(() => _hoveredIndex = null),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          // Счётчик над столбиком
+          Text(
+            '$count',
+            style: TextStyle(
+              color: (isToday ? AppColors.primary : AppColors.onSurfaceVariant)
+                  .withValues(alpha: showLabel ? 1 : 0),
+              fontSize: 10,
+              fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          // Столбик
+          Container(
+            height: barHeight,
+            decoration: BoxDecoration(
+              color: barColor,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(count == 0 ? 4 : 6),
+              ),
+              boxShadow: isToday && count > 0
+                  ? [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.3),
+                        blurRadius: 15,
+                      ),
+                    ]
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 6),
+          // Подпись дня
+          Text(
+            getWeekDayName(day.weekday),
+            style: TextStyle(
+              color: isToday ? AppColors.primary : AppColors.onSurfaceVariant,
+              fontSize: 9.5,
+              fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+          // Точка-индикатор текущего дня (слот одинаковой высоты для всех дней,
+          // чтобы сегодняшняя колонка не была сдвинута вверх).
+          const SizedBox(height: 4),
+          SizedBox(
+            height: 4,
+            child: isToday
+                ? const Center(
+                    child: SizedBox(
+                      width: 4,
+                      height: 4,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  )
+                : null,
+          ),
+        ],
       ),
     );
+  }
+
+  String _formatAvg(double value) {
+    final fixed = value.toStringAsFixed(1);
+    return fixed.endsWith('.0') ? fixed.substring(0, fixed.length - 2) : fixed;
   }
 }
 
