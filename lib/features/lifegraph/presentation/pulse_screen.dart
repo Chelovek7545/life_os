@@ -766,15 +766,13 @@ class _WeekBars extends StatelessWidget {
     final counts = <int>[];
     var maxCount = 0;
     for (final day in days) {
-      final count = tasks
-          .where(
-            (t) =>
-                t.status == TaskStatus.done &&
-                t.updatedAt.year == day.year &&
-                t.updatedAt.month == day.month &&
-                t.updatedAt.day == day.day,
-          )
-          .length;
+      final count = tasks.where((t) {
+        if (t.status != TaskStatus.done) return false;
+        final date = t.startsAt ?? t.updatedAt;
+        return date.year == day.year &&
+            date.month == day.month &&
+            date.day == day.day;
+      }).length;
       counts.add(count);
       if (count > maxCount) maxCount = count;
     }
