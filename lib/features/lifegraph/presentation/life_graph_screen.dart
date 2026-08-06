@@ -10,6 +10,7 @@ import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_card.
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/node_edit_dialog.dart';
+import 'package:life_os/features/lifegraph/presentation/widgets/existing_task_picker_dialog.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
 
 /// Экран графа жизни: сфера -> цель -> проект -> задача.
@@ -164,6 +165,38 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
 
   Future<void> _showAddChildDialog(GraphNode parent) async {
     if (parent.isLeaf) return;
+
+    if (parent.type == GraphNodeType.project) {
+      final createNew = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surfaceContainer,
+          title: const Text('Добавить в проект'),
+          content: const Text('Что добавить?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Существующую задачу'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Новую задачу'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Отмена'),
+            ),
+          ],
+        ),
+      );
+      if (createNew == null) return;
+      if (!createNew) {
+        await _showExistingTaskPicker(parent);
+        return;
+      }
+    }
+
+    if (!mounted) return;
     await showDialog<void>(
       context: context,
       builder: (ctx) => AddChildDialog(
@@ -186,6 +219,20 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
             endsAt: endsAt,
           );
         },
+      ),
+    );
+  }
+
+  Future<void> _showExistingTaskPicker(GraphNode project) async {
+    final candidates = widget.viewModel.tasks
+        .where((t) => t.projectId == null)
+        .toList();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => ExistingTaskPickerDialog(
+        tasks: candidates,
+        onSelect: (taskId) => widget.viewModel
+            .attachExistingTaskToProject(projectId: project.id, taskId: taskId),
       ),
     );
   }

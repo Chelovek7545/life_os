@@ -12,8 +12,7 @@ import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
-import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
-import 'package:life_os/core/ui/graph/graph_view.dart' as gv;
+import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';import 'package:life_os/core/ui/graph/graph_view.dart' as gv;
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:rxdart/rxdart.dart';
 
@@ -223,6 +222,32 @@ class LifeGraphViewModel {
         // Задача — лист, детей не добавляем
         return;
     }
+  }
+
+  /// Привязывает уже существующую задачу (без проекта) к проекту в графе.
+  /// Задача появляется нодой под проектом после пересборки через стримы.
+  Future<void> attachExistingTaskToProject({
+    required String projectId,
+    required String taskId,
+  }) async {
+    if (_currentSphereId == null) return;
+    final existing = await tasksRepository.getById(taskId);
+    if (existing == null) return;
+    if (existing.projectId != null) return;
+
+    await tasksRepository.updateTask(existing.copyWith(projectId: Wrapped(projectId)));
+
+    final parentView = graph.firstWhere(
+      (n) => n.id == projectId,
+      orElse: () => throw StateError('Parent not found'),
+    );
+    final parentPos = _positions[projectId] ?? parentView.position;
+    final newPos = _clampPosition(
+      Offset(parentPos.dx + 280, parentPos.dy),
+      graphNodeSizeOf(GraphNodeType.task),
+    );
+    _positions[taskId] = newPos;
+    await _scheduleSavePositions();
   }
 
   /// Обновляет ноду (переименование, описание, цвет, статус задачи).
