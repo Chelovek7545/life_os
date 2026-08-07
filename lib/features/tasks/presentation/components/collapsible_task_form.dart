@@ -220,8 +220,19 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
 
   //WORKING WITH DATES
   void _onStartsAtChange(DateTime? selected) {
-    if (_endsAt != null && selected != null && !selected.isDateOnly) {
-      if (!selected.isBefore(_endsAt!)) {
+    if (selected != null && _endsAt != null) {
+      final end = _endsAt!;
+      // Старт переехал на более позднюю дату — конец переезжает на ту же дату
+      if (selected.startOfDay.isAfter(end.startOfDay)) {
+        _endsAt = end.copyWith(
+          year: selected.year,
+          month: selected.month,
+          day: selected.day,
+        );
+      } else if (selected.startOfDay.isAtSameMomentAs(end.startOfDay) &&
+          !selected.isDateOnly &&
+          !selected.isBefore(end)) {
+        // Тот же день: время конца подстраиваем под старт + 1 час
         _endsAt = selected.add(const Duration(hours: 1));
       }
     }
@@ -230,8 +241,19 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   }
 
   void _onEndsAtChange(DateTime? selected) {
-    if (_startsAt != null && selected != null && !selected.isDateOnly) {
-      if (!selected.isAfter(_startsAt!)) {
+    if (selected != null && _startsAt != null) {
+      final start = _startsAt!;
+      // Конец переехал на более раннюю дату — старт переезжает на ту же дату
+      if (selected.startOfDay.isBefore(start.startOfDay)) {
+        _startsAt = start.copyWith(
+          year: selected.year,
+          month: selected.month,
+          day: selected.day,
+        );
+      } else if (selected.startOfDay.isAtSameMomentAs(start.startOfDay) &&
+          !selected.isDateOnly &&
+          !selected.isAfter(start)) {
+        // Тот же день: время старта подстраиваем под конец - 1 час
         _startsAt = selected.subtract(const Duration(hours: 1));
       }
     }
@@ -239,23 +261,13 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
     _emitChanged();
   }
 
-  //Валидация: если после либо если на тот же день, то сравниваем по началу дня(одно и тоже начало должно быть)
+  //Валидация не блокирует выбор: порядок дат/времён автоматически выравнивается в _onStartsAtChange/_onEndsAtChange
   bool _validateEndsAt(DateTime date) {
-    if (_startsAt != null) {
-      return date.isAfter(_startsAt!) ||
-          date.startOfDay.isAtSameMomentAs(_startsAt!.startOfDay);
-    } else {
-      return true;
-    }
+    return true;
   }
 
   bool _validateStartsAt(DateTime date) {
-    if (_endsAt != null) {
-      return date.isBefore(_endsAt!) ||
-          date.startOfDay.isAtSameMomentAs(_endsAt!.startOfDay);
-    } else {
-      return true;
-    }
+    return true;
   }
 
   @override

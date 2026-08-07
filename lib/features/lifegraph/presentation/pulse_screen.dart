@@ -423,7 +423,13 @@ class _StatsPanel extends StatelessWidget {
         if (expand)
           Expanded(child: SingleChildScrollView(child: content))
         else
-          content,
+          Padding(
+            padding: EdgeInsets.all(AppSpacing.md),
+            child: GlassPanel(
+              hasBlur: false,
+              padding: EdgeInsets.all(AppSpacing.md),
+              child: content),
+          ),
       ],
     );
   }
@@ -855,18 +861,18 @@ class _WeekBarsState extends State<_WeekBars> {
         ),
         const SizedBox(height: 12),
         // Градиент-разделитель
-        Container(
-          height: 2,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Colors.transparent,
-                AppColors.surfaceContainerHigh,
-                Colors.transparent,
-              ],
-            ),
-          ),
-        ),
+        // Container(
+        //   height: 2,
+        //   decoration: BoxDecoration(
+        //     gradient: LinearGradient(
+        //       colors: [
+        //         Colors.transparent,
+        //         AppColors.surfaceContainerHigh,
+        //         Colors.transparent,
+        //       ],
+        //     ),
+        //   ),
+        // ),
       ],
     );
   }
