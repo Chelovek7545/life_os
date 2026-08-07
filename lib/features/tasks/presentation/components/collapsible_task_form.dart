@@ -220,21 +220,30 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
 
   //WORKING WITH DATES
   void _onStartsAtChange(DateTime? selected) {
+    if (_endsAt != null && selected != null && !selected.isDateOnly) {
+      if (!selected.isBefore(_endsAt!)) {
+        _endsAt = selected.add(const Duration(hours: 1));
+      }
+    }
     setState(() => _startsAt = selected);
     _emitChanged();
   }
 
   void _onEndsAtChange(DateTime? selected) {
+    if (_startsAt != null && selected != null && !selected.isDateOnly) {
+      if (!selected.isAfter(_startsAt!)) {
+        _startsAt = selected.subtract(const Duration(hours: 1));
+      }
+    }
     setState(() => _endsAt = selected);
     _emitChanged();
   }
 
-  //Валидация: если после либо если у одного только дата, то мы сравниваем по началу дня(одно и тоже начало должно быть)
+  //Валидация: если после либо если на тот же день, то сравниваем по началу дня(одно и тоже начало должно быть)
   bool _validateEndsAt(DateTime date) {
     if (_startsAt != null) {
       return date.isAfter(_startsAt!) ||
-          (date.isDateOnly || _startsAt!.isDateOnly) &&
-              date.startOfDay.isAtSameMomentAs(_startsAt!.startOfDay);
+          date.startOfDay.isAtSameMomentAs(_startsAt!.startOfDay);
     } else {
       return true;
     }
@@ -243,8 +252,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   bool _validateStartsAt(DateTime date) {
     if (_endsAt != null) {
       return date.isBefore(_endsAt!) ||
-          (date.isDateOnly || _endsAt!.isDateOnly) &&
-              date.startOfDay.isAtSameMomentAs(_endsAt!.startOfDay);
+          date.startOfDay.isAtSameMomentAs(_endsAt!.startOfDay);
     } else {
       return true;
     }
