@@ -437,13 +437,18 @@ class _AddChildDialogState extends State<AddChildDialog> {
   Future<void> _pickDay() async {
     final selected = await chooseDateOnly(context, _startsAt);
     if (selected == null || !mounted) return;
-    setState(() {
-      _startsAt = selected.copyWith(
+    _onStartsAtChange(
+      selected.copyWith(
         hour: _startsAt?.hour,
         minute: _startsAt?.minute,
-      );
-      _endsAt = selected.copyWith(hour: _endsAt?.hour, minute: _endsAt?.minute);
-    });
+      ),
+    );
+    _onEndsAtChange(
+      selected.copyWith(
+        hour: _endsAt?.hour,
+        minute: _endsAt?.minute,
+      ),
+    );
   }
 
   void _clearTimes() {
@@ -457,7 +462,7 @@ class _AddChildDialogState extends State<AddChildDialog> {
     if (_startsAt == null) return;
     final selected = await chooseTimeForDate(context, _startsAt!);
     if (selected != null && _validateStart(selected) && mounted) {
-      setState(() => _startsAt = selected);
+      _onStartsAtChange(selected);
     }
   }
 
@@ -465,39 +470,68 @@ class _AddChildDialogState extends State<AddChildDialog> {
     if (_endsAt == null && _startsAt == null) return;
     final selected = await chooseTimeForDate(context, _endsAt ?? _startsAt!);
     if (selected != null && _validateEnd(selected) && mounted) {
-      setState(() {
-        _endsAt = _startsAt?.copyWith(
+      _onEndsAtChange(
+        _startsAt?.copyWith(
           hour: selected.hour,
           minute: selected.minute,
-        );
-      });
+        ),
+      );
     }
   }
 
   void _clearStartTime() {
-    setState(() => _startsAt = _startsAt?.startOfDay);
+    _onStartsAtChange(_startsAt?.startOfDay);
   }
 
   void _clearEndTime() {
-    setState(() => _endsAt = _endsAt?.startOfDay);
+    _onEndsAtChange(_endsAt?.startOfDay);
   }
 
-  bool _validateStart(DateTime date) {
-    if (_endsAt != null) {
-      return date.isBefore(_endsAt!) ||
-          (date.isDateOnly || _endsAt!.isDateOnly) &&
-              date.startOfDay.isAtSameMomentAs(_endsAt!.startOfDay);
+  //Валидация не блокирует выбор: порядок дат/времён автоматически выравнивается
+  //в _onStartsAtChange/_onEndsAtChange (та же автокорректировка, что в форме задачи)
+  bool _validateStart(DateTime date) => true;
+
+  bool _validateEnd(DateTime date) => true;
+
+  //Та же автокорректировка порядка дат/времён, что в CollapsibleTaskForm
+  void _onStartsAtChange(DateTime? selected) {
+    if (selected != null && _endsAt != null) {
+      final end = _endsAt!;
+      // Старт переехал на более позднюю дату — конец переезжает на ту же дату
+      if (selected.startOfDay.isAfter(end.startOfDay)) {
+        _endsAt = end.copyWith(
+          year: selected.year,
+          month: selected.month,
+          day: selected.day,
+        );
+      } else if (selected.startOfDay.isAtSameMomentAs(end.startOfDay) &&
+          !selected.isDateOnly &&
+          !selected.isBefore(end)) {
+        // Тот же день: время конца подстраиваем под старт + 1 час
+        _endsAt = selected.add(const Duration(hours: 1));
+      }
     }
-    return true;
+    setState(() => _startsAt = selected);
   }
 
-  bool _validateEnd(DateTime date) {
-    if (_startsAt != null) {
-      return date.isAfter(_startsAt!) ||
-          (date.isDateOnly || _startsAt!.isDateOnly) &&
-              date.startOfDay.isAtSameMomentAs(_startsAt!.startOfDay);
+  void _onEndsAtChange(DateTime? selected) {
+    if (selected != null && _startsAt != null) {
+      final start = _startsAt!;
+      // Конец переехал на более раннюю дату — старт переезжает на ту же дату
+      if (selected.startOfDay.isBefore(start.startOfDay)) {
+        _startsAt = start.copyWith(
+          year: selected.year,
+          month: selected.month,
+          day: selected.day,
+        );
+      } else if (selected.startOfDay.isAtSameMomentAs(start.startOfDay) &&
+          !selected.isDateOnly &&
+          !selected.isAfter(start)) {
+        // Тот же день: время старта подстраиваем под конец - 1 час
+        _startsAt = selected.subtract(const Duration(hours: 1));
+      }
     }
-    return true;
+    setState(() => _endsAt = selected);
   }
 }
 
