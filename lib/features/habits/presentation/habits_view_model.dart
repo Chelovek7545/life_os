@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:life_os/features/habits/data/habits_repository.dart';
 import 'package:life_os/features/habits/domain/habit_entry_model.dart';
 import 'package:life_os/features/habits/domain/habit_model.dart';
@@ -101,7 +102,17 @@ class HabitsViewModel {
     final nextStatus = entry?.status == HabitEntryStatus.completed
         ? HabitEntryStatus.pending
         : HabitEntryStatus.completed;
-    await _repository.setEntryStatus(habit.id, key, nextStatus);
+    _applyEntryLocally(habit.id, key, nextStatus);
+    try {
+      await _repository.setEntryStatus(habit.id, key, nextStatus);
+    } on Exception {
+      _applyEntryLocally(
+        habit.id,
+        key,
+        entry?.status ?? HabitEntryStatus.pending,
+      );
+      rethrow;
+    }
   }
 
   Future<void> skipHabit(Habit habit, DateTime date) async {
@@ -110,40 +121,90 @@ class HabitsViewModel {
     final nextStatus = entry?.status == HabitEntryStatus.skipped
         ? HabitEntryStatus.pending
         : HabitEntryStatus.skipped;
-    await _repository.setEntryStatus(habit.id, key, nextStatus);
+    _applyEntryLocally(habit.id, key, nextStatus);
+    try {
+      await _repository.setEntryStatus(habit.id, key, nextStatus);
+    } on Exception {
+      _applyEntryLocally(
+        habit.id,
+        key,
+        entry?.status ?? HabitEntryStatus.pending,
+      );
+      rethrow;
+    }
   }
 
-  HabitEntry? _findEntry(String habitId, DateTime date) {
-    final key = formatDateKey(date);
+  /// Оптимистично обновляет запись в локальном состоянии, чтобы UI
+  /// откликнулся мгновенно; реальная запись в БД идёт следом через стрим.
+  void _applyEntryLocally(
+    String habitId,
+    String dateKey,
+    HabitEntryStatus status,
+  ) {
+    debugPrint('DBG apply: closed=${_uiStateController.isClosed} '
+        'entries=${_entries.length}');
+    if (_uiStateController.isClosed) return;
+    final existing = _findEntryByKey(habitId, dateKey);
+    if (existing != null) {
+      _entries = [
+        for (final e in _entries)
+          if (e.habitId == habitId && e.dateKey == dateKey)
+            e.copyWith(
+              status: status,
+              clearCompletedAt: status != HabitEntryStatus.completed,
+            )
+          else
+            e,
+      ];
+    } else {
+      _entries = [
+        ..._entries,
+        HabitEntry.create(habitId: habitId, dateKey: dateKey, status: status),
+      ];
+    }
+    _emit();
+  }
+
+  HabitEntry? _findEntry(String habitId, DateTime date) =>
+      _findEntryByKey(habitId, formatDateKey(date));
+
+  HabitEntry? _findEntryByKey(String habitId, String dateKey) {
     for (final entry in _entries) {
-      if (entry.habitId == habitId && entry.dateKey == key) return entry;
+      if (entry.habitId == habitId && entry.dateKey == dateKey) return entry;
     }
     return null;
   }
 
   void _emit() {
     if (_uiStateController.isClosed) return;
+    debugPrint('DBG emit: closed=${_uiStateController.isClosed} '
+        'listeners=${_uiStateController.hasListener}');
     final date = _selectedDateController.value;
 
-    final items = _habits.map((habit) {
-      final isExpired = !habit.schedule.isActiveOn(
-        date,
-        createdAt: habit.createdAt,
-      );
-      final isScheduled = habit.schedule.isScheduledOn(date);
-      return HabitWithEntry(
-        habit: habit,
-        entry: _findEntry(habit.id, date),
-        streak: _streakCalculator.calculate(
+    try {
+      final items = _habits.map((habit) {
+        final isExpired = !habit.schedule.isActiveOn(
+          date,
+          createdAt: habit.createdAt,
+        );
+        final isScheduled = habit.schedule.isScheduledOn(date);
+        return HabitWithEntry(
           habit: habit,
-          entries: _entries,
-        ),
-        isScheduled: isScheduled,
-        isExpired: isExpired,
-      );
-    }).toList();
+          entry: _findEntry(habit.id, date),
+          streak: _streakCalculator.calculate(
+            habit: habit,
+            entries: _entries,
+          ),
+          isScheduled: isScheduled,
+          isExpired: isExpired,
+        );
+      }).toList();
 
-    _uiStateController.add(HabitsLoaded(habits: items));
+      _uiStateController.add(HabitsLoaded(habits: items));
+    } catch (e, st) {
+      debugPrint('DBG emit THREW: $e\n$st');
+      rethrow;
+    }
   }
 
   void dispose() {

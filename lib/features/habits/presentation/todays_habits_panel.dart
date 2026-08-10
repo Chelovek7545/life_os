@@ -9,6 +9,9 @@ import 'package:life_os/features/habits/presentation/widgets/habit_card.dart';
 ///
 /// Показывает только запланированные на сегодня и ещё активные привычки
 /// с возможностью отметить выполненной или пропустить.
+///
+/// ViewModel живёт на уровне приложения (см. DependencyContainer), поэтому
+/// панель только переинициализирует подписку, но не вызывает dispose.
 class TodaysHabitsPanel extends StatefulWidget {
   const TodaysHabitsPanel({
     super.key,
@@ -28,12 +31,6 @@ class _TodaysHabitsPanelState extends State<TodaysHabitsPanel> {
   void initState() {
     super.initState();
     widget.viewModel.initialize();
-  }
-
-  @override
-  void dispose() {
-    widget.viewModel.dispose();
-    super.dispose();
   }
 
   @override

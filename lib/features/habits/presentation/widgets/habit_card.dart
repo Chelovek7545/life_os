@@ -112,16 +112,19 @@ class HabitCard extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          _scheduleLabel,
-                          style: AppTypography.codeLabel.copyWith(
-                            fontSize: 10,
-                            color: AppColors.onSurfaceVariant.withValues(
-                              alpha: 0.7,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            _scheduleLabel,
+                            style: AppTypography.codeLabel.copyWith(
+                              fontSize: 10,
+                              color: AppColors.onSurfaceVariant.withValues(
+                                alpha: 0.7,
+                              ),
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (item.streak.hasCurrent) ...[
@@ -153,7 +156,8 @@ class HabitCard extends StatelessWidget {
             const SizedBox(width: AppSpacing.sm),
             IconButton(
               tooltip: 'Skip',
-              onPressed: item.isSkipped ? null : onSkip,
+              // Всегда активна: повторный тап снимает пропуск.
+              onPressed: onSkip,
               icon: Icon(
                 Icons.block_rounded,
                 size: 18,
