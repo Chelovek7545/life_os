@@ -32,6 +32,7 @@ class _MainScreenState extends State<MainScreen> {
     _pages = [
       PulseScreen(
         viewModel: widget.diContainer.lifeGraphViewModel,
+        habitsViewModel: widget.diContainer.habitsViewModel,
         onOpenTask: _openTaskFromPulse,
         onCompleteTask: (task) =>
             widget.diContainer.tasksViewModel.toggleTask(task),

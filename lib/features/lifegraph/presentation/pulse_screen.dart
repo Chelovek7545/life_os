@@ -10,6 +10,9 @@ import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/goals/domain/goal_model.dart';
+import 'package:life_os/features/habits/presentation/habits_sheet.dart';
+import 'package:life_os/features/habits/presentation/habits_view_model.dart';
+import 'package:life_os/features/habits/presentation/todays_habits_panel.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
@@ -44,12 +47,14 @@ Task? _activeTaskOf(List<Task> tasks) {
 /// через [Navigator.push]. Создание сферы — кнопкой в AppBar.
 class PulseScreen extends StatelessWidget {
   final LifeGraphViewModel viewModel;
+  final HabitsViewModel habitsViewModel;
   final ValueChanged<Task>? onOpenTask;
   final ValueChanged<Task>? onCompleteTask;
 
   const PulseScreen({
     super.key,
     required this.viewModel,
+    required this.habitsViewModel,
     this.onOpenTask,
     this.onCompleteTask,
   });
@@ -60,64 +65,85 @@ class PulseScreen extends StatelessWidget {
       backgroundColor: AppColors.surfaceDim,
       appBar: AppBar(
         centerTitle: true,
-        title: Text('PULSE', style: AppTypography.headlineLgMobile,),
+        title: Text('PULSE', style: AppTypography.headlineLgMobile),
         forceMaterialTransparency: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
-        actions: [],
+        actions: [
+          IconButton(
+            tooltip: 'Habits',
+            onPressed: () => showAllHabitsSheet(
+              context: context,
+              viewModel: habitsViewModel,
+            ),
+            icon: const Icon(Icons.repeat_rounded),
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, asyncSnapshot) {
           bool isSplit = asyncSnapshot.maxWidth >= 900;
 
           final goalsPanel = _GoalsPanel(viewModel: viewModel);
-          final statsPanel = _StatsPanel(
-            viewModel: viewModel,
-            onOpenTask: onOpenTask,
-            onCompleteTask: onCompleteTask,
-          );
           final spheresPanel = _SpheresPanel(
             viewModel: viewModel,
             onCreate: () => _showCreateSphereDialog(context),
             onOpenSphere: (sphere) => _openGraph(context, sphere),
           );
 
-          return isSplit
-              ? SplitView(
-                  minSizes: [300, 300, 300],
-                  axis: Axis.horizontal,
-                  dividerThickness: 2,
-                  dividerBuilder: (context, dividerIndex, axis) {
-                    return Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.borderGlass,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    );
-                  },
-                  initialWeights: [0.1, 0.8, 0.1],
-                  children: [goalsPanel, statsPanel, spheresPanel],
-                )
-              : ListView(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  children: [
-                    _StatsPanel(
-                      viewModel: viewModel,
-                      expand: false,
-                      onOpenTask: onOpenTask,
-                      onCompleteTask: onCompleteTask,
-                    ),
-                    const SizedBox(height: 12),
-                    _GoalsPanel(viewModel: viewModel, expand: false),
-                    const SizedBox(height: 12),
-                    _SpheresPanel(
-                      viewModel: viewModel,
-                      expand: false,
-                      onCreate: () => _showCreateSphereDialog(context),
-                      onOpenSphere: (sphere) => _openGraph(context, sphere),
-                    ),
-                  ],
+          if (isSplit) {
+            final centerColumn = Column(
+              children: [
+                Expanded(
+                  child: _StatsPanel(
+                    viewModel: viewModel,
+                    onOpenTask: onOpenTask,
+                    onCompleteTask: onCompleteTask,
+                  ),
+                ),
+                Expanded(
+                  child: TodaysHabitsPanel(viewModel: habitsViewModel),
+                ),
+              ],
+            );
+            return SplitView(
+              minSizes: [300, 300, 300],
+              axis: Axis.horizontal,
+              dividerThickness: 2,
+              dividerBuilder: (context, dividerIndex, axis) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.borderGlass,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                 );
+              },
+              initialWeights: [0.1, 0.8, 0.1],
+              children: [goalsPanel, centerColumn, spheresPanel],
+            );
+          }
+          return ListView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            children: [
+              _StatsPanel(
+                viewModel: viewModel,
+                expand: false,
+                onOpenTask: onOpenTask,
+                onCompleteTask: onCompleteTask,
+              ),
+              const SizedBox(height: 12),
+              TodaysHabitsPanel(viewModel: habitsViewModel, expand: false),
+              const SizedBox(height: 12),
+              _GoalsPanel(viewModel: viewModel, expand: false),
+              const SizedBox(height: 12),
+              _SpheresPanel(
+                viewModel: viewModel,
+                expand: false,
+                onCreate: () => _showCreateSphereDialog(context),
+                onOpenSphere: (sphere) => _openGraph(context, sphere),
+              ),
+            ],
+          );
         },
       ),
     );
@@ -220,11 +246,11 @@ class _GoalTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = parseHexColor(goal.color);
-    
+
     return GlassPanel(
       borderColor: color.withAlpha(20),
       hasBlur: false,
-    borderRadius: 14,
+      borderRadius: 14,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
 
       child: Row(
@@ -428,7 +454,8 @@ class _StatsPanel extends StatelessWidget {
             child: GlassPanel(
               hasBlur: false,
               padding: EdgeInsets.all(AppSpacing.md),
-              child: content),
+              child: content,
+            ),
           ),
       ],
     );
@@ -659,7 +686,6 @@ class _TimelineRow extends StatelessWidget {
                           ]
                         : null,
                   ),
-
                 ),
                 if (!isLast)
                   Expanded(child: Container(width: 2, color: lineColor)),
@@ -837,7 +863,9 @@ class _WeekBarsState extends State<_WeekBars> {
                     for (var i = 0; i < 3; i++)
                       Container(
                         height: 1,
-                        color: AppColors.onSurfaceVariant.withValues(alpha: 0.2),
+                        color: AppColors.onSurfaceVariant.withValues(
+                          alpha: 0.2,
+                        ),
                       ),
                   ],
                 ),
@@ -850,7 +878,15 @@ class _WeekBarsState extends State<_WeekBars> {
                     children: [
                       for (var i = 0; i < 7; i++) ...[
                         if (i > 0) const SizedBox(width: 6),
-                        Expanded(child: _buildDay(i, days[i], counts[i], maxCount, today)),
+                        Expanded(
+                          child: _buildDay(
+                            i,
+                            days[i],
+                            counts[i],
+                            maxCount,
+                            today,
+                          ),
+                        ),
                       ],
                     ],
                   ),
@@ -877,9 +913,17 @@ class _WeekBarsState extends State<_WeekBars> {
     );
   }
 
-  Widget _buildDay(int index, DateTime day, int count, int maxCount, DateTime today) {
+  Widget _buildDay(
+    int index,
+    DateTime day,
+    int count,
+    int maxCount,
+    DateTime today,
+  ) {
     final isToday =
-        day.year == today.year && day.month == today.month && day.day == today.day;
+        day.year == today.year &&
+        day.month == today.month &&
+        day.day == today.day;
     final hovered = _hoveredIndex == index;
     final showLabel = count > 0 || hovered;
 

@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:life_os/features/habits/domain/habit_entry_model.dart';
+import 'package:life_os/features/habits/domain/habit_type.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -87,8 +89,55 @@ class Tags extends Table {
   IntColumn get colorHex => integer()(); // Цвет тега
 }
 
+@DataClassName('HabitModel')
+class Habits extends Table {
+  TextColumn get id => text()(); // UUID
+  TextColumn get title => text()();
+  TextColumn get icon => text().withDefault(const Constant('task_alt'))();
+  TextColumn get color => text().withDefault(const Constant('#FF5C00'))();
+  IntColumn get typeKind => intEnum<HabitTypeKind>()();
+  TextColumn get timeOfDay => text().nullable()(); // "HH:mm" для TimeHabit
+  IntColumn get daysOfWeek => integer().withDefault(const Constant(254))(); // bitmask
+  IntColumn get durationWeeks => integer().nullable()(); // null = без ограничения
+  TextColumn get reminderTime => text().nullable()(); // "HH:mm"
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  BoolColumn get isArchived => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('HabitEntryModel')
+class HabitEntries extends Table {
+  TextColumn get id => text()(); // UUID
+  TextColumn get habitId =>
+      text().references(Habits, #id, onDelete: KeyAction.cascade)();
+  TextColumn get dateKey => text()(); // "YYYY-MM-DD"
+  IntColumn get status => intEnum<HabitEntryStatus>()();
+  DateTimeColumn get completedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {habitId, dateKey},
+  ];
+}
+
 // Часть 2: Определение базы данных
-@DriftDatabase(tables: [Tasks, Projects, Tags, TaskTagEntries, Goals, Spheres])
+@DriftDatabase(tables: [
+  Tasks,
+  Projects,
+  Tags,
+  TaskTagEntries,
+  Goals,
+  Spheres,
+  Habits,
+  HabitEntries,
+])
 class AppDatabase extends _$AppDatabase {
   // Конструктор
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
@@ -100,7 +149,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration {
@@ -143,6 +192,10 @@ class AppDatabase extends _$AppDatabase {
               PRIMARY KEY ("id")
             )
           ''');
+        }
+        if (from < 6) {
+          await m.createTable(habits);
+          await m.createTable(habitEntries);
         }
       },
     );

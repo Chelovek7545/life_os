@@ -10,6 +10,9 @@ import 'package:life_os/features/spheres/data/spheres_dao.dart';
 import 'package:life_os/features/spheres/data/spheres_repository.dart';
 import 'package:life_os/features/goals/data/goals_dao.dart';
 import 'package:life_os/features/goals/data/goals_repository.dart';
+import 'package:life_os/features/habits/data/habits_dao.dart';
+import 'package:life_os/features/habits/data/habits_repository.dart';
+import 'package:life_os/features/habits/presentation/habits_view_model.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
@@ -25,6 +28,7 @@ class DependencyContainer {
   late final ProjectsDao projectsDao;
   late final SpheresDao spheresDao;
   late final GoalsDao goalsDao;
+  late final HabitsDao habitsDao;
   // late final ApiClient apiClient;
   // late final SyncService syncService;
 
@@ -32,6 +36,7 @@ class DependencyContainer {
   late final ProjectsRepository projectsRepository;
   late final SpheresRepository spheresRepository;
   late final GoalsRepository goalsRepository;
+  late final HabitsRepository habitsRepository;
   // late final MoodRepository moodRepository;
   // late final AiCoachRepository aiRepository;
 
@@ -44,6 +49,7 @@ class DependencyContainer {
   late final ProjectsViewModel projectViewModel;
   // late final AiCoachViewModel aiCoachViewModel;
   late final GetTasksWithProjectsUseCase taskWithPrjct;
+  late final HabitsViewModel habitsViewModel;
 
   void init() {
     database = AppDatabase();
@@ -62,6 +68,8 @@ class DependencyContainer {
     projectsRepository = ProjectsRepository(projectsDao);
     spheresRepository = SpheresRepository(spheresDao);
     goalsRepository = GoalsRepository(goalsDao);
+    habitsDao = HabitsDao(database);
+    habitsRepository = HabitsRepository(habitsDao);
     // moodRepository = MoodRepository(
     //   MoodLocalDS(localDatabase),
     //   apiClient,
@@ -102,6 +110,9 @@ class DependencyContainer {
       taskRepo: tasksRepository,
     );
     projectViewModel.initialize();
+
+    habitsViewModel = HabitsViewModel(habitsRepository);
+    habitsViewModel.initialize();
     // moodViewModel = MoodViewModel(moodRepository, AiMoodAnalyzer(apiClient));
     // aiCoachViewModel = AiCoachViewModel(aiRepository);
   }
@@ -109,6 +120,7 @@ class DependencyContainer {
   void dispose() {
     tasksViewModel.dispose();
     projectViewModel.dispose();
+    habitsViewModel.dispose();
     lifeGraphViewModel.dispose();
     database.close();
   }
