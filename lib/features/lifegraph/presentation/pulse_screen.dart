@@ -4,12 +4,14 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
+import 'package:life_os/core/ui/collapsible_sheet.dart';
 import 'package:life_os/core/ui/layout/split_view.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/goals/domain/goal_model.dart';
+import 'package:life_os/features/habits/presentation/habits_calendar_panel.dart';
 import 'package:life_os/features/habits/presentation/habits_sheet.dart';
 import 'package:life_os/features/habits/presentation/habits_view_model.dart';
 import 'package:life_os/features/habits/presentation/todays_habits_panel.dart';
@@ -45,7 +47,7 @@ Task? _activeTaskOf(List<Task> tasks) {
 
 /// PULSE — список сфер жизни. По тапу открывает [LifeGraphScreen] (граф сферы)
 /// через [Navigator.push]. Создание сферы — кнопкой в AppBar.
-class PulseScreen extends StatelessWidget {
+class PulseScreen extends StatefulWidget {
   final LifeGraphViewModel viewModel;
   final HabitsViewModel habitsViewModel;
   final ValueChanged<Task>? onOpenTask;
@@ -58,6 +60,17 @@ class PulseScreen extends StatelessWidget {
     this.onOpenTask,
     this.onCompleteTask,
   });
+
+  @override
+  State<PulseScreen> createState() => _PulseScreenState();
+}
+
+class _PulseScreenState extends State<PulseScreen> {
+  bool _isHabitsMapVisible = false;
+
+  void _openHabitsMap() => setState(() => _isHabitsMapVisible = true);
+
+  void _closeHabitsMap() => setState(() => _isHabitsMapVisible = false);
 
   @override
   Widget build(BuildContext context) {
@@ -74,7 +87,7 @@ class PulseScreen extends StatelessWidget {
             tooltip: 'Habits',
             onPressed: () => showAllHabitsSheet(
               context: context,
-              viewModel: habitsViewModel,
+              viewModel: widget.habitsViewModel,
             ),
             icon: const Icon(Icons.repeat_rounded),
           ),
@@ -84,29 +97,33 @@ class PulseScreen extends StatelessWidget {
         builder: (context, asyncSnapshot) {
           bool isSplit = asyncSnapshot.maxWidth >= 900;
 
-          final goalsPanel = _GoalsPanel(viewModel: viewModel);
+          final goalsPanel = _GoalsPanel(viewModel: widget.viewModel);
           final spheresPanel = _SpheresPanel(
-            viewModel: viewModel,
+            viewModel: widget.viewModel,
             onCreate: () => _showCreateSphereDialog(context),
             onOpenSphere: (sphere) => _openGraph(context, sphere),
           );
 
+          final Widget body;
           if (isSplit) {
             final centerColumn = Column(
               children: [
                 Expanded(
                   child: _StatsPanel(
-                    viewModel: viewModel,
-                    onOpenTask: onOpenTask,
-                    onCompleteTask: onCompleteTask,
+                    viewModel: widget.viewModel,
+                    onOpenTask: widget.onOpenTask,
+                    onCompleteTask: widget.onCompleteTask,
                   ),
                 ),
                 Expanded(
-                  child: TodaysHabitsPanel(viewModel: habitsViewModel),
+                  child: TodaysHabitsPanel(
+                    viewModel: widget.habitsViewModel,
+                    onOpenCalendar: _openHabitsMap,
+                  ),
                 ),
               ],
             );
-            return SplitView(
+            body = SplitView(
               minSizes: [300, 300, 300],
               axis: Axis.horizontal,
               dividerThickness: 2,
@@ -121,27 +138,51 @@ class PulseScreen extends StatelessWidget {
               initialWeights: [0.1, 0.8, 0.1],
               children: [goalsPanel, centerColumn, spheresPanel],
             );
+          } else {
+            body = ListView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: [
+                _StatsPanel(
+                  viewModel: widget.viewModel,
+                  expand: false,
+                  onOpenTask: widget.onOpenTask,
+                  onCompleteTask: widget.onCompleteTask,
+                ),
+                const SizedBox(height: 12),
+                TodaysHabitsPanel(
+                  viewModel: widget.habitsViewModel,
+                  onOpenCalendar: _openHabitsMap,
+                  expand: false,
+                ),
+                const SizedBox(height: 12),
+                _GoalsPanel(viewModel: widget.viewModel, expand: false),
+                const SizedBox(height: 12),
+                _SpheresPanel(
+                  viewModel: widget.viewModel,
+                  expand: false,
+                  onCreate: () => _showCreateSphereDialog(context),
+                  onOpenSphere: (sphere) => _openGraph(context, sphere),
+                ),
+              ],
+            );
           }
-          return ListView(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+          final List<double> snapPoints = [
+                    60,
+                    190,
+                    MediaQuery.sizeOf(context).height * 0.85,
+                  ];
+          return Stack(
             children: [
-              _StatsPanel(
-                viewModel: viewModel,
-                expand: false,
-                onOpenTask: onOpenTask,
-                onCompleteTask: onCompleteTask,
-              ),
-              const SizedBox(height: 12),
-              TodaysHabitsPanel(viewModel: habitsViewModel, expand: false),
-              const SizedBox(height: 12),
-              _GoalsPanel(viewModel: viewModel, expand: false),
-              const SizedBox(height: 12),
-              _SpheresPanel(
-                viewModel: viewModel,
-                expand: false,
-                onCreate: () => _showCreateSphereDialog(context),
-                onOpenSphere: (sphere) => _openGraph(context, sphere),
-              ),
+              body,
+              if (_isHabitsMapVisible)
+                CollapsibleSheet(
+                  snapPoints: snapPoints,
+                  
+                  initialHeight: MediaQuery.sizeOf(context).height * 0.85,
+                  header: HabitsMapHeader(onClose: _closeHabitsMap),
+                  bodyBuilder: (progress, snapIndex) =>
+                      HabitsCalendarPanel(viewModel: widget.habitsViewModel, progress: progress),
+                ),
             ],
           );
         },
@@ -150,11 +191,11 @@ class PulseScreen extends StatelessWidget {
   }
 
   Future<void> _openGraph(BuildContext context, Sphere sphere) async {
-    await viewModel.switchSphere(sphere.id);
+    await widget.viewModel.switchSphere(sphere.id);
     if (!context.mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => LifeGraphScreen(viewModel: viewModel),
+        builder: (_) => LifeGraphScreen(viewModel: widget.viewModel),
       ),
     );
   }
@@ -162,7 +203,7 @@ class PulseScreen extends StatelessWidget {
   Future<void> _showCreateSphereDialog(BuildContext context) async {
     await showDialog<void>(
       context: context,
-      builder: (ctx) => CreateSphereDialog(viewModel: viewModel),
+      builder: (ctx) => CreateSphereDialog(viewModel: widget.viewModel),
     );
   }
 }

@@ -31,7 +31,11 @@ void main() {
 
     await tester.pumpWidget(
       createTestWidget(
-        child: TodaysHabitsPanel(viewModel: vm, expand: false),
+        child: TodaysHabitsPanel(
+          viewModel: vm,
+          onOpenCalendar: () {},
+          expand: false,
+        ),
       ),
     );
     await tester.pump();
@@ -71,7 +75,11 @@ void main() {
     vm.initialize();
     await tester.pumpWidget(
       createTestWidget(
-        child: TodaysHabitsPanel(viewModel: vm, expand: false),
+        child: TodaysHabitsPanel(
+          viewModel: vm,
+          onOpenCalendar: () {},
+          expand: false,
+        ),
       ),
     );
     await tester.pump();

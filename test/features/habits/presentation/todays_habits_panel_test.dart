@@ -79,6 +79,9 @@ class FakeHabitsViewModel extends Fake implements HabitsViewModel {
   void hideForm() {}
 
   @override
+  Set<String> completedDateKeysOf(String habitId) => const {};
+
+  @override
   void startEditing(Habit habit) {}
 }
 
@@ -107,9 +110,15 @@ void main() {
       viewModel.dispose();
     });
 
+    bool calendarOpened = false;
+
     Widget createWidget() {
       return createTestWidget(
-        child: TodaysHabitsPanel(viewModel: viewModel, expand: false),
+        child: TodaysHabitsPanel(
+          viewModel: viewModel,
+          onOpenCalendar: () => calendarOpened = true,
+          expand: false,
+        ),
       );
     }
 
@@ -203,6 +212,17 @@ void main() {
       await tester.pump();
 
       expect(viewModel.skippedHabitIds, [habit.id]);
+    });
+
+    testWidgets('map button opens habit calendar', (tester) async {
+      emitLoaded([habitScheduledToday()]);
+      await tester.pumpWidget(createWidget());
+      await tester.pump();
+
+      await tester.tap(find.byTooltip('Карта выполненных дней'));
+      await tester.pump();
+
+      expect(calendarOpened, isTrue);
     });
   });
 }

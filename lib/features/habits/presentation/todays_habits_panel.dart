@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/features/habits/presentation/habits_state.dart';
@@ -16,10 +17,14 @@ class TodaysHabitsPanel extends StatefulWidget {
   const TodaysHabitsPanel({
     super.key,
     required this.viewModel,
+    required this.onOpenCalendar,
     this.expand = true,
   });
 
   final HabitsViewModel viewModel;
+
+  /// Открывает карту выполненных дней (коллапсируемую шторку).
+  final VoidCallback onOpenCalendar;
   final bool expand;
 
   @override
@@ -94,6 +99,13 @@ class _TodaysHabitsPanelState extends State<TodaysHabitsPanel> {
             const Spacer(),
             Text("Habits", style: AppTypography.headlineLg),
             const Spacer(),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              style: AppButtonStyles.menuButtonStyle(),
+              icon: const Icon(Icons.calendar_month, color: Colors.white),
+              tooltip: 'Карта выполненных дней',
+              onPressed: widget.onOpenCalendar,
+            ),
             const SizedBox(width: AppMargins.md),
           ],
         ),

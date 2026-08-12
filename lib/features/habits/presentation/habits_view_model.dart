@@ -165,6 +165,13 @@ class HabitsViewModel {
     _emit();
   }
 
+  /// Дата-ключи ("YYYY-MM-DD") дней, когда привычка была выполнена.
+  Set<String> completedDateKeysOf(String habitId) => {
+    for (final e in _entries)
+      if (e.habitId == habitId && e.status == HabitEntryStatus.completed)
+        e.dateKey,
+  };
+
   HabitEntry? _findEntry(String habitId, DateTime date) =>
       _findEntryByKey(habitId, formatDateKey(date));
 
