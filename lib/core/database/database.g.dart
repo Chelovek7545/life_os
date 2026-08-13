@@ -119,6 +119,17 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _parentTaskIdMeta = const VerificationMeta(
+    'parentTaskId',
+  );
+  @override
+  late final GeneratedColumn<String> parentTaskId = GeneratedColumn<String>(
+    'parent_task_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _spaceIdMeta = const VerificationMeta(
     'spaceId',
   );
@@ -179,6 +190,7 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
     dueDate,
     space,
     projectId,
+    parentTaskId,
     spaceId,
     timerSeconds,
     priority,
@@ -266,6 +278,15 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
         projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
       );
     }
+    if (data.containsKey('parent_task_id')) {
+      context.handle(
+        _parentTaskIdMeta,
+        parentTaskId.isAcceptableOrUnknown(
+          data['parent_task_id']!,
+          _parentTaskIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('space_id')) {
       context.handle(
         _spaceIdMeta,
@@ -351,6 +372,10 @@ class $TasksTable extends Tasks with TableInfo<$TasksTable, TaskModel> {
         DriftSqlType.string,
         data['${effectivePrefix}project_id'],
       ),
+      parentTaskId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_task_id'],
+      ),
       spaceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}space_id'],
@@ -391,6 +416,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
   final DateTime? dueDate;
   final String? space;
   final String? projectId;
+  final String? parentTaskId;
   final String? spaceId;
   final int timerSeconds;
   final int priority;
@@ -407,6 +433,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
     this.dueDate,
     this.space,
     this.projectId,
+    this.parentTaskId,
     this.spaceId,
     required this.timerSeconds,
     required this.priority,
@@ -437,6 +464,9 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
     }
     if (!nullToAbsent || projectId != null) {
       map['project_id'] = Variable<String>(projectId);
+    }
+    if (!nullToAbsent || parentTaskId != null) {
+      map['parent_task_id'] = Variable<String>(parentTaskId);
     }
     if (!nullToAbsent || spaceId != null) {
       map['space_id'] = Variable<String>(spaceId);
@@ -470,6 +500,9 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
       projectId: projectId == null && nullToAbsent
           ? const Value.absent()
           : Value(projectId),
+      parentTaskId: parentTaskId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentTaskId),
       spaceId: spaceId == null && nullToAbsent
           ? const Value.absent()
           : Value(spaceId),
@@ -498,6 +531,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
       dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
       space: serializer.fromJson<String?>(json['space']),
       projectId: serializer.fromJson<String?>(json['projectId']),
+      parentTaskId: serializer.fromJson<String?>(json['parentTaskId']),
       spaceId: serializer.fromJson<String?>(json['spaceId']),
       timerSeconds: serializer.fromJson<int>(json['timerSeconds']),
       priority: serializer.fromJson<int>(json['priority']),
@@ -521,6 +555,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
       'dueDate': serializer.toJson<DateTime?>(dueDate),
       'space': serializer.toJson<String?>(space),
       'projectId': serializer.toJson<String?>(projectId),
+      'parentTaskId': serializer.toJson<String?>(parentTaskId),
       'spaceId': serializer.toJson<String?>(spaceId),
       'timerSeconds': serializer.toJson<int>(timerSeconds),
       'priority': serializer.toJson<int>(priority),
@@ -540,6 +575,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
     Value<DateTime?> dueDate = const Value.absent(),
     Value<String?> space = const Value.absent(),
     Value<String?> projectId = const Value.absent(),
+    Value<String?> parentTaskId = const Value.absent(),
     Value<String?> spaceId = const Value.absent(),
     int? timerSeconds,
     int? priority,
@@ -556,6 +592,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
     dueDate: dueDate.present ? dueDate.value : this.dueDate,
     space: space.present ? space.value : this.space,
     projectId: projectId.present ? projectId.value : this.projectId,
+    parentTaskId: parentTaskId.present ? parentTaskId.value : this.parentTaskId,
     spaceId: spaceId.present ? spaceId.value : this.spaceId,
     timerSeconds: timerSeconds ?? this.timerSeconds,
     priority: priority ?? this.priority,
@@ -576,6 +613,9 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
       dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
       space: data.space.present ? data.space.value : this.space,
       projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      parentTaskId: data.parentTaskId.present
+          ? data.parentTaskId.value
+          : this.parentTaskId,
       spaceId: data.spaceId.present ? data.spaceId.value : this.spaceId,
       timerSeconds: data.timerSeconds.present
           ? data.timerSeconds.value
@@ -601,6 +641,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
           ..write('dueDate: $dueDate, ')
           ..write('space: $space, ')
           ..write('projectId: $projectId, ')
+          ..write('parentTaskId: $parentTaskId, ')
           ..write('spaceId: $spaceId, ')
           ..write('timerSeconds: $timerSeconds, ')
           ..write('priority: $priority, ')
@@ -622,6 +663,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
     dueDate,
     space,
     projectId,
+    parentTaskId,
     spaceId,
     timerSeconds,
     priority,
@@ -642,6 +684,7 @@ class TaskModel extends DataClass implements Insertable<TaskModel> {
           other.dueDate == this.dueDate &&
           other.space == this.space &&
           other.projectId == this.projectId &&
+          other.parentTaskId == this.parentTaskId &&
           other.spaceId == this.spaceId &&
           other.timerSeconds == this.timerSeconds &&
           other.priority == this.priority &&
@@ -660,6 +703,7 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
   final Value<DateTime?> dueDate;
   final Value<String?> space;
   final Value<String?> projectId;
+  final Value<String?> parentTaskId;
   final Value<String?> spaceId;
   final Value<int> timerSeconds;
   final Value<int> priority;
@@ -677,6 +721,7 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
     this.dueDate = const Value.absent(),
     this.space = const Value.absent(),
     this.projectId = const Value.absent(),
+    this.parentTaskId = const Value.absent(),
     this.spaceId = const Value.absent(),
     this.timerSeconds = const Value.absent(),
     this.priority = const Value.absent(),
@@ -695,6 +740,7 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
     this.dueDate = const Value.absent(),
     this.space = const Value.absent(),
     this.projectId = const Value.absent(),
+    this.parentTaskId = const Value.absent(),
     this.spaceId = const Value.absent(),
     this.timerSeconds = const Value.absent(),
     this.priority = const Value.absent(),
@@ -718,6 +764,7 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
     Expression<DateTime>? dueDate,
     Expression<String>? space,
     Expression<String>? projectId,
+    Expression<String>? parentTaskId,
     Expression<String>? spaceId,
     Expression<int>? timerSeconds,
     Expression<int>? priority,
@@ -736,6 +783,7 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
       if (dueDate != null) 'due_date': dueDate,
       if (space != null) 'space': space,
       if (projectId != null) 'project_id': projectId,
+      if (parentTaskId != null) 'parent_task_id': parentTaskId,
       if (spaceId != null) 'space_id': spaceId,
       if (timerSeconds != null) 'timer_seconds': timerSeconds,
       if (priority != null) 'priority': priority,
@@ -756,6 +804,7 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
     Value<DateTime?>? dueDate,
     Value<String?>? space,
     Value<String?>? projectId,
+    Value<String?>? parentTaskId,
     Value<String?>? spaceId,
     Value<int>? timerSeconds,
     Value<int>? priority,
@@ -774,6 +823,7 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
       dueDate: dueDate ?? this.dueDate,
       space: space ?? this.space,
       projectId: projectId ?? this.projectId,
+      parentTaskId: parentTaskId ?? this.parentTaskId,
       spaceId: spaceId ?? this.spaceId,
       timerSeconds: timerSeconds ?? this.timerSeconds,
       priority: priority ?? this.priority,
@@ -820,6 +870,9 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
     if (projectId.present) {
       map['project_id'] = Variable<String>(projectId.value);
     }
+    if (parentTaskId.present) {
+      map['parent_task_id'] = Variable<String>(parentTaskId.value);
+    }
     if (spaceId.present) {
       map['space_id'] = Variable<String>(spaceId.value);
     }
@@ -852,6 +905,7 @@ class TasksCompanion extends UpdateCompanion<TaskModel> {
           ..write('dueDate: $dueDate, ')
           ..write('space: $space, ')
           ..write('projectId: $projectId, ')
+          ..write('parentTaskId: $parentTaskId, ')
           ..write('spaceId: $spaceId, ')
           ..write('timerSeconds: $timerSeconds, ')
           ..write('priority: $priority, ')
@@ -3967,6 +4021,7 @@ typedef $$TasksTableCreateCompanionBuilder =
       Value<DateTime?> dueDate,
       Value<String?> space,
       Value<String?> projectId,
+      Value<String?> parentTaskId,
       Value<String?> spaceId,
       Value<int> timerSeconds,
       Value<int> priority,
@@ -3986,6 +4041,7 @@ typedef $$TasksTableUpdateCompanionBuilder =
       Value<DateTime?> dueDate,
       Value<String?> space,
       Value<String?> projectId,
+      Value<String?> parentTaskId,
       Value<String?> spaceId,
       Value<int> timerSeconds,
       Value<int> priority,
@@ -4077,6 +4133,11 @@ class $$TasksTableFilterComposer extends Composer<_$AppDatabase, $TasksTable> {
 
   ColumnFilters<String> get projectId => $composableBuilder(
     column: $table.projectId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get parentTaskId => $composableBuilder(
+    column: $table.parentTaskId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4190,6 +4251,11 @@ class $$TasksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get parentTaskId => $composableBuilder(
+    column: $table.parentTaskId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get spaceId => $composableBuilder(
     column: $table.spaceId,
     builder: (column) => ColumnOrderings(column),
@@ -4254,6 +4320,11 @@ class $$TasksTableAnnotationComposer
 
   GeneratedColumn<String> get projectId =>
       $composableBuilder(column: $table.projectId, builder: (column) => column);
+
+  GeneratedColumn<String> get parentTaskId => $composableBuilder(
+    column: $table.parentTaskId,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get spaceId =>
       $composableBuilder(column: $table.spaceId, builder: (column) => column);
@@ -4336,6 +4407,7 @@ class $$TasksTableTableManager
                 Value<DateTime?> dueDate = const Value.absent(),
                 Value<String?> space = const Value.absent(),
                 Value<String?> projectId = const Value.absent(),
+                Value<String?> parentTaskId = const Value.absent(),
                 Value<String?> spaceId = const Value.absent(),
                 Value<int> timerSeconds = const Value.absent(),
                 Value<int> priority = const Value.absent(),
@@ -4353,6 +4425,7 @@ class $$TasksTableTableManager
                 dueDate: dueDate,
                 space: space,
                 projectId: projectId,
+                parentTaskId: parentTaskId,
                 spaceId: spaceId,
                 timerSeconds: timerSeconds,
                 priority: priority,
@@ -4372,6 +4445,7 @@ class $$TasksTableTableManager
                 Value<DateTime?> dueDate = const Value.absent(),
                 Value<String?> space = const Value.absent(),
                 Value<String?> projectId = const Value.absent(),
+                Value<String?> parentTaskId = const Value.absent(),
                 Value<String?> spaceId = const Value.absent(),
                 Value<int> timerSeconds = const Value.absent(),
                 Value<int> priority = const Value.absent(),
@@ -4389,6 +4463,7 @@ class $$TasksTableTableManager
                 dueDate: dueDate,
                 space: space,
                 projectId: projectId,
+                parentTaskId: parentTaskId,
                 spaceId: spaceId,
                 timerSeconds: timerSeconds,
                 priority: priority,

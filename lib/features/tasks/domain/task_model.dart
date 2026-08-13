@@ -67,6 +67,7 @@ class Task {
     required this.tags,
     this.dueDate,
     this.projectId,
+    this.parentTaskId,
     this.space,
   });
 
@@ -83,6 +84,7 @@ class Task {
 
   final DateTime? dueDate;
   final String? projectId;
+  final String? parentTaskId;
   final String? space;
   final int timerSeconds;
   final double effortWeight;
@@ -124,6 +126,7 @@ class Task {
 
     Wrapped<DateTime?>? dueDate,
     Wrapped<String?>? projectId,
+    Wrapped<String?>? parentTaskId,
     Wrapped<String?>? space,
     int? timerSeconds,
     double? effortWeight,
@@ -141,6 +144,8 @@ class Task {
       endsAt: endsAt != null ? endsAt.value : this.endsAt,
 
       projectId: projectId != null ? projectId.value : this.projectId,
+      parentTaskId:
+          parentTaskId != null ? parentTaskId.value : this.parentTaskId,
       space: space != null ? space.value : this.space,
       timerSeconds: timerSeconds ?? this.timerSeconds,
       effortWeight: effortWeight ?? this.effortWeight,

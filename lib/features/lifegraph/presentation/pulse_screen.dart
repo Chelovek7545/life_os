@@ -5,6 +5,7 @@ import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/collapsible_sheet.dart';
+import 'package:life_os/core/ui/heirarchy_view.dart';
 import 'package:life_os/core/ui/layout/split_view.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/color_format.dart';
@@ -19,6 +20,7 @@ import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/create_sphere_dialog.dart';
+import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
@@ -97,11 +99,15 @@ class _PulseScreenState extends State<PulseScreen> {
         builder: (context, asyncSnapshot) {
           bool isSplit = asyncSnapshot.maxWidth >= 900;
 
-          final goalsPanel = _GoalsPanel(viewModel: widget.viewModel);
-          final spheresPanel = _SpheresPanel(
-            viewModel: widget.viewModel,
-            onCreate: () => _showCreateSphereDialog(context),
-            onOpenSphere: (sphere) => _openGraph(context, sphere),
+          final hierarchyPanel = SingleChildScrollView(
+            child: _HierarchyPanel(viewModel: widget.viewModel),
+          );
+          final spheresPanel = SingleChildScrollView(
+            child: _SpheresPanel(
+              viewModel: widget.viewModel,
+              onCreate: () => _showCreateSphereDialog(context),
+              onOpenSphere: (sphere) => _openGraph(context, sphere),
+            ),
           );
 
           final Widget body;
@@ -135,8 +141,8 @@ class _PulseScreenState extends State<PulseScreen> {
                   ),
                 );
               },
-              initialWeights: [0.1, 0.8, 0.1],
-              children: [goalsPanel, centerColumn, spheresPanel],
+              initialWeights: [0.15, 0.7, 0.15],
+              children: [hierarchyPanel, centerColumn, spheresPanel],
             );
           } else {
             body = ListView(
@@ -155,7 +161,7 @@ class _PulseScreenState extends State<PulseScreen> {
                   expand: false,
                 ),
                 const SizedBox(height: 12),
-                _GoalsPanel(viewModel: widget.viewModel, expand: false),
+                _HierarchyPanel(viewModel: widget.viewModel, expand: false),
                 const SizedBox(height: 12),
                 _SpheresPanel(
                   viewModel: widget.viewModel,
@@ -167,21 +173,23 @@ class _PulseScreenState extends State<PulseScreen> {
             );
           }
           final List<double> snapPoints = [
-                    60,
-                    190,
-                    MediaQuery.sizeOf(context).height * 0.85,
-                  ];
+            60,
+            190,
+            MediaQuery.sizeOf(context).height * 0.85,
+          ];
           return Stack(
             children: [
               body,
               if (_isHabitsMapVisible)
                 CollapsibleSheet(
                   snapPoints: snapPoints,
-                  
+
                   initialHeight: MediaQuery.sizeOf(context).height * 0.85,
                   header: HabitsMapHeader(onClose: _closeHabitsMap),
-                  bodyBuilder: (progress, snapIndex) =>
-                      HabitsCalendarPanel(viewModel: widget.habitsViewModel, progress: progress),
+                  bodyBuilder: (progress, snapIndex) => HabitsCalendarPanel(
+                    viewModel: widget.habitsViewModel,
+                    progress: progress,
+                  ),
                 ),
             ],
           );
@@ -208,53 +216,58 @@ class _PulseScreenState extends State<PulseScreen> {
   }
 }
 
-/// Панель списка всех целей (display-only). В подзаголовке — имя сферы.
-class _GoalsPanel extends StatelessWidget {
+/// Панель иерархии: проект -> задача -> subtask. Строит дерево из
+/// live-стримов проектов и задач (subtask = задача с заполненным parentTaskId).
+class _HierarchyPanel extends StatelessWidget {
   final LifeGraphViewModel viewModel;
   final bool expand;
 
-  const _GoalsPanel({required this.viewModel, this.expand = true});
+  const _HierarchyPanel({required this.viewModel, this.expand = true});
 
   @override
   Widget build(BuildContext context) {
-    final list = StreamBuilder<List<Sphere>>(
-      stream: viewModel.spheresStream,
-      initialData: viewModel.spheres,
-      builder: (context, sphereSnapshot) {
-        final spheres = sphereSnapshot.data ?? const <Sphere>[];
-        final sphereNameOf = <String, String>{
-          for (final s in spheres) s.id: s.name,
-        };
-        return StreamBuilder<List<Goal>>(
-          stream: viewModel.goalsStream,
-          initialData: viewModel.goals,
-          builder: (context, goalSnapshot) {
-            final goals = goalSnapshot.data ?? const <Goal>[];
-            if (goals.isEmpty) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: Text(
-                    'Нет целей',
-                    style: TextStyle(color: Colors.white38),
+    final list = StreamBuilder<List<Project>>(
+      stream: viewModel.projectsStream,
+      initialData: viewModel.projects,
+      builder: (context, projectSnapshot) {
+        final projects = projectSnapshot.data ?? const <Project>[];
+        return StreamBuilder<List<Task>>(
+          stream: viewModel.tasksStream,
+          initialData: viewModel.tasks,
+          builder: (context, taskSnapshot) {
+            final tasks = taskSnapshot.data ?? const <Task>[];
+
+            final nodes = <HierarchyNode>[
+              for (final project in projects)
+                if (!project.isArchived)
+                  HierarchyNode(
+                    id: project.id,
+                    title: project.name,
+                    type: NodeType.project,
+                    icon: Icons.folder,
+                    dotColor: parseHexColor(project.color),
+                    isExpanded: true,
+                    children: [
+                      for (final task in _projectTasks(tasks, project.id))
+                        HierarchyNode(
+                          id: task.id,
+                          title: task.title,
+                          type: NodeType.task,
+                          children: [
+                            for (final sub in _taskSubtasks(tasks, task.id))
+                              HierarchyNode(
+                                id: sub.id,
+                                title: sub.title,
+                                type: NodeType.subtask,
+                                dotColor: sub.status.color,
+                              ),
+                          ],
+                        ),
+                    ],
                   ),
-                ),
-              );
-            }
-            return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-              itemCount: goals.length,
-              shrinkWrap: !expand,
-              physics: expand ? null : const NeverScrollableScrollPhysics(),
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final goal = goals[index];
-                return _GoalTile(
-                  goal: goal,
-                  sphereName: sphereNameOf[goal.sphereId] ?? '',
-                );
-              },
-            );
+            ];
+
+            return HierarchyColumn(nodes: nodes);
           },
         );
       },
@@ -266,14 +279,33 @@ class _GoalsPanel extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
             const Spacer(),
-            Text("Goals", style: AppTypography.headlineLg),
+            Text("Hierarchy", style: AppTypography.headlineLg),
             const Spacer(),
             const SizedBox(width: AppMargins.md),
           ],
         ),
-        if (expand) Flexible(child: list) else list,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final flexible = expand && constraints.maxHeight.isFinite;
+            return flexible
+                ? Expanded(child: SingleChildScrollView(child: list))
+                : SingleChildScrollView(child: list);
+          },
+        ),
       ],
     );
+  }
+
+  /// Задачи уровня проекта (не subtask'и).
+  List<Task> _projectTasks(List<Task> tasks, String projectId) {
+    return tasks
+        .where((t) => t.projectId == projectId && t.parentTaskId == null)
+        .toList();
+  }
+
+  /// Subtask'и задачи (родитель — задача).
+  List<Task> _taskSubtasks(List<Task> tasks, String taskId) {
+    return tasks.where((t) => t.parentTaskId == taskId).toList();
   }
 }
 
@@ -366,23 +398,26 @@ class _SpheresPanel extends StatelessWidget {
             child: _EmptyState(onCreate: onCreate),
           );
         }
-        return ListView.separated(
+        return Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-          itemCount: spheres.length,
-          shrinkWrap: !expand,
-          physics: expand ? null : const NeverScrollableScrollPhysics(),
-          separatorBuilder: (_, _) => const SizedBox(height: 10),
-          itemBuilder: (context, index) {
-            final sphere = spheres[index];
-            return _SphereTile(
-              sphere: sphere,
-              viewModel: viewModel,
-              onTap: () => onOpenSphere(sphere),
-            );
-          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < spheres.length; i++) ...[
+                if (i > 0) const SizedBox(height: 10),
+                _SphereTile(
+                  sphere: spheres[i],
+                  viewModel: viewModel,
+                  onTap: () => onOpenSphere(spheres[i]),
+                ),
+              ],
+            ],
+          ),
         );
       },
     );
+
+    final goalsSection = _GoalsSection(viewModel: viewModel, expand: expand);
 
     return Column(
       children: [
@@ -402,7 +437,94 @@ class _SpheresPanel extends StatelessWidget {
             const SizedBox(width: AppMargins.md),
           ],
         ),
-        if (expand) Flexible(child: list) else list,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final flexible = expand && constraints.maxHeight.isFinite;
+            return flexible
+                ? Expanded(child: SingleChildScrollView(child: list))
+                : SingleChildScrollView(child: list);
+          },
+        ),
+        goalsSection,
+      ],
+    );
+  }
+}
+
+/// Блок целей внутри панели сфер: заголовок + список целей (display-only).
+class _GoalsSection extends StatelessWidget {
+  final LifeGraphViewModel viewModel;
+  final bool expand;
+
+  const _GoalsSection({required this.viewModel, this.expand = true});
+
+  @override
+  Widget build(BuildContext context) {
+    final list = StreamBuilder<List<Sphere>>(
+      stream: viewModel.spheresStream,
+      initialData: viewModel.spheres,
+      builder: (context, sphereSnapshot) {
+        final spheres = sphereSnapshot.data ?? const <Sphere>[];
+        final sphereNameOf = <String, String>{
+          for (final s in spheres) s.id: s.name,
+        };
+        return StreamBuilder<List<Goal>>(
+          stream: viewModel.goalsStream,
+          initialData: viewModel.goals,
+          builder: (context, goalSnapshot) {
+            final goals = goalSnapshot.data ?? const <Goal>[];
+            if (goals.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Text(
+                    'Нет целей',
+                    style: TextStyle(color: Colors.white38),
+                  ),
+                ),
+              );
+            }
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < goals.length; i++) ...[
+                    if (i > 0) const SizedBox(height: 10),
+                    _GoalTile(
+                      goal: goals[i],
+                      sphereName: sphereNameOf[goals[i].sphereId] ?? '',
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            const Spacer(),
+            Text("Goals", style: AppTypography.headlineLg),
+            const Spacer(),
+            const SizedBox(width: AppMargins.md),
+          ],
+        ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final flexible = expand && constraints.maxHeight.isFinite;
+            return flexible
+                ? Expanded(child: SingleChildScrollView(child: list))
+                : SingleChildScrollView(child: list);
+          },
+        ),
       ],
     );
   }

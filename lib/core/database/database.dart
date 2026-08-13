@@ -25,6 +25,7 @@ class Tasks extends Table {
   DateTimeColumn get dueDate => dateTime().nullable()();
   TextColumn get space => text().nullable()();
   TextColumn get projectId => text().nullable()();
+  TextColumn get parentTaskId => text().nullable()();
   TextColumn get spaceId => text().nullable()();
 
   IntColumn get timerSeconds => integer().withDefault(const Constant(0))();
@@ -149,7 +150,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration {
@@ -196,6 +197,9 @@ class AppDatabase extends _$AppDatabase {
         if (from < 6) {
           await m.createTable(habits);
           await m.createTable(habitEntries);
+        }
+        if (from < 7) {
+          await m.addColumn(tasks, tasks.parentTaskId);
         }
       },
     );
