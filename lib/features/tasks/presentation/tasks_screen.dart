@@ -30,6 +30,9 @@ const double _kPeriodTabsHeight = 45.0;
 const double _kCalendarHeight = 90.0;
 const double _kDateHeaderHeight = 60.0;
 const double _kTimelineTopPadding = 60.0 + _kDateHeaderHeight;
+const double _kWeekTimelineTopPadding =
+    _kTimelineTopPadding - _kDateHeaderHeight;
+const double _kWideBreakpoint = 760.0;
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({
@@ -215,12 +218,13 @@ class TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  Widget _buildEventBody() {
+  Widget _buildEventBody(bool isWide, DateTime anchorDate) {
     return StreamBuilder<TaskScreenState>(
       stream: widget.viewModel.state,
       initialData: const TasksLoading(),
       builder: (context, snapshot) {
         final state = snapshot.data ?? const TasksLoading();
+        final anchorDate = widget.viewModel.currentFilterValue.anchorDate;
         List<TaskEvent> events = [];
         state.when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -241,6 +245,7 @@ class TasksScreenState extends State<TasksScreen> {
                         : AppColors.onSurface,
                     task: item.task,
                     title: item.task.title,
+                    date: item.task.startsAt,
                     startMinutes: item.task.startsAt!.durationInMinutes,
                     durationMinutes: item.task.duration.inMinutes,
                     isCompleted: item.task.isCompleted,
@@ -252,7 +257,16 @@ class TasksScreenState extends State<TasksScreen> {
 
         return TimelineBody(
           events: events,
-          topPadding: _kTimelineTopPadding,
+          weekStart: isWide ? getWeekStart(anchorDate) : null,
+          anchorDate: isWide ? anchorDate : null,
+          onWeekChange: isWide
+              ? (date) => widget.viewModel.updateFilter(
+                  (old) => old.copyWith(anchorDate: date),
+                )
+              : null,
+          topPadding: isWide
+              ? _kWeekTimelineTopPadding
+              : _kTimelineTopPadding,
           onEventChanged: _updateEvent,
           onToggleTask: widget.viewModel.toggleTask,
         );
@@ -265,6 +279,7 @@ class TasksScreenState extends State<TasksScreen> {
     bool isLandscape,
     bool _isEventMode,
     double tasksScreenWidth,
+    bool isWide,
   ) {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -276,7 +291,7 @@ class TasksScreenState extends State<TasksScreen> {
           onAddPressed: isFormVisible
               ? widget.viewModel.hideForm
               : widget.viewModel.showForm,
-          onModeChanged: _onModeChanged,
+          onModeChanged: (index) => _onModeChanged(index, isWide),
           onToggleUnscheduled: _toggleUnscheduledOverlay,
         ),
         const SizedBox(height: AppSpacing.sm),
@@ -290,7 +305,7 @@ class TasksScreenState extends State<TasksScreen> {
 
             return Column(
               children: [
-                if (_isEventMode)
+                if (_isEventMode && !isWide)
                   DateHeader(
                     anchorDate: currentFilter.anchorDate,
                     onDateChange: (value) => widget.viewModel.updateFilter(
@@ -364,9 +379,19 @@ class TasksScreenState extends State<TasksScreen> {
     widget.viewModel.showForm();
   }
 
-  void _onModeChanged(int index) {
-    _onPeriodChanged(0);
+  void _onModeChanged(int index, bool isWide) {
+    _onPeriodChanged(isWide ? DatePeriod.week.index : 0);
     widget.viewModel.toggleEventMode();
+  }
+
+  void _syncEventPeriod(bool isWide, bool isEventMode) {
+    if (!isEventMode) return;
+    final desired = isWide ? DatePeriod.week : DatePeriod.day;
+    if (widget.viewModel.currentFilterValue.period == desired) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.viewModel.updateFilter((old) => old.copyWith(period: desired));
+    });
   }
 
   void _onPeriodChanged(int index) {
@@ -383,20 +408,22 @@ class TasksScreenState extends State<TasksScreen> {
     Task task, {
     int? startMinutes,
     int? durationMinutes,
+    DateTime? newDate,
   }) async {
     final currentStart = task.startsAt;
     if (currentStart == null) {
       return;
     }
 
-    final startsAt = startMinutes == null
+    final referenceDate = newDate ?? currentStart;
+    final startsAt = startMinutes == null && newDate == null
         ? currentStart
         : DateTime(
-            currentStart.year,
-            currentStart.month,
-            currentStart.day,
-            startMinutes ~/ 60,
-            startMinutes % 60,
+            referenceDate.year,
+            referenceDate.month,
+            referenceDate.day,
+            startMinutes == null ? currentStart.hour : startMinutes ~/ 60,
+            startMinutes == null ? currentStart.minute : startMinutes % 60,
           );
     final duration = Duration(
       minutes: durationMinutes ?? task.duration.inMinutes,
@@ -473,6 +500,9 @@ class TasksScreenState extends State<TasksScreen> {
     bool isFormVisible,
     bool _isEventMode,
   ) {
+    final isWide = false;
+    _syncEventPeriod(isWide, _isEventMode);
+
     return Stack(
       alignment: AlignmentDirectional.topCenter,
       children: [
@@ -483,7 +513,10 @@ class TasksScreenState extends State<TasksScreen> {
             child: FixedVerticalFadeMask(
               topFade: 100,
               child: _isEventMode
-                  ? _buildEventBody()
+                  ? _buildEventBody(
+                      isWide,
+                      widget.viewModel.currentFilterValue.anchorDate,
+                    )
                   : _buildTaskBody(overlayHeight, today),
             ),
           ),
@@ -493,6 +526,7 @@ class TasksScreenState extends State<TasksScreen> {
           false,
           _isEventMode,
           MediaQuery.sizeOf(context).width,
+          isWide,
         ),
         _buildUnscheduledOverlay(overlayHeight, today, MediaQuery.sizeOf(context).width > 400 ? 400 : MediaQuery.sizeOf(context).width),
         _buildTaskForm(
@@ -520,6 +554,9 @@ class TasksScreenState extends State<TasksScreen> {
                   _panelWidth // _panelWidth храним в State
             : totalWidth;
 
+        final isWide = _isEventMode && leftWidth >= _kWideBreakpoint;
+        _syncEventPeriod(isWide, _isEventMode);
+
         //print(leftWidth);
         //print(totalWidth);
         //print(_panelWidth);
@@ -530,16 +567,28 @@ class TasksScreenState extends State<TasksScreen> {
                 alignment: AlignmentDirectional.topCenter,
                 children: [
                   ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: 550),
+                    constraints: BoxConstraints(
+                      maxWidth: isWide ? double.infinity : 550,
+                    ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: FixedVerticalFadeMask(
-                        topFade: 100,
-                        bottomFade: 10,
-                        child: _isEventMode
-                            ? _buildEventBody()
-                            : _buildTaskBody(overlayHeight, today),
-                      ),
+                      child: _isEventMode && isWide
+                          ? _buildEventBody(
+                              isWide,
+                              widget.viewModel.currentFilterValue.anchorDate,
+                            )
+                          : FixedVerticalFadeMask(
+                              topFade: 100,
+                              bottomFade: 10,
+                              child: _isEventMode
+                                  ? _buildEventBody(
+                                      isWide,
+                                      widget.viewModel
+                                          .currentFilterValue
+                                          .anchorDate,
+                                    )
+                                  : _buildTaskBody(overlayHeight, today),
+                            ),
                     ),
                   ),
                   _buildHeaderPanel(
@@ -547,6 +596,7 @@ class TasksScreenState extends State<TasksScreen> {
                     false,
                     _isEventMode,
                     leftWidth,
+                    isWide,
                   ),
                   _buildUnscheduledOverlay(overlayHeight, today,  leftWidth > 400 ? 400 : leftWidth),
                   if (isFormVisible && leftWidth <= 330)

@@ -186,9 +186,11 @@ class TasksViewModel {
           filter.anchorDate.day,
         );
 
+
+        print(anchorDay);
         final bool dateMatches = switch (filter.period) {
           DatePeriod.day => taskDay.isAtSameMomentAs(anchorDay),
-          DatePeriod.week => isDateInSameWeek(taskDay, anchorDay),
+          DatePeriod.week => isDateInSameWeekExtended(taskDay, anchorDay),
           DatePeriod.month =>
             task.startsAt!.year == filter.anchorDate.year &&
                 task.startsAt!.month == filter.anchorDate.month,

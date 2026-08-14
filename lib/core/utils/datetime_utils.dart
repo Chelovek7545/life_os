@@ -129,6 +129,17 @@ bool isDateInSameWeek(DateTime date, DateTime anchorDate) {
   return !date.isBefore(anchorWeekStart) && !date.isAfter(anchorWeekEnd);
 }
 
+///Показывает допом на неделю до и после
+bool isDateInSameWeekExtended(DateTime date, DateTime anchorDate) {
+  // Find Monday of the anchor date's week
+  final anchorWeekStart = getWeekStart(anchorDate).subtract(Duration(days: 7));
+  // Week ends on Sunday (start + 6 days)
+  final anchorWeekEnd = getWeekStart(anchorDate).add(const Duration(days: 14));
+
+  // Check if date falls within [anchorWeekStart, anchorWeekEnd]
+  return !date.isBefore(anchorWeekStart) && !date.isAfter(anchorWeekEnd);
+}
+
 /// Returns the start of the week (Monday) for a given date
 DateTime getWeekStart(DateTime date) {
   final weekday = date.weekday; // 1 = Monday, 7 = Sunday
