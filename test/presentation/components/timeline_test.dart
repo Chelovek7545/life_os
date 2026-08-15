@@ -495,6 +495,90 @@ void main() {
         expect(before - after, closeTo(offset, 1));
       });
 
+      testWidgets(
+          'week stays day-aligned when side panel width toggles '
+          'during a week-edge switch', (tester) async {
+        tester.view.physicalSize = const Size(830, 4200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        // viewport = 830 - 52 = 778 < 1050, so columnWidth is clamped to 150
+        // and maxScrollExtent (3150 - 778 = 2372) is NOT a multiple of it.
+        const columnWidth = 150.0;
+
+        var weekStart = monday;
+        var weekChanged = false;
+
+        Widget build() {
+          return createTestWidget(
+            child: TimelineBody(
+              events: const [],
+              topPadding: 0,
+              weekStart: weekStart,
+              anchorDate: weekStart,
+              onWeekChange: (d) {
+                weekStart = d;
+                weekChanged = true;
+              },
+              onEventChanged: _noopEventChanged,
+              onToggleTask: (_) {},
+            ),
+          );
+        }
+
+        double horizontalOffset() {
+          final horizontalScroller = tester
+              .widgetList<SingleChildScrollView>(
+                find.byType(SingleChildScrollView),
+              )
+              .firstWhere(
+                (w) =>
+                    w.scrollDirection == Axis.horizontal &&
+                    w.controller != null,
+              );
+          return horizontalScroller.controller!.offset;
+        }
+
+        await tester.pumpWidget(build());
+        await tester.pumpAndSettle();
+
+        // Scroll to the right edge of the 21-day buffer with a slow drag:
+        // releasing at maxScrollExtent with ~zero velocity pins the offset
+        // there, and maxScrollExtent is not day-aligned while the column
+        // width is clamped.
+        final gesture = await tester.startGesture(const Offset(400, 900));
+        for (var i = 0; i < 24; i++) {
+          await gesture.moveBy(const Offset(-150, 0));
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        await tester.pump(const Duration(milliseconds: 120));
+        await gesture.up();
+        await tester.pumpAndSettle();
+
+        // The scroll must rest exactly on a day boundary. On the old code
+        // the ballistic snap pinned the offset to maxScrollExtent (2372),
+        // which is 0.81 days off the grid — the skewed/clipped week.
+        expect(horizontalOffset() % columnWidth, closeTo(0, 0.5));
+
+        // The edge scroll pushed the viewport into the next week.
+        expect(weekChanged, isTrue);
+
+        // Apply the week change. The fractional offset captured at the edge
+        // must not survive: it would skew the grid by most of a day.
+        await tester.pumpWidget(build());
+        await tester.pumpAndSettle();
+
+        expect(horizontalOffset() % columnWidth, closeTo(0, 0.5));
+
+        // A side-panel style width toggle afterwards must keep the grid
+        // day-aligned too.
+        tester.view.physicalSize = const Size(1250, 4200);
+        await tester.pumpAndSettle();
+        tester.view.physicalSize = const Size(830, 4200);
+        await tester.pumpAndSettle();
+        expect(horizontalOffset() % columnWidth, closeTo(0, 0.5));
+      });
+
       testWidgets('pinch to zoom increases hour slot height', (tester) async {
         tester.view.physicalSize = const Size(800, 4200);
         tester.view.devicePixelRatio = 1.0;
