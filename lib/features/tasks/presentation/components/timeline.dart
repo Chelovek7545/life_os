@@ -9,6 +9,8 @@ import 'package:flutter/services.dart';
 
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
+import 'package:life_os/core/ui/fixed_fade_mask.dart';
+import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
@@ -887,102 +889,109 @@ class _TimelineBodyState extends State<TimelineBody>
     _lastWeekStart = weekStart;
     final layouts = _computeWeekLayout(events, weekStart);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Stack(
+      //crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ─── Шапка дней: зум ШИРИНЫ ───
-        Listener(
-          behavior: HitTestBehavior.opaque,
-          onPointerDown: _handleWidthPinchPointerDown,
-          onPointerMove: _handleWidthPinchPointerMove,
-          onPointerUp: _handleWidthPinchPointerUp,
-          onPointerCancel: _handleWidthPinchPointerCancel,
-          onPointerPanZoomStart: _handleWidthPanZoomStart,
-          onPointerPanZoomUpdate: _handleWidthPanZoomUpdate,
-          onPointerPanZoomEnd: _handleWidthPanZoomEnd,
-          onPointerSignal: _handleWidthPointerSignal,
-          child: _WeekGridHeader(
-            weekStart: weekStart,
-            anchorDate: widget.anchorDate ?? weekStart,
-            topPadding: widget.topPadding,
-            columnWidth: columnWidth,
-            horizontalController: _horizontalController,
-            onWeekChange: widget.onWeekChange,
-            onZoomIn: _zoomIn,
-            onZoomOut: _zoomOut,
-            onWidthZoomIn: _zoomWidthIn,
-            onWidthZoomOut: _zoomWidthOut,
-          ),
-        ),
+
 
         // ─── Таймлайн: зум ВЫСОТЫ ───
         Expanded(
-          child: Listener(
-            behavior: HitTestBehavior.opaque,
-            onPointerDown: _handlePinchPointerDown,
-            onPointerMove: _handlePinchPointerMove,
-            onPointerUp: _handlePinchPointerUp,
-            onPointerCancel: _handlePinchPointerCancel,
-            onPointerPanZoomStart: _handlePanZoomStart,
-            onPointerPanZoomUpdate: _handlePanZoomUpdate,
-            onPointerPanZoomEnd: _handlePanZoomEnd,
-            onPointerSignal: _handlePointerSignal,
-            child: SingleChildScrollView(
-              key: _verticalScrollKey,
-              controller: _verticalController,
-              physics: _verticalPhysics(),
-              child: SizedBox(
-                height: _totalHeight + 24,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: _leftLabelWidth,
-                      height: _totalHeight + 24,
-                      child: Stack(children: _buildWeekHourLabels()),
-                    ),
-                    Expanded(
-                      child: NotificationListener<ScrollNotification>(
-                        onNotification: _handleHorizontalScrollNotification,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          controller: _horizontalController,
-                          physics: _horizontalPhysics(
-                            columnWidth,
-                            viewportWidth,
-                          ),
-                          child: SizedBox(
-                            width: _weekTotalDays * columnWidth,
-                            height: _totalHeight + 24,
-                            child: Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                ..._buildWeekColumnBackground(
-                                  columnWidth,
-                                  weekStart,
-                                ),
-                                ..._buildWeekHourGridlines(),
-                                ...events.map((event) {
-                                  final layout =
-                                      layouts[event.task.id] ??
-                                      const _EventLayoutInfo(0, 1);
-                                  return _buildDraggableEvent(
-                                    event,
-                                    layout,
-                                    viewportWidth,
-                                    weekColumnWidth: columnWidth,
-                                  );
-                                }),
-                                _buildWeekNowLine(weekStart, columnWidth),
-                              ],
+          child: FixedVerticalFadeMask(
+            topFade: 200,
+            child: Listener(
+              behavior: HitTestBehavior.opaque,
+              onPointerDown: _handlePinchPointerDown,
+              onPointerMove: _handlePinchPointerMove,
+              onPointerUp: _handlePinchPointerUp,
+              onPointerCancel: _handlePinchPointerCancel,
+              onPointerPanZoomStart: _handlePanZoomStart,
+              onPointerPanZoomUpdate: _handlePanZoomUpdate,
+              onPointerPanZoomEnd: _handlePanZoomEnd,
+              onPointerSignal: _handlePointerSignal,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(top: 200),
+                key: _verticalScrollKey,
+                controller: _verticalController,
+                physics: _verticalPhysics(),
+                child: SizedBox(
+                  height: _totalHeight + 24,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: _leftLabelWidth,
+                        height: _totalHeight + 24,
+                        child: Stack(children: _buildWeekHourLabels()),
+                      ),
+                      Expanded(
+                        child: NotificationListener<ScrollNotification>(
+                          onNotification: _handleHorizontalScrollNotification,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            controller: _horizontalController,
+                            physics: _horizontalPhysics(
+                              columnWidth,
+                              viewportWidth,
+                            ),
+                            child: SizedBox(
+                              width: _weekTotalDays * columnWidth,
+                              height: _totalHeight + 24,
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  ..._buildWeekColumnBackground(
+                                    columnWidth,
+                                    weekStart,
+                                  ),
+                                  ..._buildWeekHourGridlines(),
+                                  ...events.map((event) {
+                                    final layout =
+                                        layouts[event.task.id] ??
+                                        const _EventLayoutInfo(0, 1);
+                                    return _buildDraggableEvent(
+                                      event,
+                                      layout,
+                                      viewportWidth,
+                                      weekColumnWidth: columnWidth,
+                                    );
+                                  }),
+                                  _buildWeekNowLine(weekStart, columnWidth),
+                                ],
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
+            ),
+          ),
+        ),
+                // ─── Шапка дней: зум ШИРИНЫ ───
+        Flexible(
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: _handleWidthPinchPointerDown,
+            onPointerMove: _handleWidthPinchPointerMove,
+            onPointerUp: _handleWidthPinchPointerUp,
+            onPointerCancel: _handleWidthPinchPointerCancel,
+            onPointerPanZoomStart: _handleWidthPanZoomStart,
+            onPointerPanZoomUpdate: _handleWidthPanZoomUpdate,
+            onPointerPanZoomEnd: _handleWidthPanZoomEnd,
+            onPointerSignal: _handleWidthPointerSignal,
+            child: _WeekGridHeader(
+              weekStart: weekStart,
+              anchorDate: widget.anchorDate ?? weekStart,
+              topPadding: widget.topPadding,
+              columnWidth: columnWidth,
+              horizontalController: _horizontalController,
+              onWeekChange: widget.onWeekChange,
+              onZoomIn: _zoomIn,
+              onZoomOut: _zoomOut,
+              onWidthZoomIn: _zoomWidthIn,
+              onWidthZoomOut: _zoomWidthOut,
             ),
           ),
         ),
@@ -1569,263 +1578,241 @@ class _WeekGridHeader extends StatelessWidget {
         _isSameDay(today, weekEnd) ||
         (today.isAfter(weekStart) && today.isBefore(weekEnd));
 
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-        child: Container(
-          color: AppColors.surfaceDim.withOpacity(0.55),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(height: topPadding),
-              if (hasNav)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-                  child: Center(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _glassIconButton(
-                            Icons.chevron_left,
-                            'Previous week',
-                            () => onWeekChange!(_addDays(weekStart, -7)),
-                          ),
-                          const SizedBox(width: 10),
-                          _GlassBox(
-                            borderRadius: 999,
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(999),
-                                onTap: () => _pickDate(context),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 6,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(height: topPadding),
+        if (hasNav)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+            child: Center(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _glassIconButton(
+                      Icons.chevron_left,
+                      'Previous week',
+                      () => onWeekChange!(_addDays(weekStart, -7)),
+                    ),
+                    const SizedBox(width: 10),
+                    _GlassBox(
+                      borderRadius: 999,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(999),
+                          onTap: () => _pickDate(context),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 6,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                AnimatedSwitcher(
+                                  duration: const Duration(
+                                    milliseconds: 200,
                                   ),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      AnimatedSwitcher(
-                                        duration: const Duration(
-                                          milliseconds: 200,
-                                        ),
-                                        transitionBuilder: (child, animation) {
-                                          return FadeTransition(
-                                            opacity: animation,
-                                            child: SizeTransition(
-                                              sizeFactor: animation,
-                                              child: child,
-                                            ),
-                                          );
-                                        },
-                                        child: isCurrentWeek
-                                            ? Text(
-                                                'THIS WEEK',
-                                                key: const ValueKey(
-                                                  'this_week_text',
-                                                ),
-                                                style: AppTypography.codeLabel,
-                                              )
-                                            : const SizedBox.shrink(
-                                                key: ValueKey('empty_space'),
-                                              ),
+                                  transitionBuilder: (child, animation) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: SizeTransition(
+                                        sizeFactor: animation,
+                                        child: child,
                                       ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        '${_twoDigit(weekStart.day)}.${_twoDigit(weekStart.month)} – ${_twoDigit(weekEnd.day)}.${_twoDigit(weekEnd.month)}',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
+                                    );
+                                  },
+                                  child: isCurrentWeek
+                                      ? Text(
+                                          'THIS WEEK',
+                                          key: const ValueKey(
+                                            'this_week_text',
+                                          ),
+                                          style: AppTypography.codeLabel,
+                                        )
+                                      : const SizedBox.shrink(
+                                          key: ValueKey('empty_space'),
                                         ),
-                                      ),
-                                    ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${_twoDigit(weekStart.day)}.${_twoDigit(weekStart.month)} – ${_twoDigit(weekEnd.day)}.${_twoDigit(weekEnd.month)}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
-                              ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          _glassIconButton(
-                            Icons.remove,
-                            'Zoom out (height)',
-                            onZoomOut,
-                          ),
-                          const SizedBox(width: 6),
-                          _glassIconButton(
-                            Icons.add,
-                            'Zoom in (height)',
-                            onZoomIn,
-                          ),
-                          const SizedBox(width: 16),
-                          _glassIconButton(
-                            Icons.unfold_less,
-                            'Zoom out (width)',
-                            onWidthZoomOut,
-                          ),
-                          const SizedBox(width: 6),
-                          _glassIconButton(
-                            Icons.unfold_more,
-                            'Zoom in (width)',
-                            onWidthZoomIn,
-                          ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.only(
-                  left: _leftLabelWidth,
-                  right: 0,
-                  bottom: 10,
-                ),
-                child: SizedBox(
-                  height: 58,
-                  child: ClipRect(
-                    child: AnimatedBuilder(
-                      animation: horizontalController,
-                      builder: (context, child) {
-                        final offset = horizontalController.hasClients
-                            ? horizontalController.offset
-                            : _weekBufferDays * columnWidth;
-                        return Stack(
-                          clipBehavior: Clip.hardEdge,
-                          children: [
-                            Positioned(
-                              left: -offset,
-                              top: 0,
-                              bottom: 0,
-                              width: _weekTotalDays * columnWidth,
-                              child: child!,
-                            ),
-                          ],
-                        );
-                      },
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: List.generate(_weekTotalDays, (index) {
-                          final date = _addDays(visibleStart, index);
-                          final isToday = _isSameDay(date, today);
-                          final isAnchor = _isSameDay(date, anchorDate);
-                          final inCurrentWeek =
-                              index >= _weekBufferDays &&
-                              index < _weekBufferDays + 7;
-
-                          return SizedBox(
-                            width: columnWidth,
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(12),
-                                onTap: hasNav
-                                    ? () => onWeekChange!(date)
-                                    : null,
-                                child: Container(
-                                  margin: const EdgeInsets.symmetric(
-                                    horizontal: 2,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: inCurrentWeek
-                                        ? Colors.white.withOpacity(0.04)
-                                        : Colors.white.withOpacity(0.015),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: isAnchor
-                                        ? Border.all(
-                                            color: Colors.white.withOpacity(
-                                              0.22,
-                                            ),
-                                            width: 1,
-                                          )
-                                        : null,
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 2,
-                                          ),
-                                          child: Text(
-                                            getWeekDayName(
-                                              date.weekday,
-                                            ).toUpperCase(),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: isToday
-                                                  ? _orange
-                                                  : Colors.white.withOpacity(
-                                                      0.55,
-                                                    ),
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w700,
-                                              letterSpacing: 0.6,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Container(
-                                        width: 30,
-                                        height: 30,
-                                        alignment: Alignment.center,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          gradient: isToday
-                                              ? LinearGradient(
-                                                  colors: [
-                                                    _orange,
-                                                    _orange.withOpacity(0.85),
-                                                  ],
-                                                )
-                                              : null,
-                                          boxShadow: isToday
-                                              ? [
-                                                  BoxShadow(
-                                                    color: _orange.withOpacity(
-                                                      0.35,
-                                                    ),
-                                                    blurRadius: 10,
-                                                    offset: const Offset(0, 3),
-                                                  ),
-                                                ]
-                                              : null,
-                                        ),
-                                        child: Text(
-                                          '${date.day}',
-                                          style: TextStyle(
-                                            color: isToday
-                                                ? Colors.black
-                                                : Colors.white.withOpacity(
-                                                    0.85,
-                                                  ),
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
+                    const SizedBox(width: 10),
+                    _glassIconButton(
+                      Icons.chevron_right,
+                      'Next week',
+                      () => onWeekChange!(_addDays(weekStart, 7)),
+                      
                     ),
-                  ),
+        
+                  ],
                 ),
               ),
-            ],
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.only(
+            left: _leftLabelWidth,
+            right: 0,
+            bottom: 10,
+          ),
+          child: SizedBox(
+            height: 58,
+            child: ClipRect(
+              child: AnimatedBuilder(
+                animation: horizontalController,
+                builder: (context, child) {
+                  final offset = horizontalController.hasClients
+                      ? horizontalController.offset
+                      : _weekBufferDays * columnWidth;
+                  return Stack(
+                    clipBehavior: Clip.hardEdge,
+                    children: [
+                      Positioned(
+                        left: -offset,
+                        top: 0,
+                        bottom: 0,
+                        width: _weekTotalDays * columnWidth,
+                        child: child!,
+                      ),
+                    ],
+                  );
+                },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(_weekTotalDays, (index) {
+                    final date = _addDays(visibleStart, index);
+                    final isToday = _isSameDay(date, today);
+                    final isAnchor = _isSameDay(date, anchorDate);
+                    final inCurrentWeek =
+                        index >= _weekBufferDays &&
+                        index < _weekBufferDays + 7;
+        
+                    return SizedBox(
+                      width: columnWidth,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: hasNav
+                              ? () => onWeekChange!(date)
+                              : null,
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 2,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: inCurrentWeek
+                                  ? Colors.white.withOpacity(0.2)
+                                  : Colors.white.withOpacity(0.04),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: GlassPanel(
+                              borderColor: isAnchor
+                                  ?  Colors.white.withOpacity(
+                                        0.6,
+                                      )
+    
+                                  : null,
+                              borderRadius: 12,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 2,
+                                      ),
+                                      child: Text(
+                                        getWeekDayName(
+                                          date.weekday,
+                                        ).toUpperCase(),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: isToday
+                                              ? _orange
+                                              : Colors.white.withOpacity(
+                                                  0.55,
+                                                ),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.6,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    width: 30,
+                                    height: 30,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: isToday
+                                          ? LinearGradient(
+                                              colors: [
+                                                _orange,
+                                                _orange.withOpacity(0.85),
+                                              ],
+                                            )
+                                          : null,
+                                      boxShadow: isToday
+                                          ? [
+                                              BoxShadow(
+                                                color: _orange.withOpacity(
+                                                  0.35,
+                                                ),
+                                                blurRadius: 10,
+                                                offset: const Offset(0, 3),
+                                              ),
+                                            ]
+                                          : null,
+                                    ),
+                                    child: Text(
+                                      '${date.day}',
+                                      style: TextStyle(
+                                        color: isToday
+                                            ? Colors.black
+                                            : Colors.white.withOpacity(
+                                                0.85,
+                                              ),
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
+              ),
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 }
