@@ -115,15 +115,15 @@ class _TimelineBodyState extends State<TimelineBody>
   static const _totalMinutes = (_endHour - _startHour) * 60;
 
   // Width-only pinch (для шапки дней)
-final Map<int, Offset> _widthPinchPointers = {};
-double _widthPinchStartDistance = 0;
-double _widthPinchStartScale = 1.0;
-bool _widthPinching = false;
+  final Map<int, Offset> _widthPinchPointers = {};
+  double _widthPinchStartDistance = 0;
+  double _widthPinchStartScale = 1.0;
+  bool _widthPinching = false;
 
-// Width-only pan-zoom (для шапки дней)
-bool _widthPanZooming = false;
-double _widthPanZoomStartScale = 1.0;
-Timer? _widthPanZoomSafetyTimer;
+  // Width-only pan-zoom (для шапки дней)
+  bool _widthPanZooming = false;
+  double _widthPanZoomStartScale = 1.0;
+  Timer? _widthPanZoomSafetyTimer;
 
   double _hourHeight = _defaultHourHeight;
   double get _totalHeight => (_endHour - _startHour) * _hourHeight;
@@ -161,15 +161,15 @@ Timer? _widthPanZoomSafetyTimer;
   double _lastColumnWidth = 0;
   DateTime? _lastWeekStart;
 
-bool get _isInteracting =>
-    _draggingId != null ||
-    _resizingId != null ||
-    _pinching ||
-    _panZooming ||
-    _widthPinching ||
-    _widthPanZooming ||
-    _zoomAnimationController.isAnimating;
-  
+  bool get _isInteracting =>
+      _draggingId != null ||
+      _resizingId != null ||
+      _pinching ||
+      _panZooming ||
+      _widthPinching ||
+      _widthPanZooming ||
+      _zoomAnimationController.isAnimating;
+
   // Ширина (горизонтальный зум)
   double _dayWidthScale = 1.0;
   double _pinchStartWidthScale = 1.0;
@@ -178,6 +178,23 @@ bool get _isInteracting =>
   // Анимация зума ширины
   double _zoomFromWidthScale = 1.0;
   double _zoomTargetWidthScale = 1.0;
+
+  void _cancelDrag() {
+    setState(() {
+      _draggingId = null;
+      _ghostStart = null;
+      _ghostDuration = null;
+      _ghostDayOffset = 0;
+    });
+  }
+
+  void _cancelResize() {
+    setState(() {
+      _resizingId = null;
+      _ghostStart = null;
+      _ghostDuration = null;
+    });
+  }
 
   @override
   void initState() {
@@ -216,15 +233,15 @@ bool get _isInteracting =>
     // автоматически скорректирует горизонтальный скролл.
   }
 
-@override
-void dispose() {
-  _panZoomSafetyTimer?.cancel();
-  _widthPanZoomSafetyTimer?.cancel();
-  _zoomAnimationController.dispose();
-  _verticalController.dispose();
-  _horizontalController.dispose();
-  super.dispose();
-}
+  @override
+  void dispose() {
+    _panZoomSafetyTimer?.cancel();
+    _widthPanZoomSafetyTimer?.cancel();
+    _zoomAnimationController.dispose();
+    _verticalController.dispose();
+    _horizontalController.dispose();
+    super.dispose();
+  }
 
   /// Ключевой метод для исправления бага с "криво"
   /// При изменении размера экрана или смене недели мы математически вычисляем,
@@ -421,96 +438,97 @@ void dispose() {
     return renderObject.globalToLocal(Offset(0, globalDy)).dy;
   }
 
-// ─── Width-only pinch (шапка дней) ───
+  // ─── Width-only pinch (шапка дней) ───
 
-void _handleWidthPinchPointerDown(PointerDownEvent event) {
-  _widthPinchPointers[event.pointer] = event.position;
-  if (_widthPinchPointers.length == 2) {
-    _zoomAnimationController.stop();
+  void _handleWidthPinchPointerDown(PointerDownEvent event) {
+    _widthPinchPointers[event.pointer] = event.position;
+    if (_widthPinchPointers.length == 2) {
+      _zoomAnimationController.stop();
+      final positions = _widthPinchPointers.values.toList();
+      _widthPinchStartDistance = (positions[0] - positions[1]).distance;
+      _widthPinchStartScale = _dayWidthScale;
+      setState(() => _widthPinching = true);
+    }
+  }
+
+  void _handleWidthPinchPointerMove(PointerMoveEvent event) {
+    if (!_widthPinchPointers.containsKey(event.pointer)) return;
+    _widthPinchPointers[event.pointer] = event.position;
+    if (_widthPinchPointers.length < 2 || _widthPinchStartDistance <= 0) return;
+
     final positions = _widthPinchPointers.values.toList();
-    _widthPinchStartDistance = (positions[0] - positions[1]).distance;
-    _widthPinchStartScale = _dayWidthScale;
-    setState(() => _widthPinching = true);
+    final scale =
+        (positions[0] - positions[1]).distance / _widthPinchStartDistance;
+    _applyDayWidthScale(_widthPinchStartScale * scale);
   }
-}
 
-void _handleWidthPinchPointerMove(PointerMoveEvent event) {
-  if (!_widthPinchPointers.containsKey(event.pointer)) return;
-  _widthPinchPointers[event.pointer] = event.position;
-  if (_widthPinchPointers.length < 2 || _widthPinchStartDistance <= 0) return;
-
-  final positions = _widthPinchPointers.values.toList();
-  final scale = (positions[0] - positions[1]).distance / _widthPinchStartDistance;
-  _applyDayWidthScale(_widthPinchStartScale * scale);
-}
-
-void _handleWidthPinchPointerUp(PointerUpEvent event) {
-  _widthPinchPointers.remove(event.pointer);
-  if (_widthPinchPointers.length < 2 && _widthPinching) {
-    setState(() => _widthPinching = false);
+  void _handleWidthPinchPointerUp(PointerUpEvent event) {
+    _widthPinchPointers.remove(event.pointer);
+    if (_widthPinchPointers.length < 2 && _widthPinching) {
+      setState(() => _widthPinching = false);
+    }
   }
-}
 
-void _handleWidthPinchPointerCancel(PointerCancelEvent event) {
-  _widthPinchPointers.remove(event.pointer);
-  if (_widthPinchPointers.length < 2 && _widthPinching) {
-    setState(() => _widthPinching = false);
+  void _handleWidthPinchPointerCancel(PointerCancelEvent event) {
+    _widthPinchPointers.remove(event.pointer);
+    if (_widthPinchPointers.length < 2 && _widthPinching) {
+      setState(() => _widthPinching = false);
+    }
+    if (_widthPanZooming) setState(() => _widthPanZooming = false);
   }
-  if (_widthPanZooming) setState(() => _widthPanZooming = false);
-}
 
-// ─── Width-only pan-zoom (шапка дней) ───
+  // ─── Width-only pan-zoom (шапка дней) ───
 
-void _armWidthPanZoomSafetyReset() {
-  _widthPanZoomSafetyTimer?.cancel();
-  _widthPanZoomSafetyTimer = Timer(const Duration(milliseconds: 350), () {
-    if (mounted && _widthPanZooming) setState(() => _widthPanZooming = false);
-  });
-}
-
-void _handleWidthPanZoomStart(PointerPanZoomStartEvent event) {
-  _zoomAnimationController.stop();
-  _widthPanZoomStartScale = _dayWidthScale;
-  _armWidthPanZoomSafetyReset();
-}
-
-void _handleWidthPanZoomUpdate(PointerPanZoomUpdateEvent event) {
-  if (event.scale <= 0) return;
-  final shouldZoom = (event.scale - 1.0).abs() > 0.005 || _widthPanZooming;
-  if (!shouldZoom) return;
-
-  if (!_widthPanZooming) {
-    setState(() {
-      _widthPanZooming = true;
-      _widthPanZoomStartScale = _dayWidthScale / event.scale;
+  void _armWidthPanZoomSafetyReset() {
+    _widthPanZoomSafetyTimer?.cancel();
+    _widthPanZoomSafetyTimer = Timer(const Duration(milliseconds: 350), () {
+      if (mounted && _widthPanZooming) setState(() => _widthPanZooming = false);
     });
   }
-  _armWidthPanZoomSafetyReset();
-  _applyDayWidthScale(_widthPanZoomStartScale * event.scale);
-}
 
-void _handleWidthPanZoomEnd(PointerPanZoomEndEvent event) {
-  _widthPanZoomSafetyTimer?.cancel();
-  if (_widthPanZooming) setState(() => _widthPanZooming = false);
-}
+  void _handleWidthPanZoomStart(PointerPanZoomStartEvent event) {
+    _zoomAnimationController.stop();
+    _widthPanZoomStartScale = _dayWidthScale;
+    _armWidthPanZoomSafetyReset();
+  }
 
-// ─── Width-only pointer signal (шапка дней) ───
+  void _handleWidthPanZoomUpdate(PointerPanZoomUpdateEvent event) {
+    if (event.scale <= 0) return;
+    final shouldZoom = (event.scale - 1.0).abs() > 0.005 || _widthPanZooming;
+    if (!shouldZoom) return;
 
-void _handleWidthPointerSignal(PointerSignalEvent event) {
-  if (event is! PointerScrollEvent) return;
-  final pressed = HardwareKeyboard.instance.logicalKeysPressed;
-  final hasCtrl =
-      pressed.contains(LogicalKeyboardKey.controlLeft) ||
-      pressed.contains(LogicalKeyboardKey.controlRight) ||
-      pressed.contains(LogicalKeyboardKey.metaLeft) ||
-      pressed.contains(LogicalKeyboardKey.metaRight);
+    if (!_widthPanZooming) {
+      setState(() {
+        _widthPanZooming = true;
+        _widthPanZoomStartScale = _dayWidthScale / event.scale;
+      });
+    }
+    _armWidthPanZoomSafetyReset();
+    _applyDayWidthScale(_widthPanZoomStartScale * event.scale);
+  }
 
-  if (!hasCtrl || event.scrollDelta.dy == 0) return;
+  void _handleWidthPanZoomEnd(PointerPanZoomEndEvent event) {
+    _widthPanZoomSafetyTimer?.cancel();
+    if (_widthPanZooming) setState(() => _widthPanZooming = false);
+  }
 
-  _zoomAnimationController.stop();
-  final factor = math.exp(-event.scrollDelta.dy / 240.0);
-  _applyDayWidthScale(_dayWidthScale * factor);
-}
+  // ─── Width-only pointer signal (шапка дней) ───
+
+  void _handleWidthPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    final hasCtrl =
+        pressed.contains(LogicalKeyboardKey.controlLeft) ||
+        pressed.contains(LogicalKeyboardKey.controlRight) ||
+        pressed.contains(LogicalKeyboardKey.metaLeft) ||
+        pressed.contains(LogicalKeyboardKey.metaRight);
+
+    if (!hasCtrl || event.scrollDelta.dy == 0) return;
+
+    _zoomAnimationController.stop();
+    final factor = math.exp(-event.scrollDelta.dy / 240.0);
+    _applyDayWidthScale(_dayWidthScale * factor);
+  }
 
   void _handlePinchPointerDown(PointerDownEvent event) {
     _pinchPointers[event.pointer] = event.position;
@@ -524,20 +542,22 @@ void _handleWidthPointerSignal(PointerSignalEvent event) {
     }
   }
 
-void _handlePinchPointerMove(PointerMoveEvent event) {
-  if (!_pinchPointers.containsKey(event.pointer)) return;
-  _pinchPointers[event.pointer] = event.position;
-  if (_pinchPointers.length < 2 || _pinchStartDistance <= 0) return;
-  if (_draggingId != null || _resizingId != null) return;
+  void _handlePinchPointerMove(PointerMoveEvent event) {
+    if (!_pinchPointers.containsKey(event.pointer)) return;
+    _pinchPointers[event.pointer] = event.position;
+    if (_pinchPointers.length < 2 || _pinchStartDistance <= 0) return;
+    if (_draggingId != null || _resizingId != null) return;
 
-  final positions = _pinchPointers.values.toList();
-  final scale = (positions[0] - positions[1]).distance / _pinchStartDistance;
-  final focalLocalDy =
-      _verticalFocalLocalDy((positions[0].dy + positions[1].dy) / 2.0);
+    final positions = _pinchPointers.values.toList();
+    final scale = (positions[0] - positions[1]).distance / _pinchStartDistance;
+    final focalLocalDy = _verticalFocalLocalDy(
+      (positions[0].dy + positions[1].dy) / 2.0,
+    );
 
-  // Только высота
-  _applyHourHeight(_pinchStartHeight * scale, focalLocalDy: focalLocalDy);
-}
+    // Только высота
+    _applyHourHeight(_pinchStartHeight * scale, focalLocalDy: focalLocalDy);
+  }
+
   void _handlePinchPointerUp(PointerUpEvent event) {
     _pinchPointers.remove(event.pointer);
     if (_pinchPointers.length < 2 && _pinching)
@@ -565,48 +585,56 @@ void _handlePinchPointerMove(PointerMoveEvent event) {
     _armPanZoomSafetyReset();
   }
 
-void _handlePanZoomUpdate(PointerPanZoomUpdateEvent event) {
-  if (event.scale <= 0) return;
-  final shouldZoom = (event.scale - 1.0).abs() > 0.005 || _panZooming;
-  if (!shouldZoom) return;
+  void _handlePanZoomUpdate(PointerPanZoomUpdateEvent event) {
+    if (event.scale <= 0) return;
+    final shouldZoom = (event.scale - 1.0).abs() > 0.005 || _panZooming;
+    if (!shouldZoom) return;
 
-  if (!_panZooming) {
-    setState(() {
-      _panZooming = true;
-      _panZoomStartHeight = _hourHeight / event.scale;
-    });
+    if (!_panZooming) {
+      setState(() {
+        _panZooming = true;
+        _panZoomStartHeight = _hourHeight / event.scale;
+      });
+    }
+    _armPanZoomSafetyReset();
+
+    final focalLocalDy = _verticalFocalLocalDy(event.position.dy);
+    // Только высота
+    _applyHourHeight(
+      _panZoomStartHeight * event.scale,
+      focalLocalDy: focalLocalDy,
+    );
   }
-  _armPanZoomSafetyReset();
 
-  final focalLocalDy = _verticalFocalLocalDy(event.position.dy);
-  // Только высота
-  _applyHourHeight(_panZoomStartHeight * event.scale, focalLocalDy: focalLocalDy);
-}
   void _handlePanZoomEnd(PointerPanZoomEndEvent event) {
     _panZoomSafetyTimer?.cancel();
     if (_panZooming) setState(() => _panZooming = false);
   }
 
-void _handlePointerSignal(PointerSignalEvent event) {
-  if (event is! PointerScrollEvent) return;
-  final pressed = HardwareKeyboard.instance.logicalKeysPressed;
-  final hasCtrl =
-      pressed.contains(LogicalKeyboardKey.controlLeft) ||
-      pressed.contains(LogicalKeyboardKey.controlRight) ||
-      pressed.contains(LogicalKeyboardKey.metaLeft) ||
-      pressed.contains(LogicalKeyboardKey.metaRight);
+  void _handlePointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final pressed = HardwareKeyboard.instance.logicalKeysPressed;
+    final hasCtrl =
+        pressed.contains(LogicalKeyboardKey.controlLeft) ||
+        pressed.contains(LogicalKeyboardKey.controlRight) ||
+        pressed.contains(LogicalKeyboardKey.metaLeft) ||
+        pressed.contains(LogicalKeyboardKey.metaRight);
 
-  if (!hasCtrl || event.scrollDelta.dy == 0) return;
+    if (!hasCtrl || event.scrollDelta.dy == 0) return;
 
-  _zoomAnimationController.stop();
-  final factor = math.exp(-event.scrollDelta.dy / 240.0);
-  final focalLocalDy = _verticalFocalLocalDy(event.position.dy);
+    _zoomAnimationController.stop();
+    final factor = math.exp(-event.scrollDelta.dy / 240.0);
+    final focalLocalDy = _verticalFocalLocalDy(event.position.dy);
 
-  // Только высота
-  _applyHourHeight(_hourHeight * factor, focalLocalDy: focalLocalDy);
-}// --- Drag & Resize Handlers ---
+    // Только высота
+    _applyHourHeight(_hourHeight * factor, focalLocalDy: focalLocalDy);
+  } // --- Drag & Resize Handlers ---
 
   void _onDragStart(TaskEvent event, DragStartDetails details) {
+    // Не начинаем drag если уже идёт pinch, pan-zoom или width-zoom
+    if (_pinching || _panZooming || _widthPinching || _widthPanZooming) return;
+    if (_pinchPointers.length > 1 || _widthPinchPointers.length > 1) return;
+
     HapticFeedback.lightImpact();
     setState(() {
       _draggingId = event.task.id;
@@ -620,6 +648,17 @@ void _handlePointerSignal(PointerSignalEvent event) {
   }
 
   void _onDragUpdate(TaskEvent event, DragUpdateDetails details) {
+    // Если начался pinch/pan-zoom во время drag — отменяем drag
+    if (_pinching ||
+        _panZooming ||
+        _widthPinching ||
+        _widthPanZooming ||
+        _pinchPointers.length > 1 ||
+        _widthPinchPointers.length > 1) {
+      _cancelDrag();
+      return;
+    }
+
     final dyDelta = details.globalPosition.dy - _dragStartDy;
     final minutesDelta = (dyDelta / _hourHeight * 60.0).round();
     final minStart = _startHour * 60;
@@ -635,11 +674,18 @@ void _handlePointerSignal(PointerSignalEvent event) {
         event.date != null &&
         _lastColumnWidth > 0) {
       final dxDelta = details.globalPosition.dx - _dragStartDx;
-      final rawOffset = (dxDelta / _lastColumnWidth).round();
+      final rawOffset = dxDelta / _lastColumnWidth;
+      final roundedOffset = rawOffset >= 0
+          ? rawOffset.floorToDouble()
+          : rawOffset.ceilToDouble();
+      final finalOffset = rawOffset.abs() > 0.7
+          ? rawOffset.roundToDouble()
+          : roundedOffset;
+
       final visibleStart = _visibleStart(widget.weekStart!);
       final visibleEnd = _visibleEnd(widget.weekStart!);
       final originalDay = _dateOnly(event.date!);
-      var targetDay = _addDays(originalDay, rawOffset);
+      var targetDay = _addDays(originalDay, finalOffset.toInt());
       if (targetDay.isBefore(visibleStart)) targetDay = visibleStart;
       if (targetDay.isAfter(visibleEnd)) targetDay = visibleEnd;
       dayOffset = _daysBetween(originalDay, targetDay);
@@ -678,6 +724,9 @@ void _handlePointerSignal(PointerSignalEvent event) {
   }
 
   void _onResizeStart(TaskEvent event, DragStartDetails details) {
+    if (_pinching || _panZooming || _widthPinching || _widthPanZooming) return;
+    if (_pinchPointers.length > 1 || _widthPinchPointers.length > 1) return;
+
     HapticFeedback.lightImpact();
     setState(() {
       _resizingId = event.task.id;
@@ -689,6 +738,16 @@ void _handlePointerSignal(PointerSignalEvent event) {
   }
 
   void _onResizeUpdate(TaskEvent event, DragUpdateDetails details) {
+    if (_pinching ||
+        _panZooming ||
+        _widthPinching ||
+        _widthPanZooming ||
+        _pinchPointers.length > 1 ||
+        _widthPinchPointers.length > 1) {
+      _cancelResize();
+      return;
+    }
+
     final dyDelta = details.globalPosition.dy - _resizeStartDy;
     final minutesDelta = (dyDelta / _hourHeight * 60.0).round();
     final maxDuration = _endHour * 60 - event.startMinutes;
@@ -794,164 +853,180 @@ void _handlePointerSignal(PointerSignalEvent event) {
     );
   }
 
-Widget _buildWeekView(List<TaskEvent> events, double maxWidth) {
-  final weekStart = widget.weekStart!;
-  final viewportWidth = math.max(0.0, maxWidth - _leftLabelWidth);
-  final baseColumnWidth = viewportWidth / 7.0;
-  final columnWidth = math.max(_minDayWidth, baseColumnWidth * _dayWidthScale);
+  Widget _buildWeekView(List<TaskEvent> events, double maxWidth) {
+    final weekStart = widget.weekStart!;
+    final viewportWidth = math.max(0.0, maxWidth - _leftLabelWidth);
+    final baseColumnWidth = viewportWidth / 7.0;
+    final columnWidth = math.max(
+      _minDayWidth,
+      baseColumnWidth * _dayWidthScale,
+    );
 
-  // Синхронизация offset при ресайзе или смене недели
-  if (_horizontalController.hasClients && _lastColumnWidth > 0 && columnWidth > 0) {
-    final oldWeekStart = _lastWeekStart ?? weekStart;
-    final oldVisibleStart = _visibleStart(oldWeekStart);
-    final newVisibleStart = _visibleStart(weekStart);
-    final bool weekChanged = oldWeekStart != weekStart;
-    final bool sizeChanged = (_lastColumnWidth - columnWidth).abs() > 0.1;
+    // Синхронизация offset при ресайзе или смене недели
+    if (_horizontalController.hasClients &&
+        _lastColumnWidth > 0 &&
+        columnWidth > 0) {
+      final oldWeekStart = _lastWeekStart ?? weekStart;
+      final oldVisibleStart = _visibleStart(oldWeekStart);
+      final newVisibleStart = _visibleStart(weekStart);
+      final bool weekChanged = oldWeekStart != weekStart;
+      final bool sizeChanged = (_lastColumnWidth - columnWidth).abs() > 0.1;
 
-    if (weekChanged || sizeChanged) {
-      _syncHorizontalOffset(
-        oldVisibleStart: oldVisibleStart,
-        newVisibleStart: newVisibleStart,
-        oldColumnWidth: _lastColumnWidth,
-        newColumnWidth: columnWidth,
-        viewportWidth: viewportWidth,
-      );
+      if (weekChanged || sizeChanged) {
+        _syncHorizontalOffset(
+          oldVisibleStart: oldVisibleStart,
+          newVisibleStart: newVisibleStart,
+          oldColumnWidth: _lastColumnWidth,
+          newColumnWidth: columnWidth,
+          viewportWidth: viewportWidth,
+        );
+      }
     }
-  }
 
-  _lastColumnWidth = columnWidth;
-  _lastWeekStart = weekStart;
-  final layouts = _computeWeekLayout(events, weekStart);
+    _lastColumnWidth = columnWidth;
+    _lastWeekStart = weekStart;
+    final layouts = _computeWeekLayout(events, weekStart);
 
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      // ─── Шапка дней: зум ШИРИНЫ ───
-      Listener(
-        behavior: HitTestBehavior.opaque,
-        onPointerDown: _handleWidthPinchPointerDown,
-        onPointerMove: _handleWidthPinchPointerMove,
-        onPointerUp: _handleWidthPinchPointerUp,
-        onPointerCancel: _handleWidthPinchPointerCancel,
-        onPointerPanZoomStart: _handleWidthPanZoomStart,
-        onPointerPanZoomUpdate: _handleWidthPanZoomUpdate,
-        onPointerPanZoomEnd: _handleWidthPanZoomEnd,
-        onPointerSignal: _handleWidthPointerSignal,
-        child: _WeekGridHeader(
-          weekStart: weekStart,
-          anchorDate: widget.anchorDate ?? weekStart,
-          topPadding: widget.topPadding,
-          columnWidth: columnWidth,
-          horizontalController: _horizontalController,
-          onWeekChange: widget.onWeekChange,
-          onZoomIn: _zoomIn,
-          onZoomOut: _zoomOut,
-          onWidthZoomIn: _zoomWidthIn,
-          onWidthZoomOut: _zoomWidthOut,
-        ),
-      ),
-
-      // ─── Таймлайн: зум ВЫСОТЫ ───
-      Expanded(
-        child: Listener(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ─── Шапка дней: зум ШИРИНЫ ───
+        Listener(
           behavior: HitTestBehavior.opaque,
-          onPointerDown: _handlePinchPointerDown,
-          onPointerMove: _handlePinchPointerMove,
-          onPointerUp: _handlePinchPointerUp,
-          onPointerCancel: _handlePinchPointerCancel,
-          onPointerPanZoomStart: _handlePanZoomStart,
-          onPointerPanZoomUpdate: _handlePanZoomUpdate,
-          onPointerPanZoomEnd: _handlePanZoomEnd,
-          onPointerSignal: _handlePointerSignal,
-          child: SingleChildScrollView(
-            key: _verticalScrollKey,
-            controller: _verticalController,
-            physics: _verticalPhysics(),
-            child: SizedBox(
-              height: _totalHeight + 24,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: _leftLabelWidth,
-                    height: _totalHeight + 24,
-                    child: Stack(children: _buildWeekHourLabels()),
-                  ),
-                  Expanded(
-                    child: NotificationListener<ScrollNotification>(
-                      onNotification: _handleHorizontalScrollNotification,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        controller: _horizontalController,
-                        physics: _horizontalPhysics(columnWidth, viewportWidth),
-                        child: SizedBox(
-                          width: _weekTotalDays * columnWidth,
-                          height: _totalHeight + 24,
-                          child: Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              ..._buildWeekColumnBackground(columnWidth, weekStart),
-                              ..._buildWeekHourGridlines(),
-                              ...events.map((event) {
-                                final layout = layouts[event.task.id] ??
-                                    const _EventLayoutInfo(0, 1);
-                                return _buildDraggableEvent(
-                                  event, layout, viewportWidth,
-                                  weekColumnWidth: columnWidth,
-                                );
-                              }),
-                              _buildWeekNowLine(weekStart, columnWidth),
-                            ],
+          onPointerDown: _handleWidthPinchPointerDown,
+          onPointerMove: _handleWidthPinchPointerMove,
+          onPointerUp: _handleWidthPinchPointerUp,
+          onPointerCancel: _handleWidthPinchPointerCancel,
+          onPointerPanZoomStart: _handleWidthPanZoomStart,
+          onPointerPanZoomUpdate: _handleWidthPanZoomUpdate,
+          onPointerPanZoomEnd: _handleWidthPanZoomEnd,
+          onPointerSignal: _handleWidthPointerSignal,
+          child: _WeekGridHeader(
+            weekStart: weekStart,
+            anchorDate: widget.anchorDate ?? weekStart,
+            topPadding: widget.topPadding,
+            columnWidth: columnWidth,
+            horizontalController: _horizontalController,
+            onWeekChange: widget.onWeekChange,
+            onZoomIn: _zoomIn,
+            onZoomOut: _zoomOut,
+            onWidthZoomIn: _zoomWidthIn,
+            onWidthZoomOut: _zoomWidthOut,
+          ),
+        ),
+
+        // ─── Таймлайн: зум ВЫСОТЫ ───
+        Expanded(
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: _handlePinchPointerDown,
+            onPointerMove: _handlePinchPointerMove,
+            onPointerUp: _handlePinchPointerUp,
+            onPointerCancel: _handlePinchPointerCancel,
+            onPointerPanZoomStart: _handlePanZoomStart,
+            onPointerPanZoomUpdate: _handlePanZoomUpdate,
+            onPointerPanZoomEnd: _handlePanZoomEnd,
+            onPointerSignal: _handlePointerSignal,
+            child: SingleChildScrollView(
+              key: _verticalScrollKey,
+              controller: _verticalController,
+              physics: _verticalPhysics(),
+              child: SizedBox(
+                height: _totalHeight + 24,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: _leftLabelWidth,
+                      height: _totalHeight + 24,
+                      child: Stack(children: _buildWeekHourLabels()),
+                    ),
+                    Expanded(
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: _handleHorizontalScrollNotification,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          controller: _horizontalController,
+                          physics: _horizontalPhysics(
+                            columnWidth,
+                            viewportWidth,
+                          ),
+                          child: SizedBox(
+                            width: _weekTotalDays * columnWidth,
+                            height: _totalHeight + 24,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                ..._buildWeekColumnBackground(
+                                  columnWidth,
+                                  weekStart,
+                                ),
+                                ..._buildWeekHourGridlines(),
+                                ...events.map((event) {
+                                  final layout =
+                                      layouts[event.task.id] ??
+                                      const _EventLayoutInfo(0, 1);
+                                  return _buildDraggableEvent(
+                                    event,
+                                    layout,
+                                    viewportWidth,
+                                    weekColumnWidth: columnWidth,
+                                  );
+                                }),
+                                _buildWeekNowLine(weekStart, columnWidth),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),
-    ],
-  );
-}
-Widget _buildDayView(List<TaskEvent> events, double maxWidth) {
-  final availableWidth = math.max(0.0, maxWidth - _leftLabelWidth - 24.0);
-  final layouts = _computeLayout(events);
+      ],
+    );
+  }
 
-  return Listener(
-    behavior: HitTestBehavior.opaque,
-    onPointerDown: _handlePinchPointerDown,
-    onPointerMove: _handlePinchPointerMove,
-    onPointerUp: _handlePinchPointerUp,
-    onPointerCancel: _handlePinchPointerCancel,
-    onPointerPanZoomStart: _handlePanZoomStart,
-    onPointerPanZoomUpdate: _handlePanZoomUpdate,
-    onPointerPanZoomEnd: _handlePanZoomEnd,
-    onPointerSignal: _handlePointerSignal,
-    child: SingleChildScrollView(
-      key: _verticalScrollKey,
-      controller: _verticalController,
-      physics: _verticalPhysics(),
-      padding: EdgeInsets.only(top: widget.topPadding),
-      child: SizedBox(
-        height: _totalHeight + 24,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            ..._buildHourRows(),
-            ...events.map((event) {
-              final layout = layouts[event.task.id] ?? const _EventLayoutInfo(0, 1);
-              return _buildDraggableEvent(event, layout, availableWidth);
-            }),
-            _buildNowLine(),
-          ],
+  Widget _buildDayView(List<TaskEvent> events, double maxWidth) {
+    final availableWidth = math.max(0.0, maxWidth - _leftLabelWidth - 24.0);
+    final layouts = _computeLayout(events);
+
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: _handlePinchPointerDown,
+      onPointerMove: _handlePinchPointerMove,
+      onPointerUp: _handlePinchPointerUp,
+      onPointerCancel: _handlePinchPointerCancel,
+      onPointerPanZoomStart: _handlePanZoomStart,
+      onPointerPanZoomUpdate: _handlePanZoomUpdate,
+      onPointerPanZoomEnd: _handlePanZoomEnd,
+      onPointerSignal: _handlePointerSignal,
+      child: SingleChildScrollView(
+        key: _verticalScrollKey,
+        controller: _verticalController,
+        physics: _verticalPhysics(),
+        padding: EdgeInsets.only(top: widget.topPadding),
+        child: SizedBox(
+          height: _totalHeight + 24,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              ..._buildHourRows(),
+              ...events.map((event) {
+                final layout =
+                    layouts[event.task.id] ?? const _EventLayoutInfo(0, 1);
+                return _buildDraggableEvent(event, layout, availableWidth);
+              }),
+              _buildNowLine(),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
   // --- UI Builders ---
 
   List<Widget> _buildHourRows() {
@@ -1254,7 +1329,8 @@ class _EventTile extends StatelessWidget {
     return Stack(
       children: [
         GestureDetector(
-          behavior: HitTestBehavior.opaque,
+          behavior: HitTestBehavior.translucent,
+          dragStartBehavior: DragStartBehavior.down,
           onPanStart: onDragStart,
           onPanUpdate: onDragUpdate,
           onPanEnd: onDragEnd,
@@ -1377,30 +1453,31 @@ class _EventTile extends StatelessWidget {
             ),
           ),
         ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: _resizeHandleHeight,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onVerticalDragStart: onResizeStart,
-            onVerticalDragUpdate: onResizeUpdate,
-            onVerticalDragEnd: onResizeEnd,
-            child: Container(
-              color: Colors.transparent,
-              alignment: Alignment.center,
-              child: Container(
-                width: 34,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(isInteracting ? 0.55 : 0.16),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              ),
-            ),
-          ),
+Positioned(
+  left: 0,
+  right: 0,
+  bottom: 0,
+  height: _resizeHandleHeight,
+  child: GestureDetector(
+    behavior: HitTestBehavior.translucent,
+    dragStartBehavior: DragStartBehavior.down,
+    onVerticalDragStart: onResizeStart,
+    onVerticalDragUpdate: onResizeUpdate,
+    onVerticalDragEnd: onResizeEnd,
+    child: Container(
+      color: Colors.transparent,
+      alignment: Alignment.center,
+      child: Container(
+        width: 34,
+        height: 4,
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(isInteracting ? 0.55 : 0.16),
+          borderRadius: BorderRadius.circular(999),
         ),
+      ),
+    ),
+  ),
+),
         Positioned(
           top: 8,
           bottom: 8,
