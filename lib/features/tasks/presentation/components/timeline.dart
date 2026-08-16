@@ -1345,8 +1345,9 @@ class _EventTile extends StatelessWidget {
           onPanEnd: onDragEnd,
           child: ClipRRect(
             borderRadius: borderRadius,
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: Container(
+              color: AppColors.surfaceContainerLow,
+
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 120),
                 padding: const EdgeInsets.fromLTRB(20, 2, 10, 2),
@@ -1354,14 +1355,14 @@ class _EventTile extends StatelessWidget {
                   borderRadius: borderRadius,
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+                    end: Alignment.bottomCenter,
                     colors: [
                       if (event.isCompleted)
                         Colors.white.withOpacity(0.05)
                       else
                         accent.withOpacity(0.22),
-                      Colors.white.withOpacity(0.05),
-                      Colors.black.withOpacity(0.10),
+                      Colors.white.withOpacity(0.06),
+                      Colors.black.withOpacity(0.01),
                     ],
                   ),
                   border: Border.all(
@@ -1393,7 +1394,7 @@ class _EventTile extends StatelessWidget {
                     final showTime = height > 54 && constraints.maxWidth > 70;
                     final showDragHandle =
                         height > 36 && constraints.maxWidth > 88;
-
+              
                     return Row(
                       children: [
                         CheckDot(
