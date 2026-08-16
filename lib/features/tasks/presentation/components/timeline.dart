@@ -895,104 +895,100 @@ class _TimelineBodyState extends State<TimelineBody>
 
 
         // ─── Таймлайн: зум ВЫСОТЫ ───
-        Expanded(
-          child: FixedVerticalFadeMask(
-            topFade: 200,
-            child: Listener(
-              behavior: HitTestBehavior.opaque,
-              onPointerDown: _handlePinchPointerDown,
-              onPointerMove: _handlePinchPointerMove,
-              onPointerUp: _handlePinchPointerUp,
-              onPointerCancel: _handlePinchPointerCancel,
-              onPointerPanZoomStart: _handlePanZoomStart,
-              onPointerPanZoomUpdate: _handlePanZoomUpdate,
-              onPointerPanZoomEnd: _handlePanZoomEnd,
-              onPointerSignal: _handlePointerSignal,
-              child: SingleChildScrollView(
-                padding: EdgeInsets.only(top: 200),
-                key: _verticalScrollKey,
-                controller: _verticalController,
-                physics: _verticalPhysics(),
-                child: SizedBox(
-                  height: _totalHeight + 24,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: _leftLabelWidth,
-                        height: _totalHeight + 24,
-                        child: Stack(children: _buildWeekHourLabels()),
-                      ),
-                      Expanded(
-                        child: NotificationListener<ScrollNotification>(
-                          onNotification: _handleHorizontalScrollNotification,
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            controller: _horizontalController,
-                            physics: _horizontalPhysics(
-                              columnWidth,
-                              viewportWidth,
-                            ),
-                            child: SizedBox(
-                              width: _weekTotalDays * columnWidth,
-                              height: _totalHeight + 24,
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  ..._buildWeekColumnBackground(
-                                    columnWidth,
-                                    weekStart,
-                                  ),
-                                  ..._buildWeekHourGridlines(),
-                                  ...events.map((event) {
-                                    final layout =
-                                        layouts[event.task.id] ??
-                                        const _EventLayoutInfo(0, 1);
-                                    return _buildDraggableEvent(
-                                      event,
-                                      layout,
-                                      viewportWidth,
-                                      weekColumnWidth: columnWidth,
-                                    );
-                                  }),
-                                  _buildWeekNowLine(weekStart, columnWidth),
-                                ],
-                              ),
+        FixedVerticalFadeMask(
+          topFade: 200,
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: _handlePinchPointerDown,
+            onPointerMove: _handlePinchPointerMove,
+            onPointerUp: _handlePinchPointerUp,
+            onPointerCancel: _handlePinchPointerCancel,
+            onPointerPanZoomStart: _handlePanZoomStart,
+            onPointerPanZoomUpdate: _handlePanZoomUpdate,
+            onPointerPanZoomEnd: _handlePanZoomEnd,
+            onPointerSignal: _handlePointerSignal,
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(top: 200),
+              key: _verticalScrollKey,
+              controller: _verticalController,
+              physics: _verticalPhysics(),
+              child: SizedBox(
+                height: _totalHeight + 24,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: _leftLabelWidth,
+                      height: _totalHeight + 24,
+                      child: Stack(children: _buildWeekHourLabels()),
+                    ),
+                    Expanded(
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: _handleHorizontalScrollNotification,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          controller: _horizontalController,
+                          physics: _horizontalPhysics(
+                            columnWidth,
+                            viewportWidth,
+                          ),
+                          child: SizedBox(
+                            width: _weekTotalDays * columnWidth,
+                            height: _totalHeight + 24,
+                            child: Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                ..._buildWeekColumnBackground(
+                                  columnWidth,
+                                  weekStart,
+                                ),
+                                ..._buildWeekHourGridlines(),
+                                ...events.map((event) {
+                                  final layout =
+                                      layouts[event.task.id] ??
+                                      const _EventLayoutInfo(0, 1);
+                                  return _buildDraggableEvent(
+                                    event,
+                                    layout,
+                                    viewportWidth,
+                                    weekColumnWidth: columnWidth,
+                                  );
+                                }),
+                                _buildWeekNowLine(weekStart, columnWidth),
+                              ],
                             ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
         ),
                 // ─── Шапка дней: зум ШИРИНЫ ───
-        Flexible(
-          child: Listener(
-            behavior: HitTestBehavior.opaque,
-            onPointerDown: _handleWidthPinchPointerDown,
-            onPointerMove: _handleWidthPinchPointerMove,
-            onPointerUp: _handleWidthPinchPointerUp,
-            onPointerCancel: _handleWidthPinchPointerCancel,
-            onPointerPanZoomStart: _handleWidthPanZoomStart,
-            onPointerPanZoomUpdate: _handleWidthPanZoomUpdate,
-            onPointerPanZoomEnd: _handleWidthPanZoomEnd,
-            onPointerSignal: _handleWidthPointerSignal,
-            child: _WeekGridHeader(
-              weekStart: weekStart,
-              anchorDate: widget.anchorDate ?? weekStart,
-              topPadding: widget.topPadding,
-              columnWidth: columnWidth,
-              horizontalController: _horizontalController,
-              onWeekChange: widget.onWeekChange,
-              onZoomIn: _zoomIn,
-              onZoomOut: _zoomOut,
-              onWidthZoomIn: _zoomWidthIn,
-              onWidthZoomOut: _zoomWidthOut,
-            ),
+        Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: _handleWidthPinchPointerDown,
+          onPointerMove: _handleWidthPinchPointerMove,
+          onPointerUp: _handleWidthPinchPointerUp,
+          onPointerCancel: _handleWidthPinchPointerCancel,
+          onPointerPanZoomStart: _handleWidthPanZoomStart,
+          onPointerPanZoomUpdate: _handleWidthPanZoomUpdate,
+          onPointerPanZoomEnd: _handleWidthPanZoomEnd,
+          onPointerSignal: _handleWidthPointerSignal,
+          child: _WeekGridHeader(
+            weekStart: weekStart,
+            anchorDate: widget.anchorDate ?? weekStart,
+            topPadding: widget.topPadding,
+            columnWidth: columnWidth,
+            horizontalController: _horizontalController,
+            onWeekChange: widget.onWeekChange,
+            onZoomIn: _zoomIn,
+            onZoomOut: _zoomOut,
+            onWidthZoomIn: _zoomWidthIn,
+            onWidthZoomOut: _zoomWidthOut,
           ),
         ),
       ],
