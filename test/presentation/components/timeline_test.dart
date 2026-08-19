@@ -862,6 +862,100 @@ void main() {
         );
       });
 
+      testWidgets(
+        'mini form stays on the right even when a task is to the right of '
+        'the ghost',
+        (tester) async {
+          tester.view.physicalSize = const Size(1600, 4200);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(tester.view.reset);
+
+          final event = TaskEvent(
+            task: createMockTask(),
+            title: 'Busy',
+            startMinutes: 540,
+            durationMinutes: 60,
+            date: DateTime(2026, 8, 11, 9), // Tuesday 9:00, right of Monday
+          );
+
+          await tester.pumpWidget(
+            buildBody(weekStart: monday, events: [event]),
+          );
+          await tester.pump();
+
+          const columnWidth = (1600 - 52) / 7.0;
+          final h = horizontalOffset(tester);
+          final v = verticalOffset(tester);
+          final screenX = 52 + (7 * columnWidth + columnWidth / 2) - h;
+          final screenY = 200 + (10 * 140 + 70) - v;
+
+          final gesture = await tester.startGesture(Offset(screenX, screenY));
+          await tester.pump(const Duration(milliseconds: 600));
+          await gesture.up();
+          await tester.pump(const Duration(milliseconds: 100));
+
+          expect(find.byType(MiniTaskForm), findsOneWidget);
+
+          final ghostTextRect = tester.getRect(
+            find.text('10:30 AM \u2013 11:30 AM'),
+          );
+          final formRect = tester.getRect(find.byType(MiniTaskForm));
+          expect(formRect.top, greaterThanOrEqualTo(ghostTextRect.top - 15));
+          expect(formRect.left, greaterThanOrEqualTo(ghostTextRect.right - 1));
+        },
+      );
+
+      testWidgets('mini form moves together with the ghost on scroll', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(1600, 4200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(buildBody(weekStart: monday));
+        await tester.pump();
+
+        const columnWidth = (1600 - 52) / 7.0;
+        final h = horizontalOffset(tester);
+        final v = verticalOffset(tester);
+        final screenX = 52 + (7 * columnWidth + columnWidth / 2) - h;
+        final screenY = 200 + (9 * 140 + 70) - v;
+
+        final gesture = await tester.startGesture(Offset(screenX, screenY));
+        await tester.pump(const Duration(milliseconds: 600));
+        await gesture.up();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.byType(MiniTaskForm), findsOneWidget);
+
+        final before = tester.getRect(find.byType(MiniTaskForm));
+
+        final horizontal = tester
+            .widgetList<SingleChildScrollView>(
+              find.byType(SingleChildScrollView),
+            )
+            .firstWhere(
+              (w) =>
+                  w.scrollDirection == Axis.horizontal && w.controller != null,
+            )
+            .controller!;
+        final vertical = tester
+            .widgetList<SingleChildScrollView>(
+              find.byType(SingleChildScrollView),
+            )
+            .firstWhere(
+              (w) => w.scrollDirection == Axis.vertical && w.controller != null,
+            )
+            .controller!;
+        horizontal.jumpTo(horizontal.offset + columnWidth);
+        vertical.jumpTo(vertical.offset + 140);
+        await tester.pump();
+
+        final after = tester.getRect(find.byType(MiniTaskForm));
+        expect(after.left, closeTo(before.left - columnWidth, 1));
+        expect(after.top, closeTo(before.top - 140, 1));
+      });
+
       testWidgets('cancel button closes mini form and clears ghost', (
         tester,
       ) async {

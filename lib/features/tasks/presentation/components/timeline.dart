@@ -180,7 +180,6 @@ class _TimelineBodyState extends State<TimelineBody>
   int _selStartMinutes = 0;
   int _selEndMinutes = 0;
   bool _showDraftForm = false;
-  bool _draftFormAbove = false;
   double _lastMaxWidth = 0;
   double _lastDayViewWidth = 0;
 
@@ -287,22 +286,6 @@ class _TimelineBodyState extends State<TimelineBody>
     setState(() {
       _isSelecting = false;
       _showDraftForm = true;
-      _draftFormAbove = _shouldPlaceFormAbove();
-    });
-  }
-
-  bool _shouldPlaceFormAbove() {
-    if (widget.weekStart == null) return true;
-    final ghost = _selectionGhostRect();
-    final candidate = Rect.fromLTWH(
-      ghost.right + 12,
-      ghost.top,
-      _kDraftFormWidth,
-      _kDraftFormHeight,
-    );
-    return widget.events.any((event) {
-      final r = _eventRect(event);
-      return r != null && candidate.overlaps(r);
     });
   }
 
@@ -323,7 +306,6 @@ class _TimelineBodyState extends State<TimelineBody>
     setState(() {
       _isSelecting = false;
       _showDraftForm = false;
-      _draftFormAbove = false;
       _selDayIndex = 0;
       _selStartMinutes = 0;
       _selEndMinutes = 0;
@@ -370,61 +352,60 @@ class _TimelineBodyState extends State<TimelineBody>
 
   Widget _buildDraftFormOverlay() {
     if (!_showDraftForm) return const SizedBox.shrink();
-    final ghost = _selectionGhostRect();
-    final vOffset = _verticalController.hasClients
-        ? _verticalController.offset
-        : 0.0;
-    final hOffset = _horizontalController.hasClients
-        ? _horizontalController.offset
-        : 0.0;
-    final topPad = widget.weekStart == null ? widget.topPadding : 200.0;
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        _verticalController,
+        _horizontalController,
+      ]),
+      builder: (context, _) {
+        final ghost = _selectionGhostRect();
+        final vOffset = _verticalController.hasClients
+            ? _verticalController.offset
+            : 0.0;
+        final hOffset = _horizontalController.hasClients
+            ? _horizontalController.offset
+            : 0.0;
+        final topPad = widget.weekStart == null ? widget.topPadding : 200.0;
 
-    final ghostLeft = widget.weekStart == null
-        ? ghost.left
-        : _leftLabelWidth + ghost.left - hOffset;
-    final ghostTop = topPad + ghost.top - vOffset;
+        final ghostLeft = widget.weekStart == null
+            ? ghost.left
+            : _leftLabelWidth + ghost.left - hOffset;
+        final ghostTop = topPad + ghost.top - vOffset;
 
-    double left;
-    double top;
-    if (widget.weekStart == null || _draftFormAbove) {
-      left = widget.weekStart == null
-          ? ghostLeft
-          : ghostLeft + ghost.width - _kDraftFormWidth;
-      top = ghostTop - _kDraftFormHeight - 12;
-    } else {
-      left = ghostLeft + ghost.width + 12;
-      top = ghostTop;
-    }
+        final double left = (ghostLeft + ghost.width + 12)
+            .clamp(8.0, math.max(0.0, _lastMaxWidth - _kDraftFormWidth - 8))
+            .toDouble();
+        final maxTop = _verticalController.hasClients
+            ? math.max(
+                0.0,
+                _verticalController.position.viewportDimension -
+                    _kDraftFormHeight -
+                    8,
+              )
+            : 0.0;
+        final double top = ghostTop.clamp(8.0, maxTop).toDouble();
 
-    final maxLeft = math.max(0.0, _lastMaxWidth - _kDraftFormWidth - 8);
-    left = left.clamp(8.0, maxLeft);
-    final maxTop = _verticalController.hasClients
-        ? math.max(
-            0.0,
-            _verticalController.position.viewportDimension -
-                _kDraftFormHeight -
-                8,
-          )
-        : 0.0;
-    top = top.clamp(8.0, maxTop);
+        final start = _selectionStartDateTime();
+        final end = start.add(
+          Duration(minutes: _selEndMinutes - _selStartMinutes),
+        );
 
-    final start = _selectionStartDateTime();
-    final end = start.add(Duration(minutes: _selEndMinutes - _selStartMinutes));
-
-    return Positioned(
-      left: left,
-      top: top,
-      child: MiniTaskForm(
-        width: _kDraftFormWidth,
-        start: start,
-        end: end,
-        projects: widget.taskFormProjects,
-        onSubmit: (task) {
-          widget.onSubmitNewTask?.call(task);
-          _clearDraftForm();
-        },
-        onCancel: _clearDraftForm,
-      ),
+        return Positioned(
+          left: left,
+          top: top,
+          child: MiniTaskForm(
+            width: _kDraftFormWidth,
+            start: start,
+            end: end,
+            projects: widget.taskFormProjects,
+            onSubmit: (task) {
+              widget.onSubmitNewTask?.call(task);
+              _clearDraftForm();
+            },
+            onCancel: _clearDraftForm,
+          ),
+        );
+      },
     );
   }
 
