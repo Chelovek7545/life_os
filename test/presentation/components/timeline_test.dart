@@ -470,6 +470,55 @@ void main() {
         expect(received, DateTime(2026, 8, 17));
       });
 
+      testWidgets('horizontal scroll jumps to new week start when '
+          'navigating via header', (tester) async {
+        tester.view.physicalSize = const Size(800, 4200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        var weekStart = monday;
+
+        Widget build() {
+          return createTestWidget(
+            child: TimelineBody(
+              events: const [],
+              topPadding: 0,
+              weekStart: weekStart,
+              anchorDate: weekStart,
+              onWeekChange: (d) => weekStart = d,
+              onEventChanged: _noopEventChanged,
+              onToggleTask: (_) {},
+            ),
+          );
+        }
+
+        await tester.pumpWidget(build());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byIcon(Icons.chevron_right));
+        expect(weekStart, DateTime(2026, 8, 17));
+
+        // Apply the week change, as the parent does in the real app.
+        await tester.pumpWidget(build());
+        await tester.pumpAndSettle();
+
+        // viewport = 800 - 52 = 748, so columnWidth is clamped to 150 and
+        // the new week must start exactly at the buffer center offset.
+        const columnWidth = 150.0;
+        final horizontalScroller = tester
+            .widgetList<SingleChildScrollView>(
+              find.byType(SingleChildScrollView),
+            )
+            .firstWhere(
+              (w) =>
+                  w.scrollDirection == Axis.horizontal && w.controller != null,
+            );
+        expect(
+          horizontalScroller.controller!.offset,
+          closeTo(7 * columnWidth, 1),
+        );
+      });
+
       testWidgets('week grid scrolls horizontally', (tester) async {
         tester.view.physicalSize = const Size(800, 4200);
         tester.view.devicePixelRatio = 1.0;

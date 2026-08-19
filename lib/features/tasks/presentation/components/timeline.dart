@@ -162,6 +162,12 @@ class _TimelineBodyState extends State<TimelineBody>
   // Layout Tracking (Для правильного ресайза)
   double _lastColumnWidth = 0;
   DateTime? _lastWeekStart;
+  bool _pendingHeaderWeekChange = false;
+
+  void _handleHeaderWeekChange(DateTime date) {
+    _pendingHeaderWeekChange = true;
+    widget.onWeekChange?.call(date);
+  }
 
   bool get _isInteracting =>
       _draggingId != null ||
@@ -201,12 +207,17 @@ class _TimelineBodyState extends State<TimelineBody>
   @override
   void initState() {
     super.initState();
-    final initialOffset = math.max(
+    final initialVerticalOffset = math.max(
       0.0,
       DateTime.now().hour * _defaultHourHeight - 120.0,
     );
-    _verticalController = ScrollController(initialScrollOffset: initialOffset);
-    _horizontalController = ScrollController();
+    final initialHorizontalOffset = _minDayWidth * 7;
+    _verticalController = ScrollController(
+      initialScrollOffset: initialVerticalOffset,
+    );
+    _horizontalController = ScrollController(
+      initialScrollOffset: initialHorizontalOffset,
+    );
 
     _zoomAnimationController = AnimationController(
       vsync: this,
@@ -233,6 +244,14 @@ class _TimelineBodyState extends State<TimelineBody>
     setState(() => _dayWidthScale = clamped);
     // LayoutBuilder пересчитает columnWidth и _syncHorizontalOffset
     // автоматически скорректирует горизонтальный скролл.
+  }
+
+  @override
+  void didUpdateWidget(covariant TimelineBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.weekStart == widget.weekStart) {
+      _pendingHeaderWeekChange = false;
+    }
   }
 
   @override
@@ -875,13 +894,28 @@ class _TimelineBodyState extends State<TimelineBody>
       final bool sizeChanged = (_lastColumnWidth - columnWidth).abs() > 0.1;
 
       if (weekChanged || sizeChanged) {
-        _syncHorizontalOffset(
-          oldVisibleStart: oldVisibleStart,
-          newVisibleStart: newVisibleStart,
-          oldColumnWidth: _lastColumnWidth,
-          newColumnWidth: columnWidth,
-          viewportWidth: viewportWidth,
-        );
+        if (weekChanged && _pendingHeaderWeekChange) {
+          _pendingHeaderWeekChange = false;
+          final maxExtent = math.max(
+            0.0,
+            _weekTotalDays * columnWidth - viewportWidth,
+          );
+          final target = (_weekBufferDays * columnWidth)
+              .clamp(0.0, maxExtent)
+              .toDouble();
+          final pos = _horizontalController.position;
+          if ((pos.pixels - target).abs() > 0.5) {
+            pos.correctPixels(target);
+          }
+        } else {
+          _syncHorizontalOffset(
+            oldVisibleStart: oldVisibleStart,
+            newVisibleStart: newVisibleStart,
+            oldColumnWidth: _lastColumnWidth,
+            newColumnWidth: columnWidth,
+            viewportWidth: viewportWidth,
+          );
+        }
       }
     }
 
@@ -892,8 +926,6 @@ class _TimelineBodyState extends State<TimelineBody>
     return Stack(
       //crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-
-
         // ─── Таймлайн: зум ВЫСОТЫ ───
         FixedVerticalFadeMask(
           topFade: 200,
@@ -967,7 +999,7 @@ class _TimelineBodyState extends State<TimelineBody>
             ),
           ),
         ),
-                // ─── Шапка дней: зум ШИРИНЫ ───
+        // ─── Шапка дней: зум ШИРИНЫ ───
         Listener(
           behavior: HitTestBehavior.opaque,
           onPointerDown: _handleWidthPinchPointerDown,
@@ -984,7 +1016,7 @@ class _TimelineBodyState extends State<TimelineBody>
             topPadding: widget.topPadding,
             columnWidth: columnWidth,
             horizontalController: _horizontalController,
-            onWeekChange: widget.onWeekChange,
+            onWeekChange: _handleHeaderWeekChange,
             onZoomIn: _zoomIn,
             onZoomOut: _zoomOut,
             onWidthZoomIn: _zoomWidthIn,
@@ -1390,7 +1422,7 @@ class _EventTile extends StatelessWidget {
                     final showTime = height > 54 && constraints.maxWidth > 70;
                     final showDragHandle =
                         height > 36 && constraints.maxWidth > 88;
-              
+
                     return Row(
                       children: [
                         CheckDot(
@@ -1459,31 +1491,31 @@ class _EventTile extends StatelessWidget {
             ),
           ),
         ),
-Positioned(
-  left: 0,
-  right: 0,
-  bottom: 0,
-  height: _resizeHandleHeight,
-  child: GestureDetector(
-    behavior: HitTestBehavior.translucent,
-    dragStartBehavior: DragStartBehavior.down,
-    onVerticalDragStart: onResizeStart,
-    onVerticalDragUpdate: onResizeUpdate,
-    onVerticalDragEnd: onResizeEnd,
-    child: Container(
-      color: Colors.transparent,
-      alignment: Alignment.center,
-      child: Container(
-        width: 34,
-        height: 4,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(isInteracting ? 0.55 : 0.16),
-          borderRadius: BorderRadius.circular(999),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: _resizeHandleHeight,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            dragStartBehavior: DragStartBehavior.down,
+            onVerticalDragStart: onResizeStart,
+            onVerticalDragUpdate: onResizeUpdate,
+            onVerticalDragEnd: onResizeEnd,
+            child: Container(
+              color: Colors.transparent,
+              alignment: Alignment.center,
+              child: Container(
+                width: 34,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(isInteracting ? 0.55 : 0.16),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+          ),
         ),
-      ),
-    ),
-  ),
-),
         Positioned(
           top: 8,
           bottom: 8,
@@ -1553,7 +1585,8 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
   // Насколько день (по абсолютному номеру) принадлежит анимированному
   // недельному окну шириной 7 дней: 0..1.
   double _weekMembership(double dayAbs) {
-    final overlap = math.min(dayAbs + 0.5, _currentCenterAbs + 3.5) -
+    final overlap =
+        math.min(dayAbs + 0.5, _currentCenterAbs + 3.5) -
         math.max(dayAbs - 0.5, _currentCenterAbs - 3.5);
     return overlap.clamp(0.0, 1.0).toDouble();
   }
@@ -1623,6 +1656,7 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
   @override
   Widget build(BuildContext context) {
     final today = _dateOnly(DateTime.now());
+    print("Start of week: ${widget.weekStart}");
     final weekEnd = _addDays(widget.weekStart, 6);
     final visibleStart = _addDays(widget.weekStart, -_weekBufferDays);
     final hasNav = widget.onWeekChange != null;
@@ -1647,7 +1681,8 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
                     _glassIconButton(
                       Icons.chevron_left,
                       'Previous week',
-                      () => widget.onWeekChange!(_addDays(widget.weekStart, -7)),
+                      () =>
+                          widget.onWeekChange!(_addDays(widget.weekStart, -7)),
                     ),
                     const SizedBox(width: 10),
                     _GlassBox(
@@ -1666,9 +1701,7 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 AnimatedSwitcher(
-                                  duration: const Duration(
-                                    milliseconds: 200,
-                                  ),
+                                  duration: const Duration(milliseconds: 200),
                                   transitionBuilder: (child, animation) {
                                     return FadeTransition(
                                       opacity: animation,
@@ -1681,9 +1714,7 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
                                   child: isCurrentWeek
                                       ? Text(
                                           'THIS WEEK',
-                                          key: const ValueKey(
-                                            'this_week_text',
-                                          ),
+                                          key: const ValueKey('this_week_text'),
                                           style: AppTypography.codeLabel,
                                         )
                                       : const SizedBox.shrink(
@@ -1710,9 +1741,7 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
                       Icons.chevron_right,
                       'Next week',
                       () => widget.onWeekChange!(_addDays(widget.weekStart, 7)),
-                      
                     ),
-        
                   ],
                 ),
               ),
@@ -1724,7 +1753,7 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
             right: 0,
             bottom: 10,
           ),
-child: SizedBox(
+          child: SizedBox(
             height: 58,
             child: ClipRect(
               child: AnimatedBuilder(
@@ -1749,7 +1778,10 @@ child: SizedBox(
                           children: List.generate(_weekTotalDays, (index) {
                             final date = _addDays(visibleStart, index);
                             final isToday = _isSameDay(date, today);
-                            final isAnchor = _isSameDay(date, widget.anchorDate);
+                            final isAnchor = _isSameDay(
+                              date,
+                              widget.anchorDate,
+                            );
                             final membership = _weekMembership(
                               _absDay(date).toDouble(),
                             );
@@ -1776,21 +1808,20 @@ child: SizedBox(
                                     ),
                                     child: GlassPanel(
                                       borderColor: isAnchor
-                                          ?  Colors.white.withOpacity(
-                                                0.6,
-                                             )
-    
+                                          ? Colors.white.withOpacity(0.6)
                                           : null,
                                       borderRadius: 12,
                                       child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
                                         children: [
                                           FittedBox(
                                             fit: BoxFit.scaleDown,
                                             child: Padding(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 2,
-                                              ),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 2,
+                                                  ),
                                               child: Text(
                                                 getWeekDayName(
                                                   date.weekday,
@@ -1800,9 +1831,8 @@ child: SizedBox(
                                                 style: TextStyle(
                                                   color: isToday
                                                       ? _orange
-                                                      : Colors.white.withOpacity(
-                                                          0.55,
-                                                        ),
+                                                      : Colors.white
+                                                            .withOpacity(0.55),
                                                   fontSize: 10,
                                                   fontWeight: FontWeight.w700,
                                                   letterSpacing: 0.6,
@@ -1821,18 +1851,22 @@ child: SizedBox(
                                                   ? LinearGradient(
                                                       colors: [
                                                         _orange,
-                                                        _orange.withOpacity(0.85),
+                                                        _orange.withOpacity(
+                                                          0.85,
+                                                        ),
                                                       ],
                                                     )
                                                   : null,
                                               boxShadow: isToday
                                                   ? [
                                                       BoxShadow(
-                                                        color: _orange.withOpacity(
-                                                          0.35,
-                                                        ),
+                                                        color: _orange
+                                                            .withOpacity(0.35),
                                                         blurRadius: 10,
-                                                        offset: const Offset(0, 3),
+                                                        offset: const Offset(
+                                                          0,
+                                                          3,
+                                                        ),
                                                       ),
                                                     ]
                                                   : null,
