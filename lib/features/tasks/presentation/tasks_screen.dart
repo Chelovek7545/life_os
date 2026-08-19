@@ -61,7 +61,11 @@ class TasksScreenState extends State<TasksScreen> {
     setState(() => _showUnscheduledOverlay = !_showUnscheduledOverlay);
   }
 
-  Widget _buildUnscheduledOverlay(double overlayHeight, DateTime today, double overlayWidth) {
+  Widget _buildUnscheduledOverlay(
+    double overlayHeight,
+    DateTime today,
+    double overlayWidth,
+  ) {
     if (!_showUnscheduledOverlay) {
       return const SizedBox.shrink();
     }
@@ -70,10 +74,12 @@ class TasksScreenState extends State<TasksScreen> {
       initialData: const TasksLoading(),
       builder: (context, snapshot) {
         final state = snapshot.data ?? const TasksLoading();
-        final unscheduledTasks = state.maybeWhen(
-          loaded: (_, _, _, _, unscheduled) => unscheduled,
-          orElse: () => const <TaskWithProject>[],
-        ) ?? const <TaskWithProject>[];
+        final unscheduledTasks =
+            state.maybeWhen(
+              loaded: (_, _, _, _, unscheduled) => unscheduled,
+              orElse: () => const <TaskWithProject>[],
+            ) ??
+            const <TaskWithProject>[];
         if (unscheduledTasks.isEmpty) {
           return const SizedBox.shrink();
         }
@@ -109,9 +115,8 @@ class TasksScreenState extends State<TasksScreen> {
                           const Spacer(),
                           IconButton(
                             icon: const Icon(Icons.close),
-                            onPressed: () => setState(
-                              () => _showUnscheduledOverlay = false,
-                            ),
+                            onPressed: () =>
+                                setState(() => _showUnscheduledOverlay = false),
                           ),
                         ],
                       ),
@@ -132,9 +137,7 @@ class TasksScreenState extends State<TasksScreen> {
                                       ? parseHexColor(item.project!.color)
                                       : null,
                                   isOverdue:
-                                      item.task.dueDate?.isBefore(
-                                        today,
-                                      ) ??
+                                      item.task.dueDate?.isBefore(today) ??
                                       false,
                                   onCheckChanged: () {
                                     widget.viewModel.toggleTask(item.task);
@@ -264,11 +267,11 @@ class TasksScreenState extends State<TasksScreen> {
                   (old) => old.copyWith(anchorDate: date),
                 )
               : null,
-          topPadding: isWide
-              ? _kWeekTimelineTopPadding
-              : _kTimelineTopPadding,
+          topPadding: isWide ? _kWeekTimelineTopPadding : _kTimelineTopPadding,
           onEventChanged: _updateEvent,
           onToggleTask: widget.viewModel.toggleTask,
+          taskFormProjects: widget.viewModel.watchProjects(),
+          onSubmitNewTask: widget.viewModel.addTask,
         );
       },
     );
@@ -528,7 +531,13 @@ class TasksScreenState extends State<TasksScreen> {
           MediaQuery.sizeOf(context).width,
           isWide,
         ),
-        _buildUnscheduledOverlay(overlayHeight, today, MediaQuery.sizeOf(context).width > 400 ? 400 : MediaQuery.sizeOf(context).width),
+        _buildUnscheduledOverlay(
+          overlayHeight,
+          today,
+          MediaQuery.sizeOf(context).width > 400
+              ? 400
+              : MediaQuery.sizeOf(context).width,
+        ),
         _buildTaskForm(
           context,
           isFormVisible,
@@ -583,7 +592,8 @@ class TasksScreenState extends State<TasksScreen> {
                               child: _isEventMode
                                   ? _buildEventBody(
                                       isWide,
-                                      widget.viewModel
+                                      widget
+                                          .viewModel
                                           .currentFilterValue
                                           .anchorDate,
                                     )
@@ -598,7 +608,11 @@ class TasksScreenState extends State<TasksScreen> {
                     leftWidth,
                     isWide,
                   ),
-                  _buildUnscheduledOverlay(overlayHeight, today,  leftWidth > 400 ? 400 : leftWidth),
+                  _buildUnscheduledOverlay(
+                    overlayHeight,
+                    today,
+                    leftWidth > 400 ? 400 : leftWidth,
+                  ),
                   if (isFormVisible && leftWidth <= 330)
                     _buildTaskForm(context, isFormVisible, 310),
                 ],
@@ -725,7 +739,8 @@ class _TaskListState extends State<_TaskList> {
     }
 
     // Вызываем setState только если данные действительно изменились
-    final changed = _items.length != widget.items.length ||
+    final changed =
+        _items.length != widget.items.length ||
         _items.asMap().entries.any((e) => e.value != widget.items[e.key]);
     if (changed) {
       setState(() {});
@@ -981,41 +996,41 @@ class _TasksHeader extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-// Внутри TasksScreen (в AppBar или любой кнопке)
-IconButton(
-  icon: const Icon(Icons.settings_outlined),
-  onPressed: () {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => SettingsScreen(
-          // Если настройкам нужен доступ к DI, передаем его или viewModel
-          // viewModel: widget.viewModel.settingsViewModel,
-        ),
-      ),
-    );
-  },
-),
-            Badge(
-              label: StreamBuilder<TaskScreenState>(
-                stream: vm.state,
-                initialData: const TasksLoading(),
-                builder: (context, snap) {
-                  final state = snap.data ?? const TasksLoading();
-                  final count = state.maybeWhen(
-                    loaded: (_, _, _, _, unscheduled) => unscheduled.length,
-                    orElse: () => 0,
-                  );
-                  return Text(
-                    count.toString(),
-                    style: const TextStyle(fontSize: 10),
-                  );
-                },
-              ),
-              child: IconButton(
-                onPressed: onToggleUnscheduled,
-                icon: const Icon(Icons.inbox_rounded, color: Colors.white),
-              ),
+          // Внутри TasksScreen (в AppBar или любой кнопке)
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => SettingsScreen(
+                    // Если настройкам нужен доступ к DI, передаем его или viewModel
+                    // viewModel: widget.viewModel.settingsViewModel,
+                  ),
+                ),
+              );
+            },
+          ),
+          Badge(
+            label: StreamBuilder<TaskScreenState>(
+              stream: vm.state,
+              initialData: const TasksLoading(),
+              builder: (context, snap) {
+                final state = snap.data ?? const TasksLoading();
+                final count = state.maybeWhen(
+                  loaded: (_, _, _, _, unscheduled) => unscheduled.length,
+                  orElse: () => 0,
+                );
+                return Text(
+                  count.toString(),
+                  style: const TextStyle(fontSize: 10),
+                );
+              },
             ),
+            child: IconButton(
+              onPressed: onToggleUnscheduled,
+              icon: const Icon(Icons.inbox_rounded, color: Colors.white),
+            ),
+          ),
           Spacer(),
           SizedBox(
             width: 150,
@@ -1044,7 +1059,7 @@ IconButton(
                         loaded: (_, selected, _, _, _) {
                           if (selected.isEmpty) return null;
 
-                            final screenWidth = tasksScreenWidth;
+                          final screenWidth = tasksScreenWidth;
                           //MediaQuery.sizeOf(context).width
                           final int maxVisibleActions = switch (screenWidth) {
                             < 400 => 1,

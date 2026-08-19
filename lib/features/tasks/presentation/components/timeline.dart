@@ -13,7 +13,10 @@ import 'package:life_os/core/ui/fixed_fade_mask.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
+
+import 'mini_task_form.dart';
 
 const _orange = Color(0xFFFF5C00);
 
@@ -36,6 +39,9 @@ const _weekTotalDays = _weekBufferDays * 2 + 7;
 
 const _minDayWidthScale = 0.5;
 const _maxDayWidthScale = 3.0;
+
+const _kDraftFormWidth = 260.0;
+const _kDraftFormHeight = 170.0;
 
 class TaskEvent {
   const TaskEvent({
@@ -92,6 +98,8 @@ class TimelineBody extends StatefulWidget {
     this.weekStart,
     this.anchorDate,
     this.onWeekChange,
+    this.taskFormProjects,
+    this.onSubmitNewTask,
   });
 
   final List<TaskEvent> events;
@@ -99,6 +107,8 @@ class TimelineBody extends StatefulWidget {
   final DateTime? weekStart;
   final DateTime? anchorDate;
   final ValueChanged<DateTime>? onWeekChange;
+  final Stream<List<Project>>? taskFormProjects;
+  final Future<void> Function(Task task)? onSubmitNewTask;
   final void Function(
     Task task, {
     int? startMinutes,
@@ -164,9 +174,258 @@ class _TimelineBodyState extends State<TimelineBody>
   DateTime? _lastWeekStart;
   bool _pendingHeaderWeekChange = false;
 
+  // Выделение области для создания новой задачи
+  bool _isSelecting = false;
+  int _selDayIndex = 0;
+  int _selStartMinutes = 0;
+  int _selEndMinutes = 0;
+  bool _showDraftForm = false;
+  bool _draftFormAbove = false;
+  double _lastMaxWidth = 0;
+  double _lastDayViewWidth = 0;
+
   void _handleHeaderWeekChange(DateTime date) {
     _pendingHeaderWeekChange = true;
     widget.onWeekChange?.call(date);
+  }
+
+  // --- Создание задачи выделением области (long-press + drag) ---
+
+  int _localDyToMinutes(double dy) {
+    return (dy / _hourHeight * 60)
+        .round()
+        .clamp(_startHour * 60, _endHour * 60)
+        .toInt();
+  }
+
+  Rect? _eventRect(TaskEvent event) {
+    final top = (event.startMinutes - _startHour * 60) / 60 * _hourHeight;
+    final height = math.max(
+      30.0,
+      event.durationMinutes / 60 * _hourHeight + 4.0,
+    );
+    if (widget.weekStart != null) {
+      final date = event.date;
+      if (date == null) return null;
+      final visibleStart = _visibleStart(widget.weekStart!);
+      final dayIndex = _daysBetween(visibleStart, date);
+      if (dayIndex < 0 || dayIndex >= _weekTotalDays) return null;
+      final colW = _lastColumnWidth;
+      final innerLeft = dayIndex * colW + 3;
+      final innerWidth = math.max(0.0, colW - 6);
+      final width = math.max(18.0, innerWidth - 2);
+      return Rect.fromLTWH(innerLeft + 1, top + 2, width, height);
+    }
+    final width = math.max(0.0, _lastDayViewWidth - 4);
+    return Rect.fromLTWH(_leftLabelWidth + 12, top + 2, width, height);
+  }
+
+  bool _eventAt(Offset localPosition) {
+    return widget.events.any(
+      (event) => _eventRect(event)?.contains(localPosition) ?? false,
+    );
+  }
+
+  Rect _selectionGhostRect() {
+    final top = (_selStartMinutes - _startHour * 60) / 60 * _hourHeight;
+    final height = math.max(
+      30.0,
+      (_selEndMinutes - _selStartMinutes) / 60 * _hourHeight + 4.0,
+    );
+    if (widget.weekStart != null) {
+      final colW = _lastColumnWidth;
+      final left = _selDayIndex * colW + 3;
+      final width = math.max(0.0, colW - 6);
+      return Rect.fromLTWH(left, top + 2, width, height);
+    }
+    final width = math.max(0.0, _lastDayViewWidth - 4);
+    return Rect.fromLTWH(_leftLabelWidth + 12, top + 2, width, height);
+  }
+
+  void _onSelectionLongPressStart(LongPressStartDetails details) {
+    if (_isInteracting || _showDraftForm) return;
+    final pos = details.localPosition;
+    if (_eventAt(pos)) return;
+    final center =
+        (_localDyToMinutes(pos.dy) / _snapMinutes).round() * _snapMinutes;
+    final start = center
+        .clamp(
+          _startHour * 60,
+          math.max(_startHour * 60, _endHour * 60 - _minDurationMinutes),
+        )
+        .toInt();
+    final dayIndex = widget.weekStart != null
+        ? (pos.dx / _lastColumnWidth)
+              .floor()
+              .clamp(0, _weekTotalDays - 1)
+              .toInt()
+        : 0;
+    setState(() {
+      _isSelecting = true;
+      _selDayIndex = dayIndex;
+      _selStartMinutes = start;
+      _selEndMinutes = math.min(_endHour * 60, start + 60);
+      _showDraftForm = false;
+    });
+  }
+
+  void _onSelectionLongPressMove(LongPressMoveUpdateDetails details) {
+    if (!_isSelecting) return;
+    final end =
+        (_localDyToMinutes(details.localPosition.dy) / _snapMinutes).round() *
+        _snapMinutes;
+    setState(() {
+      _selEndMinutes = math.min(
+        _endHour * 60,
+        math.max(_selStartMinutes + _minDurationMinutes, end),
+      );
+    });
+  }
+
+  void _onSelectionLongPressEnd(LongPressEndDetails details) {
+    if (!_isSelecting) return;
+    setState(() {
+      _isSelecting = false;
+      _showDraftForm = true;
+      _draftFormAbove = _shouldPlaceFormAbove();
+    });
+  }
+
+  bool _shouldPlaceFormAbove() {
+    if (widget.weekStart == null) return true;
+    final ghost = _selectionGhostRect();
+    final candidate = Rect.fromLTWH(
+      ghost.right + 12,
+      ghost.top,
+      _kDraftFormWidth,
+      _kDraftFormHeight,
+    );
+    return widget.events.any((event) {
+      final r = _eventRect(event);
+      return r != null && candidate.overlaps(r);
+    });
+  }
+
+  DateTime _selectionStartDateTime() {
+    final day = widget.weekStart != null
+        ? _addDays(_visibleStart(widget.weekStart!), _selDayIndex)
+        : _dateOnly(widget.anchorDate ?? DateTime.now());
+    return DateTime(
+      day.year,
+      day.month,
+      day.day,
+      _selStartMinutes ~/ 60,
+      _selStartMinutes % 60,
+    );
+  }
+
+  void _clearDraftForm() {
+    setState(() {
+      _isSelecting = false;
+      _showDraftForm = false;
+      _draftFormAbove = false;
+      _selDayIndex = 0;
+      _selStartMinutes = 0;
+      _selEndMinutes = 0;
+    });
+  }
+
+  Widget _buildSelectionGhost() {
+    if (!_isSelecting && !_showDraftForm) return const SizedBox.shrink();
+    final rect = _selectionGhostRect();
+    final start = TimeOfDay(
+      hour: (_selStartMinutes ~/ 60) % 24,
+      minute: _selStartMinutes % 60,
+    );
+    final end = TimeOfDay(
+      hour: (_selEndMinutes ~/ 60) % 24,
+      minute: _selEndMinutes % 60,
+    );
+    return Positioned(
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+      child: IgnorePointer(
+        child: Container(
+          decoration: BoxDecoration(
+            color: _orange.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _orange.withValues(alpha: 0.7)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Text(
+                '${_formatTime(start)} – ${_formatTime(end)}',
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDraftFormOverlay() {
+    if (!_showDraftForm) return const SizedBox.shrink();
+    final ghost = _selectionGhostRect();
+    final vOffset = _verticalController.hasClients
+        ? _verticalController.offset
+        : 0.0;
+    final hOffset = _horizontalController.hasClients
+        ? _horizontalController.offset
+        : 0.0;
+    final topPad = widget.weekStart == null ? widget.topPadding : 200.0;
+
+    final ghostLeft = widget.weekStart == null
+        ? ghost.left
+        : _leftLabelWidth + ghost.left - hOffset;
+    final ghostTop = topPad + ghost.top - vOffset;
+
+    double left;
+    double top;
+    if (widget.weekStart == null || _draftFormAbove) {
+      left = widget.weekStart == null
+          ? ghostLeft
+          : ghostLeft + ghost.width - _kDraftFormWidth;
+      top = ghostTop - _kDraftFormHeight - 12;
+    } else {
+      left = ghostLeft + ghost.width + 12;
+      top = ghostTop;
+    }
+
+    final maxLeft = math.max(0.0, _lastMaxWidth - _kDraftFormWidth - 8);
+    left = left.clamp(8.0, maxLeft);
+    final maxTop = _verticalController.hasClients
+        ? math.max(
+            0.0,
+            _verticalController.position.viewportDimension -
+                _kDraftFormHeight -
+                8,
+          )
+        : 0.0;
+    top = top.clamp(8.0, maxTop);
+
+    final start = _selectionStartDateTime();
+    final end = start.add(Duration(minutes: _selEndMinutes - _selStartMinutes));
+
+    return Positioned(
+      left: left,
+      top: top,
+      child: MiniTaskForm(
+        width: _kDraftFormWidth,
+        start: start,
+        end: end,
+        projects: widget.taskFormProjects,
+        onSubmit: (task) {
+          widget.onSubmitNewTask?.call(task);
+          _clearDraftForm();
+        },
+        onCancel: _clearDraftForm,
+      ),
+    );
   }
 
   bool get _isInteracting =>
@@ -251,6 +510,9 @@ class _TimelineBodyState extends State<TimelineBody>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.weekStart == widget.weekStart) {
       _pendingHeaderWeekChange = false;
+    } else {
+      _showDraftForm = false;
+      _isSelecting = false;
     }
   }
 
@@ -921,6 +1183,7 @@ class _TimelineBodyState extends State<TimelineBody>
 
     _lastColumnWidth = columnWidth;
     _lastWeekStart = weekStart;
+    _lastMaxWidth = maxWidth;
     final layouts = _computeWeekLayout(events, weekStart);
 
     return Stack(
@@ -967,27 +1230,34 @@ class _TimelineBodyState extends State<TimelineBody>
                           child: SizedBox(
                             width: _weekTotalDays * columnWidth,
                             height: _totalHeight + 24,
-                            child: Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                ..._buildWeekColumnBackground(
-                                  columnWidth,
-                                  weekStart,
-                                ),
-                                ..._buildWeekHourGridlines(),
-                                ...events.map((event) {
-                                  final layout =
-                                      layouts[event.task.id] ??
-                                      const _EventLayoutInfo(0, 1);
-                                  return _buildDraggableEvent(
-                                    event,
-                                    layout,
-                                    viewportWidth,
-                                    weekColumnWidth: columnWidth,
-                                  );
-                                }),
-                                _buildWeekNowLine(weekStart, columnWidth),
-                              ],
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onLongPressStart: _onSelectionLongPressStart,
+                              onLongPressMoveUpdate: _onSelectionLongPressMove,
+                              onLongPressEnd: _onSelectionLongPressEnd,
+                              child: Stack(
+                                clipBehavior: Clip.none,
+                                children: [
+                                  ..._buildWeekColumnBackground(
+                                    columnWidth,
+                                    weekStart,
+                                  ),
+                                  ..._buildWeekHourGridlines(),
+                                  ...events.map((event) {
+                                    final layout =
+                                        layouts[event.task.id] ??
+                                        const _EventLayoutInfo(0, 1);
+                                    return _buildDraggableEvent(
+                                      event,
+                                      layout,
+                                      viewportWidth,
+                                      weekColumnWidth: columnWidth,
+                                    );
+                                  }),
+                                  _buildWeekNowLine(weekStart, columnWidth),
+                                  _buildSelectionGhost(),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -1023,45 +1293,67 @@ class _TimelineBodyState extends State<TimelineBody>
             onWidthZoomOut: _zoomWidthOut,
           ),
         ),
+        _buildDraftFormOverlay(),
       ],
     );
   }
 
   Widget _buildDayView(List<TaskEvent> events, double maxWidth) {
     final availableWidth = math.max(0.0, maxWidth - _leftLabelWidth - 24.0);
+    _lastDayViewWidth = availableWidth;
+    _lastMaxWidth = maxWidth;
     final layouts = _computeLayout(events);
 
-    return Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: _handlePinchPointerDown,
-      onPointerMove: _handlePinchPointerMove,
-      onPointerUp: _handlePinchPointerUp,
-      onPointerCancel: _handlePinchPointerCancel,
-      onPointerPanZoomStart: _handlePanZoomStart,
-      onPointerPanZoomUpdate: _handlePanZoomUpdate,
-      onPointerPanZoomEnd: _handlePanZoomEnd,
-      onPointerSignal: _handlePointerSignal,
-      child: SingleChildScrollView(
-        key: _verticalScrollKey,
-        controller: _verticalController,
-        physics: _verticalPhysics(),
-        padding: EdgeInsets.only(top: widget.topPadding),
-        child: SizedBox(
-          height: _totalHeight + 24,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              ..._buildHourRows(),
-              ...events.map((event) {
-                final layout =
-                    layouts[event.task.id] ?? const _EventLayoutInfo(0, 1);
-                return _buildDraggableEvent(event, layout, availableWidth);
-              }),
-              _buildNowLine(),
-            ],
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: _handlePinchPointerDown,
+          onPointerMove: _handlePinchPointerMove,
+          onPointerUp: _handlePinchPointerUp,
+          onPointerCancel: _handlePinchPointerCancel,
+          onPointerPanZoomStart: _handlePanZoomStart,
+          onPointerPanZoomUpdate: _handlePanZoomUpdate,
+          onPointerPanZoomEnd: _handlePanZoomEnd,
+          onPointerSignal: _handlePointerSignal,
+          child: SingleChildScrollView(
+            key: _verticalScrollKey,
+            controller: _verticalController,
+            physics: _verticalPhysics(),
+            padding: EdgeInsets.only(top: widget.topPadding),
+            child: SizedBox(
+              width: maxWidth,
+              height: _totalHeight + 24,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onLongPressStart: _onSelectionLongPressStart,
+                onLongPressMoveUpdate: _onSelectionLongPressMove,
+                onLongPressEnd: _onSelectionLongPressEnd,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    ..._buildHourRows(),
+                    ...events.map((event) {
+                      final layout =
+                          layouts[event.task.id] ??
+                          const _EventLayoutInfo(0, 1);
+                      return _buildDraggableEvent(
+                        event,
+                        layout,
+                        availableWidth,
+                      );
+                    }),
+                    _buildNowLine(),
+                    _buildSelectionGhost(),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
-      ),
+        _buildDraftFormOverlay(),
+      ],
     );
   }
   // --- UI Builders ---

@@ -10,7 +10,9 @@ class GlassPanel extends StatelessWidget {
   final Color? borderColor;
   final double blurLevel;
   final bool hasBlur;
-  const GlassPanel({
+  final Color? color; 
+  const GlassPanel(
+    {
     super.key,
     required this.child,
     this.padding,
@@ -18,6 +20,7 @@ class GlassPanel extends StatelessWidget {
     this.borderColor,
     this.blurLevel = 8,
     this.hasBlur = true,
+    this.color,
   });
 
   @override
@@ -26,7 +29,7 @@ class GlassPanel extends StatelessWidget {
       padding: padding,
       decoration: BoxDecoration(
         color: blurAllowed
-            ? AppColors.surfaceGlass
+            ? color ?? AppColors.surfaceGlass
             : AppColors.surfaceContainerLow.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(

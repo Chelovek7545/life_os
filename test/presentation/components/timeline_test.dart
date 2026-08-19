@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:life_os/features/tasks/presentation/components/mini_task_form.dart';
 import 'package:life_os/features/tasks/presentation/components/timeline.dart';
 
 import '../../test_helpers.dart';
@@ -312,7 +313,8 @@ void main() {
         // Should still render hour grid
         expect(find.text('00:00'), findsOneWidget);
         expect(find.text('24:00'), findsOneWidget);
-      });      testWidgets('renders grid lines for each hour', (tester) async {
+      });
+      testWidgets('renders grid lines for each hour', (tester) async {
         await tester.pumpWidget(
           createTestWidget(
             child: TimelineBody(
@@ -341,11 +343,12 @@ void main() {
         DateTime? anchorDate,
         ValueChanged<DateTime>? onWeekChange,
         void Function(
-          Task,
-          {int? startMinutes,
+          Task, {
+          int? startMinutes,
           int? durationMinutes,
-          DateTime? newDate}
-        )? onEventChanged,
+          DateTime? newDate,
+        })?
+        onEventChanged,
       }) {
         return createTestWidget(
           child: TimelineBody(
@@ -434,8 +437,7 @@ void main() {
         await tester.pumpWidget(
           weekBody(
             events: [event],
-            onEventChanged: (task,
-                {startMinutes, durationMinutes, newDate}) {
+            onEventChanged: (task, {startMinutes, durationMinutes, newDate}) {
               newStart = startMinutes;
               receivedNewDate = newDate;
             },
@@ -544,8 +546,7 @@ void main() {
         expect(before - after, closeTo(offset, 1));
       });
 
-      testWidgets(
-          'week stays day-aligned when side panel width toggles '
+      testWidgets('week stays day-aligned when side panel width toggles '
           'during a week-edge switch', (tester) async {
         tester.view.physicalSize = const Size(830, 4200);
         tester.view.devicePixelRatio = 1.0;
@@ -691,6 +692,203 @@ void main() {
 
         // Hour height goes 140 -> ~116.67, so hour 9 moves up
         expect(before - after, closeTo(9 * 140 * (1 - 1 / 1.2), 1));
+      });
+    });
+
+    group('Task creation via long-press selection', () {
+      final monday = DateTime(2026, 8, 10);
+
+      Widget buildBody({
+        List<TaskEvent> events = const [],
+        DateTime? weekStart,
+        DateTime? anchorDate,
+        Future<void> Function(Task task)? onSubmitNewTask,
+      }) {
+        return createTestWidget(
+          child: TimelineBody(
+            events: events,
+            topPadding: 0,
+            weekStart: weekStart,
+            anchorDate: anchorDate ?? weekStart ?? monday,
+            onWeekChange: (_) {},
+            onEventChanged: _noopEventChanged,
+            onToggleTask: (_) {},
+            onSubmitNewTask: onSubmitNewTask,
+          ),
+        );
+      }
+
+      double horizontalOffset(WidgetTester tester) {
+        return tester
+            .widgetList<SingleChildScrollView>(
+              find.byType(SingleChildScrollView),
+            )
+            .firstWhere(
+              (w) =>
+                  w.scrollDirection == Axis.horizontal && w.controller != null,
+            )
+            .controller!
+            .offset;
+      }
+
+      double verticalOffset(WidgetTester tester) {
+        return tester
+            .widgetList<SingleChildScrollView>(
+              find.byType(SingleChildScrollView),
+            )
+            .firstWhere(
+              (w) => w.scrollDirection == Axis.vertical && w.controller != null,
+            )
+            .controller!
+            .offset;
+      }
+
+      testWidgets('long-press on empty week area opens mini form and '
+          'creates a task on submit', (tester) async {
+        tester.view.physicalSize = const Size(1600, 4200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        Task? submitted;
+        await tester.pumpWidget(
+          buildBody(
+            weekStart: monday,
+            onSubmitNewTask: (task) async => submitted = task,
+          ),
+        );
+        await tester.pump();
+
+        // Monday of the current week (buffer index 7).
+        const columnWidth = (1600 - 52) / 7.0;
+        final h = horizontalOffset(tester);
+        final v = verticalOffset(tester);
+        final screenX = 52 + (7 * columnWidth + columnWidth / 2) - h;
+        final screenY = 200 + (9 * 140 + 70) - v;
+
+        final gesture = await tester.startGesture(Offset(screenX, screenY));
+        await tester.pump(const Duration(milliseconds: 600));
+        await gesture.moveBy(const Offset(0, 140));
+        await tester.pump(const Duration(milliseconds: 50));
+        await gesture.up();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.byType(MiniTaskForm), findsOneWidget);
+
+        await tester.enterText(
+          find.byKey(const ValueKey('mini_task_title')),
+          'Gym',
+        );
+        await tester.tap(find.text('Create'));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.byType(MiniTaskForm), findsNothing);
+        expect(submitted, isNotNull);
+        expect(submitted!.title, 'Gym');
+        final startsAt = submitted!.startsAt!;
+        expect(DateTime(startsAt.year, startsAt.month, startsAt.day), monday);
+        expect(
+          submitted!.endsAt!.difference(startsAt),
+          const Duration(hours: 1),
+        );
+      });
+
+      testWidgets('long-press on an existing event does not open mini form', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(1600, 4200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final event = TaskEvent(
+          task: createMockTask(),
+          title: 'Busy',
+          startMinutes: 540,
+          durationMinutes: 60,
+          date: DateTime(2026, 8, 10, 9), // Monday 9:00
+        );
+
+        await tester.pumpWidget(buildBody(weekStart: monday, events: [event]));
+        await tester.pump();
+
+        const columnWidth = (1600 - 52) / 7.0;
+        final h = horizontalOffset(tester);
+        final v = verticalOffset(tester);
+        final screenX = 52 + (7 * columnWidth + columnWidth / 2) - h;
+        final screenY = 200 + ((540 + 30) / 60 * 140) - v;
+
+        final gesture = await tester.startGesture(Offset(screenX, screenY));
+        await tester.pump(const Duration(milliseconds: 600));
+        await gesture.up();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.byType(MiniTaskForm), findsNothing);
+      });
+
+      testWidgets('long-press in day view creates task on the anchor date', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(1600, 4200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final anchor = DateTime(2026, 8, 12);
+        Task? submitted;
+        await tester.pumpWidget(
+          buildBody(
+            anchorDate: anchor,
+            onSubmitNewTask: (task) async => submitted = task,
+          ),
+        );
+        await tester.pump();
+
+        final gesture = await tester.startGesture(const Offset(500, 900));
+        await tester.pump(const Duration(milliseconds: 600));
+        await gesture.moveBy(const Offset(0, 140));
+        await tester.pump(const Duration(milliseconds: 50));
+        await gesture.up();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.byType(MiniTaskForm), findsOneWidget);
+
+        await tester.tap(find.text('Create'));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(submitted, isNotNull);
+        final startsAt = submitted!.startsAt!;
+        expect(DateTime(startsAt.year, startsAt.month, startsAt.day), anchor);
+        expect(
+          submitted!.endsAt!.difference(startsAt),
+          const Duration(hours: 1),
+        );
+      });
+
+      testWidgets('cancel button closes mini form and clears ghost', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(1600, 4200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(buildBody(weekStart: monday));
+        await tester.pump();
+
+        const columnWidth = (1600 - 52) / 7.0;
+        final h = horizontalOffset(tester);
+        final v = verticalOffset(tester);
+        final screenX = 52 + (7 * columnWidth + columnWidth / 2) - h;
+        final screenY = 200 + (9 * 140 + 70) - v;
+
+        final gesture = await tester.startGesture(Offset(screenX, screenY));
+        await tester.pump(const Duration(milliseconds: 600));
+        await gesture.up();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.byType(MiniTaskForm), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.close));
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(find.byType(MiniTaskForm), findsNothing);
       });
     });
   });
