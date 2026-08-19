@@ -13,6 +13,8 @@ import 'package:life_os/core/ui/fixed_fade_mask.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/core/calendar/calendar.dart';
+import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 const _orange = Color(0xFFFF5C00);
@@ -92,6 +94,8 @@ class TimelineBody extends StatefulWidget {
     this.weekStart,
     this.anchorDate,
     this.onWeekChange,
+    this.onDraftSubmitted,
+    this.useReusableWeekCalendar = false,
   });
 
   final List<TaskEvent> events;
@@ -99,6 +103,12 @@ class TimelineBody extends StatefulWidget {
   final DateTime? weekStart;
   final DateTime? anchorDate;
   final ValueChanged<DateTime>? onWeekChange;
+  final void Function(String title, DateTime start, DateTime end)?
+  onDraftSubmitted;
+
+  /// Enables the reusable CalendarView implementation for the desktop week UI.
+  /// Kept opt-in so the legacy day timeline remains available on narrow layouts.
+  final bool useReusableWeekCalendar;
   final void Function(
     Task task, {
     int? startMinutes,
@@ -132,6 +142,7 @@ class _TimelineBodyState extends State<TimelineBody>
 
   late final ScrollController _verticalController;
   late final ScrollController _horizontalController;
+  final CalendarController _calendarController = CalendarController();
   final GlobalKey _verticalScrollKey = GlobalKey();
 
   // Pinch & Zoom State
@@ -242,6 +253,7 @@ class _TimelineBodyState extends State<TimelineBody>
     _zoomAnimationController.dispose();
     _verticalController.dispose();
     _horizontalController.dispose();
+    _calendarController.dispose();
     super.dispose();
   }
 
@@ -849,9 +861,242 @@ class _TimelineBodyState extends State<TimelineBody>
             })
             .toList(growable: false);
 
+        if (isWeekMode && widget.useReusableWeekCalendar) {
+          return _buildReusableWeekCalendar();
+        }
         if (isWeekMode) return _buildWeekView(displayEvents, maxWidth);
         return _buildDayView(displayEvents, maxWidth);
       },
+    );
+  }
+
+  Widget _buildReusableWeekCalendar() {
+    final initialDate = widget.weekStart!;
+    final calendarEvents = widget.events
+        .where((event) => event.date != null)
+        .map(
+          (event) => CalendarEvent<TaskEvent>(
+            id: event.task.id,
+            data: event,
+            start: DateTime(
+              event.date!.year,
+              event.date!.month,
+              event.date!.day,
+              event.startMinutes ~/ 60,
+              event.startMinutes % 60,
+            ),
+            end: DateTime(
+              event.date!.year,
+              event.date!.month,
+              event.date!.day,
+              event.endMinutes ~/ 60,
+              event.endMinutes % 60,
+            ),
+          ),
+        )
+        .toList(growable: false);
+    final calendar = CalendarView<TaskEvent>(
+      controller: _calendarController,
+      events: calendarEvents,
+      initialDate: initialDate,
+      initialHour: DateTime.now().hour,
+      initialHourHeight: _defaultHourHeight,
+      minHourHeight: _minHourHeight,
+      maxHourHeight: _maxHourHeight,
+      initialDayWidth: _minDayWidth,
+      minDayWidth: _minDayWidth,
+      maxDayWidth: 440,
+      snapDuration: const Duration(minutes: _snapMinutes),
+      backgroundColor: Colors.transparent,
+      gridLineColor: const Color(0xFF2A2A2A),
+      dayHeaderBuilder: (context, date, isToday) => Expanded(
+        child: _TimelineDayHeader(
+          date: date,
+          isToday: isToday,
+          isAnchor: _isSameDay(date, widget.anchorDate ?? date),
+        ),
+      ),
+      timeLabelBuilder: (context, hour) => Text(
+        '${hour.toString().padLeft(2, '0')}:00',
+        style: const TextStyle(color: Colors.white38, fontSize: 11),
+      ),
+      eventBuilder: (context, calendarEvent, layout) {
+        final event = calendarEvent.data;
+        final accent = event.accentColor;
+        final isInteracting = false;
+        return AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                padding: const EdgeInsets.fromLTRB(20, 2, 10, 2),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      if (event.isCompleted)
+                        Colors.white.withOpacity(0.05)
+                      else
+                        accent.withOpacity(0.22),
+                      Colors.white.withOpacity(0.06),
+                      Colors.black.withOpacity(0.01),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: isInteracting
+                        ? accent.withOpacity(0.95)
+                        : Colors.white.withOpacity(
+                            event.isCompleted ? 0.08 : 0.14,
+                          ),
+                    width: isInteracting ? 1.5 : 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(
+                        isInteracting ? 0.35 : 0.18,
+                      ),
+                      blurRadius: isInteracting ? 22 : 10,
+                      offset: const Offset(0, 8),
+                    ),
+                    if (isInteracting)
+                      BoxShadow(
+                        color: accent.withOpacity(0.25),
+                        blurRadius: 18,
+                      ),
+                  ],
+                ),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final showTitle =   constraints.maxWidth > 40;
+                    final showTime =  constraints.maxWidth > 70;
+                    final showDragHandle =
+                         constraints.maxWidth > 88;
+
+                    return Row(
+                      children: [
+                        CheckDot(
+                          isCompleted: event.isCompleted,
+                          onCheckChanged: (){},
+                          isSelected: false,
+                          isOverdue: false,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (showTitle)
+                                Text(
+                                  event.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    decoration: event.isCompleted
+                                        ? TextDecoration.lineThrough
+                                        : TextDecoration.none,
+                                    decorationColor: accent.withOpacity(0.8),
+                                    decorationThickness: 1.6,
+                                    color: event.isCompleted
+                                        ? Colors.white.withOpacity(0.65)
+                                        : Colors.white,
+                                    fontWeight: event.isCompleted
+                                        ? FontWeight.w400
+                                        : FontWeight.w600,
+                                    fontSize: 13.5,
+                                  ),
+                                ),
+                              // if (showTime) ...[
+                              //   const SizedBox(height: 2),
+                              //   Text(
+                              //     '${_formatTime(start)} - ${_formatTime(end)}',
+                              //     maxLines: 1,
+                              //     overflow: TextOverflow.ellipsis,
+                              //     style: TextStyle(
+                              //       color: Colors.white.withOpacity(
+                              //         isInteracting ? 0.8 : 0.55,
+                              //       ),
+                              //       fontSize: 11.5,
+                              //       fontWeight: isInteracting
+                              //           ? FontWeight.w600
+                              //           : FontWeight.normal,
+                              //     ),
+                              //   ),
+                              // ],
+                            ],
+                          ),
+                        ),
+                        if (showDragHandle)
+                          const Icon(
+                            Icons.drag_indicator,
+                            color: Colors.white24,
+                            size: 16,
+                          ),
+                      ],
+                    );
+                  },
+                ),
+              );
+      },
+         
+      ghostBuilder: (context, draft) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: _orange.withOpacity(0.22),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _orange.withOpacity(0.8)),
+        ),
+      ),
+      createEventFormBuilder: (context, draft, dismiss) => _TimelineDraftForm(
+        draft: draft,
+        onDismiss: dismiss,
+        onSubmit: (title) {
+          widget.onDraftSubmitted?.call(title, draft.start, draft.end);
+          dismiss();
+        },
+      ),
+      onEventMoved: (event, start, end) => widget.onEventChanged(
+        event.data.task,
+        startMinutes: start.hour * 60 + start.minute,
+        durationMinutes: end.difference(start).inMinutes,
+        newDate: _dateOnly(start),
+      ),
+      onEventResized: (event, start, end) => widget.onEventChanged(
+        event.data.task,
+        durationMinutes: end.difference(start).inMinutes,
+      ),
+      onEventTapped: (event) => widget.onToggleTask(event.data.task),
+      onDateChanged: (date) => widget.onWeekChange?.call(getWeekStart(date)),
+    );
+    final weekEnd = _addDays(initialDate, 6);
+    return Column(
+      children: [
+        SizedBox(
+          height: widget.topPadding,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                tooltip: 'Previous week',
+                onPressed: _calendarController.previousWeek,
+                icon: const Icon(Icons.chevron_left, color: Colors.white70),
+              ),
+              Text(
+                '${_twoDigit(initialDate.day)}.${_twoDigit(initialDate.month)} – ${_twoDigit(weekEnd.day)}.${_twoDigit(weekEnd.month)}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Next week',
+                onPressed: _calendarController.nextWeek,
+                icon: const Icon(Icons.chevron_right, color: Colors.white70),
+              ),
+            ],
+          ),
+        ),
+        Expanded(child: calendar),
+      ],
     );
   }
 
@@ -892,8 +1137,6 @@ class _TimelineBodyState extends State<TimelineBody>
     return Stack(
       //crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-
-
         // ─── Таймлайн: зум ВЫСОТЫ ───
         FixedVerticalFadeMask(
           topFade: 200,
@@ -967,7 +1210,7 @@ class _TimelineBodyState extends State<TimelineBody>
             ),
           ),
         ),
-                // ─── Шапка дней: зум ШИРИНЫ ───
+        // ─── Шапка дней: зум ШИРИНЫ ───
         Listener(
           behavior: HitTestBehavior.opaque,
           onPointerDown: _handleWidthPinchPointerDown,
@@ -1390,7 +1633,7 @@ class _EventTile extends StatelessWidget {
                     final showTime = height > 54 && constraints.maxWidth > 70;
                     final showDragHandle =
                         height > 36 && constraints.maxWidth > 88;
-              
+
                     return Row(
                       children: [
                         CheckDot(
@@ -1459,31 +1702,31 @@ class _EventTile extends StatelessWidget {
             ),
           ),
         ),
-Positioned(
-  left: 0,
-  right: 0,
-  bottom: 0,
-  height: _resizeHandleHeight,
-  child: GestureDetector(
-    behavior: HitTestBehavior.translucent,
-    dragStartBehavior: DragStartBehavior.down,
-    onVerticalDragStart: onResizeStart,
-    onVerticalDragUpdate: onResizeUpdate,
-    onVerticalDragEnd: onResizeEnd,
-    child: Container(
-      color: Colors.transparent,
-      alignment: Alignment.center,
-      child: Container(
-        width: 34,
-        height: 4,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(isInteracting ? 0.55 : 0.16),
-          borderRadius: BorderRadius.circular(999),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: _resizeHandleHeight,
+          child: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            dragStartBehavior: DragStartBehavior.down,
+            onVerticalDragStart: onResizeStart,
+            onVerticalDragUpdate: onResizeUpdate,
+            onVerticalDragEnd: onResizeEnd,
+            child: Container(
+              color: Colors.transparent,
+              alignment: Alignment.center,
+              child: Container(
+                width: 34,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(isInteracting ? 0.55 : 0.16),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+          ),
         ),
-      ),
-    ),
-  ),
-),
         Positioned(
           top: 8,
           bottom: 8,
@@ -1506,7 +1749,7 @@ Positioned(
   }
 }
 
-class _WeekGridHeader extends StatefulWidget {
+class _WeekGridHeader extends StatelessWidget {
   const _WeekGridHeader({
     required this.weekStart,
     required this.anchorDate,
@@ -1531,70 +1774,14 @@ class _WeekGridHeader extends StatefulWidget {
   final VoidCallback onWidthZoomIn;
   final VoidCallback onWidthZoomOut;
 
-  @override
-  State<_WeekGridHeader> createState() => _WeekGridHeaderState();
-}
-
-class _WeekGridHeaderState extends State<_WeekGridHeader>
-    with SingleTickerProviderStateMixin {
-  // Анимация плавного "перетекания" выделенной недели при её смене.
-  // Неделя описывается непрерывным центром окна в абсолютных днях.
-  late final AnimationController _weekShiftController;
-  double _centerFrom = 0;
-  double _centerTo = 0;
-
-  static int _absDay(DateTime date) => _daysBetween(DateTime(2000), date);
-
-  double get _currentCenterAbs =>
-      _centerFrom +
-      (_centerTo - _centerFrom) *
-          Curves.easeOutCubic.transform(_weekShiftController.value);
-
-  // Насколько день (по абсолютному номеру) принадлежит анимированному
-  // недельному окну шириной 7 дней: 0..1.
-  double _weekMembership(double dayAbs) {
-    final overlap = math.min(dayAbs + 0.5, _currentCenterAbs + 3.5) -
-        math.max(dayAbs - 0.5, _currentCenterAbs - 3.5);
-    return overlap.clamp(0.0, 1.0).toDouble();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _weekShiftController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 360),
-    );
-    final center = _absDay(widget.weekStart) + 3.0;
-    _centerFrom = center;
-    _centerTo = center;
-    _weekShiftController.value = 1.0;
-  }
-
-  @override
-  void didUpdateWidget(covariant _WeekGridHeader oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.weekStart != widget.weekStart) {
-      _centerFrom = _currentCenterAbs;
-      _centerTo = _absDay(widget.weekStart) + 3.0;
-      _weekShiftController.forward(from: 0.0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _weekShiftController.dispose();
-    super.dispose();
-  }
-
   Future<void> _pickDate(BuildContext context) async {
     final date = await showDatePicker(
       context: context,
-      initialDate: widget.anchorDate,
+      initialDate: anchorDate,
       firstDate: DateTime(2000),
       lastDate: DateTime(2140),
     );
-    if (date != null) widget.onWeekChange?.call(date);
+    if (date != null) onWeekChange?.call(date);
   }
 
   Widget _glassIconButton(
@@ -1623,19 +1810,19 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
   @override
   Widget build(BuildContext context) {
     final today = _dateOnly(DateTime.now());
-    final weekEnd = _addDays(widget.weekStart, 6);
-    final visibleStart = _addDays(widget.weekStart, -_weekBufferDays);
-    final hasNav = widget.onWeekChange != null;
+    final weekEnd = _addDays(weekStart, 6);
+    final visibleStart = _addDays(weekStart, -_weekBufferDays);
+    final hasNav = onWeekChange != null;
     final isCurrentWeek =
-        _isSameDay(today, widget.weekStart) ||
+        _isSameDay(today, weekStart) ||
         _isSameDay(today, weekEnd) ||
-        (today.isAfter(widget.weekStart) && today.isBefore(weekEnd));
+        (today.isAfter(weekStart) && today.isBefore(weekEnd));
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(height: widget.topPadding),
+        SizedBox(height: topPadding),
         if (hasNav)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
@@ -1647,7 +1834,7 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
                     _glassIconButton(
                       Icons.chevron_left,
                       'Previous week',
-                      () => widget.onWeekChange!(_addDays(widget.weekStart, -7)),
+                      () => onWeekChange!(_addDays(weekStart, -7)),
                     ),
                     const SizedBox(width: 10),
                     _GlassBox(
@@ -1666,9 +1853,7 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 AnimatedSwitcher(
-                                  duration: const Duration(
-                                    milliseconds: 200,
-                                  ),
+                                  duration: const Duration(milliseconds: 200),
                                   transitionBuilder: (child, animation) {
                                     return FadeTransition(
                                       opacity: animation,
@@ -1681,9 +1866,7 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
                                   child: isCurrentWeek
                                       ? Text(
                                           'THIS WEEK',
-                                          key: const ValueKey(
-                                            'this_week_text',
-                                          ),
+                                          key: const ValueKey('this_week_text'),
                                           style: AppTypography.codeLabel,
                                         )
                                       : const SizedBox.shrink(
@@ -1692,7 +1875,7 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  '${_twoDigit(widget.weekStart.day)}.${_twoDigit(widget.weekStart.month)} – ${_twoDigit(weekEnd.day)}.${_twoDigit(weekEnd.month)}',
+                                  '${_twoDigit(weekStart.day)}.${_twoDigit(weekStart.month)} – ${_twoDigit(weekEnd.day)}.${_twoDigit(weekEnd.month)}',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
@@ -1709,10 +1892,8 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
                     _glassIconButton(
                       Icons.chevron_right,
                       'Next week',
-                      () => widget.onWeekChange!(_addDays(widget.weekStart, 7)),
-                      
+                      () => onWeekChange!(_addDays(weekStart, 7)),
                     ),
-        
                   ],
                 ),
               ),
@@ -1724,18 +1905,15 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
             right: 0,
             bottom: 10,
           ),
-child: SizedBox(
+          child: SizedBox(
             height: 58,
             child: ClipRect(
               child: AnimatedBuilder(
-                animation: Listenable.merge([
-                  widget.horizontalController,
-                  _weekShiftController,
-                ]),
+                animation: horizontalController,
                 builder: (context, child) {
-                  final offset = widget.horizontalController.hasClients
-                      ? widget.horizontalController.offset
-                      : _weekBufferDays * widget.columnWidth;
+                  final offset = horizontalController.hasClients
+                      ? horizontalController.offset
+                      : _weekBufferDays * columnWidth;
                   return Stack(
                     clipBehavior: Clip.hardEdge,
                     children: [
@@ -1743,126 +1921,118 @@ child: SizedBox(
                         left: -offset,
                         top: 0,
                         bottom: 0,
-                        width: _weekTotalDays * widget.columnWidth,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: List.generate(_weekTotalDays, (index) {
-                            final date = _addDays(visibleStart, index);
-                            final isToday = _isSameDay(date, today);
-                            final isAnchor = _isSameDay(date, widget.anchorDate);
-                            final membership = _weekMembership(
-                              _absDay(date).toDouble(),
-                            );
-
-                            return SizedBox(
-                              width: widget.columnWidth,
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(12),
-                                  onTap: hasNav
-                                      ? () => widget.onWeekChange!(date)
-                                      : null,
-                                  child: Container(
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 2,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(
-                                        0.04 + 0.16 * membership,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: GlassPanel(
-                                      borderColor: isAnchor
-                                          ?  Colors.white.withOpacity(
-                                                0.6,
-                                             )
-    
-                                          : null,
-                                      borderRadius: 12,
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            child: Padding(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 2,
-                                              ),
-                                              child: Text(
-                                                getWeekDayName(
-                                                  date.weekday,
-                                                ).toUpperCase(),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  color: isToday
-                                                      ? _orange
-                                                      : Colors.white.withOpacity(
-                                                          0.55,
-                                                        ),
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w700,
-                                                  letterSpacing: 0.6,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Container(
-                                            width: 30,
-                                            height: 30,
-                                            alignment: Alignment.center,
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              gradient: isToday
-                                                  ? LinearGradient(
-                                                      colors: [
-                                                        _orange,
-                                                        _orange.withOpacity(0.85),
-                                                      ],
-                                                    )
-                                                  : null,
-                                              boxShadow: isToday
-                                                  ? [
-                                                      BoxShadow(
-                                                        color: _orange.withOpacity(
-                                                          0.35,
-                                                        ),
-                                                        blurRadius: 10,
-                                                        offset: const Offset(0, 3),
-                                                      ),
-                                                    ]
-                                                  : null,
-                                            ),
-                                            child: Text(
-                                              '${date.day}',
-                                              style: TextStyle(
-                                                color: isToday
-                                                    ? Colors.black
-                                                    : Colors.white.withOpacity(
-                                                        0.85,
-                                                      ),
-                                                fontWeight: FontWeight.w700,
-                                                fontSize: 13,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          }),
-                        ),
+                        width: _weekTotalDays * columnWidth,
+                        child: child!,
                       ),
                     ],
                   );
                 },
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(_weekTotalDays, (index) {
+                    final date = _addDays(visibleStart, index);
+                    final isToday = _isSameDay(date, today);
+                    final isAnchor = _isSameDay(date, anchorDate);
+                    final inCurrentWeek =
+                        index >= _weekBufferDays &&
+                        index < _weekBufferDays + 7;
+
+                    return SizedBox(
+                      width: columnWidth,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12),
+                          onTap: hasNav
+                              ? () => onWeekChange!(date)
+                              : null,
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 2,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: inCurrentWeek
+                                  ? Colors.white.withOpacity(0.2)
+                                  : Colors.white.withOpacity(0.04),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: GlassPanel(
+                              borderColor: isAnchor
+                                  ? Colors.white.withOpacity(0.6)
+                                  : null,
+                              borderRadius: 12,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 2,
+                                      ),
+                                      child: Text(
+                                        getWeekDayName(
+                                          date.weekday,
+                                        ).toUpperCase(),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: isToday
+                                              ? _orange
+                                              : Colors.white.withOpacity(0.55),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.6,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    width: 30,
+                                    height: 30,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: isToday
+                                          ? LinearGradient(
+                                              colors: [
+                                                _orange,
+                                                _orange.withOpacity(0.85),
+                                              ],
+                                            )
+                                          : null,
+                                      boxShadow: isToday
+                                          ? [
+                                              BoxShadow(
+                                                color: _orange.withOpacity(0.35),
+                                                blurRadius: 10,
+                                                offset: const Offset(0, 3),
+                                              ),
+                                            ]
+                                          : null,
+                                    ),
+                                    child: Text(
+                                      '${date.day}',
+                                      style: TextStyle(
+                                        color: isToday
+                                            ? Colors.black
+                                            : Colors.white.withOpacity(0.85),
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
               ),
             ),
           ),
@@ -2054,6 +2224,221 @@ class _EventLayoutInfo {
   const _EventLayoutInfo(this.leftFactor, this.widthFactor);
   final double leftFactor;
   final double widthFactor;
+}
+
+/// Adapter UI for the reusable calendar. Data and interaction live in
+/// `core/calendar`; this file only preserves the tasks screen visual language.
+class _TimelineDayHeader extends StatelessWidget {
+  const _TimelineDayHeader({
+    required this.date,
+    required this.isToday,
+    required this.isAnchor,
+  });
+  final DateTime date;
+  final bool isToday;
+  final bool isAnchor;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+    child: GlassPanel(
+      borderRadius: 12,
+      borderColor: isAnchor ? Colors.white.withOpacity(0.6) : null,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            getWeekDayName(date.weekday).toUpperCase(),
+            style: TextStyle(
+              color: isToday ? _orange : Colors.white.withOpacity(0.55),
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isToday ? _orange : Colors.transparent,
+            ),
+            child: Text(
+              '${date.day}',
+              style: TextStyle(
+                color: isToday ? Colors.black : Colors.white.withOpacity(0.85),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _ReusableTaskEventTile extends StatelessWidget {
+  const _ReusableTaskEventTile({required this.event});
+  final TaskEvent event;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final accent = event.accentColor;
+      final showDetails =
+          constraints.maxHeight > 50 && constraints.maxWidth > 70;
+      return Container(
+        padding: const EdgeInsets.fromLTRB(15, 5, 8, 5),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          gradient: LinearGradient(
+            colors: [
+              accent.withOpacity(event.isCompleted ? 0.05 : 0.22),
+              Colors.white.withOpacity(0.06),
+              Colors.black.withOpacity(0.01),
+            ],
+          ),
+          border: Border.all(
+            color: Colors.white.withOpacity(event.isCompleted ? 0.08 : 0.14),
+          ),
+        ),
+        child: Row(
+          children: [
+            CheckDot(
+              isCompleted: event.isCompleted,
+              onCheckChanged: () {},
+              isSelected: false,
+              isOverdue: false,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    event.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: event.isCompleted ? Colors.white60 : Colors.white,
+                      decoration: event.isCompleted
+                          ? TextDecoration.lineThrough
+                          : null,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  if (showDetails)
+                    Text(
+                      '${_formatTime(event.startTime)} - ${_formatTime(event.endTime)}',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.55),
+                        fontSize: 11,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+class _TimelineDraftForm extends StatefulWidget {
+  const _TimelineDraftForm({
+    required this.draft,
+    required this.onDismiss,
+    required this.onSubmit,
+  });
+
+  final CalendarDraftEvent draft;
+  final VoidCallback onDismiss;
+  final ValueChanged<String> onSubmit;
+
+  @override
+  State<_TimelineDraftForm> createState() => _TimelineDraftFormState();
+}
+
+class _TimelineDraftFormState extends State<_TimelineDraftForm> {
+  late final TextEditingController _titleController;
+  late final FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController();
+    _focusNode = FocusNode();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _focusNode.requestFocus(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final title = _titleController.text.trim();
+    if (title.isEmpty) return;
+    widget.onSubmit(title);
+  }
+
+  @override
+  Widget build(BuildContext context) => _GlassBox(
+    borderRadius: 14,
+    padding: const EdgeInsets.all(10),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${_formatTime(TimeOfDay.fromDateTime(widget.draft.start))} – ${_formatTime(TimeOfDay.fromDateTime(widget.draft.end))}',
+          style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 11),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _titleController,
+          focusNode: _focusNode,
+          onSubmitted: (_) => _submit(),
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          decoration: const InputDecoration(
+            hintText: 'Task title',
+            isDense: true,
+            border: InputBorder.none,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            TextButton(
+              onPressed: widget.onDismiss,
+              child: const Text('Cancel'),
+            ),
+            const SizedBox(width: 4),
+            FilledButton(
+              onPressed: _submit,
+              style: FilledButton.styleFrom(
+                backgroundColor: _orange,
+                foregroundColor: Colors.black,
+                minimumSize: const Size(64, 32),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
 }
 
 // --- Helpers ---

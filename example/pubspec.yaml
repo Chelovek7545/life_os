@@ -1,0 +1,11 @@
+name: calendar_view_example
+publish_to: none
+environment:
+  sdk: ^3.12.0
+dependencies:
+  flutter:
+    sdk: flutter
+  life_os:
+    path: ../
+flutter:
+  uses-material-design: true
