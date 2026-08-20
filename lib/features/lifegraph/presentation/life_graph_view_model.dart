@@ -12,7 +12,8 @@ import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
-import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';import 'package:life_os/core/ui/graph/graph_view.dart' as gv;
+import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
+import 'package:life_os/core/ui/graph/graph_view.dart' as gv;
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:rxdart/rxdart.dart';
 
@@ -48,8 +49,9 @@ class LifeGraphViewModel {
   bool get initialized => _initialized;
 
   /// Статус автосохранения позиций (для бейджа draft / saving… / saved).
-  final ValueNotifier<GraphSaveStatus> saveStatus =
-      ValueNotifier(GraphSaveStatus.draft);
+  final ValueNotifier<GraphSaveStatus> saveStatus = ValueNotifier(
+    GraphSaveStatus.draft,
+  );
 
   /// Стрим view-нод для [GraphView]. Полный список на каждую эмиссию.
   final BehaviorSubject<List<gv.GraphNode>> _graphSubject =
@@ -57,19 +59,23 @@ class LifeGraphViewModel {
   Stream<List<gv.GraphNode>> get graphStream => _graphSubject.stream;
   List<gv.GraphNode> get graph => _graphSubject.value;
 
-  final BehaviorSubject<List<Sphere>> _spheresSubject = BehaviorSubject<List<Sphere>>.seeded([]);
+  final BehaviorSubject<List<Sphere>> _spheresSubject =
+      BehaviorSubject<List<Sphere>>.seeded([]);
   Stream<List<Sphere>> get spheresStream => _spheresSubject.stream;
   List<Sphere> get spheres => _spheresSubject.value;
 
-  final BehaviorSubject<List<Goal>> _goalsSubject = BehaviorSubject<List<Goal>>.seeded([]);
+  final BehaviorSubject<List<Goal>> _goalsSubject =
+      BehaviorSubject<List<Goal>>.seeded([]);
   Stream<List<Goal>> get goalsStream => _goalsSubject.stream;
   List<Goal> get goals => _goalsSubject.value;
 
-  final BehaviorSubject<List<Project>> _projectsSubject = BehaviorSubject<List<Project>>.seeded([]);
+  final BehaviorSubject<List<Project>> _projectsSubject =
+      BehaviorSubject<List<Project>>.seeded([]);
   Stream<List<Project>> get projectsStream => _projectsSubject.stream;
   List<Project> get projects => _projectsSubject.value;
 
-  final BehaviorSubject<List<Task>> _tasksSubject = BehaviorSubject<List<Task>>.seeded([]);
+  final BehaviorSubject<List<Task>> _tasksSubject =
+      BehaviorSubject<List<Task>>.seeded([]);
   Stream<List<Task>> get tasksStream => _tasksSubject.stream;
   List<Task> get tasks => _tasksSubject.value;
 
@@ -91,38 +97,30 @@ class LifeGraphViewModel {
   /// просматриваемую сферу (либо выбирает первую).
   Future<void> initialize() async {
     _lastSphereId = await positionsRepository.loadLastSphereId();
-    _spheresSubscription = spheresRepository.watchAllSpheres().listen(
-      (spheres) {
-        _spheresSubject.add(spheres);
-        _initialized = true;
-        if (spheres.isNotEmpty && _currentSphereId == null) {
-          final last = _lastSphereId;
-          final target = (last != null && spheres.any((s) => s.id == last))
-              ? last
-              : spheres.first.id;
-          _switchToSphere(target);
-        }
-      },
-      onError: (e) => debugPrint('Spheres stream error: $e'),
-    );
-    _goalsSubscription = goalsRepository.watchAllGoals().listen(
-      (goals) {
-        _goalsSubject.add(goals);
-      },
-      onError: (e) => debugPrint('Goals stream error: $e'),
-    );
-    _tasksSubscription = tasksRepository.watchTasks().listen(
-      (tasks) {
-        _tasksSubject.add(tasks);
-      },
-      onError: (e) => debugPrint('Tasks stream error: $e'),
-    );
-    _projectsSubscription = projectsRepository.watchAllProjects().listen(
-      (projects) {
-        _projectsSubject.add(projects);
-      },
-      onError: (e) => debugPrint('Projects stream error: $e'),
-    );
+    _spheresSubscription = spheresRepository.watchAllSpheres().listen((
+      spheres,
+    ) {
+      _spheresSubject.add(spheres);
+      _initialized = true;
+      if (spheres.isNotEmpty && _currentSphereId == null) {
+        final last = _lastSphereId;
+        final target = (last != null && spheres.any((s) => s.id == last))
+            ? last
+            : spheres.first.id;
+        _switchToSphere(target);
+      }
+    }, onError: (e) => debugPrint('Spheres stream error: $e'));
+    _goalsSubscription = goalsRepository.watchAllGoals().listen((goals) {
+      _goalsSubject.add(goals);
+    }, onError: (e) => debugPrint('Goals stream error: $e'));
+    _tasksSubscription = tasksRepository.watchTasks().listen((tasks) {
+      _tasksSubject.add(tasks);
+    }, onError: (e) => debugPrint('Tasks stream error: $e'));
+    _projectsSubscription = projectsRepository.watchAllProjects().listen((
+      projects,
+    ) {
+      _projectsSubject.add(projects);
+    }, onError: (e) => debugPrint('Projects stream error: $e'));
   }
 
   /// Переключает текущую сферу (граф).
@@ -139,13 +137,11 @@ class LifeGraphViewModel {
     _domainNodes = const [];
     _graphSubject.add(const []); // сбрасываем устаревшие данные прошлой сферы
     _graphSubscription?.cancel();
-    _graphSubscription = graphBuilder.watchGraph(sphereId).listen(
-      (nodes) {
-        _domainNodes = nodes;
-        _graphSubject.add(_toViewNodes(nodes));
-      },
-      onError: (e) => debugPrint('Graph stream error: $e'),
-    );
+    _graphSubscription = graphBuilder.watchGraph(sphereId).listen((nodes) {
+      _domainNodes = nodes;
+      _graphSubject.add(_toViewNodes(nodes));
+      
+    }, onError: (e) => debugPrint('Graph stream error: $e'));
   }
 
   Future<void> _loadPositions(String sphereId) async {
@@ -157,7 +153,10 @@ class LifeGraphViewModel {
   }
 
   /// Создаёт новую сферу и переключается на неё.
-  Future<void> createSphere({required String name, String color = '#FFB59C'}) async {
+  Future<void> createSphere({
+    required String name,
+    String color = '#FFB59C',
+  }) async {
     final sphere = Sphere.create(name: name, color: color);
     await spheresRepository.addSphere(sphere);
     await _switchToSphere(sphere.id);
@@ -231,6 +230,21 @@ class LifeGraphViewModel {
         break;
 
       case GraphNodeType.task:
+        // Проект -> подзадача
+        final task = Task.blank().copyWith(
+          title: title,
+          description: description,
+          parentTaskId: Wrapped(parentId),
+          status: TaskStatus.notStarted,
+          dueDate: Wrapped(dueDate),
+          startsAt: Wrapped(startsAt),
+          endsAt: Wrapped(endsAt),
+        );
+        await tasksRepository.addTask(task);
+        _positions[task.id] = newPos;
+        await _scheduleSavePositions();
+        break;
+      case GraphNodeType.subTask:
         // Задача — лист, детей не добавляем
         return;
     }
@@ -247,7 +261,9 @@ class LifeGraphViewModel {
     if (existing == null) return;
     if (existing.projectId != null) return;
 
-    await tasksRepository.updateTask(existing.copyWith(projectId: Wrapped(projectId)));
+    await tasksRepository.updateTask(
+      existing.copyWith(projectId: Wrapped(projectId)),
+    );
 
     final parentView = graph.firstWhere(
       (n) => n.id == projectId,
@@ -308,7 +324,19 @@ class LifeGraphViewModel {
         if (updated.taskStatus != null) {
           final existing = await tasksRepository.getById(updated.id);
           if (existing != null) {
-            await tasksRepository.updateTask(existing.copyWith(status: updated.taskStatus!));
+            await tasksRepository.updateTask(
+              existing.copyWith(status: updated.taskStatus!),
+            );
+          }
+        }
+        break;
+      case GraphNodeType.subTask:
+        if (updated.taskStatus != null) {
+          final existing = await tasksRepository.getById(updated.id);
+          if (existing != null) {
+            await tasksRepository.updateTask(
+              existing.copyWith(status: updated.taskStatus!),
+            );
           }
         }
         break;
@@ -340,8 +368,14 @@ class LifeGraphViewModel {
   /// Клампит позицию внутрь мирового канваса с учётом размера ноды.
   Offset _clampPosition(Offset pos, Size size) {
     return Offset(
-      pos.dx.clamp(graphWorldMargin, graphWorldSize - size.width - graphWorldMargin),
-      pos.dy.clamp(graphWorldMargin, graphWorldSize - size.height - graphWorldMargin),
+      pos.dx.clamp(
+        graphWorldMargin,
+        graphWorldSize - size.width - graphWorldMargin,
+      ),
+      pos.dy.clamp(
+        graphWorldMargin,
+        graphWorldSize - size.height - graphWorldMargin,
+      ),
     );
   }
 
@@ -404,6 +438,11 @@ class LifeGraphViewModel {
       case GraphNodeType.task:
         await tasksRepository.deleteTask(id);
         _positions.remove(id);
+        _removePositions(descendantIds);
+        break;
+      case GraphNodeType.subTask:
+        await tasksRepository.deleteTask(id);
+        _positions.remove(id);
         await _scheduleSavePositions();
         break;
     }
@@ -440,6 +479,11 @@ class LifeGraphViewModel {
 
       case GraphNodeType.task:
         await tasksRepository.deleteTask(id);
+        _removePositions([id]);
+
+        break;
+      case GraphNodeType.subTask:
+        await tasksRepository.deleteTask(id);
         _positions.remove(id);
         await _scheduleSavePositions();
         break;
@@ -449,7 +493,9 @@ class LifeGraphViewModel {
   List<String> _getDescendantIds(String id) {
     final result = <String>[];
     void collect(String parentId) {
-      final children = _domainNodes.where((n) => n.parentId == parentId).toList();
+      final children = _domainNodes
+          .where((n) => n.parentId == parentId)
+          .toList();
       for (final child in children) {
         result.add(child.id);
         collect(child.id);
@@ -494,6 +540,8 @@ class LifeGraphViewModel {
       case GraphNodeType.project:
         return GraphNodeType.task;
       case GraphNodeType.task:
+        return GraphNodeType.subTask;
+      case GraphNodeType.subTask:
         return GraphNodeType.task;
     }
   }
@@ -505,15 +553,20 @@ class LifeGraphViewModel {
     final out = <gv.GraphNode>[];
     for (var i = 0; i < nodes.length; i++) {
       final n = nodes[i];
-      out.add(gv.GraphNode(
-        id: n.id,
-        label: n.title,
-        index: i,
-        depth: depth[n.id] ?? 0,
-        parentId: n.parentId,
-        size: graphNodeSizeOf(n.type),
-        position: _clampPosition(positions[n.id] ?? Offset.zero, graphNodeSizeOf(n.type)),
-      ));
+      out.add(
+        gv.GraphNode(
+          id: n.id,
+          label: n.title,
+          index: i,
+          depth: depth[n.id] ?? 0,
+          parentId: n.parentId,
+          size: graphNodeSizeOf(n.type),
+          position: _clampPosition(
+            positions[n.id] ?? Offset.zero,
+            graphNodeSizeOf(n.type),
+          ),
+        ),
+      );
     }
     return out;
   }
@@ -557,7 +610,8 @@ class LifeGraphViewModel {
       }
     }
 
-    positions[root.id] = _positions[root.id] ?? const Offset(worldCenter, worldCenter);
+    positions[root.id] =
+        _positions[root.id] ?? const Offset(worldCenter, worldCenter);
     final queue = <GraphNode>[root];
     while (queue.isNotEmpty) {
       final parent = queue.removeAt(0);
@@ -566,7 +620,8 @@ class LifeGraphViewModel {
       final parentPos = positions[parent.id]!;
       for (var i = 0; i < n; i++) {
         final kid = kids[i];
-        final pos = _positions[kid.id] ??
+        final pos =
+            _positions[kid.id] ??
             Offset(parentPos.dx + 280, parentPos.dy + (i - (n - 1) / 2) * 160);
         positions[kid.id] = pos;
         queue.add(kid);

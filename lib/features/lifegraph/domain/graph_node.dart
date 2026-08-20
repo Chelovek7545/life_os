@@ -1,7 +1,7 @@
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 /// Тип ноды графа жизни: сфера -> цель -> проект -> задача.
-enum GraphNodeType { sphere, goal, project, task }
+enum GraphNodeType { sphere, goal, project, task, subTask }
 
 /// Доменная нода графа. Описывает сущность из БД; позиция/рёбра — забота
 /// view-слоя ([GraphView] выводит их сам из [parentId] и layout).
@@ -25,7 +25,7 @@ class GraphNode {
   });
 
   /// Задача — лист, детей не имеет.
-  bool get isLeaf => type == GraphNodeType.task;
+  bool get isLeaf => type == GraphNodeType.subTask;
 
   GraphNode copyWith({
     String? id,

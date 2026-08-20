@@ -13,6 +13,9 @@ Size graphNodeSizeOf(GraphNodeType type) {
       return const Size(180, 100);
     case GraphNodeType.task:
       return const Size(160, 120);
+    case GraphNodeType.subTask:
+            return const Size(160, 120);
+
   }
 }
 

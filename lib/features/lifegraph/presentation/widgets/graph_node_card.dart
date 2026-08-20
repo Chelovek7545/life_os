@@ -279,6 +279,8 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
       case GraphNodeType.project:
         return 'задачу';
       case GraphNodeType.task:
+        return 'подзадачу';
+      case GraphNodeType.subTask:
         return '';
     }
   }
@@ -293,6 +295,8 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
         return 'ПРОЕКТ';
       case GraphNodeType.task:
         return 'ЗАДАЧА';
+      case GraphNodeType.subTask:
+        return 'ПОДЗАДАЧА';
     }
   }
 
@@ -305,6 +309,8 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
       case GraphNodeType.project:
         return Icons.folder_rounded;
       case GraphNodeType.task:
+        return Icons.task_alt_rounded;
+      case GraphNodeType.subTask:
         return Icons.task_alt_rounded;
     }
   }

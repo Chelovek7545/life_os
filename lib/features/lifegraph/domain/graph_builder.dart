@@ -1,3 +1,4 @@
+import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:life_os/features/spheres/data/spheres_repository.dart';
@@ -42,7 +43,14 @@ class GraphBuilder {
         final goalIds = goals.map((g) => g.id).toSet();
         final projects = allProjects.where((p) => p.goalId != null && goalIds.contains(p.goalId)).toList();
         final projectIds = projects.map((p) => p.id).toSet();
-        final tasks = allTasks.where((t) => t.projectId != null && projectIds.contains(t.projectId)).toList();
+        final tasks = allTasks.where(
+          (t) => t.projectId != null && projectIds.contains(t.projectId)
+          
+          ).toList();
+        final subTasks = allTasks.where(
+          (t) => t.parentTaskId != null
+          
+          ).toList();
 
         final nodes = <GraphNode>[
           // Сфера (корень)
@@ -80,19 +88,38 @@ class GraphBuilder {
           ));
         }
 
+        
         // Задачи
         for (final task in tasks) {
+          
           nodes.add(GraphNode(
             id: task.id,
             type: GraphNodeType.task,
             title: task.title,
             subtitle: task.description.isEmpty ? 'Нет описания' : task.description,
             color: projects.firstWhere((v) => v.id == task.projectId).color,
-            parentId: task.projectId,
+            parentId: task.parentTaskId ?? task.projectId,
             taskStatus: task.status,
           ));
+
         }
 
+        
+
+        for (final task in subTasks) {
+          
+          nodes.add(GraphNode(
+            id: task.id,
+            type: GraphNodeType.subTask,
+            title: task.title,
+            subtitle: task.description.isEmpty ? 'Нет описания' : task.description,
+            color: AppColors.secondary.toHex(),
+            parentId: task.parentTaskId,
+            taskStatus: task.status,
+          ));
+
+        }
+        
         return nodes;
       },
     );

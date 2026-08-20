@@ -174,6 +174,8 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
         return 'Редактировать проект';
       case GraphNodeType.task:
         return 'Редактировать задачу';
+      case GraphNodeType.subTask:
+        return 'Редактировать подзадачу';
     }
   }
 
@@ -428,6 +430,8 @@ class _AddChildDialogState extends State<AddChildDialog> {
       case GraphNodeType.project:
         return 'задачу';
       case GraphNodeType.task:
+        return 'подзадачу';
+      case GraphNodeType.subTask:
         return '';
     }
   }
