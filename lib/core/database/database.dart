@@ -46,6 +46,7 @@ class Projects extends Table {
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   DateTimeColumn get dueDate => dateTime().nullable()();
+  TextColumn get parentProejectId => text().nullable()();
 
   //IntColumn get status => integer().withDefault(const Constant(0))();
   TextColumn get goalId => text().nullable()();
@@ -150,7 +151,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration {
@@ -201,7 +202,10 @@ class AppDatabase extends _$AppDatabase {
         if (from < 7) {
           await m.addColumn(tasks, tasks.parentTaskId);
         }
-      },
+        if (from < 8) {
+          await m.addColumn(projects, projects.parentProejectId);
+        }
+      }, 
     );
   }
 }

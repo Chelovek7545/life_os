@@ -63,7 +63,7 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isTask = widget.node.type == GraphNodeType.task;
+    final isTask = widget.node.type == GraphNodeType.task || widget.node.type == GraphNodeType.subTask;
 
     return AlertDialog(
       backgroundColor: AppColors.surfaceContainer,
@@ -217,7 +217,7 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
 
 /// Диалог создания дочерней ноды (следующий уровень иерархии).
 class AddChildDialog extends StatefulWidget {
-  final GraphNode parentNode;
+  final GraphNodeType childNodeType;
   final Future<void> Function({
     required String title,
     required String description,
@@ -230,7 +230,7 @@ class AddChildDialog extends StatefulWidget {
 
   const AddChildDialog({
     super.key,
-    required this.parentNode,
+    required this.childNodeType,
     required this.onSave,
   });
 
@@ -268,11 +268,11 @@ class _AddChildDialogState extends State<AddChildDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isTaskChild = widget.parentNode.type == GraphNodeType.project;
+    final isTaskChild = widget.childNodeType == GraphNodeType.task;
 
     return AlertDialog(
       backgroundColor: AppColors.surfaceContainer,
-      title: Text('Добавить ${_childName(widget.parentNode.type)}'),
+      title: Text('Добавить ${_childName(widget.childNodeType)}'),
       content: SizedBox(
         width: 320,
         child: SingleChildScrollView(
@@ -424,15 +424,15 @@ class _AddChildDialogState extends State<AddChildDialog> {
   String _childName(GraphNodeType type) {
     switch (type) {
       case GraphNodeType.sphere:
-        return 'цель';
-      case GraphNodeType.goal:
-        return 'проект';
-      case GraphNodeType.project:
-        return 'задачу';
-      case GraphNodeType.task:
-        return 'подзадачу';
-      case GraphNodeType.subTask:
         return '';
+      case GraphNodeType.goal:
+        return 'цель';
+      case GraphNodeType.project:
+        return 'проект';
+      case GraphNodeType.task:
+        return 'задачу';
+      case GraphNodeType.subTask:
+        return 'Подзадачу';
     }
   }
 

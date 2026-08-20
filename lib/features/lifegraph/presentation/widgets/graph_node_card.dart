@@ -258,7 +258,7 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                     style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 10.5),
                   ),
                 ],
-                if (n.type == GraphNodeType.task && n.taskStatus != null) ...[
+                if ((n.type == GraphNodeType.task || n.type == GraphNodeType.subTask)  && n.taskStatus != null) ...[
                   const SizedBox(height: 5),
                   _StatusChip(status: n.taskStatus!),
                 ],

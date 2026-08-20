@@ -18,7 +18,7 @@ class ProjectsRepository {
     try {
       await _dao.createProject(project.toDrift());
     } catch (error) {
-      throw StorageException('Failed to save task.', error);
+      throw StorageException('Failed to save project.', error);
     }
   }
 

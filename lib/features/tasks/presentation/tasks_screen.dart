@@ -6,7 +6,8 @@ import 'package:life_os/core/ui/empty_placeholder.dart';
 import 'package:life_os/core/ui/fixed_fade_mask.dart';
 import 'package:life_os/core/ui/glassPopUpMenuButton.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
-import 'package:life_os/core/ui/heirarchy_view.dart';
+import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
+import 'package:life_os/core/ui/hierarchy/build_hierarchy_tree.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/ui/segmented_pill_controller.dart';
 import 'package:life_os/core/ui/resizable_panel.dart';
@@ -396,7 +397,7 @@ class TasksScreenState extends State<TasksScreen> {
           builder: (context, taskSnapshot) {
             final tasks = taskSnapshot.data ?? const <Task>[];
             return HierarchyColumn(
-              nodes: _buildHierarchyNodes(projects, tasks),
+              nodes: buildHierarchyTree(projects, tasks),
               draggableBuilder: _buildDraggableHierarchyNode,
             );
           },
@@ -405,51 +406,6 @@ class TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  List<HierarchyNode> _buildHierarchyNodes(
-    List<Project> projects,
-    List<Task> tasks,
-  ) {
-    final tasksByParent = <String?, List<Task>>{};
-    for (final task in tasks) {
-      tasksByParent.putIfAbsent(task.parentTaskId, () => []).add(task);
-    }
-
-    HierarchyNode taskNode(Task task) {
-      return HierarchyNode(
-        id: task.id,
-        title: task.title,
-        type: NodeType.task,
-        data: task,
-        children: (tasksByParent[task.id] ?? const <Task>[])
-            .map(
-              (sub) => HierarchyNode(
-                id: sub.id,
-                title: sub.title,
-                type: NodeType.subtask,
-                data: sub,
-              ),
-            )
-            .toList(),
-      );
-    }
-
-    return [
-      for (final project in projects)
-        if (!project.isArchived)
-          HierarchyNode(
-            id: project.id,
-            title: project.name,
-            type: NodeType.project,
-            icon: Icons.folder,
-            dotColor: parseHexColor(project.color),
-            isExpanded: true,
-            children: (tasksByParent[null] ?? const <Task>[])
-                .where((t) => t.projectId == project.id)
-                .map(taskNode)
-                .toList(),
-          ),
-    ];
-  }
 
   Widget _buildDraggableHierarchyNode(HierarchyNode node, Widget child) {
     final task = node.data;

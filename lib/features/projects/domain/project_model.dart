@@ -12,6 +12,7 @@ class Project {
   final DateTime? dueDate;
   final bool isArchived;
   final String? goalId;
+  final String? parentProejectId;
 
   Project({
     required this.id,
@@ -24,6 +25,7 @@ class Project {
     this.dueDate,
 
     this.goalId,
+    this.parentProejectId,
     this.isArchived = false,
   });
 
@@ -33,6 +35,7 @@ class Project {
     String description = '',
     String color = '#4A90D9',
     String? goalId,
+    String? parentProjectId
   }) {
     final now = DateTime.now();
     return Project(
@@ -43,6 +46,7 @@ class Project {
       createdAt: now,
       updatedAt: now,
       isArchived: false,
+      parentProejectId: parentProjectId,
       goalId: goalId,
     );
   }
@@ -57,6 +61,7 @@ class Project {
     DateTime? updatedAt,
     Wrapped<DateTime?>? dueDate,
     Wrapped<String?>? goalId,
+    Wrapped<String?>? parentProejectId,
     bool? isArchived,
   }) {
     return Project(
@@ -70,6 +75,8 @@ class Project {
 
       isArchived: isArchived ?? this.isArchived,
       goalId: goalId != null ? goalId.value : this.goalId,
+      parentProejectId: parentProejectId != null ? parentProejectId.value : this.parentProejectId,
+
     );
   }
 }

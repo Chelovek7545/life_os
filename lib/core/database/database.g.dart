@@ -993,6 +993,17 @@ class $ProjectsTable extends Projects
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _parentProejectIdMeta = const VerificationMeta(
+    'parentProejectId',
+  );
+  @override
+  late final GeneratedColumn<String> parentProejectId = GeneratedColumn<String>(
+    'parent_proeject_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _goalIdMeta = const VerificationMeta('goalId');
   @override
   late final GeneratedColumn<String> goalId = GeneratedColumn<String>(
@@ -1026,6 +1037,7 @@ class $ProjectsTable extends Projects
     createdAt,
     updatedAt,
     dueDate,
+    parentProejectId,
     goalId,
     isArchived,
   ];
@@ -1095,6 +1107,15 @@ class $ProjectsTable extends Projects
         dueDate.isAcceptableOrUnknown(data['due_date']!, _dueDateMeta),
       );
     }
+    if (data.containsKey('parent_proeject_id')) {
+      context.handle(
+        _parentProejectIdMeta,
+        parentProejectId.isAcceptableOrUnknown(
+          data['parent_proeject_id']!,
+          _parentProejectIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('goal_id')) {
       context.handle(
         _goalIdMeta,
@@ -1144,6 +1165,10 @@ class $ProjectsTable extends Projects
         DriftSqlType.dateTime,
         data['${effectivePrefix}due_date'],
       ),
+      parentProejectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_proeject_id'],
+      ),
       goalId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}goal_id'],
@@ -1169,6 +1194,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? dueDate;
+  final String? parentProejectId;
   final String? goalId;
   final bool isArchived;
   const ProjectModel({
@@ -1179,6 +1205,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
     required this.createdAt,
     required this.updatedAt,
     this.dueDate,
+    this.parentProejectId,
     this.goalId,
     required this.isArchived,
   });
@@ -1193,6 +1220,9 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || dueDate != null) {
       map['due_date'] = Variable<DateTime>(dueDate);
+    }
+    if (!nullToAbsent || parentProejectId != null) {
+      map['parent_proeject_id'] = Variable<String>(parentProejectId);
     }
     if (!nullToAbsent || goalId != null) {
       map['goal_id'] = Variable<String>(goalId);
@@ -1212,6 +1242,9 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
       dueDate: dueDate == null && nullToAbsent
           ? const Value.absent()
           : Value(dueDate),
+      parentProejectId: parentProejectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentProejectId),
       goalId: goalId == null && nullToAbsent
           ? const Value.absent()
           : Value(goalId),
@@ -1232,6 +1265,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       dueDate: serializer.fromJson<DateTime?>(json['dueDate']),
+      parentProejectId: serializer.fromJson<String?>(json['parentProejectId']),
       goalId: serializer.fromJson<String?>(json['goalId']),
       isArchived: serializer.fromJson<bool>(json['isArchived']),
     );
@@ -1247,6 +1281,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'dueDate': serializer.toJson<DateTime?>(dueDate),
+      'parentProejectId': serializer.toJson<String?>(parentProejectId),
       'goalId': serializer.toJson<String?>(goalId),
       'isArchived': serializer.toJson<bool>(isArchived),
     };
@@ -1260,6 +1295,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
     DateTime? createdAt,
     DateTime? updatedAt,
     Value<DateTime?> dueDate = const Value.absent(),
+    Value<String?> parentProejectId = const Value.absent(),
     Value<String?> goalId = const Value.absent(),
     bool? isArchived,
   }) => ProjectModel(
@@ -1270,6 +1306,9 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     dueDate: dueDate.present ? dueDate.value : this.dueDate,
+    parentProejectId: parentProejectId.present
+        ? parentProejectId.value
+        : this.parentProejectId,
     goalId: goalId.present ? goalId.value : this.goalId,
     isArchived: isArchived ?? this.isArchived,
   );
@@ -1284,6 +1323,9 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       dueDate: data.dueDate.present ? data.dueDate.value : this.dueDate,
+      parentProejectId: data.parentProejectId.present
+          ? data.parentProejectId.value
+          : this.parentProejectId,
       goalId: data.goalId.present ? data.goalId.value : this.goalId,
       isArchived: data.isArchived.present
           ? data.isArchived.value
@@ -1301,6 +1343,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('dueDate: $dueDate, ')
+          ..write('parentProejectId: $parentProejectId, ')
           ..write('goalId: $goalId, ')
           ..write('isArchived: $isArchived')
           ..write(')'))
@@ -1316,6 +1359,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
     createdAt,
     updatedAt,
     dueDate,
+    parentProejectId,
     goalId,
     isArchived,
   );
@@ -1330,6 +1374,7 @@ class ProjectModel extends DataClass implements Insertable<ProjectModel> {
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.dueDate == this.dueDate &&
+          other.parentProejectId == this.parentProejectId &&
           other.goalId == this.goalId &&
           other.isArchived == this.isArchived);
 }
@@ -1342,6 +1387,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> dueDate;
+  final Value<String?> parentProejectId;
   final Value<String?> goalId;
   final Value<bool> isArchived;
   final Value<int> rowid;
@@ -1353,6 +1399,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.dueDate = const Value.absent(),
+    this.parentProejectId = const Value.absent(),
     this.goalId = const Value.absent(),
     this.isArchived = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1365,6 +1412,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
     required DateTime createdAt,
     required DateTime updatedAt,
     this.dueDate = const Value.absent(),
+    this.parentProejectId = const Value.absent(),
     this.goalId = const Value.absent(),
     this.isArchived = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1382,6 +1430,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? dueDate,
+    Expression<String>? parentProejectId,
     Expression<String>? goalId,
     Expression<bool>? isArchived,
     Expression<int>? rowid,
@@ -1394,6 +1443,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (dueDate != null) 'due_date': dueDate,
+      if (parentProejectId != null) 'parent_proeject_id': parentProejectId,
       if (goalId != null) 'goal_id': goalId,
       if (isArchived != null) 'is_archived': isArchived,
       if (rowid != null) 'rowid': rowid,
@@ -1408,6 +1458,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<DateTime?>? dueDate,
+    Value<String?>? parentProejectId,
     Value<String?>? goalId,
     Value<bool>? isArchived,
     Value<int>? rowid,
@@ -1420,6 +1471,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       dueDate: dueDate ?? this.dueDate,
+      parentProejectId: parentProejectId ?? this.parentProejectId,
       goalId: goalId ?? this.goalId,
       isArchived: isArchived ?? this.isArchived,
       rowid: rowid ?? this.rowid,
@@ -1450,6 +1502,9 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
     if (dueDate.present) {
       map['due_date'] = Variable<DateTime>(dueDate.value);
     }
+    if (parentProejectId.present) {
+      map['parent_proeject_id'] = Variable<String>(parentProejectId.value);
+    }
     if (goalId.present) {
       map['goal_id'] = Variable<String>(goalId.value);
     }
@@ -1472,6 +1527,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectModel> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('dueDate: $dueDate, ')
+          ..write('parentProejectId: $parentProejectId, ')
           ..write('goalId: $goalId, ')
           ..write('isArchived: $isArchived, ')
           ..write('rowid: $rowid')
@@ -4534,6 +4590,7 @@ typedef $$ProjectsTableCreateCompanionBuilder =
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<DateTime?> dueDate,
+      Value<String?> parentProejectId,
       Value<String?> goalId,
       Value<bool> isArchived,
       Value<int> rowid,
@@ -4547,6 +4604,7 @@ typedef $$ProjectsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<DateTime?> dueDate,
+      Value<String?> parentProejectId,
       Value<String?> goalId,
       Value<bool> isArchived,
       Value<int> rowid,
@@ -4593,6 +4651,11 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<DateTime> get dueDate => $composableBuilder(
     column: $table.dueDate,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get parentProejectId => $composableBuilder(
+    column: $table.parentProejectId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4651,6 +4714,11 @@ class $$ProjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get parentProejectId => $composableBuilder(
+    column: $table.parentProejectId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get goalId => $composableBuilder(
     column: $table.goalId,
     builder: (column) => ColumnOrderings(column),
@@ -4693,6 +4761,11 @@ class $$ProjectsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get dueDate =>
       $composableBuilder(column: $table.dueDate, builder: (column) => column);
+
+  GeneratedColumn<String> get parentProejectId => $composableBuilder(
+    column: $table.parentProejectId,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get goalId =>
       $composableBuilder(column: $table.goalId, builder: (column) => column);
@@ -4741,6 +4814,7 @@ class $$ProjectsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<DateTime?> dueDate = const Value.absent(),
+                Value<String?> parentProejectId = const Value.absent(),
                 Value<String?> goalId = const Value.absent(),
                 Value<bool> isArchived = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4752,6 +4826,7 @@ class $$ProjectsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 dueDate: dueDate,
+                parentProejectId: parentProejectId,
                 goalId: goalId,
                 isArchived: isArchived,
                 rowid: rowid,
@@ -4765,6 +4840,7 @@ class $$ProjectsTableTableManager
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<DateTime?> dueDate = const Value.absent(),
+                Value<String?> parentProejectId = const Value.absent(),
                 Value<String?> goalId = const Value.absent(),
                 Value<bool> isArchived = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4776,6 +4852,7 @@ class $$ProjectsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 dueDate: dueDate,
+                parentProejectId: parentProejectId,
                 goalId: goalId,
                 isArchived: isArchived,
                 rowid: rowid,

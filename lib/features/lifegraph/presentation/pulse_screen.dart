@@ -5,7 +5,8 @@ import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/collapsible_sheet.dart';
-import 'package:life_os/core/ui/heirarchy_view.dart';
+import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
+import 'package:life_os/core/ui/hierarchy/build_hierarchy_tree.dart';
 import 'package:life_os/core/ui/layout/split_view.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/color_format.dart';
@@ -222,7 +223,11 @@ class HierarchyPanel extends StatelessWidget {
   final LifeGraphViewModel viewModel;
   final bool expand;
 
-  const HierarchyPanel({required this.viewModel, this.expand = true});
+  const HierarchyPanel({
+    super.key,
+    required this.viewModel,
+    this.expand = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -237,35 +242,7 @@ class HierarchyPanel extends StatelessWidget {
           builder: (context, taskSnapshot) {
             final tasks = taskSnapshot.data ?? const <Task>[];
 
-            final nodes = <HierarchyNode>[
-              for (final project in projects)
-                if (!project.isArchived)
-                  HierarchyNode(
-                    id: project.id,
-                    title: project.name,
-                    type: NodeType.project,
-                    icon: Icons.folder,
-                    dotColor: parseHexColor(project.color),
-                    isExpanded: true,
-                    children: [
-                      for (final task in _projectTasks(tasks, project.id))
-                        HierarchyNode(
-                          id: task.id,
-                          title: task.title,
-                          type: NodeType.task,
-                          children: [
-                            for (final sub in _taskSubtasks(tasks, task.id))
-                              HierarchyNode(
-                                id: sub.id,
-                                title: sub.title,
-                                type: NodeType.subtask,
-                                dotColor: sub.status.color,
-                              ),
-                          ],
-                        ),
-                    ],
-                  ),
-            ];
+            final nodes = buildHierarchyTree(projects, tasks);
 
             return HierarchyColumn(nodes: nodes);
           },
@@ -296,17 +273,8 @@ class HierarchyPanel extends StatelessWidget {
     );
   }
 
-  /// Задачи уровня проекта (не subtask'и).
-  List<Task> _projectTasks(List<Task> tasks, String projectId) {
-    return tasks
-        .where((t) => t.projectId == projectId && t.parentTaskId == null)
-        .toList();
-  }
 
-  /// Subtask'и задачи (родитель — задача).
-  List<Task> _taskSubtasks(List<Task> tasks, String taskId) {
-    return tasks.where((t) => t.parentTaskId == taskId).toList();
-  }
+
 }
 
 /// Строка списка целей: цвет-индикатор, название, имя сферы.

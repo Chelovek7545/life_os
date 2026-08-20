@@ -166,6 +166,7 @@ class LifeGraphViewModel {
   Future<void> addChild({
     required String parentId,
     required String title,
+    required GraphNodeType childNodeType,
     String description = '',
     String? color,
     DateTime? dueDate,
@@ -186,9 +187,8 @@ class LifeGraphViewModel {
       graphNodeSizeOf(_childTypeOf(parentType)),
     );
 
-    switch (parentType) {
-      case GraphNodeType.sphere:
-        // Сфера -> Цель
+    switch (childNodeType) {
+      case GraphNodeType.goal:
         final goal = Goal.create(
           name: title,
           sphereId: _currentSphereId!,
@@ -200,9 +200,14 @@ class LifeGraphViewModel {
         await _scheduleSavePositions();
         break;
 
-      case GraphNodeType.goal:
-        // Цель -> Проект
-        final project = Project.create(
+      case GraphNodeType.project:
+      print(parentId);
+        final project = parentType == GraphNodeType.project ? Project.create(
+          name: title,
+          description: description,
+          color: color ?? '#4A90D9',
+          parentProjectId: parentId,
+        ) : Project.create(
           name: title,
           description: description,
           color: color ?? '#4A90D9',
@@ -213,8 +218,7 @@ class LifeGraphViewModel {
         await _scheduleSavePositions();
         break;
 
-      case GraphNodeType.project:
-        // Проект -> Задача
+      case GraphNodeType.task:
         final task = Task.blank().copyWith(
           title: title,
           description: description,
@@ -229,8 +233,7 @@ class LifeGraphViewModel {
         await _scheduleSavePositions();
         break;
 
-      case GraphNodeType.task:
-        // Проект -> подзадача
+      case GraphNodeType.subTask:
         final task = Task.blank().copyWith(
           title: title,
           description: description,
@@ -244,8 +247,7 @@ class LifeGraphViewModel {
         _positions[task.id] = newPos;
         await _scheduleSavePositions();
         break;
-      case GraphNodeType.subTask:
-        // Задача — лист, детей не добавляем
+      case GraphNodeType.sphere:
         return;
     }
   }

@@ -166,8 +166,9 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   Future<void> _showAddChildDialog(GraphNode parent) async {
     if (parent.isLeaf) return;
 
+    GraphNodeType? childType;
     if (parent.type == GraphNodeType.project) {
-      final createNew = await showDialog<bool>(
+      final typeNew = await showDialog<int>(
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: AppColors.surfaceContainer,
@@ -175,13 +176,18 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           content: const Text('Что добавить?'),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
+              onPressed: () => Navigator.pop(ctx, 0),
               child: const Text('Существующую задачу'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
+              onPressed: () => Navigator.pop(ctx, 1),
               child: const Text('Новую задачу'),
             ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, 2),
+              child: const Text('Новый подпроект'),
+            ),
+
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: const Text('Отмена'),
@@ -189,10 +195,17 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           ],
         ),
       );
-      if (createNew == null) return;
-      if (!createNew) {
+      if (typeNew == null) return;
+      switch (typeNew) {
+        case 0: 
         await _showExistingTaskPicker(parent);
         return;
+        case 1:
+        childType = GraphNodeType.task;
+        case 2: 
+        childType = GraphNodeType.project;
+        default:
+        
       }
     }
 
@@ -200,7 +213,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AddChildDialog(
-        parentNode: parent,
+        childNodeType: childType ?? GraphNodeType.values[parent.type.index + 1],
         onSave: ({
           required title,
           required description,
@@ -210,6 +223,8 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           endsAt,
         }) {
           return widget.viewModel.addChild(
+        childNodeType: childType ?? GraphNodeType.values[parent.type.index + 1],
+
             parentId: parent.id,
             title: title,
             description: description,
