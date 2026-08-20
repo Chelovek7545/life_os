@@ -4,9 +4,10 @@ import 'package:life_os/core/di.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
-import 'package:life_os/features/dashboard/presentation/dashboard_screen.dart';
+import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
 import 'package:life_os/features/projects/presentation/projects_screen.dart';
 import 'package:life_os/features/resources/presentation/resources_screen.dart';
+import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/tasks/presentation/tasks_screen.dart';
 
 class MainScreen extends StatefulWidget {
@@ -29,8 +30,12 @@ class _MainScreenState extends State<MainScreen> {
     super.initState();
     // Инициализируем экраны единоразово при загрузке виджета
     _pages = [
-      DashboardScreen(
-        viewModel: widget.diContainer.dashboardViewModel,
+      PulseScreen(
+        viewModel: widget.diContainer.lifeGraphViewModel,
+        habitsViewModel: widget.diContainer.habitsViewModel,
+        onOpenTask: _openTaskFromPulse,
+        onCompleteTask: (task) =>
+            widget.diContainer.tasksViewModel.toggleTask(task),
       ),
       TasksScreen(
         viewModel: widget.diContainer.tasksViewModel,
@@ -57,6 +62,11 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       _selectedIndex = index;
     });
+  }
+
+  void _openTaskFromPulse(Task task) {
+    _onItemTapped(1);
+    widget.diContainer.tasksViewModel.openTaskInEditor(task);
   }
 
   @override

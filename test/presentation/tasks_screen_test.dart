@@ -28,11 +28,15 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
   Task _draftTask = Task.blank();
   TaskWithProject? _activeTaskWithProject;
   final List<Task> _selectedTasks = [];
+  final List<Task> _allTasks;
+  final List<Project> projects;
 
   FakeTasksViewModel({
     TaskScreenState? initialState,
     bool? initialFormVisible,
     TaskFilterConfig? initialFilter,
+    List<Task>? allTasks,
+    List<Project>? projects,
   }) : _stateController = BehaviorSubject<TaskScreenState>.seeded(
          initialState ?? const TasksLoading(),
        ),
@@ -41,7 +45,9 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
        ),
        _filterController = BehaviorSubject<TaskFilterConfig>.seeded(
          initialFilter ?? TaskFilterConfig(anchorDate: DateTime.now()),
-       );
+       ),
+       _allTasks = allTasks ?? [],
+       projects = projects ?? [];
 
   @override
   Stream<TaskScreenState> get state => _stateController.stream;
@@ -135,7 +141,10 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
   Future<void> deleteTask(String id) async {}
 
   @override
-  Stream<List<Project>> watchProjects() => Stream.value([]);
+  Stream<List<Project>> watchProjects() => Stream.value(projects);
+
+  @override
+  Stream<List<Task>> watchAllTasks() => Stream.value(_allTasks);
 
   @override
   void initialize() {}
@@ -380,6 +389,65 @@ void main() {
         await tester.pump();
 
         expect(find.byType(PillSwitcher), findsOneWidget);
+      });
+    });
+
+    group('Hierarchy Overlay', () {
+      testWidgets('shows hierarchy button in header', (tester) async {
+        viewModel._stateController.add(const TasksEmpty());
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
+
+        expect(find.byIcon(Icons.account_tree_rounded), findsOneWidget);
+      });
+
+      testWidgets('tapping hierarchy button toggles overlay', (tester) async {
+        viewModel._stateController.add(const TasksEmpty());
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
+
+        expect(find.text('Hierarchy'), findsNothing);
+
+        await tester.tap(find.byIcon(Icons.account_tree_rounded));
+        await tester.pump();
+
+        expect(find.text('Hierarchy'), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.account_tree_rounded));
+        await tester.pump();
+
+        expect(find.text('Hierarchy'), findsNothing);
+      });
+
+      testWidgets('hierarchy overlay lists projects and tasks', (tester) async {
+        final project = createMockProject(
+          id: 'proj-1',
+          name: 'Work',
+          createdAt: today,
+        );
+        final task = createMockTask(
+          id: 'task-1',
+          title: 'Write report',
+          projectId: 'proj-1',
+          createdAt: today,
+          updatedAt: today,
+        );
+
+        viewModel = FakeTasksViewModel(
+          initialState: const TasksEmpty(),
+          allTasks: [task],
+          projects: [project],
+        );
+        viewModel._stateController.add(const TasksEmpty());
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
+
+        await tester.tap(find.byIcon(Icons.account_tree_rounded));
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.text('Work'), findsOneWidget);
+        expect(find.text('Write report'), findsOneWidget);
       });
     });
 

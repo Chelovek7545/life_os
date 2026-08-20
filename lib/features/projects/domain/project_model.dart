@@ -31,18 +31,19 @@ class Project {
   factory Project.create({
     required String name,
     String description = '',
-    String goalId = '',
     String color = '#4A90D9',
+    String? goalId,
   }) {
     final now = DateTime.now();
     return Project(
-      id: Uuid().v4(), // Будет заменено на UUID при сохранении
+      id: Uuid().v4(),
       name: name,
       description: description,
       color: color,
       createdAt: now,
       updatedAt: now,
       isArchived: false,
+      goalId: goalId,
     );
   }
 

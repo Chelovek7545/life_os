@@ -1,8 +1,54 @@
+import 'package:flutter/material.dart';
 import 'package:life_os/core/utils/wrapped.dart';
 import 'package:uuid/uuid.dart';
 import 'package:life_os/features/tasks/domain/tag_model.dart';
 
-enum TaskStatus { notStarted, inProgress, done, open }
+//enum TaskStatus { notStarted, inProgress, done, open }
+
+enum TaskStatus {
+  open(
+    title: 'Open',
+    subtitle: 'Pending analysis',
+    symbol: '…',
+    color: Colors.blueGrey,
+    icon: Icons.pending_actions,
+  ),
+  notStarted(
+    title: 'To Do',
+    subtitle: 'Awaiting deployment',
+    symbol: '○',
+    color: Colors.redAccent,
+    icon: Icons.radio_button_unchecked,
+  ),
+  inProgress(
+    title: 'In Progress',
+    subtitle: 'Active execution',
+    symbol: '▶',
+    color: Colors.amberAccent,
+    icon: Icons.hourglass_top, // Заполненный наполовину круг
+  ),
+  done(
+    title: 'Done',
+    subtitle: 'Mission complete',
+    symbol: '✓',
+    color: Colors.lightGreenAccent,
+    icon: Icons.check_circle_outline,
+  );
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final String symbol;
+  final Color color;
+
+  const TaskStatus({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.symbol,
+    required this.color,
+  });
+}
 
 class Task {
   const Task({
@@ -21,6 +67,7 @@ class Task {
     required this.tags,
     this.dueDate,
     this.projectId,
+    this.parentTaskId,
     this.space,
   });
 
@@ -37,6 +84,7 @@ class Task {
 
   final DateTime? dueDate;
   final String? projectId;
+  final String? parentTaskId;
   final String? space;
   final int timerSeconds;
   final double effortWeight;
@@ -78,6 +126,7 @@ class Task {
 
     Wrapped<DateTime?>? dueDate,
     Wrapped<String?>? projectId,
+    Wrapped<String?>? parentTaskId,
     Wrapped<String?>? space,
     int? timerSeconds,
     double? effortWeight,
@@ -95,6 +144,8 @@ class Task {
       endsAt: endsAt != null ? endsAt.value : this.endsAt,
 
       projectId: projectId != null ? projectId.value : this.projectId,
+      parentTaskId:
+          parentTaskId != null ? parentTaskId.value : this.parentTaskId,
       space: space != null ? space.value : this.space,
       timerSeconds: timerSeconds ?? this.timerSeconds,
       effortWeight: effortWeight ?? this.effortWeight,

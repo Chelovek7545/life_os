@@ -1,5 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
+import 'package:life_os/features/habits/domain/habit_entry_model.dart';
+import 'package:life_os/features/habits/domain/habit_type.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -23,6 +25,7 @@ class Tasks extends Table {
   DateTimeColumn get dueDate => dateTime().nullable()();
   TextColumn get space => text().nullable()();
   TextColumn get projectId => text().nullable()();
+  TextColumn get parentTaskId => text().nullable()();
   TextColumn get spaceId => text().nullable()();
 
   IntColumn get timerSeconds => integer().withDefault(const Constant(0))();
@@ -52,6 +55,34 @@ class Projects extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('GoalModel')
+class Goals extends Table {
+  TextColumn get id => text()(); // UUID
+  TextColumn get name => text()(); // используем name вместо title
+  TextColumn get description => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  
+  TextColumn get color => text()(); // Hex color, например "#FF5733"
+  DateTimeColumn get dueDate => dateTime().nullable()();
+  TextColumn get sphereId => text().nullable()(); // FK к Spheres
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('SphereModel')
+class Spheres extends Table {
+  TextColumn get id => text()(); // UUID
+  TextColumn get name => text()();
+  TextColumn get color => text()(); // Hex color, например "#FF5733"
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DataClassName('TagModel')
 class Tags extends Table {
   IntColumn get id => integer().autoIncrement()();
@@ -59,8 +90,55 @@ class Tags extends Table {
   IntColumn get colorHex => integer()(); // Цвет тега
 }
 
+@DataClassName('HabitModel')
+class Habits extends Table {
+  TextColumn get id => text()(); // UUID
+  TextColumn get title => text()();
+  TextColumn get icon => text().withDefault(const Constant('task_alt'))();
+  TextColumn get color => text().withDefault(const Constant('#FF5C00'))();
+  IntColumn get typeKind => intEnum<HabitTypeKind>()();
+  TextColumn get timeOfDay => text().nullable()(); // "HH:mm" для TimeHabit
+  IntColumn get daysOfWeek => integer().withDefault(const Constant(254))(); // bitmask
+  IntColumn get durationWeeks => integer().nullable()(); // null = без ограничения
+  TextColumn get reminderTime => text().nullable()(); // "HH:mm"
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  BoolColumn get isArchived => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('HabitEntryModel')
+class HabitEntries extends Table {
+  TextColumn get id => text()(); // UUID
+  TextColumn get habitId =>
+      text().references(Habits, #id, onDelete: KeyAction.cascade)();
+  TextColumn get dateKey => text()(); // "YYYY-MM-DD"
+  IntColumn get status => intEnum<HabitEntryStatus>()();
+  DateTimeColumn get completedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {habitId, dateKey},
+  ];
+}
+
 // Часть 2: Определение базы данных
-@DriftDatabase(tables: [Tasks, Projects, Tags, TaskTagEntries])
+@DriftDatabase(tables: [
+  Tasks,
+  Projects,
+  Tags,
+  TaskTagEntries,
+  Goals,
+  Spheres,
+  Habits,
+  HabitEntries,
+])
 class AppDatabase extends _$AppDatabase {
   // Конструктор
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
@@ -72,7 +150,60 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 7;
+
+  @override
+  MigrationStrategy get migration {
+    return MigrationStrategy(
+      onCreate: (Migrator m) async {
+        await m.createAll();
+      },
+      onUpgrade: (Migrator m, int from, int to) async {
+        if (from <= 2) {
+          await m.database.customStatement('DROP TABLE IF EXISTS dashboard_widgets');
+        }
+        if (from <= 4) {
+          // Миграция v4 была сломана: зависела от несуществующей таблицы `spaces`
+          // (в v3 её не было) и создавала таблицы с camelCase-колонками, тогда
+          // как drift ожидает snake_case. Здесь делаем всё идемпотентно:
+          // чистим мусор от сломанной миграции и создаём таблицы корректно.
+          await m.database.customStatement('DROP TABLE IF EXISTS spheres_new');
+          await m.database.customStatement('DROP TABLE IF EXISTS goals_new');
+          await m.database.customStatement('DROP TABLE IF EXISTS spaces');
+          await m.database.customStatement('''
+            CREATE TABLE IF NOT EXISTS "spheres" (
+              "id" TEXT NOT NULL,
+              "name" TEXT NOT NULL,
+              "color" TEXT NOT NULL,
+              "created_at" TEXT NOT NULL,
+              "updated_at" TEXT NOT NULL,
+              PRIMARY KEY ("id")
+            )
+          ''');
+          await m.database.customStatement('''
+            CREATE TABLE IF NOT EXISTS "goals" (
+              "id" TEXT NOT NULL,
+              "name" TEXT NOT NULL,
+              "description" TEXT NOT NULL,
+              "created_at" TEXT NOT NULL,
+              "updated_at" TEXT NOT NULL,
+              "color" TEXT NOT NULL,
+              "due_date" TEXT NULL,
+              "sphere_id" TEXT NULL,
+              PRIMARY KEY ("id")
+            )
+          ''');
+        }
+        if (from < 6) {
+          await m.createTable(habits);
+          await m.createTable(habitEntries);
+        }
+        if (from < 7) {
+          await m.addColumn(tasks, tasks.parentTaskId);
+        }
+      },
+    );
+  }
 }
 
 class TaskTagEntries extends Table {

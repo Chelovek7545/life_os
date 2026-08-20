@@ -144,7 +144,7 @@ class _TaskCardState extends State<TaskCard>
       onHorizontalDragUpdate: widget.onDelete != null ? _onDragUpdate : null,
       onHorizontalDragEnd: widget.onDelete != null ? _onDragEnd : null,
       onLongPress: widget.onLongPress,
-      onTap: widget.onTap,
+      //onTap: widget.onTap,
       onDoubleTap: widget.onSelected,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 200),
@@ -266,10 +266,13 @@ class _TaskCardState extends State<TaskCard>
                             ],
                           ),
                         ),
-                        Icon(
-                          Icons.drag_indicator,
-                          color: AppColors.onSurfaceVariant.withValues(
-                            alpha: 0.4,
+                        GestureDetector(
+                          onTap: widget.onTap,
+                          child: Icon(
+                            Icons.drag_indicator,
+                            color: AppColors.onSurfaceVariant.withValues(
+                              alpha: 0.4,
+                            ),
                           ),
                         ),
                       ],

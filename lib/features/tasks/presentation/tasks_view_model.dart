@@ -186,9 +186,11 @@ class TasksViewModel {
           filter.anchorDate.day,
         );
 
+
+        print(anchorDay);
         final bool dateMatches = switch (filter.period) {
           DatePeriod.day => taskDay.isAtSameMomentAs(anchorDay),
-          DatePeriod.week => isDateInSameWeek(taskDay, anchorDay),
+          DatePeriod.week => isDateInSameWeekExtended(taskDay, anchorDay),
           DatePeriod.month =>
             task.startsAt!.year == filter.anchorDate.year &&
                 task.startsAt!.month == filter.anchorDate.month,
@@ -296,12 +298,30 @@ void startEditingTask(TaskWithProject item) {
     draftTask = item.task;  // ← копируем задачу в draft при начале редактирования
 }
 
+  // Открывает экран задач и сразу показывает задачу в форме редактирования.
+  // Вызывается из Pulse при тапе на активную задачу.
+  void openTaskInEditor(Task task) {
+    final startsAt = task.startsAt;
+    if (startsAt != null) {
+      updateFilter(
+        (old) => old.copyWith(
+          period: DatePeriod.day,
+          anchorDate: DateTime(startsAt.year, startsAt.month, startsAt.day),
+        ),
+      );
+    }
+    startEditingTask(TaskWithProject(task: task, project: null));
+    showForm();
+  }
+
   // --- Бизнес-логика (CUD операции) ---
   // ВАЖНО: Мы убрали ручной вызов _emitUiState() из этих методов.
   // Так как репозиторий реактивный, вызов addTask/deleteTask изменит базу данных,
   // это стриггерит стрим в Use Case, и метод _handleDataUpdate выполнится САМ автоматически.
 
   Future<Task?> getTask(String id) async => await _repository.getById(id);
+
+  Stream<List<Task>> watchAllTasks() => _repository.watchTasks();
 
   Stream<List<Project>> watchProjects() =>
       _projectsRepository.watchAllProjects();
@@ -317,6 +337,7 @@ void startEditingTask(TaskWithProject item) {
   Future<void> toggleTask(Task task) async {
     final updated = task.copyWith(
       status: task.isCompleted ? TaskStatus.inProgress : TaskStatus.done,
+      updatedAt: DateTime.now(),
     );
     await updateTask(updated);
   }
@@ -333,7 +354,9 @@ void startEditingTask(TaskWithProject item) {
 
   Future<void> markSelectedAsDone() async {
     for (final t in selectedTasks) {
-      await _repository.updateTask(t.copyWith(status: TaskStatus.done));
+      await _repository.updateTask(
+        t.copyWith(status: TaskStatus.done, updatedAt: DateTime.now()),
+      );
     }
   }
 

@@ -3,10 +3,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/app.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/core/di.dart';
-import 'package:life_os/features/dashboard/presentation/dashboard_view_model.dart';
+import 'package:life_os/features/habits/data/habits_dao.dart';
+import 'package:life_os/features/habits/data/habits_repository.dart';
+import 'package:life_os/features/habits/presentation/habits_view_model.dart';
+import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
+import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
+import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
 import 'package:life_os/features/projects/presentation/projects_view_model.dart';
+import 'package:life_os/features/spheres/data/spheres_dao.dart';
+import 'package:life_os/features/spheres/data/spheres_repository.dart';
+import 'package:life_os/features/goals/data/goals_dao.dart';
+import 'package:life_os/features/goals/data/goals_repository.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
@@ -18,29 +27,67 @@ void main() {
       final db = AppDatabase(NativeDatabase.memory());
       final tasksDao = TasksDao(db);
       final projectsDao = ProjectsDao(db);
+      final spheresDao = SpheresDao(db);
+      final goalsDao = GoalsDao(db);
+      final habitsDao = HabitsDao(db);
       final tasksRepo = TasksRepository(tasksDao);
       final projectsRepo = ProjectsRepository(projectsDao);
+      final spheresRepo = SpheresRepository(spheresDao);
+      final goalsRepo = GoalsRepository(goalsDao);
+      final habitsRepo = HabitsRepository(habitsDao);
+      final positionsRepo = GraphPositionsRepository();
       final useCase = GetTasksWithProjectsUseCase(tasksRepo, projectsRepo);
+
+      final graphBuilder = GraphBuilder(
+        spheresRepository: spheresRepo,
+        goalsRepository: goalsRepo,
+        projectsRepository: projectsRepo,
+        tasksRepository: tasksRepo,
+      );
 
       final dc = DependencyContainer();
       dc.database = db;
       dc.tasksDAO = tasksDao;
       dc.projectsDao = projectsDao;
+      dc.spheresDao = spheresDao;
+      dc.goalsDao = goalsDao;
+      dc.habitsDao = habitsDao;
       dc.tasksRepository = tasksRepo;
       dc.projectsRepository = projectsRepo;
+      dc.spheresRepository = spheresRepo;
+      dc.goalsRepository = goalsRepo;
+      dc.habitsRepository = habitsRepo;
+      dc.graphPositionsRepository = positionsRepo;
+      dc.graphBuilder = graphBuilder;
+      dc.lifeGraphViewModel = LifeGraphViewModel(
+        spheresRepository: spheresRepo,
+        goalsRepository: goalsRepo,
+        projectsRepository: projectsRepo,
+        tasksRepository: tasksRepo,
+        positionsRepository: positionsRepo,
+        graphBuilder: graphBuilder,
+      );
+      dc.lifeGraphViewModel.initialize();
+
       dc.taskWithPrjct = useCase;
-      dc.dashboardViewModel = DashboardViewModel(tasksRepo, projectsRepo);
       dc.tasksViewModel = TasksViewModel(tasksRepo, useCase, projectsRepo);
       dc.projectViewModel = ProjectsViewModel(
         repository: projectsRepo,
         taskRepo: tasksRepo,
       );
+      dc.habitsViewModel = HabitsViewModel(habitsRepo);
+      dc.habitsViewModel.initialize();
 
       await tester.pumpWidget(MyApp(diContainer: dc));
       await tester.pump();
 
       expect(find.byType(MyApp), findsOneWidget);
 
+      dc.habitsViewModel.dispose();
+      // Drift schedules a zero-duration timer when the last stream listener
+      // unsubscribes. Under FakeAsync that timer only fires when time advances,
+      // so pump once before closing the database.
+      await tester.pump(const Duration(milliseconds: 10));
       await db.close();
     });
   });
