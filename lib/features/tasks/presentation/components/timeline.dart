@@ -101,6 +101,9 @@ class TimelineBody extends StatefulWidget {
     this.taskFormProjects,
     this.onSubmitNewTask,
     this.onExternalDrop,
+    this.isOverUnscheduled,
+    this.onEventToUnscheduled,
+    this.onHoverUnscheduled,
   });
 
   final List<TaskEvent> events;
@@ -119,7 +122,10 @@ class TimelineBody extends StatefulWidget {
   onEventChanged;
   final void Function(Task task) onToggleTask;
   final void Function(Task task, DateTime startsAt, DateTime endsAt)?
-      onExternalDrop;
+  onExternalDrop;
+  final bool Function(Offset globalPosition)? isOverUnscheduled;
+  final void Function(Task task)? onEventToUnscheduled;
+  final void Function(bool hovering)? onHoverUnscheduled;
 
   @override
   State<TimelineBody> createState() => _TimelineBodyState();
@@ -191,6 +197,15 @@ class _TimelineBodyState extends State<TimelineBody>
   int? _dropMinutes;
   int _dropDurationMinutes = 60;
   int _dropDayIndex = 0;
+
+  // Реверс: drag события в список Unscheduled
+  bool _hoveringUnscheduled = false;
+
+  void _updateUnscheduledHover(bool hovering) {
+    if (_hoveringUnscheduled == hovering) return;
+    _hoveringUnscheduled = hovering;
+    widget.onHoverUnscheduled?.call(hovering);
+  }
 
   void _handleHeaderWeekChange(DateTime date) {
     _pendingHeaderWeekChange = true;
@@ -329,8 +344,9 @@ class _TimelineBodyState extends State<TimelineBody>
     final local = box.globalToLocal(globalPosition);
     final isWeek = widget.weekStart != null;
 
-    final verticalOffset =
-        _verticalController.hasClients ? _verticalController.offset : 0.0;
+    final verticalOffset = _verticalController.hasClients
+        ? _verticalController.offset
+        : 0.0;
     final topPad = isWeek ? 200.0 : widget.topPadding;
     final dyFromGridTop = local.dy - topPad + verticalOffset;
     final minutes = _snapToGrid(
@@ -338,8 +354,9 @@ class _TimelineBodyState extends State<TimelineBody>
     ).clamp(_startHour * 60, _endHour * 60).toInt();
 
     if (isWeek) {
-      final horizontalOffset =
-          _horizontalController.hasClients ? _horizontalController.offset : 0.0;
+      final horizontalOffset = _horizontalController.hasClients
+          ? _horizontalController.offset
+          : 0.0;
       final xInContent = local.dx - _leftLabelWidth + horizontalOffset;
       final dayIndex = (xInContent / _lastColumnWidth)
           .floor()
@@ -352,10 +369,7 @@ class _TimelineBodyState extends State<TimelineBody>
 
   int _dropDurationFor(Task task) {
     if (task.startsAt != null && task.endsAt != null) {
-      return task.duration.inMinutes.clamp(
-        _minDurationMinutes,
-        _totalMinutes,
-      );
+      return task.duration.inMinutes.clamp(_minDurationMinutes, _totalMinutes);
     }
     return 60;
   }
@@ -436,10 +450,7 @@ class _TimelineBodyState extends State<TimelineBody>
       left = _leftLabelWidth + 12;
       width = math.max(0.0, _lastDayViewWidth - 4);
     }
-    final start = TimeOfDay(
-      hour: (minutes ~/ 60) % 24,
-      minute: minutes % 60,
-    );
+    final start = TimeOfDay(hour: (minutes ~/ 60) % 24, minute: minutes % 60);
     final endMinutes = minutes + _dropDurationMinutes;
     final end = TimeOfDay(
       hour: (endMinutes ~/ 60) % 24,
@@ -611,6 +622,7 @@ class _TimelineBodyState extends State<TimelineBody>
       _ghostDuration = null;
       _ghostDayOffset = 0;
     });
+    _updateUnscheduledHover(false);
   }
 
   void _cancelResize() {
@@ -1136,10 +1148,18 @@ class _TimelineBodyState extends State<TimelineBody>
       _ghostStart = newStart;
       _ghostDayOffset = dayOffset;
     });
+
+    final hovering =
+        widget.isOverUnscheduled?.call(details.globalPosition) ?? false;
+    _updateUnscheduledHover(hovering);
   }
 
   void _onDragEnd(TaskEvent event, LongPressEndDetails details) {
-    if (_ghostStart != null) {
+    final isHoveringUnscheduled =
+        widget.isOverUnscheduled?.call(details.globalPosition) ?? false;
+    if (isHoveringUnscheduled && _ghostStart != null) {
+      widget.onEventToUnscheduled?.call(event.task);
+    } else if (_ghostStart != null) {
       final date = event.date;
       if (date != null && _ghostDayOffset != 0) {
         widget.onEventChanged(
@@ -1162,6 +1182,7 @@ class _TimelineBodyState extends State<TimelineBody>
       _ghostDuration = null;
       _ghostDayOffset = 0;
     });
+    _updateUnscheduledHover(false);
   }
 
   void _onResizeStart(TaskEvent event, DragStartDetails details) {
@@ -1696,11 +1717,12 @@ class _TimelineBodyState extends State<TimelineBody>
     final isDragging = _draggingId == event.task.id;
     final isResizing = _resizingId == event.task.id;
     final isInteracting = isDragging || isResizing;
+    final snappedBack = isDragging && _hoveringUnscheduled;
 
-    final displayStart = isInteracting
+    final displayStart = isInteracting && !snappedBack
         ? (_ghostStart ?? event.startMinutes)
         : event.startMinutes;
-    final displayDuration = isInteracting
+    final displayDuration = isInteracting && !snappedBack
         ? (_ghostDuration ?? event.durationMinutes)
         : event.durationMinutes;
 
@@ -1721,7 +1743,7 @@ class _TimelineBodyState extends State<TimelineBody>
 
       final visibleStart = _visibleStart(widget.weekStart!);
       final baseDayIndex = _daysBetween(visibleStart, date);
-      final dayIndex = isDragging
+      final dayIndex = isDragging && !snappedBack
           ? baseDayIndex + _ghostDayOffset
           : baseDayIndex;
 
@@ -1755,7 +1777,7 @@ class _TimelineBodyState extends State<TimelineBody>
       height: visualHeight,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 120),
-        opacity: isDragging ? 0.8 : 1.0,
+        opacity: isDragging ? (snappedBack ? 0.35 : 0.8) : 1.0,
         child: _EventTile(
           event: event,
           height: visualHeight,

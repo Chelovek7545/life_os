@@ -295,6 +295,105 @@ void main() {
         // Since 15 min = 35px < 36, it should be hidden
         expect(find.byIcon(Icons.drag_indicator), findsNothing);
       });
+
+      testWidgets('drag ending over unscheduled panel unschedules the task', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(1600, 4200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final task = createMockTask();
+        final event = TaskEvent(
+          task: task,
+          title: 'Timed Event',
+          startMinutes: 540, // 9:00 AM
+          durationMinutes: 60,
+        );
+
+        Task? unscheduled;
+        var eventChangedCalls = 0;
+        var hoverCalls = 0;
+        bool? lastHover;
+
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: [event],
+              topPadding: 60,
+              onEventChanged: (t, {startMinutes, durationMinutes, newDate}) {
+                eventChangedCalls++;
+              },
+              onToggleTask: (_) {},
+              isOverUnscheduled: (_) => true,
+              onEventToUnscheduled: (t) => unscheduled = t,
+              onHoverUnscheduled: (hovering) {
+                hoverCalls++;
+                lastHover = hovering;
+              },
+            ),
+          ),
+        );
+        await tester.pump();
+
+        // Event tile top: (540 - 0) / 60 * 140 + 2 = 1262 in content coords,
+        // plus topPadding 60 → global ~1322.
+        final gesture = await tester.startGesture(const Offset(300, 1340));
+        await tester.pump(const Duration(milliseconds: 600));
+        await gesture.moveBy(const Offset(0, 100));
+        await tester.pump(const Duration(milliseconds: 50));
+        await gesture.up();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(unscheduled, same(task));
+        expect(eventChangedCalls, 0);
+        expect(hoverCalls, greaterThan(0));
+        expect(lastHover, isFalse);
+      });
+
+      testWidgets('drag ending outside unscheduled panel moves the event', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(1600, 4200);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final task = createMockTask();
+        final event = TaskEvent(
+          task: task,
+          title: 'Timed Event',
+          startMinutes: 540,
+          durationMinutes: 60,
+        );
+
+        int? movedStartMinutes;
+        Task? unscheduled;
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: [event],
+              topPadding: 60,
+              onEventChanged: (t, {startMinutes, durationMinutes, newDate}) {
+                movedStartMinutes = startMinutes;
+              },
+              onToggleTask: (_) {},
+              isOverUnscheduled: (_) => false,
+              onEventToUnscheduled: (t) => unscheduled = t,
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final gesture = await tester.startGesture(const Offset(300, 1340));
+        await tester.pump(const Duration(milliseconds: 600));
+        await gesture.moveBy(const Offset(0, 100));
+        await tester.pump(const Duration(milliseconds: 50));
+        await gesture.up();
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(unscheduled, isNull);
+        expect(movedStartMinutes, isNotNull);
+      });
     });
 
     group('Layout', () {

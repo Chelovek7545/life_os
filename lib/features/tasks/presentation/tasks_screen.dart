@@ -33,6 +33,7 @@ const double _kTimelineTopPadding = 60.0 + _kDateHeaderHeight;
 const double _kWeekTimelineTopPadding =
     _kTimelineTopPadding - _kDateHeaderHeight;
 const double _kWideBreakpoint = 760.0;
+const _kUnscheduledHoverColor = Color(0xFFFFB59C);
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({
@@ -52,6 +53,30 @@ class TasksScreenState extends State<TasksScreen> {
   bool _showCalendar = true;
   bool _showUnscheduledOverlay = false;
   bool _draggingFromOverlay = false;
+  bool _hoveringUnscheduled = false;
+  final GlobalKey _unscheduledOverlayKey = GlobalKey();
+
+  bool _isOverUnscheduled(Offset globalPosition) {
+    final box =
+        _unscheduledOverlayKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return false;
+    final local = box.globalToLocal(globalPosition);
+    return local.dx >= 0 &&
+        local.dy >= 0 &&
+        local.dx <= box.size.width &&
+        local.dy <= box.size.height;
+  }
+
+  void _onHoverUnscheduled(bool hovering) {
+    if (_hoveringUnscheduled == hovering) return;
+    setState(() => _hoveringUnscheduled = hovering);
+  }
+
+  Future<void> _unscheduleTask(Task task) async {
+    await widget.viewModel.updateTask(
+      task.copyWith(startsAt: Wrapped(null), endsAt: Wrapped(null)),
+    );
+  }
 
   @override
   void dispose() {
@@ -85,83 +110,107 @@ class TasksScreenState extends State<TasksScreen> {
           return const SizedBox.shrink();
         }
         return Positioned(
+          key: _unscheduledOverlayKey,
           top: AppSpacing.sm + _kHeaderHeight + AppSpacing.sm,
           left: 8,
           width: overlayWidth,
           child: IgnorePointer(
             ignoring: _draggingFromOverlay,
-            child: Material(
-              elevation: 8,
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-              color: Colors.transparent,
-              child: GlassPanel(
-                padding: EdgeInsets.zero,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 400),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadius.lg + 2),
+                border: _hoveringUnscheduled
+                    ? Border.all(color: _kUnscheduledHoverColor, width: 2)
+                    : null,
+                boxShadow: _hoveringUnscheduled
+                    ? [
+                        BoxShadow(
+                          color: _kUnscheduledHoverColor.withValues(alpha: 0.4),
+                          blurRadius: 20,
+                          spreadRadius: -6,
                         ),
-                        child: Row(
-                          children: [
-                            const Text(
-                              'Unscheduled',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () => setState(
-                                () => _showUnscheduledOverlay = false,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Divider(height: 1),
-                      Flexible(
-                        child: ListView(
-                          shrinkWrap: true,
-                          padding: const EdgeInsets.all(8),
-                          children: unscheduledTasks
-                              .map(
-                                (item) => Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: LongPressDraggable<Task>(
-                                    data: item.task,
-                                    hapticFeedbackOnStart: true,
-                                    onDragStarted: () => setState(
-                                      () => _draggingFromOverlay = true,
-                                    ),
-                                    onDraggableCanceled: (_, __) => setState(
-                                      () => _draggingFromOverlay = false,
-                                    ),
-                                    onDragEnd: (_) => setState(
-                                      () => _draggingFromOverlay = false,
-                                    ),
-                                    feedback: _buildDragFeedback(item),
-                                    childWhenDragging: Opacity(
-                                      opacity: 0.35,
-                                      child: _buildUnscheduledCard(
-                                        item,
-                                        today,
-                                      ),
-                                    ),
-                                    child: _buildUnscheduledCard(item, today),
-                                  ),
+                      ]
+                    : null,
+              ),
+              child: Material(
+                elevation: 8,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                color: Colors.transparent,
+                child: GlassPanel(
+                  padding: EdgeInsets.zero,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 400),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          child: Row(
+                            children: [
+                              Text(
+                                _hoveringUnscheduled
+                                    ? 'Drop to unschedule'
+                                    : 'Unscheduled',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                  color: _hoveringUnscheduled
+                                      ? _kUnscheduledHoverColor
+                                      : null,
                                 ),
-                              )
-                              .toList(),
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                icon: const Icon(Icons.close),
+                                onPressed: () => setState(
+                                  () => _showUnscheduledOverlay = false,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                        const Divider(height: 1),
+                        Flexible(
+                          child: ListView(
+                            shrinkWrap: true,
+                            padding: const EdgeInsets.all(8),
+                            children: unscheduledTasks
+                                .map(
+                                  (item) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: LongPressDraggable<Task>(
+                                      data: item.task,
+                                      hapticFeedbackOnStart: true,
+                                      onDragStarted: () => setState(
+                                        () => _draggingFromOverlay = true,
+                                      ),
+                                      onDraggableCanceled: (_, __) => setState(
+                                        () => _draggingFromOverlay = false,
+                                      ),
+                                      onDragEnd: (_) => setState(
+                                        () => _draggingFromOverlay = false,
+                                      ),
+                                      feedback: _buildDragFeedback(item),
+                                      childWhenDragging: Opacity(
+                                        opacity: 0.35,
+                                        child: _buildUnscheduledCard(
+                                          item,
+                                          today,
+                                        ),
+                                      ),
+                                      child: _buildUnscheduledCard(item, today),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -357,6 +406,9 @@ class TasksScreenState extends State<TasksScreen> {
           topPadding: isWide ? _kWeekTimelineTopPadding : _kTimelineTopPadding,
           onEventChanged: _updateEvent,
           onExternalDrop: _scheduleUnscheduledTask,
+          isOverUnscheduled: _isOverUnscheduled,
+          onEventToUnscheduled: _unscheduleTask,
+          onHoverUnscheduled: _onHoverUnscheduled,
           onToggleTask: widget.viewModel.toggleTask,
           taskFormProjects: widget.viewModel.watchProjects(),
           onSubmitNewTask: widget.viewModel.addTask,
@@ -534,10 +586,7 @@ class TasksScreenState extends State<TasksScreen> {
     DateTime endsAt,
   ) async {
     await widget.viewModel.updateTask(
-      task.copyWith(
-        startsAt: Wrapped(startsAt),
-        endsAt: Wrapped(endsAt),
-      ),
+      task.copyWith(startsAt: Wrapped(startsAt), endsAt: Wrapped(endsAt)),
     );
   }
 
@@ -743,7 +792,11 @@ class TasksScreenState extends State<TasksScreen> {
           forceExpanded: forceExpanded,
           onFormVisibilityChanged: (value) =>
               widget.onFormVisibilityChanged?.call(value),
-          onCancel: widget.viewModel.hideForm,
+          onCancel: (){
+            widget.viewModel.hideForm();
+            if(forceExpanded) widget.viewModel.disableForm();
+
+          },
           height: forceExpanded
               ? constraints.maxHeight
               : MediaQuery.sizeOf(context).height * 0.8,
@@ -753,8 +806,12 @@ class TasksScreenState extends State<TasksScreen> {
           onDelete: (taskId) {
             widget.viewModel.deleteTask(taskId);
             widget.viewModel.hideForm();
+            if(forceExpanded) widget.viewModel.disableForm();
           },
-          onSubmit: _submitTask,
+          onSubmit: (task){
+            _submitTask(task);
+            if(forceExpanded) widget.viewModel.disableForm();
+          },
         );
       },
     );
