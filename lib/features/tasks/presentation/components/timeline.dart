@@ -395,7 +395,10 @@ class _TimelineBodyState extends State<TimelineBody>
     final drop = _dropFromGlobal(details.offset);
     final task = details.data;
     _clearExternalDrop();
-    if (drop == null || task.startsAt != null) return;
+    
+    
+    //Раньше здесь был if (drop == null || task.startsAt != null) return;
+    if (drop == null) return;
 
     final isWeek = widget.weekStart != null;
     final day = isWeek

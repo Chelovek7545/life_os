@@ -6,6 +6,7 @@ import 'package:life_os/core/ui/empty_placeholder.dart';
 import 'package:life_os/core/ui/fixed_fade_mask.dart';
 import 'package:life_os/core/ui/glassPopUpMenuButton.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
+import 'package:life_os/core/ui/heirarchy_view.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/ui/segmented_pill_controller.dart';
 import 'package:life_os/core/ui/resizable_panel.dart';
@@ -14,6 +15,7 @@ import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/core/utils/wrapped.dart';
+import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/settings/settings_screen.dart';
 import 'package:life_os/features/tasks/domain/task_filter_config.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
@@ -55,6 +57,8 @@ class TasksScreenState extends State<TasksScreen> {
   bool _draggingFromOverlay = false;
   bool _hoveringUnscheduled = false;
   final GlobalKey _unscheduledOverlayKey = GlobalKey();
+  bool _showHierarchyOverlay = false;
+  bool _draggingFromHierarchy = false;
 
   bool _isOverUnscheduled(Offset globalPosition) {
     final box =
@@ -84,7 +88,17 @@ class TasksScreenState extends State<TasksScreen> {
   }
 
   void _toggleUnscheduledOverlay() {
-    setState(() => _showUnscheduledOverlay = !_showUnscheduledOverlay);
+    setState(() {
+      _showUnscheduledOverlay = !_showUnscheduledOverlay;
+      _showHierarchyOverlay = false;
+    });
+  }
+
+  void _toggleHierarchyOverlay() {
+    setState(() {
+      _showHierarchyOverlay = !_showHierarchyOverlay;
+      _showUnscheduledOverlay = false;
+    });
   }
 
   Widget _buildUnscheduledOverlay(
@@ -298,6 +312,214 @@ class TasksScreenState extends State<TasksScreen> {
     );
   }
 
+  Widget _buildHierarchyOverlay(
+    double overlayHeight,
+    DateTime today,
+    double overlayWidth,
+  ) {
+    if (!_showHierarchyOverlay) {
+      return const SizedBox.shrink();
+    }
+    return Positioned(
+      top: AppSpacing.sm + _kHeaderHeight + AppSpacing.sm,
+      left: 8,
+      width: overlayWidth,
+      child: IgnorePointer(
+        ignoring: _draggingFromHierarchy,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.lg + 2),
+          ),
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            color: Colors.transparent,
+            child: GlassPanel(
+              padding: EdgeInsets.zero,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 400),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        children: [
+                          const Text(
+                            'Hierarchy',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () => setState(
+                              () => _showHierarchyOverlay = false,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    Flexible(
+                      child: ListView(
+                        shrinkWrap: true,
+                        padding: EdgeInsets.zero,
+                        children: [_buildHierarchyContent()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHierarchyContent() {
+    return StreamBuilder<List<Project>>(
+      stream: widget.viewModel.watchProjects(),
+      initialData: const [],
+      builder: (context, projectSnapshot) {
+        final projects = projectSnapshot.data ?? const <Project>[];
+        return StreamBuilder<List<Task>>(
+          stream: widget.viewModel.watchAllTasks(),
+          initialData: const [],
+          builder: (context, taskSnapshot) {
+            final tasks = taskSnapshot.data ?? const <Task>[];
+            return HierarchyColumn(
+              nodes: _buildHierarchyNodes(projects, tasks),
+              draggableBuilder: _buildDraggableHierarchyNode,
+            );
+          },
+        );
+      },
+    );
+  }
+
+  List<HierarchyNode> _buildHierarchyNodes(
+    List<Project> projects,
+    List<Task> tasks,
+  ) {
+    final tasksByParent = <String?, List<Task>>{};
+    for (final task in tasks) {
+      tasksByParent.putIfAbsent(task.parentTaskId, () => []).add(task);
+    }
+
+    HierarchyNode taskNode(Task task) {
+      return HierarchyNode(
+        id: task.id,
+        title: task.title,
+        type: NodeType.task,
+        data: task,
+        children: (tasksByParent[task.id] ?? const <Task>[])
+            .map(
+              (sub) => HierarchyNode(
+                id: sub.id,
+                title: sub.title,
+                type: NodeType.subtask,
+                data: sub,
+              ),
+            )
+            .toList(),
+      );
+    }
+
+    return [
+      for (final project in projects)
+        if (!project.isArchived)
+          HierarchyNode(
+            id: project.id,
+            title: project.name,
+            type: NodeType.project,
+            icon: Icons.folder,
+            dotColor: parseHexColor(project.color),
+            isExpanded: true,
+            children: (tasksByParent[null] ?? const <Task>[])
+                .where((t) => t.projectId == project.id)
+                .map(taskNode)
+                .toList(),
+          ),
+    ];
+  }
+
+  Widget _buildDraggableHierarchyNode(HierarchyNode node, Widget child) {
+    final task = node.data;
+    if (task is! Task) return child;
+    return LongPressDraggable<Task>(
+      data: task,
+      hapticFeedbackOnStart: true,
+      onDragStarted: () => setState(() => _draggingFromHierarchy = true),
+      onDragEnd: (_) => setState(() => _draggingFromHierarchy = false),
+      onDraggableCanceled: (_, __) =>
+          setState(() => _draggingFromHierarchy = false),
+      feedback: _buildHierarchyDragFeedback(task),
+      childWhenDragging: Opacity(opacity: 0.35, child: child),
+      child: child,
+    );
+  }
+
+  Widget _buildHierarchyDragFeedback(Task task) {
+    return Material(
+      elevation: 8,
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: Container(
+        width: 220,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: AppColors.primary, width: 2),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.drag_indicator, size: 20, color: Colors.white54),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    task.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodyMd.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const Row(
+                    children: [
+                      Icon(Icons.event, size: 10, color: Colors.white54),
+                      SizedBox(width: 4),
+                      Text(
+                        'Drop on calendar',
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTaskBody(double overlayHeight, DateTime today) {
     return StreamBuilder<TaskScreenState>(
       stream: widget.viewModel.state,
@@ -436,6 +658,7 @@ class TasksScreenState extends State<TasksScreen> {
               : widget.viewModel.showForm,
           onModeChanged: (index) => _onModeChanged(index, isWide),
           onToggleUnscheduled: _toggleUnscheduledOverlay,
+          onToggleHierarchy: _toggleHierarchyOverlay,
         ),
         const SizedBox(height: AppSpacing.sm),
 
@@ -688,6 +911,13 @@ class TasksScreenState extends State<TasksScreen> {
               ? 400
               : MediaQuery.sizeOf(context).width,
         ),
+        _buildHierarchyOverlay(
+          overlayHeight,
+          today,
+          MediaQuery.sizeOf(context).width > 400
+              ? 400
+              : MediaQuery.sizeOf(context).width,
+        ),
         _buildTaskForm(
           context,
           isFormVisible,
@@ -759,6 +989,11 @@ class TasksScreenState extends State<TasksScreen> {
                     isWide,
                   ),
                   _buildUnscheduledOverlay(
+                    overlayHeight,
+                    today,
+                    leftWidth > 400 ? 400 : leftWidth,
+                  ),
+                  _buildHierarchyOverlay(
                     overlayHeight,
                     today,
                     leftWidth > 400 ? 400 : leftWidth,
@@ -1140,12 +1375,14 @@ class _TasksHeader extends StatelessWidget {
     required this.vm,
     required this.tasksScreenWidth,
     required this.onToggleUnscheduled,
+    required this.onToggleHierarchy,
   });
   final TasksViewModel vm;
   final VoidCallback onAddPressed;
   final ValueChanged<int> onModeChanged;
   final double tasksScreenWidth;
   final VoidCallback onToggleUnscheduled;
+  final VoidCallback onToggleHierarchy;
 
   @override
   Widget build(BuildContext context) {
@@ -1188,6 +1425,11 @@ class _TasksHeader extends StatelessWidget {
               onPressed: onToggleUnscheduled,
               icon: const Icon(Icons.inbox_rounded, color: Colors.white),
             ),
+          ),
+          IconButton(
+            tooltip: 'Hierarchy',
+            onPressed: onToggleHierarchy,
+            icon: const Icon(Icons.account_tree_rounded, color: Colors.white),
           ),
           Spacer(),
           SizedBox(

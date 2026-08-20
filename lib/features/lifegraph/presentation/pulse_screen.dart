@@ -100,7 +100,7 @@ class _PulseScreenState extends State<PulseScreen> {
           bool isSplit = asyncSnapshot.maxWidth >= 900;
 
           final hierarchyPanel = SingleChildScrollView(
-            child: _HierarchyPanel(viewModel: widget.viewModel),
+            child: HierarchyPanel(viewModel: widget.viewModel),
           );
           final spheresPanel = SingleChildScrollView(
             child: _SpheresPanel(
@@ -161,7 +161,7 @@ class _PulseScreenState extends State<PulseScreen> {
                   expand: false,
                 ),
                 const SizedBox(height: 12),
-                _HierarchyPanel(viewModel: widget.viewModel, expand: false),
+                HierarchyPanel(viewModel: widget.viewModel, expand: false),
                 const SizedBox(height: 12),
                 _SpheresPanel(
                   viewModel: widget.viewModel,
@@ -218,11 +218,11 @@ class _PulseScreenState extends State<PulseScreen> {
 
 /// Панель иерархии: проект -> задача -> subtask. Строит дерево из
 /// live-стримов проектов и задач (subtask = задача с заполненным parentTaskId).
-class _HierarchyPanel extends StatelessWidget {
+class HierarchyPanel extends StatelessWidget {
   final LifeGraphViewModel viewModel;
   final bool expand;
 
-  const _HierarchyPanel({required this.viewModel, this.expand = true});
+  const HierarchyPanel({required this.viewModel, this.expand = true});
 
   @override
   Widget build(BuildContext context) {

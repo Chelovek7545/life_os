@@ -11,6 +11,7 @@ class HierarchyNode {
   final Color? dotColor;
   final List<HierarchyNode> children;
   final bool isExpanded;
+  final Object? data;
 
   HierarchyNode({
     required this.id,
@@ -20,6 +21,7 @@ class HierarchyNode {
     this.dotColor,
     this.children = const [],
     this.isExpanded = false,
+    this.data,
   });
 }
 
@@ -33,11 +35,13 @@ class HierarchyNode {
 class HierarchyColumn extends StatefulWidget {
   final List<HierarchyNode> nodes;
   final double indent;
+  final Widget Function(HierarchyNode node, Widget child)? draggableBuilder;
 
   const HierarchyColumn({
     super.key,
     required this.nodes,
     this.indent = 18,
+    this.draggableBuilder,
   });
 
   @override
@@ -57,6 +61,14 @@ class _HierarchyColumnState extends State<HierarchyColumn> {
     for (final node in nodes) {
       if (node.isExpanded) _expandedIds.add(node.id);
       _collectInitiallyExpanded(node.children);
+    }
+  }
+
+  @override
+  void didUpdateWidget(HierarchyColumn oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.nodes != widget.nodes) {
+      _collectInitiallyExpanded(widget.nodes);
     }
   }
 
@@ -99,70 +111,76 @@ class _HierarchyColumnState extends State<HierarchyColumn> {
     final bool hasChildren = node.children.isNotEmpty;
     final bool expanded = _isExpanded(node);
 
+    Widget tile = InkWell(
+      onTap: hasChildren ? () => _toggle(node) : null,
+      borderRadius: BorderRadius.circular(8),
+      hoverColor: AppColors.surfaceContainerHigh,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
+        child: Row(
+          children: [
+            if (hasChildren)
+              Icon(
+                expanded
+                    ? Icons.keyboard_arrow_down
+                    : Icons.keyboard_arrow_right,
+                size: 18,
+                color: level == 0 ? AppColors.primary : AppColors.onSurfaceVariant,
+              )
+            else
+              const SizedBox(width: 18),
+            const SizedBox(width: 4),
+
+            if (node.type == NodeType.project)
+              Icon(
+                node.icon ?? Icons.folder,
+                size: 18,
+                color: node.dotColor ?? AppColors.primary,
+              )
+            else if (node.type == NodeType.subtask)
+              Container(
+                width: 6,
+                height: 6,
+                margin: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  color: node.dotColor ?? AppColors.primary.withValues(alpha: 0.5),
+                  shape: BoxShape.circle,
+                ),
+              ),
+
+            const SizedBox(width: 8),
+
+            Expanded(
+              child: Text(
+                node.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: level == 2 ? 12 : 14,
+                  fontFamily: 'JetBrainsMono',
+                  fontWeight: level == 0 ? FontWeight.w600 : FontWeight.w400,
+                  color: level == 0
+                      ? AppColors.onSurface
+                      : level == 1
+                          ? AppColors.onSurface.withValues(alpha: 0.8)
+                          : AppColors.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final draggableBuilder = widget.draggableBuilder;
+    if (draggableBuilder != null) {
+      tile = draggableBuilder(node, tile);
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          onTap: hasChildren ? () => _toggle(node) : null,
-          borderRadius: BorderRadius.circular(8),
-          hoverColor: AppColors.surfaceContainerHigh,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
-            child: Row(
-              children: [
-                if (hasChildren)
-                  Icon(
-                    expanded
-                        ? Icons.keyboard_arrow_down
-                        : Icons.keyboard_arrow_right,
-                    size: 18,
-                    color: level == 0 ? AppColors.primary : AppColors.onSurfaceVariant,
-                  )
-                else
-                  const SizedBox(width: 18),
-                const SizedBox(width: 4),
-
-                if (node.type == NodeType.project)
-                  Icon(
-                    node.icon ?? Icons.folder,
-                    size: 18,
-                    color: node.dotColor ?? AppColors.primary,
-                  )
-                else if (node.type == NodeType.subtask)
-                  Container(
-                    width: 6,
-                    height: 6,
-                    margin: const EdgeInsets.symmetric(horizontal: 6),
-                    decoration: BoxDecoration(
-                      color: node.dotColor ?? AppColors.primary.withValues(alpha: 0.5),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-
-                const SizedBox(width: 8),
-
-                Expanded(
-                  child: Text(
-                    node.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: level == 2 ? 12 : 14,
-                      fontFamily: 'JetBrainsMono',
-                      fontWeight: level == 0 ? FontWeight.w600 : FontWeight.w400,
-                      color: level == 0
-                          ? AppColors.onSurface
-                          : level == 1
-                              ? AppColors.onSurface.withValues(alpha: 0.8)
-                              : AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
+        tile,
         if (hasChildren && expanded)
           Padding(
             padding: EdgeInsets.only(left: widget.indent),

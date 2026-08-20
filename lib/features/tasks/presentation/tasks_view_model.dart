@@ -321,6 +321,8 @@ void startEditingTask(TaskWithProject item) {
 
   Future<Task?> getTask(String id) async => await _repository.getById(id);
 
+  Stream<List<Task>> watchAllTasks() => _repository.watchTasks();
+
   Stream<List<Project>> watchProjects() =>
       _projectsRepository.watchAllProjects();
 
