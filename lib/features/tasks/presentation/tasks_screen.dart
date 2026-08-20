@@ -51,6 +51,7 @@ class TasksScreen extends StatefulWidget {
 class TasksScreenState extends State<TasksScreen> {
   bool _showCalendar = true;
   bool _showUnscheduledOverlay = false;
+  bool _draggingFromOverlay = false;
 
   @override
   void dispose() {
@@ -87,78 +88,164 @@ class TasksScreenState extends State<TasksScreen> {
           top: AppSpacing.sm + _kHeaderHeight + AppSpacing.sm,
           left: 8,
           width: overlayWidth,
-          child: Material(
-            elevation: 8,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            color: Colors.transparent,
-            child: GlassPanel(
-              padding: EdgeInsets.zero,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 400),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      child: Row(
-                        children: [
-                          const Text(
-                            'Unscheduled',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            icon: const Icon(Icons.close),
-                            onPressed: () =>
-                                setState(() => _showUnscheduledOverlay = false),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    Flexible(
-                      child: ListView(
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.all(8),
-                        children: unscheduledTasks
-                            .map(
-                              (item) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: TaskCard(
-                                  task: item.task,
-                                  projectTitle: item.project?.name,
-                                  leftBorderColor: item.project != null
-                                      ? parseHexColor(item.project!.color)
-                                      : null,
-                                  isOverdue:
-                                      item.task.dueDate?.isBefore(today) ??
-                                      false,
-                                  onCheckChanged: () {
-                                    widget.viewModel.toggleTask(item.task);
-                                  },
-                                  onLongPress: () => _openTaskEditor(item),
-                                  onDelete: () =>
-                                      widget.viewModel.deleteTask(item.task.id),
-                                  isSelected: false,
-                                ),
+          child: IgnorePointer(
+            ignoring: _draggingFromOverlay,
+            child: Material(
+              elevation: 8,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              color: Colors.transparent,
+              child: GlassPanel(
+                padding: EdgeInsets.zero,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 400),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        child: Row(
+                          children: [
+                            const Text(
+                              'Unscheduled',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
                               ),
-                            )
-                            .toList(),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: () => setState(
+                                () => _showUnscheduledOverlay = false,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                      const Divider(height: 1),
+                      Flexible(
+                        child: ListView(
+                          shrinkWrap: true,
+                          padding: const EdgeInsets.all(8),
+                          children: unscheduledTasks
+                              .map(
+                                (item) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: LongPressDraggable<Task>(
+                                    data: item.task,
+                                    hapticFeedbackOnStart: true,
+                                    onDragStarted: () => setState(
+                                      () => _draggingFromOverlay = true,
+                                    ),
+                                    onDraggableCanceled: (_, __) => setState(
+                                      () => _draggingFromOverlay = false,
+                                    ),
+                                    onDragEnd: (_) => setState(
+                                      () => _draggingFromOverlay = false,
+                                    ),
+                                    feedback: _buildDragFeedback(item),
+                                    childWhenDragging: Opacity(
+                                      opacity: 0.35,
+                                      child: _buildUnscheduledCard(
+                                        item,
+                                        today,
+                                      ),
+                                    ),
+                                    child: _buildUnscheduledCard(item, today),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildUnscheduledCard(TaskWithProject item, DateTime today) {
+    return TaskCard(
+      task: item.task,
+      projectTitle: item.project?.name,
+      leftBorderColor: item.project != null
+          ? parseHexColor(item.project!.color)
+          : null,
+      isOverdue: item.task.dueDate?.isBefore(today) ?? false,
+      onCheckChanged: () {
+        widget.viewModel.toggleTask(item.task);
+      },
+      onTap: () => _openTaskEditor(item),
+      onDelete: () => widget.viewModel.deleteTask(item.task.id),
+      isSelected: false,
+    );
+  }
+
+  Widget _buildDragFeedback(TaskWithProject item) {
+    final accent = item.project != null
+        ? parseHexColor(item.project!.color)
+        : AppColors.primary;
+    return Material(
+      elevation: 8,
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: Container(
+        width: 220,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: accent, width: 2),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.drag_indicator, size: 20, color: Colors.white54),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.task.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodyMd.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: accent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Text(
+                        'Drop on calendar',
+                        style: TextStyle(color: Colors.white54, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -269,6 +356,7 @@ class TasksScreenState extends State<TasksScreen> {
               : null,
           topPadding: isWide ? _kWeekTimelineTopPadding : _kTimelineTopPadding,
           onEventChanged: _updateEvent,
+          onExternalDrop: _scheduleUnscheduledTask,
           onToggleTask: widget.viewModel.toggleTask,
           taskFormProjects: widget.viewModel.watchProjects(),
           onSubmitNewTask: widget.viewModel.addTask,
@@ -436,6 +524,19 @@ class TasksScreenState extends State<TasksScreen> {
       task.copyWith(
         startsAt: Wrapped(startsAt),
         endsAt: Wrapped(startsAt.add(duration)),
+      ),
+    );
+  }
+
+  Future<void> _scheduleUnscheduledTask(
+    Task task,
+    DateTime startsAt,
+    DateTime endsAt,
+  ) async {
+    await widget.viewModel.updateTask(
+      task.copyWith(
+        startsAt: Wrapped(startsAt),
+        endsAt: Wrapped(endsAt),
       ),
     );
   }
@@ -776,12 +877,12 @@ class _TaskListState extends State<_TaskList> {
           : null,
       isOverdue: item.task.dueDate?.isBefore(widget.today) ?? false,
       onCheckChanged: () => widget.onToggleTask(item.task),
-      onLongPress: () => widget.onEditTask(item),
+      onTap: () => widget.onEditTask(item),
       onDelete: () => widget.onDeleteTask(item.task.id),
       projectTitle: item.project?.name,
       isSelected: widget.selectedIds.contains(item.task.id),
       onSelected: () => widget.onToggleSelection(item.task),
-      onTap: () {},
+      //onTap: () {},
     );
   }
 }
@@ -959,12 +1060,12 @@ class _WeekDaySection extends StatelessWidget {
                       : null,
                   task: item.task,
                   onCheckChanged: () => onToggleTask(item.task),
-                  onLongPress: () => onEditTask(item),
+                  onTap: () => onEditTask(item),
                   onDelete: () => onDeleteTask(item.task.id),
                   projectTitle: item.project?.name,
                   isSelected: selectedIds.contains(item.task.id),
                   onSelected: () => onToggleSelection(item.task),
-                  onTap: () {},
+                  //onTap: () {},
                 ),
               ),
             ),

@@ -100,6 +100,7 @@ class TimelineBody extends StatefulWidget {
     this.onWeekChange,
     this.taskFormProjects,
     this.onSubmitNewTask,
+    this.onExternalDrop,
   });
 
   final List<TaskEvent> events;
@@ -117,6 +118,8 @@ class TimelineBody extends StatefulWidget {
   })
   onEventChanged;
   final void Function(Task task) onToggleTask;
+  final void Function(Task task, DateTime startsAt, DateTime endsAt)?
+      onExternalDrop;
 
   @override
   State<TimelineBody> createState() => _TimelineBodyState();
@@ -182,6 +185,12 @@ class _TimelineBodyState extends State<TimelineBody>
   bool _showDraftForm = false;
   double _lastMaxWidth = 0;
   double _lastDayViewWidth = 0;
+
+  // Drag & Drop из списка Unscheduled
+  Task? _dropTask;
+  int? _dropMinutes;
+  int _dropDurationMinutes = 60;
+  int _dropDayIndex = 0;
 
   void _handleHeaderWeekChange(DateTime date) {
     _pendingHeaderWeekChange = true;
@@ -310,6 +319,174 @@ class _TimelineBodyState extends State<TimelineBody>
       _selStartMinutes = 0;
       _selEndMinutes = 0;
     });
+  }
+
+  // --- Drag & Drop из списка Unscheduled ---
+
+  ({int minutes, int dayIndex})? _dropFromGlobal(Offset globalPosition) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return null;
+    final local = box.globalToLocal(globalPosition);
+    final isWeek = widget.weekStart != null;
+
+    final verticalOffset =
+        _verticalController.hasClients ? _verticalController.offset : 0.0;
+    final topPad = isWeek ? 200.0 : widget.topPadding;
+    final dyFromGridTop = local.dy - topPad + verticalOffset;
+    final minutes = _snapToGrid(
+      (dyFromGridTop / _hourHeight * 60).round(),
+    ).clamp(_startHour * 60, _endHour * 60).toInt();
+
+    if (isWeek) {
+      final horizontalOffset =
+          _horizontalController.hasClients ? _horizontalController.offset : 0.0;
+      final xInContent = local.dx - _leftLabelWidth + horizontalOffset;
+      final dayIndex = (xInContent / _lastColumnWidth)
+          .floor()
+          .clamp(0, _weekTotalDays - 1)
+          .toInt();
+      return (minutes: minutes, dayIndex: dayIndex);
+    }
+    return (minutes: minutes, dayIndex: 0);
+  }
+
+  int _dropDurationFor(Task task) {
+    if (task.startsAt != null && task.endsAt != null) {
+      return task.duration.inMinutes.clamp(
+        _minDurationMinutes,
+        _totalMinutes,
+      );
+    }
+    return 60;
+  }
+
+  void _onExternalDropMove(DragTargetDetails<Task> details) {
+    final drop = _dropFromGlobal(details.offset);
+    if (drop == null) return;
+    final duration = _dropDurationFor(details.data);
+    if (_dropMinutes == drop.minutes &&
+        _dropDayIndex == drop.dayIndex &&
+        _dropDurationMinutes == duration) {
+      return;
+    }
+    setState(() {
+      _dropTask = details.data;
+      _dropMinutes = drop.minutes;
+      _dropDayIndex = drop.dayIndex;
+      _dropDurationMinutes = duration;
+    });
+  }
+
+  void _onExternalDropAccept(DragTargetDetails<Task> details) {
+    final drop = _dropFromGlobal(details.offset);
+    final task = details.data;
+    _clearExternalDrop();
+    if (drop == null || task.startsAt != null) return;
+
+    final isWeek = widget.weekStart != null;
+    final day = isWeek
+        ? _addDays(_visibleStart(widget.weekStart!), drop.dayIndex)
+        : _dateOnly(widget.anchorDate ?? DateTime.now());
+
+    final durationMinutes = _dropDurationFor(task);
+    final maxStart = _endHour * 60 - durationMinutes;
+    final startMinutes = drop.minutes
+        .clamp(_startHour * 60, math.max(_startHour * 60, maxStart))
+        .toInt();
+
+    final start = DateTime(
+      day.year,
+      day.month,
+      day.day,
+      startMinutes ~/ 60,
+      startMinutes % 60,
+    );
+    widget.onExternalDrop?.call(
+      task,
+      start,
+      start.add(Duration(minutes: durationMinutes)),
+    );
+  }
+
+  void _clearExternalDrop() {
+    if (_dropMinutes == null && _dropTask == null) return;
+    setState(() {
+      _dropTask = null;
+      _dropMinutes = null;
+      _dropDurationMinutes = 60;
+      _dropDayIndex = 0;
+    });
+  }
+
+  Widget _buildDropGhost() {
+    final minutes = _dropMinutes;
+    if (minutes == null) return const SizedBox.shrink();
+    final top = (minutes - _startHour * 60) / 60 * _hourHeight;
+    final height = math.max(
+      30.0,
+      _dropDurationMinutes / 60 * _hourHeight + 4.0,
+    );
+    final double left;
+    final double width;
+    if (widget.weekStart != null) {
+      final colW = _lastColumnWidth;
+      left = _dropDayIndex * colW + 3;
+      width = math.max(0.0, colW - 6);
+    } else {
+      left = _leftLabelWidth + 12;
+      width = math.max(0.0, _lastDayViewWidth - 4);
+    }
+    final start = TimeOfDay(
+      hour: (minutes ~/ 60) % 24,
+      minute: minutes % 60,
+    );
+    final endMinutes = minutes + _dropDurationMinutes;
+    final end = TimeOfDay(
+      hour: (endMinutes ~/ 60) % 24,
+      minute: endMinutes % 60,
+    );
+    return Positioned(
+      left: left,
+      top: top + 2,
+      width: width,
+      height: height,
+      child: IgnorePointer(
+        child: Container(
+          decoration: BoxDecoration(
+            color: _orange.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _orange.withValues(alpha: 0.8)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${_formatTime(start)} – ${_formatTime(end)}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
+                  ),
+                  if (_dropTask != null)
+                    Text(
+                      _dropTask!.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildSelectionGhost() {
@@ -894,7 +1071,7 @@ class _TimelineBodyState extends State<TimelineBody>
     _applyHourHeight(_hourHeight * factor, focalLocalDy: focalLocalDy);
   } // --- Drag & Resize Handlers ---
 
-  void _onDragStart(TaskEvent event, DragStartDetails details) {
+  void _onDragStart(TaskEvent event, LongPressStartDetails details) {
     // Не начинаем drag если уже идёт pinch, pan-zoom или width-zoom
     if (_pinching || _panZooming || _widthPinching || _widthPanZooming) return;
     if (_pinchPointers.length > 1 || _widthPinchPointers.length > 1) return;
@@ -911,7 +1088,7 @@ class _TimelineBodyState extends State<TimelineBody>
     });
   }
 
-  void _onDragUpdate(TaskEvent event, DragUpdateDetails details) {
+  void _onDragUpdate(TaskEvent event, LongPressMoveUpdateDetails details) {
     // Если начался pinch/pan-zoom во время drag — отменяем drag
     if (_pinching ||
         _panZooming ||
@@ -961,7 +1138,7 @@ class _TimelineBodyState extends State<TimelineBody>
     });
   }
 
-  void _onDragEnd(TaskEvent event, DragEndDetails details) {
+  void _onDragEnd(TaskEvent event, LongPressEndDetails details) {
     if (_ghostStart != null) {
       final date = event.date;
       if (date != null && _ghostDayOffset != 0) {
@@ -1111,8 +1288,24 @@ class _TimelineBodyState extends State<TimelineBody>
             })
             .toList(growable: false);
 
-        if (isWeekMode) return _buildWeekView(displayEvents, maxWidth);
-        return _buildDayView(displayEvents, maxWidth);
+        if (isWeekMode) {
+          return DragTarget<Task>(
+            onWillAcceptWithDetails: (_) => !_isSelecting && !_showDraftForm,
+            onMove: _onExternalDropMove,
+            onLeave: (data) => _clearExternalDrop(),
+            onAcceptWithDetails: _onExternalDropAccept,
+            builder: (context, candidateData, rejectedData) =>
+                _buildWeekView(displayEvents, maxWidth),
+          );
+        }
+        return DragTarget<Task>(
+          onWillAcceptWithDetails: (_) => !_isSelecting && !_showDraftForm,
+          onMove: _onExternalDropMove,
+          onLeave: (data) => _clearExternalDrop(),
+          onAcceptWithDetails: _onExternalDropAccept,
+          builder: (context, candidateData, rejectedData) =>
+              _buildDayView(displayEvents, maxWidth),
+        );
       },
     );
   }
@@ -1237,6 +1430,7 @@ class _TimelineBodyState extends State<TimelineBody>
                                   }),
                                   _buildWeekNowLine(weekStart, columnWidth),
                                   _buildSelectionGhost(),
+                                  _buildDropGhost(),
                                 ],
                               ),
                             ),
@@ -1327,6 +1521,7 @@ class _TimelineBodyState extends State<TimelineBody>
                     }),
                     _buildNowLine(),
                     _buildSelectionGhost(),
+                    _buildDropGhost(),
                   ],
                 ),
               ),
@@ -1604,9 +1799,9 @@ class _EventTile extends StatelessWidget {
   final double height;
   final bool isDragging;
   final bool isResizing;
-  final ValueChanged<DragStartDetails> onDragStart;
-  final ValueChanged<DragUpdateDetails> onDragUpdate;
-  final ValueChanged<DragEndDetails> onDragEnd;
+  final ValueChanged<LongPressStartDetails> onDragStart;
+  final ValueChanged<LongPressMoveUpdateDetails> onDragUpdate;
+  final ValueChanged<LongPressEndDetails> onDragEnd;
   final ValueChanged<DragStartDetails> onResizeStart;
   final ValueChanged<DragUpdateDetails> onResizeUpdate;
   final ValueChanged<DragEndDetails> onResizeEnd;
@@ -1640,10 +1835,9 @@ class _EventTile extends StatelessWidget {
       children: [
         GestureDetector(
           behavior: HitTestBehavior.translucent,
-          dragStartBehavior: DragStartBehavior.down,
-          onPanStart: onDragStart,
-          onPanUpdate: onDragUpdate,
-          onPanEnd: onDragEnd,
+          onLongPressStart: onDragStart,
+          onLongPressMoveUpdate: onDragUpdate,
+          onLongPressEnd: onDragEnd,
           child: ClipRRect(
             borderRadius: borderRadius,
             child: Container(
@@ -1770,7 +1964,7 @@ class _EventTile extends StatelessWidget {
           bottom: 0,
           height: _resizeHandleHeight,
           child: GestureDetector(
-            behavior: HitTestBehavior.translucent,
+            behavior: HitTestBehavior.opaque,
             dragStartBehavior: DragStartBehavior.down,
             onVerticalDragStart: onResizeStart,
             onVerticalDragUpdate: onResizeUpdate,

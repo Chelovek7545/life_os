@@ -363,6 +363,18 @@ void main() {
         );
       }
 
+      double verticalOffsetOf(WidgetTester tester) {
+        return tester
+            .widgetList<SingleChildScrollView>(
+              find.byType(SingleChildScrollView),
+            )
+            .firstWhere(
+              (w) => w.scrollDirection == Axis.vertical && w.controller != null,
+            )
+            .controller!
+            .offset;
+      }
+
       testWidgets('renders 7 day headers with dates', (tester) async {
         await tester.pumpWidget(weekBody(events: const []));
 
@@ -445,11 +457,67 @@ void main() {
         );
 
         const columnWidth = 320.0;
-        await tester.drag(find.text('Draggable Event'), Offset(columnWidth, 0));
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.text('Draggable Event')),
+        );
+        await tester.pump(const Duration(milliseconds: 600));
+        await gesture.moveBy(Offset(columnWidth, 0));
+        await tester.pump(const Duration(milliseconds: 50));
+        await gesture.up();
         await tester.pumpAndSettle();
 
         expect(newStart, 540);
         expect(receivedNewDate, DateTime(2026, 8, 13)); // Thursday
+      });
+
+      testWidgets('quick drag over a task scrolls instead of moving it', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(800, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final event = TaskEvent(
+          task: createMockTask(),
+          title: 'Scroll Me',
+          startMinutes: 540,
+          durationMinutes: 60,
+          date: DateTime(2026, 8, 12, 9), // Wednesday
+        );
+
+        int? newStart;
+        DateTime? receivedNewDate;
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: [event],
+              topPadding: 0,
+              weekStart: null,
+              anchorDate: DateTime(2026, 8, 12),
+              onWeekChange: (_) {},
+              onEventChanged: (task, {startMinutes, durationMinutes, newDate}) {
+                newStart = startMinutes;
+                receivedNewDate = newDate;
+              },
+              onToggleTask: (_) {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(find.text('Scroll Me'));
+        await tester.pumpAndSettle();
+
+        final startOffset = verticalOffsetOf(tester);
+        await tester.dragFrom(
+          tester.getCenter(find.text('Scroll Me')),
+          const Offset(0, -200),
+        );
+        await tester.pumpAndSettle();
+
+        expect(newStart, isNull);
+        expect(receivedNewDate, isNull);
+        expect(verticalOffsetOf(tester), isNot(startOffset));
       });
 
       testWidgets('left arrow navigates to previous week', (tester) async {
