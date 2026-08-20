@@ -1426,6 +1426,7 @@ class _TasksHeader extends StatelessWidget {
               icon: const Icon(Icons.inbox_rounded, color: Colors.white),
             ),
           ),
+          if(MediaQuery.sizeOf(context).width > 410)
           IconButton(
             tooltip: 'Hierarchy',
             onPressed: onToggleHierarchy,
@@ -1462,8 +1463,8 @@ class _TasksHeader extends StatelessWidget {
                           final screenWidth = tasksScreenWidth;
                           //MediaQuery.sizeOf(context).width
                           final int maxVisibleActions = switch (screenWidth) {
-                            < 400 => 1,
-                            < 480 => 2,
+                            < 450 => 1,
+                            < 500 => 2,
                             < 600 => 3,
                             _ => 4, // Для больших экранов
                           };
