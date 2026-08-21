@@ -78,6 +78,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                   Positioned.fill(
                     child: graph.GraphView(
                       nodes: widget.viewModel.graphStream,
+                      notes: widget.viewModel.notesStream,
                       onAction: _onAction,
                       camera: _camera,
                       theme: AppGraphThemes.dark,
@@ -145,6 +146,24 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       case graph.SelectAction():
         break;
       case graph.ToggleCollapseAction():
+        break;
+      // Notes actions
+      case graph.CreateNoteAction():
+        widget.viewModel.createNote();
+        break;
+      case graph.NoteTextChangedAction(:final id, :final text):
+        widget.viewModel.updateNoteText(id, text);
+        break;
+      case graph.MoveNoteAction(:final id, :final to):
+        widget.viewModel.moveNote(id, to.dx, to.dy);
+        break;
+      case graph.MoveNoteEndAction(:final id, :final to):
+        widget.viewModel.commitNoteMove(id, to.dx, to.dy);
+        break;
+      case graph.RemoveNoteAction(:final id):
+        widget.viewModel.removeNote(id);
+        break;
+      case graph.SelectNoteAction():
         break;
     }
   }

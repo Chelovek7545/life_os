@@ -33,20 +33,31 @@ class GraphNodeStore {
   Duration latency; // simulated round-trip; watch the ghosts bridge it
 
   final List<GraphNode> _nodes = [];
+  final List<GraphNote> _notes = [];
   int _ids = 0;
   int _labels = 0;
+  int _noteLabels = 0;
   final _rnd = math.Random();
 
   final _ctrl = StreamController<List<GraphNode>>.broadcast(sync: true);
+  final _notesCtrl = StreamController<List<GraphNote>>.broadcast(sync: true);
 
   /// Full snapshot on every event; fresh objects every time.
   Stream<List<GraphNode>> get nodes => _ctrl.stream;
 
-  void _emit() => _ctrl.add([for (final n in _nodes) n.clone()]);
+  /// Notes stream.
+  Stream<List<GraphNote>> get notes => _notesCtrl.stream;
+
+  void _emit() {
+    _ctrl.add([for (final n in _nodes) n.clone()]);
+    _notesCtrl.add([for (final n in _notes) n.clone()]);
+  }
 
   Future<void> apply(GraphAction action) async {
     // MoveAction is a live cursor — never delay or persist it per-event.
-    if (action is! MoveAction && latency > Duration.zero) {
+    if (action is! MoveAction &&
+        action is! MoveNoteAction &&
+        latency > Duration.zero) {
       await Future.delayed(latency);
     }
     switch (action) {
@@ -64,6 +75,20 @@ class GraphNodeStore {
         return; // selection lives in the view; nothing to store
       case ToggleCollapseAction():
         return;
+      // Note actions
+      case CreateNoteAction(:final at, :final text):
+        _addNote(at, text);
+      case NoteTextChangedAction(:final id, :final text):
+        _updateNoteText(id, text);
+      case MoveNoteAction(:final id, :final to):
+        _moveNote(id, to);
+      case MoveNoteEndAction(:final id, :final to):
+        _moveNote(id, to);
+      case RemoveNoteAction(:final id):
+        _removeNote(id);
+      case SelectNoteAction():
+        return; // selection lives in the view; nothing to store
+
     }
     _emit();
   }
@@ -115,7 +140,10 @@ class GraphNodeStore {
     _emit();
   }
 
-  void dispose() => _ctrl.close();
+  void dispose() {
+    _ctrl.close();
+    _notesCtrl.close();
+  }
 
   // ── Internals ──────────────────────────────────────────────────────────────
 
@@ -186,6 +214,65 @@ class GraphNodeStore {
     _nodes.removeWhere((n) => doomed.contains(n.id));
   }
 
+  // ── Note internals ───────────────────────────────────────────────────────────
+
+  GraphNote _addNote(Offset? at, String? text) {
+    final index = _noteLabels++;
+    final centerX = layout.worldSize.width / 2;
+    final centerY = layout.worldSize.height / 2;
+    final n = GraphNote(
+      id: 'note${_ids++}',
+      index: index,
+      size: layout.noteSize,
+      text: text ?? 'Note $index',
+      position: _clampNote(at ??
+          Offset(
+            centerX - layout.noteSize.width / 2,
+            centerY - layout.noteSize.height / 2,
+          )),
+    );
+    _notes.add(n);
+    return n;
+  }
+
+  void _updateNoteText(String id, String text) {
+    final i = _notes.indexWhere((n) => n.id == id);
+    if (i == -1) return;
+    final n = _notes[i];
+    _notes[i] = GraphNote(
+      id: n.id,
+      index: n.index,
+      size: n.size,
+      text: text,
+      position: n.position,
+    );
+  }
+
+  void _moveNote(String id, Offset to) {
+    final i = _notes.indexWhere((n) => n.id == id);
+    if (i == -1) return;
+    final n = _notes[i];
+    _notes[i] = GraphNote(
+      id: n.id,
+      index: n.index,
+      size: n.size,
+      text: n.text,
+      position: _clampNote(to, n.size),
+    );
+  }
+
+  void _removeNote(String id) {
+    _notes.removeWhere((n) => n.id == id);
+  }
+
+  Offset _clampNote(Offset pos, [Size? size]) {
+    final ns = size ?? layout.noteSize;
+    return Offset(
+      pos.dx.clamp(24, layout.worldSize.width - ns.width - 24),
+      pos.dy.clamp(24, layout.worldSize.height - ns.height - 24),
+    );
+  }
+
   Offset _clamp(Offset pos) => Offset(
         pos.dx.clamp(24, layout.worldSize.width - layout.nodeSize.width - 24),
         pos.dy.clamp(24, layout.worldSize.height - layout.nodeSize.height - 24),
@@ -220,10 +307,12 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
   late final GraphNodeStore _store;
   final _camera = GraphViewCamera();
   StreamSubscription<List<GraphNode>>? _consoleSub;
+  StreamSubscription<List<GraphNote>>? _notesConsoleSub;
 
   final List<_Entry> _entries = [];
   int _seq = 0;
   int? _prevCount;
+  int? _prevNoteCount;
   bool _dark = true;
   bool _slow = false; // 400 ms simulated latency
 
@@ -234,12 +323,14 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     super.initState();
     _store = GraphNodeStore(layout: _layout);
     _consoleSub = _store.nodes.listen((list) => _logEmit(list.length));
+    _notesConsoleSub = _store.notes.listen((list) => _logNotesEmit(list.length));
     _store.seed();
   }
 
   @override
   void dispose() {
     _consoleSub?.cancel();
+    _notesConsoleSub?.cancel();
     _store.dispose();
     super.dispose();
   }
@@ -272,6 +363,19 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
     _log(_Kind.emit, '← $head node${delta == 1 || delta == -1 ? '' : 's'} · $count total');
   }
 
+  void _logNotesEmit(int count) {
+    final delta = _prevNoteCount == null ? null : count - _prevNoteCount!;
+    _prevNoteCount = count;
+    final head = delta == null
+        ? 'initial'
+        : delta == 0
+            ? '·'
+            : delta > 0
+                ? '+$delta'
+                : '$delta';
+    _log(_Kind.emit, '← $head note${delta == 1 || delta == -1 ? '' : 's'} · $count total');
+  }
+
   String _describe(GraphAction a) => switch (a) {
         CreateRootAction() => 'createRoot',
         CreateChildAction(:final parentId) => 'createChild($parentId)',
@@ -279,8 +383,13 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         MoveEndAction(:final id) => 'moveEnd($id)',
         RemoveAction(:final id) => 'remove($id)',
         SelectAction(:final id) => 'select(${id ?? '∅'})',
-    // TODO: Handle this case.
-    ToggleCollapseAction() => ''
+        ToggleCollapseAction() => 'toggleCollapse',
+        CreateNoteAction() => 'createNote',
+        NoteTextChangedAction(:final id) => 'noteText($id)',
+        MoveNoteAction(:final id) => 'moveNote($id)',
+        MoveNoteEndAction(:final id) => 'moveNoteEnd($id)',
+        RemoveNoteAction(:final id) => 'removeNote($id)',
+        SelectNoteAction(:final id) => 'selectNote(${id ?? '∅'})',
       };
 
   void _onAction(GraphAction a) {
@@ -333,6 +442,7 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
       children: [
         GraphView(
           nodes: _store.nodes,
+          notes: _store.notes,
           onAction: _onAction,
           theme: theme,
           layout: _layout,
@@ -420,6 +530,17 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
               );
             },
           ),
+          const SizedBox(width: 16),
+          StreamBuilder<List<GraphNote>>(
+            stream: _store.notes,
+            builder: (context, snap) {
+              final n = snap.data?.length ?? 0;
+              return Text(
+                '$n notes',
+                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: theme.textDim),
+              );
+            },
+          ),
           const Spacer(),
 
           // Latency switch — makes the optimistic ghosts visible.
@@ -474,6 +595,16 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
             icon: Icons.fit_screen,
             tooltip: 'Fit graph',
             onTap: () => _camera.fitView(),
+          ),
+          const SizedBox(width: 8),
+          _ToolButton(
+            theme: theme,
+            icon: Icons.sticky_note_2_outlined,
+            tooltip: 'Add note',
+            onTap: () {
+              _store.apply(GraphAction.createNote());
+              _log(_Kind.info, '⇢ created note');
+            },
           ),
           const SizedBox(width: 8),
           _ToolButton(

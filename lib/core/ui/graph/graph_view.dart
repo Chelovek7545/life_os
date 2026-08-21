@@ -53,7 +53,12 @@ class GraphViewTheme {
   Color accentFor(int depth) => depthRamp[depth % depthRamp.length];
 
   static const deep = GraphViewTheme(
-    depthRamp: [Color(0xFFFFB454), Color(0xFFFF6B5E), Color(0xFF34D3A6), Color(0xFF58A6FF)],
+    depthRamp: [
+      Color(0xFFFFB454),
+      Color(0xFFFF6B5E),
+      Color(0xFF34D3A6),
+      Color(0xFF58A6FF),
+    ],
     canvas: Color(0xFF0B1E24),
     ambientA: Color(0x14FFB454),
     ambientB: Color(0x1234D3A6),
@@ -70,7 +75,12 @@ class GraphViewTheme {
   );
 
   static const paper = GraphViewTheme(
-    depthRamp: [Color(0xFFE08A00), Color(0xFFE4573D), Color(0xFF0FA37F), Color(0xFF2E7CD6)],
+    depthRamp: [
+      Color(0xFFE08A00),
+      Color(0xFFE4573D),
+      Color(0xFF0FA37F),
+      Color(0xFF2E7CD6),
+    ],
     canvas: Color(0xFFEEF3F2),
     ambientA: Color(0x1AE08A00),
     ambientB: Color(0x1A0FA37F),
@@ -90,12 +100,14 @@ class GraphViewTheme {
 /// Geometry of the graph. Purely structural — colors live in [GraphViewTheme].
 class GraphLayout {
   final Size nodeSize;
-  final double levelGap;   // horizontal parent → child distance
+  final Size noteSize; // дефолтный размер заметки
+  final double levelGap; // horizontal parent → child distance
   final double siblingGap; // vertical band step between siblings
-  final Size worldSize;    // pannable canvas extent
+  final Size worldSize; // pannable canvas extent
 
   const GraphLayout({
     this.nodeSize = const Size(176, 68),
+    this.noteSize = const Size(212, 150),
     this.levelGap = 236,
     this.siblingGap = 112,
     this.worldSize = const Size(4200, 4200),
@@ -111,10 +123,10 @@ class GraphLayout {
 class GraphNode {
   final String id;
   final String label;
-  final int index;    // creation order — drives the boot stagger
-  final int depth;    // 0 for roots; drives the accent color
+  final int index; // creation order — drives the boot stagger
+  final int depth; // 0 for roots; drives the accent color
   final String? parentId;
-  final Size size;    // physical footprint of the node
+  final Size size; // physical footprint of the node
   Offset position; // top-left, world coordinates
 
   GraphNode({
@@ -128,14 +140,40 @@ class GraphNode {
   });
 
   GraphNode clone() => GraphNode(
-        id: id,
-        label: label,
-        index: index,
-        depth: depth,
-        parentId: parentId,
-        size: size,
-        position: position,
-      );
+    id: id,
+    label: label,
+    index: index,
+    depth: depth,
+    parentId: parentId,
+    size: size,
+    position: position,
+  );
+}
+
+/// Стикеры-заметки на канвасе. Контракт как у [GraphNode]: хост владеет
+/// инстансами и эмитит свежие объекты; виджет рендерит и сообщает жесты.
+class GraphNote {
+  final String id;
+  final int index; // порядок создания — стаггер появления и лёгкий наклон
+  final Size size;
+  String text; // содержимое; меняется только через NoteTextChangedAction
+  Offset position; // top-left, мировые координаты
+
+  GraphNote({
+    required this.id,
+    required this.index,
+    this.size = const Size(212, 150),
+    this.text = '',
+    required this.position,
+  });
+
+  GraphNote clone() => GraphNote(
+    id: id,
+    index: index,
+    size: size,
+    text: text,
+    position: position,
+  );
 }
 
 /// Everything the user can ask the host to do. Sealed, so the host handler
@@ -143,15 +181,34 @@ class GraphNode {
 sealed class GraphAction {
   const GraphAction();
 
-  factory GraphAction.createRoot({Offset? at, String? label}) = CreateRootAction;
-  factory GraphAction.createChild({required String parentId, Offset? at, String? label}) =
-      CreateChildAction;
-  factory GraphAction.move({required String id, required Offset to}) = MoveAction;
-  factory GraphAction.moveEnd({required String id, required Offset to}) = MoveEndAction;
+  factory GraphAction.createRoot({Offset? at, String? label}) =
+      CreateRootAction;
+  factory GraphAction.createChild({
+    required String parentId,
+    Offset? at,
+    String? label,
+  }) = CreateChildAction;
+  factory GraphAction.move({required String id, required Offset to}) =
+      MoveAction;
+  factory GraphAction.moveEnd({required String id, required Offset to}) =
+      MoveEndAction;
   factory GraphAction.remove({required String id}) = RemoveAction;
   factory GraphAction.select(String? id) = SelectAction;
-  factory GraphAction.toggleCollapse({required String id, required bool collapsed}) =
-      ToggleCollapseAction;
+  factory GraphAction.toggleCollapse({
+    required String id,
+    required bool collapsed,
+  }) = ToggleCollapseAction;
+
+  //Экшены заметок
+  factory GraphAction.createNote({Offset? at, String? text}) = CreateNoteAction;
+  factory GraphAction.noteText({required String id, required String text}) =
+      NoteTextChangedAction;
+  factory GraphAction.moveNote({required String id, required Offset to}) =
+      MoveNoteAction;
+  factory GraphAction.moveNoteEnd({required String id, required Offset to}) =
+      MoveNoteEndAction;
+  factory GraphAction.removeNote({required String id}) = RemoveNoteAction;
+  factory GraphAction.selectNote(String? id) = SelectNoteAction;
 }
 
 /// Double-tap on empty canvas. [at] is a suggested top-left position.
@@ -205,6 +262,47 @@ class ToggleCollapseAction extends GraphAction {
   const ToggleCollapseAction({required this.id, required this.collapsed});
 }
 
+/// Создание заметки. Летит из кнопки «стикер» во встроенной панели;
+/// [at] — предложенный top-left (центр вьюпорта на момент нажатия).
+class CreateNoteAction extends GraphAction {
+  final Offset? at;
+  final String? text;
+  const CreateNoteAction({this.at, this.text});
+}
+
+/// Коммит текста заметки: один раз, когда редактирование закончилось
+/// (Enter / потеря фокуса). Во время ввода текст — локальный драфт.
+class NoteTextChangedAction extends GraphAction {
+  final String id;
+  final String text;
+  const NoteTextChangedAction({required this.id, required this.text});
+}
+
+/// Живой драг заметки: высокочастотный, можно дропать.
+/// Точка коммита — [MoveNoteEndAction].
+class MoveNoteAction extends GraphAction {
+  final String id;
+  final Offset to;
+  const MoveNoteAction({required this.id, required this.to});
+}
+
+class MoveNoteEndAction extends GraphAction {
+  final String id;
+  final Offset to;
+  const MoveNoteEndAction({required this.id, required this.to});
+}
+
+class RemoveNoteAction extends GraphAction {
+  final String id;
+  const RemoveNoteAction({required this.id});
+}
+
+/// Выделение заметок — view-local; событие информационное.
+class SelectNoteAction extends GraphAction {
+  final String? id;
+  const SelectNoteAction(this.id);
+}
+
 /// What a custom node renderer receives.
 class NodeState {
   final GraphNode node;
@@ -252,7 +350,62 @@ class NodeState {
   });
 }
 
-typedef NodeWidgetBuilder = Widget Function(BuildContext context, NodeState state);
+typedef NodeWidgetBuilder =
+    Widget Function(BuildContext context, NodeState state);
+
+/// Что получает кастомный рендерер заметки.
+class NoteState {
+  final GraphNote note;
+  final Size size;
+
+  /// Актуальный текст: драфт во время редактирования, иначе коммитнутый.
+  final String text;
+
+  final bool selected;
+  final bool editing;
+  final bool canDelete;
+  final Color accent;
+
+  final VoidCallback select;
+  final VoidCallback beginEdit;
+
+  /// Закоммитить драфт и выйти из режима редактирования.
+  final VoidCallback endEdit;
+
+  /// Обновить драфт (view-local, в хост не летит до коммита).
+  final ValueChanged<String> updateText;
+
+  final VoidCallback remove;
+
+  final GestureDragStartCallback dragStart;
+  final GestureDragUpdateCallback dragUpdate;
+  final GestureDragEndCallback dragEnd;
+
+  /// Обновить размер заметки (при изменении через ручки изменения размера).
+  final ValueChanged<Size>? onResize;
+
+  const NoteState({
+    required this.note,
+    required this.size,
+    required this.text,
+    required this.selected,
+    required this.editing,
+    required this.canDelete,
+    required this.accent,
+    required this.select,
+    required this.beginEdit,
+    required this.endEdit,
+    required this.updateText,
+    required this.remove,
+    required this.dragStart,
+    required this.dragUpdate,
+    required this.dragEnd,
+    this.onResize,
+  });
+}
+
+typedef NoteWidgetBuilder =
+    Widget Function(BuildContext context, NoteState state, VoidCallback onResize);
 
 // ════════════════════════════════════════════════════════════════════════════
 // 3 · Camera — optional imperative handle
@@ -293,6 +446,10 @@ class GraphView extends StatefulWidget {
   /// ветки — view прячет их сам, а при разворачивании данные нужны на месте.
   final Stream<List<GraphNode>> nodes;
 
+  /// Опциональный поток заметок — тот же контракт, что у [nodes].
+  final Stream<List<GraphNote>>? notes;
+  final NoteWidgetBuilder? noteBuilder;
+
   /// User intent. Wire it to your store/bloc/repository.
   final ValueChanged<GraphAction>? onAction;
 
@@ -328,6 +485,8 @@ class GraphView extends StatefulWidget {
     this.maxScale = 2.5,
     this.initiallyCollapsed = const {},
     this.ghostTimeout = const Duration(milliseconds: 2500),
+    this.notes,
+    this.noteBuilder,
   });
 
   @override
@@ -358,13 +517,23 @@ class _GraphViewState extends State<GraphView>
   bool _booted = false;
   bool _firstEmit = false;
 
+  // ── Notes ────────────────────────────────────────────────────────────────
+  final Map<String, GraphNote> _notes = {};
+  StreamSubscription<List<GraphNote>>? _subNotes;
+  String? _selectedNoteId;
+  String? _draggingNoteId;
+  String? _editingNoteId;
+  final Map<String, String> _noteDrafts = {}; // noteId -> драфт текста
+  bool _firstNotesEmit = false;
+  bool _bootStarted = false;
+
   // ── Collapse / fold state ────────────────────────────────────────────────
-  final Set<String> _collapsed = {};            // id свёрнутых нод
-  final Map<String, double> _suck = {};         // прогресс сворачивания 0..1
-  final Map<String, double> _suckFrom = {};     // откуда стартовала анимация
-  final Map<String, double> _suckTo = {};       // куда идёт
-  final Map<String, Offset> _suckOrigin = {};   // точка «всасывания» (центр ноды)
-  Map<String, List<String>> _childrenIdx = {};  // parentId -> [childId]
+  final Set<String> _collapsed = {}; // id свёрнутых нод
+  final Map<String, double> _suck = {}; // прогресс сворачивания 0..1
+  final Map<String, double> _suckFrom = {}; // откуда стартовала анимация
+  final Map<String, double> _suckTo = {}; // куда идёт
+  final Map<String, Offset> _suckOrigin = {}; // точка «всасывания» (центр ноды)
+  Map<String, List<String>> _childrenIdx = {}; // parentId -> [childId]
   late final AnimationController _foldCtrl;
   late final CurvedAnimation _foldCurved;
 
@@ -377,17 +546,33 @@ class _GraphViewState extends State<GraphView>
 
     _collapsed.addAll(widget.initiallyCollapsed);
 
-    _revealCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 750));
-    _revealCurved = CurvedAnimation(parent: _revealCtrl, curve: Curves.easeOutCubic);
+    _revealCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 750),
+    );
+    _revealCurved = CurvedAnimation(
+      parent: _revealCtrl,
+      curve: Curves.easeOutCubic,
+    );
     _revealCtrl.addListener(_onRevealTick);
 
-    _foldCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 420));
-    _foldCurved = CurvedAnimation(parent: _foldCtrl, curve: Curves.easeInOutCubic);
+    _foldCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 420),
+    );
+    _foldCurved = CurvedAnimation(
+      parent: _foldCtrl,
+      curve: Curves.easeInOutCubic,
+    );
     _foldCtrl.addListener(_onFoldTick);
 
-    _flyCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
+    _flyCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 380),
+    );
 
     _subscribe(widget.nodes);
+    _subscribeNotes(widget.notes);
   }
 
   @override
@@ -404,13 +589,34 @@ class _GraphViewState extends State<GraphView>
       _selectedId = null;
       _firstEmit = false;
       _booted = false;
-      _collapsed..clear()..addAll(widget.initiallyCollapsed);
+      _collapsed
+        ..clear()
+        ..addAll(widget.initiallyCollapsed);
       _suck.clear();
       _suckFrom.clear();
       _suckTo.clear();
       _suckOrigin.clear();
       _childrenIdx = {};
       _subscribe(widget.nodes);
+    }
+
+    if (old.nodes != widget.nodes) {
+      _nodes.clear();
+      _reveals.clear();
+      _ghosts.clear();
+      _selectedId = null;
+      _firstEmit = false;
+      _booted = false;
+      _bootStarted = false;
+      _subscribe(widget.nodes);
+    }
+    if (old.notes != widget.notes) {
+      _notes.clear();
+      _noteDrafts.clear();
+      _selectedNoteId = null;
+      _editingNoteId = null;
+      _firstNotesEmit = false;
+      _subscribeNotes(widget.notes);
     }
   }
 
@@ -422,6 +628,7 @@ class _GraphViewState extends State<GraphView>
     _foldCtrl.dispose();
     _flyCtrl.dispose();
     _ctrl.dispose();
+    _subNotes?.cancel();
     super.dispose();
   }
 
@@ -433,6 +640,75 @@ class _GraphViewState extends State<GraphView>
     );
   }
 
+  void _bootOnce() {
+    if (_bootStarted) return;
+    _bootStarted = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && (_nodes.isNotEmpty || _notes.isNotEmpty))
+        fitView(animate: false);
+      Future.delayed(const Duration(milliseconds: 450), () {
+        if (!mounted) return;
+        _revealCtrl.forward();
+        setState(() => _booted = true);
+      });
+    });
+  }
+
+  void _subscribeNotes(Stream<List<GraphNote>>? stream) {
+    _subNotes?.cancel();
+    _subNotes = null;
+    if (stream == null) return;
+    _subNotes = stream.listen(
+      _onNotesEmit,
+      onError: (Object e) => debugPrint('GraphView: notes stream error: $e'),
+    );
+  }
+
+  void _onNotesEmit(List<GraphNote> incoming) {
+    if (!mounted) return;
+    final byId = {for (final n in incoming) n.id: n};
+    var changed = false;
+
+    for (final id
+        in _notes.keys.where((id) => !byId.containsKey(id)).toList()) {
+      _notes.remove(id);
+      _noteDrafts.remove(id);
+      if (_editingNoteId == id) _editingNoteId = null;
+      changed = true;
+    }
+
+    for (final fresh in byId.values) {
+      final existing = _notes[fresh.id];
+      if (existing == null) {
+        _notes[fresh.id] = fresh;
+        changed = true;
+      } else if (existing.text != fresh.text ||
+          existing.index != fresh.index ||
+          existing.size != fresh.size) {
+        _notes[fresh.id] = fresh;
+        // Пока идёт редактирование, текст из хоста не перекрывает драфт.
+        if (fresh.id == _editingNoteId) fresh.text = existing.text;
+        if (fresh.id == _draggingNoteId) fresh.position = existing.position;
+        changed = true;
+      } else if (existing.position != fresh.position &&
+          fresh.id != _draggingNoteId) {
+        existing.position = fresh.position;
+        changed = true;
+      }
+    }
+
+    if (_selectedNoteId != null && !_notes.containsKey(_selectedNoteId)) {
+      _selectedNoteId = null;
+    }
+
+    if (!_firstNotesEmit) {
+      _firstNotesEmit = true;
+      _bootOnce();
+    }
+
+    if (changed) setState(() {});
+  }
+
   // ── Diff engine ────────────────────────────────────────────────────────────
 
   void _onEmit(List<GraphNode> incoming) {
@@ -440,7 +716,8 @@ class _GraphViewState extends State<GraphView>
     final byId = {for (final n in incoming) n.id: n};
     var changed = false;
 
-    for (final id in _nodes.keys.where((id) => !byId.containsKey(id)).toList()) {
+    for (final id
+        in _nodes.keys.where((id) => !byId.containsKey(id)).toList()) {
       _nodes.remove(id);
       changed = true;
     }
@@ -457,13 +734,15 @@ class _GraphViewState extends State<GraphView>
         _nodes[fresh.id] = fresh;
         if (fresh.id == _draggingId) fresh.position = existing.position;
         changed = true;
-      } else if (existing.position != fresh.position && fresh.id != _draggingId) {
+      } else if (existing.position != fresh.position &&
+          fresh.id != _draggingId) {
         existing.position = fresh.position;
         changed = true;
       }
     }
 
-    if (_selectedId != null && !_nodes.containsKey(_selectedId)) _selectedId = null;
+    if (_selectedId != null && !_nodes.containsKey(_selectedId))
+      _selectedId = null;
 
     // Fold bookkeeping: чистим состояние удалённых нод, строим индекс детей.
     _collapsed.removeWhere((id) => !_nodes.containsKey(id));
@@ -478,14 +757,7 @@ class _GraphViewState extends State<GraphView>
 
     if (!_firstEmit) {
       _firstEmit = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _nodes.isNotEmpty) fitView(animate: false);
-        Future.delayed(const Duration(milliseconds: 450), () {
-          if (!mounted) return;
-          _revealCtrl.forward();
-          setState(() => _booted = true);
-        });
-      });
+      _bootOnce();
     }
 
     if (changed) setState(() {});
@@ -564,8 +836,12 @@ class _GraphViewState extends State<GraphView>
   void _toggleCollapse(GraphNode n) =>
       _setCollapsed(n, !_collapsed.contains(n.id));
 
-  void _setCollapsed(GraphNode n, bool collapsing,
-      {bool notify = true, bool haptic = true}) {
+  void _setCollapsed(
+    GraphNode n,
+    bool collapsing, {
+    bool notify = true,
+    bool haptic = true,
+  }) {
     if (haptic) HapticFeedback.selectionClick();
 
     final starts = <String, double>{};
@@ -583,7 +859,8 @@ class _GraphViewState extends State<GraphView>
     } else {
       _collapsed.remove(n.id);
       for (final d in _descendantsOf(n.id)) {
-        if (_collapsedAncestorOf(d) != null) continue; // остаётся скрытой другой нодой
+        if (_collapsedAncestorOf(d) != null)
+          continue; // остаётся скрытой другой нодой
         starts[d.id] = _suck[d.id] ?? 1;
         targets[d.id] = 0;
       }
@@ -629,8 +906,10 @@ class _GraphViewState extends State<GraphView>
   /// чтобы сохранить элемент в дереве и не перезапускать boot-анимации).
   _Visual _visualOf(GraphNode n) {
     final foldedUnder = _collapsedAncestorOf(n);
-    final double p =
-        (_suck[n.id] ?? (foldedUnder != null ? 1.0 : 0.0)).clamp(0.0, 1.0);
+    final double p = (_suck[n.id] ?? (foldedUnder != null ? 1.0 : 0.0)).clamp(
+      0.0,
+      1.0,
+    );
     if (p >= 1) return _Visual(n.position & n.size, 0);
     if (p <= 0) return _Visual(n.position & n.size, 1);
 
@@ -645,19 +924,28 @@ class _GraphViewState extends State<GraphView>
     }
     if (into == null) return _Visual(n.position & n.size, 1 - p);
 
-    final target = Offset(into.dx - n.size.width / 2, into.dy - n.size.height / 2);
+    final target = Offset(
+      into.dx - n.size.width / 2,
+      into.dy - n.size.height / 2,
+    );
     return _Visual(Offset.lerp(n.position, target, p)! & n.size, 1 - p);
   }
 
   // ── Ghosts — optimistic placeholders while the host round-trips ────────────
 
-  void _spawnGhost({required String? parentId, required Offset at, required Color accent}) {
-    _ghosts.add(_Ghost(
-      id: 'g${_ghostSeq++}',
-      parentId: parentId,
-      position: _clamp(at),
-      accent: accent,
-    ));
+  void _spawnGhost({
+    required String? parentId,
+    required Offset at,
+    required Color accent,
+  }) {
+    _ghosts.add(
+      _Ghost(
+        id: 'g${_ghostSeq++}',
+        parentId: parentId,
+        position: _clamp(at),
+        accent: accent,
+      ),
+    );
     setState(() {});
   }
 
@@ -666,7 +954,8 @@ class _GraphViewState extends State<GraphView>
     final matched = <_Ghost>{};
     for (final g in _ghosts) {
       for (final n in incoming) {
-        if (n.parentId == g.parentId && (n.position - g.position).distance < 48) {
+        if (n.parentId == g.parentId &&
+            (n.position - g.position).distance < 48) {
           matched.add(g);
           break;
         }
@@ -713,14 +1002,22 @@ class _GraphViewState extends State<GraphView>
     final l = widget.layout;
     final siblings = _nodes.values.where((n) => n.parentId == parent.id).length;
     final band = (siblings + 1) ~/ 2;
-    final dy = siblings == 0 ? 0.0 : band * l.siblingGap * (siblings.isOdd ? 1 : -1);
+    final dy = siblings == 0
+        ? 0.0
+        : band * l.siblingGap * (siblings.isOdd ? 1 : -1);
     return _clamp(
-        Offset(parent.position.dx + parent.size.width + l.levelGap, parent.position.dy + dy));
+      Offset(
+        parent.position.dx + parent.size.width + l.levelGap,
+        parent.position.dy + dy,
+      ),
+    );
   }
 
   // ── Dragging: optimistic locally, committed via MoveEndAction ──────────────
 
   void _dragStart(GraphNode n, DragStartDetails d) {
+    _commitNoteEdit();
+_selectedNoteId = null;
     _dragGrab = n.position - _sceneFromGlobal(d.globalPosition);
     _draggingId = n.id;
     if (_selectedId != n.id) {
@@ -750,9 +1047,88 @@ class _GraphViewState extends State<GraphView>
     );
   }
 
+  // ── Notes: создание, редактирование, драг ────────────────────────────────
+
+  void _requestNote() {
+    HapticFeedback.selectionClick();
+    final box = _viewerBox;
+    if (box == null) return;
+    final ns = widget.layout.noteSize;
+    final center = _ctrl.toScene(box.size.center(Offset.zero));
+    final at = _clamp(center - Offset(ns.width / 2, ns.height / 2), ns);
+    _act(GraphAction.createNote(at: at));
+  }
+
+  /// Закоммитить драфт (если идёт редактирование) и выйти из него.
+  void _commitNoteEdit() {
+    final id = _editingNoteId;
+    if (id == null) return;
+    final note = _notes[id];
+    final draft = _noteDrafts.remove(id) ?? note?.text ?? '';
+    _editingNoteId = null;
+    if (note != null && draft != note.text) {
+      _act(GraphAction.noteText(id: id, text: draft));
+    }
+    setState(() {});
+  }
+
+  void _beginNoteEdit(GraphNote n) {
+    if (_editingNoteId == n.id) return;
+    _commitNoteEdit();
+    _editingNoteId = n.id;
+    _noteDrafts[n.id] = n.text;
+    _selectedNoteId = n.id;
+    if (_selectedId != null) {
+      _selectedId = null;
+      _act(GraphAction.select(null));
+    }
+    setState(() {});
+  }
+
+  void _updateNoteDraft(GraphNote n, String text) {
+    _noteDrafts[n.id] = text;
+    setState(() {});
+  }
+
+  void _noteSelect(GraphNote n) {
+    _commitNoteEdit();
+    _selectedNoteId = n.id;
+    if (_selectedId != null) {
+      _selectedId = null;
+      _act(GraphAction.select(null));
+    }
+    _act(GraphAction.selectNote(n.id));
+    setState(() {});
+  }
+
+  void _noteDragStart(GraphNote n, DragStartDetails d) {
+    _commitNoteEdit();
+    _dragGrab = n.position - _sceneFromGlobal(d.globalPosition);
+    _draggingNoteId = n.id;
+    _selectedNoteId = n.id;
+    if (_selectedId != null) {
+      _selectedId = null;
+      _act(GraphAction.select(null));
+    }
+    _act(GraphAction.selectNote(n.id));
+    setState(() {});
+  }
+
+  void _noteDragUpdate(GraphNote n, DragUpdateDetails d) {
+    n.position = _clamp(_sceneFromGlobal(d.globalPosition) + _dragGrab, n.size);
+    _act(GraphAction.moveNote(id: n.id, to: n.position));
+    setState(() {});
+  }
+
+  void _noteDragEnd(GraphNote n) {
+    if (_draggingNoteId == n.id) _draggingNoteId = null;
+    _act(GraphAction.moveNoteEnd(id: n.id, to: n.position));
+  }
+
   // ── Camera math ────────────────────────────────────────────────────────────
 
-  RenderBox? get _viewerBox => _viewerKey.currentContext?.findRenderObject() as RenderBox?;
+  RenderBox? get _viewerBox =>
+      _viewerKey.currentContext?.findRenderObject() as RenderBox?;
 
   Offset _sceneFromGlobal(Offset global) {
     final box = _viewerBox;
@@ -771,32 +1147,32 @@ class _GraphViewState extends State<GraphView>
   void _applyFly() => _ctrl.value = _flyAnim!.value;
 
   @override
-  void fitView({required bool animate}) {
-    // Скрытые сворачиванием ноды в кадр не попадают.
-    final all = _nodes.values.where((n) => !_isFoldedAway(n)).toList();
-    final box = _viewerBox;
-    if (all.isEmpty || box == null) return;
+void fitView({required bool animate}) {
+  final box = _viewerBox;
+  if (box == null || (_nodes.isEmpty && _notes.isEmpty)) return;
 
-    var rect = Rect.fromLTWH(
-        all.first.position.dx, all.first.position.dy, all.first.size.width, all.first.size.height);
-    for (final n in all) {
-      rect = rect.expandToInclude(
-          Rect.fromLTWH(n.position.dx, n.position.dy, n.size.width, n.size.height));
-    }
-    rect = rect.inflate(150);
-
-    final vp = box.size;
-    final s = math.min(vp.width / rect.width, vp.height / rect.height)
-        .clamp(widget.minScale, 1.1);
-    final m = Matrix4.identity()
-      ..scale(s, s)
-      ..translate(
-        (vp.width / 2 - s * rect.center.dx) / s,
-        (vp.height / 2 - s * rect.center.dy) / s,
-      );
-    animate ? _flyTo(m) : _ctrl.value = m;
+  Rect? rect;
+  for (final n in _nodes.values) {
+    final r = n.position & n.size;
+    rect = rect == null ? r : rect.expandToInclude(r);
   }
+  for (final n in _notes.values) {
+    final r = n.position & n.size;
+    rect = rect == null ? r : rect.expandToInclude(r);
+  }
+  rect = rect!.inflate(150);
 
+  final vp = box.size;
+  final s = math.min(vp.width / rect.width, vp.height / rect.height)
+      .clamp(widget.minScale, 1.1);
+  final m = Matrix4.identity()
+    ..scale(s, s)
+    ..translate(
+      (vp.width / 2 - s * rect.center.dx) / s,
+      (vp.height / 2 - s * rect.center.dy) / s,
+    );
+  animate ? _flyTo(m) : _ctrl.value = m;
+}
   @override
   void zoomBy(double f) {
     final box = _viewerBox;
@@ -846,16 +1222,18 @@ class _GraphViewState extends State<GraphView>
       final vt = _visualOf(n);
       final alpha = math.min(vf.vis, vt.vis);
       if (alpha <= 0.01) continue;
-      out.add(_EdgeSpec(
-        from,
-        n,
-        theme.accentFor(from.depth),
-        theme.accentFor(n.depth),
-        _reveals['${from.id}>${n.id}'] ?? 1,
-        alpha,
-        vf.rect,
-        vt.rect,
-      ));
+      out.add(
+        _EdgeSpec(
+          from,
+          n,
+          theme.accentFor(from.depth),
+          theme.accentFor(n.depth),
+          _reveals['${from.id}>${n.id}'] ?? 1,
+          alpha,
+          vf.rect,
+          vt.rect,
+        ),
+      );
     }
     return out;
   }
@@ -880,7 +1258,8 @@ class _GraphViewState extends State<GraphView>
           width: n.size.width,
           height: n.size.height,
           child: IgnorePointer(
-            ignoring: v.vis < 1, // во время анимации и в скрытом виде жесты не ловим
+            ignoring:
+                v.vis < 1, // во время анимации и в скрытом виде жесты не ловим
             child: Opacity(
               opacity: v.vis,
               child: Transform.scale(
@@ -896,9 +1275,13 @@ class _GraphViewState extends State<GraphView>
                       canDelete: widget.longPressDeletes,
                       hasChildren: _childrenIdx[n.id]?.isNotEmpty ?? false,
                       collapsed: isCollapsed,
-                      hiddenCount: isCollapsed ? _descendantsOf(n.id).length : 0,
+                      hiddenCount: isCollapsed
+                          ? _descendantsOf(n.id).length
+                          : 0,
                       accent: theme.accentFor(n.depth),
                       select: () {
+                        _commitNoteEdit();
+                        _selectedNoteId = null;
                         _selectedId = n.id;
                         _act(GraphAction.select(n.id));
                         setState(() {});
@@ -941,29 +1324,40 @@ class _GraphViewState extends State<GraphView>
             ),
           ),
           Positioned(
-            left: -160, top: -180, width: 560, height: 560,
+            left: -160,
+            top: -180,
+            width: 560,
+            height: 560,
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: RadialGradient(colors: [theme.ambientA, Colors.transparent]),
+                  gradient: RadialGradient(
+                    colors: [theme.ambientA, Colors.transparent],
+                  ),
                 ),
               ),
             ),
           ),
           Positioned(
-            right: -180, bottom: -220, width: 640, height: 640,
+            right: -180,
+            bottom: -220,
+            width: 640,
+            height: 640,
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: RadialGradient(colors: [theme.ambientB, Colors.transparent]),
+                  gradient: RadialGradient(
+                    colors: [theme.ambientB, Colors.transparent],
+                  ),
                 ),
               ),
             ),
           ),
           InteractiveViewer(
             key: _viewerKey,
+            panEnabled: _editingNoteId == null,
             transformationController: _ctrl,
             constrained: false,
             minScale: widget.minScale,
@@ -977,11 +1371,16 @@ class _GraphViewState extends State<GraphView>
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () {
+                        _commitNoteEdit();
+                        if (_selectedNoteId != null) {
+                          _selectedNoteId = null;
+                          _act(GraphAction.selectNote(null));
+                        }
                         if (_selectedId != null) {
                           _selectedId = null;
                           _act(GraphAction.select(null));
-                          setState(() {});
                         }
+                        setState(() {});
                       },
                       onDoubleTapDown: widget.doubleTapCreatesRoot
                           ? (d) => _requestRoot(d.localPosition)
@@ -991,7 +1390,9 @@ class _GraphViewState extends State<GraphView>
                   ),
                   Positioned.fill(
                     child: IgnorePointer(
-                      child: CustomPaint(painter: _EdgesPainter(_buildEdges(theme), theme)),
+                      child: CustomPaint(
+                        painter: _EdgesPainter(_buildEdges(theme), theme),
+                      ),
                     ),
                   ),
                   // Ghosts sit under real nodes.
@@ -1011,6 +1412,41 @@ class _GraphViewState extends State<GraphView>
                       ),
                     ),
                   ...nodeLayer,
+                  // Заметки — под призраками и нодами.
+for (final nt in _notes.values)
+  Positioned(
+    key: ValueKey('note:${nt.id}'), // префикс, чтобы не collide с ключами нод
+    left: nt.position.dx,
+    top: nt.position.dy,
+    width: nt.size.width,
+    height: nt.size.height,
+    child: _PopIn(
+      delayMs: _booted ? 0 : math.min(nt.index * 90, 600),
+      child: (widget.noteBuilder ?? _defaultNoteBuilder)(
+        context,
+        NoteState(
+          note: nt,
+          size: nt.size,
+          text: _noteDrafts[nt.id] ?? nt.text,
+          selected: _selectedNoteId == nt.id,
+          editing: _editingNoteId == nt.id,
+          canDelete: widget.longPressDeletes,
+          accent: theme.accentFor(nt.index),
+          select: () => _noteSelect(nt),
+          beginEdit: () => _beginNoteEdit(nt),
+          endEdit: _commitNoteEdit,
+          updateText: (t) => _updateNoteDraft(nt, t),
+          remove: () {
+            HapticFeedback.mediumImpact();
+            _act(GraphAction.removeNote(id: nt.id));
+          },
+          dragStart: (d) => _noteDragStart(nt, d),
+          dragUpdate: (d) => _noteDragUpdate(nt, d),
+          dragEnd: (_) => _noteDragEnd(nt),
+        ),
+      ),
+    ),
+  ),
                 ],
               ),
             ),
@@ -1025,6 +1461,7 @@ class _GraphViewState extends State<GraphView>
                 onZoomIn: () => zoomBy(1.25),
                 onZoomOut: () => zoomBy(0.8),
                 onFit: () => fitView(animate: true),
+                onAddNote: widget.notes != null ? _requestNote : null,
               ),
             ),
         ],
@@ -1034,7 +1471,10 @@ class _GraphViewState extends State<GraphView>
 
   Widget _defaultBuilder(BuildContext context, NodeState state) =>
       DefaultNodeCard(state: state, theme: widget.theme);
+Widget _defaultNoteBuilder(BuildContext context, NoteState state) =>
+    DefaultNoteCard(state: state, theme: widget.theme);
 }
+
 
 // ════════════════════════════════════════════════════════════════════════════
 // 5 · Default node card
@@ -1071,7 +1511,9 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
             behavior: HitTestBehavior.opaque,
             onTap: s.select,
             // Двойной тап по карточке — свернуть/развернуть ветку.
-            onDoubleTap: (s.hasChildren || s.collapsed) ? s.toggleCollapse : null,
+            onDoubleTap: (s.hasChildren || s.collapsed)
+                ? s.toggleCollapse
+                : null,
             onLongPress: s.canDelete ? s.remove : null,
             onPanStart: s.dragStart,
             onPanUpdate: s.dragUpdate,
@@ -1212,10 +1654,18 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
                             : s.accent,
                         border: Border.all(color: t.canvas, width: 3),
                         boxShadow: [
-                          BoxShadow(color: t.shadow, blurRadius: 8, offset: const Offset(0, 3)),
+                          BoxShadow(
+                            color: t.shadow,
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
                         ],
                       ),
-                      child: const Icon(Icons.add, size: 17, color: Color(0xFF08161B)),
+                      child: const Icon(
+                        Icons.add,
+                        size: 17,
+                        color: Color(0xFF08161B),
+                      ),
                     ),
                   ),
                 ),
@@ -1243,13 +1693,19 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
                         color: s.collapsed ? s.accent : t.surfaceHover,
                         border: Border.all(color: t.canvas, width: 2.5),
                         boxShadow: [
-                          BoxShadow(color: t.shadow, blurRadius: 6, offset: const Offset(0, 2)),
+                          BoxShadow(
+                            color: t.shadow,
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
                         ],
                       ),
                       child: Icon(
                         s.collapsed ? Icons.chevron_right : Icons.expand_more,
                         size: 14,
-                        color: s.collapsed ? const Color(0xFF08161B) : t.textDim,
+                        color: s.collapsed
+                            ? const Color(0xFF08161B)
+                            : t.textDim,
                       ),
                     ),
                   ),
@@ -1263,13 +1719,20 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
               bottom: -9,
               child: IgnorePointer(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2.5,
+                  ),
                   decoration: BoxDecoration(
                     color: t.surface,
                     borderRadius: BorderRadius.circular(9),
                     border: Border.all(color: s.accent.withOpacity(0.55)),
                     boxShadow: [
-                      BoxShadow(color: t.shadow, blurRadius: 6, offset: const Offset(0, 2)),
+                      BoxShadow(
+                        color: t.shadow,
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
                     ],
                   ),
                   child: Text(
@@ -1279,6 +1742,194 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
                       fontWeight: FontWeight.w800,
                       letterSpacing: 0.4,
                       color: s.accent,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Дефолтная заметка-стикер: драг, выделение, инлайн-редактирование текста.
+/// Полностью заменяется через [GraphView.noteBuilder].
+class DefaultNoteCard extends StatefulWidget {
+  final NoteState state;
+  final GraphViewTheme theme;
+  const DefaultNoteCard({super.key, required this.state, required this.theme});
+
+  @override
+  State<DefaultNoteCard> createState() => _DefaultNoteCardState();
+}
+
+class _DefaultNoteCardState extends State<DefaultNoteCard> {
+  bool _hovered = false;
+  final TextEditingController _textCtrl = TextEditingController();
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _textCtrl.text = widget.state.text;
+    _focus.addListener(() {
+      // Потеря фокуса = коммит драфта.
+      if (!_focus.hasFocus && widget.state.editing) widget.state.endEdit();
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant DefaultNoteCard old) {
+    super.didUpdateWidget(old);
+    if (!old.state.editing && widget.state.editing) {
+      _textCtrl.text = widget.state.text;
+    }
+  }
+
+  @override
+  void dispose() {
+    _textCtrl.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.state;
+    final t = widget.theme;
+    final tilt = ((s.note.index % 5) - 2) * 0.008; // лёгкий наклон «от руки»
+
+    return MouseRegion(
+      cursor: s.editing ? SystemMouseCursors.text : SystemMouseCursors.grab,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: s.select,
+            onDoubleTap: s.beginEdit,
+            onLongPress: s.canDelete ? s.remove : null,
+            // Пока идёт редактирование, жесты отданы TextField.
+            onPanStart: s.editing ? null : s.dragStart,
+            onPanUpdate: s.editing ? null : s.dragUpdate,
+            onPanEnd: s.editing ? null : s.dragEnd,
+            onPanCancel: s.editing ? null : () => s.dragEnd(DragEndDetails()),
+            child: Transform.rotate(
+              angle: s.editing ? 0 : tilt,
+              child: AnimatedScale(
+                scale: _hovered && !s.editing ? 1.02 : 1,
+                duration: const Duration(milliseconds: 160),
+                curve: Curves.easeOut,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  decoration: BoxDecoration(
+                    color: Color.lerp(t.surface, s.accent, 0.16)!,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: s.selected ? s.accent : t.border,
+                      width: s.selected ? 1.6 : 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: s.selected ? s.accent.withOpacity(0.30) : t.shadow,
+                        blurRadius: s.selected ? 22 : 12,
+                        spreadRadius: s.selected ? 1 : 0,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        height: 8,
+                        decoration: BoxDecoration(
+                          color: s.accent.withOpacity(0.8),
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(11),
+                            topRight: Radius.circular(11),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: ClipRect(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                            child: s.editing
+                                ? TextField(
+                                    controller: _textCtrl,
+                                    focusNode: _focus,
+                                    autofocus: true,
+                                    maxLines: null,
+                                    expands: true,
+                                    textAlignVertical: TextAlignVertical.top,
+                                    onChanged: s.updateText,
+                                    onSubmitted: (_) => s.endEdit(),
+                                    style: TextStyle(fontSize: 13.5, height: 1.35, color: t.text),
+                                    decoration: InputDecoration(
+                                      isCollapsed: true,
+                                      border: InputBorder.none,
+                                      hintText: 'Заметка…',
+                                      hintStyle: TextStyle(
+                                        fontSize: 13.5,
+                                        color: t.textDim.withOpacity(0.6),
+                                      ),
+                                    ),
+                                  )
+                                : Align(
+                                    alignment: Alignment.topLeft,
+                                    child: s.text.isEmpty
+                                        ? Text(
+                                            'Заметка…',
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              color: t.textDim.withOpacity(0.7),
+                                            ),
+                                          )
+                                        : Text(
+                                            s.text,
+                                            maxLines: null,
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              height: 1.35,
+                                              color: t.text,
+                                            ),
+                                          ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (s.canDelete)
+            Positioned(
+              top: -9,
+              right: -9,
+              child: IgnorePointer(
+                ignoring: !_hovered || s.editing,
+                child: AnimatedOpacity(
+                  opacity: _hovered && !s.editing ? 1 : 0,
+                  duration: const Duration(milliseconds: 150),
+                  child: GestureDetector(
+                    onTap: s.remove,
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: t.surfaceHover,
+                          border: Border.all(color: t.border),
+                        ),
+                        child: Icon(Icons.close, size: 11, color: t.textDim),
+                      ),
                     ),
                   ),
                 ),
@@ -1307,11 +1958,15 @@ class _PopInState extends State<_PopIn> with SingleTickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.elasticOut);
-    _fade = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _ctrl, curve: const Interval(0, 0.25)),
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
     );
+    _scale = CurvedAnimation(parent: _ctrl, curve: Curves.elasticOut);
+    _fade = Tween<double>(
+      begin: 0,
+      end: 1,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: const Interval(0, 0.25)));
     Future.delayed(Duration(milliseconds: widget.delayMs), () {
       if (mounted) _ctrl.forward();
     });
@@ -1327,7 +1982,11 @@ class _PopInState extends State<_PopIn> with SingleTickerProviderStateMixin {
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _fade,
-      child: ScaleTransition(scale: _scale, alignment: Alignment.centerLeft, child: widget.child),
+      child: ScaleTransition(
+        scale: _scale,
+        alignment: Alignment.centerLeft,
+        child: widget.child,
+      ),
     );
   }
 }
@@ -1375,7 +2034,8 @@ class _GhostNode extends StatefulWidget {
   State<_GhostNode> createState() => _GhostNodeState();
 }
 
-class _GhostNodeState extends State<_GhostNode> with SingleTickerProviderStateMixin {
+class _GhostNodeState extends State<_GhostNode>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _pulse;
   late final Timer _expiry;
   bool _leaving = false;
@@ -1383,8 +2043,10 @@ class _GhostNodeState extends State<_GhostNode> with SingleTickerProviderStateMi
   @override
   void initState() {
     super.initState();
-    _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))
-      ..repeat(reverse: true);
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..repeat(reverse: true);
     _expiry = Timer(widget.timeout, () {
       if (!mounted) return;
       setState(() => _leaving = true);
@@ -1414,10 +2076,10 @@ class _GhostNodeState extends State<_GhostNode> with SingleTickerProviderStateMi
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  CustomPaint(painter: _DashedBorder(color: g.accent, radius: 13)),
-                  Center(
-                    child: Icon(Icons.add, size: 16, color: g.accent),
+                  CustomPaint(
+                    painter: _DashedBorder(color: g.accent, radius: 13),
                   ),
+                  Center(child: Icon(Icons.add, size: 16, color: g.accent)),
                 ],
               ),
             );
@@ -1436,7 +2098,9 @@ class _DashedBorder extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final path = Path()
-      ..addRRect(RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)));
+      ..addRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
+      );
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.6
@@ -1515,8 +2179,16 @@ class _EdgeSpec {
   final double alpha; // видимость с учётом сворачивания
   final Rect rectFrom;
   final Rect rectTo;
-  const _EdgeSpec(this.from, this.to, this.cFrom, this.cTo, this.reveal, this.alpha,
-      this.rectFrom, this.rectTo);
+  const _EdgeSpec(
+    this.from,
+    this.to,
+    this.cFrom,
+    this.cTo,
+    this.reveal,
+    this.alpha,
+    this.rectFrom,
+    this.rectTo,
+  );
 }
 
 class _EdgesPainter extends CustomPainter {
@@ -1564,8 +2236,16 @@ class _EdgesPainter extends CustomPainter {
 
       if (e.reveal < 1 && pm != null) {
         final tip = pm.getTangentForOffset(pm.length * e.reveal)?.position ?? b;
-        canvas.drawCircle(tip, 7, Paint()..color = theme.text.withOpacity(0.18 * e.alpha));
-        canvas.drawCircle(tip, 3.2, Paint()..color = theme.text.withOpacity(e.alpha));
+        canvas.drawCircle(
+          tip,
+          7,
+          Paint()..color = theme.text.withOpacity(0.18 * e.alpha),
+        );
+        canvas.drawCircle(
+          tip,
+          3.2,
+          Paint()..color = theme.text.withOpacity(e.alpha),
+        );
       }
     }
   }
@@ -1584,13 +2264,14 @@ class _ZoomControls extends StatelessWidget {
   final VoidCallback onZoomIn;
   final VoidCallback onZoomOut;
   final VoidCallback onFit;
+  final VoidCallback? onAddNote;
 
   const _ZoomControls({
     required this.theme,
     required this.ctrl,
     required this.onZoomIn,
     required this.onZoomOut,
-    required this.onFit,
+    required this.onFit, this.onAddNote,
   });
 
   @override
@@ -1619,11 +2300,35 @@ class _ZoomControls extends StatelessWidget {
             ),
           ),
         ),
-        ControlButton(theme: theme, icon: Icons.add, tooltip: 'Zoom in', onTap: onZoomIn),
+        ControlButton(
+          theme: theme,
+          icon: Icons.add,
+          tooltip: 'Zoom in',
+          onTap: onZoomIn,
+        ),
         const SizedBox(height: 8),
-        ControlButton(theme: theme, icon: Icons.remove, tooltip: 'Zoom out', onTap: onZoomOut),
+        ControlButton(
+          theme: theme,
+          icon: Icons.remove,
+          tooltip: 'Zoom out',
+          onTap: onZoomOut,
+        ),
         const SizedBox(height: 8),
-        ControlButton(theme: theme, icon: Icons.fit_screen, tooltip: 'Fit graph', onTap: onFit),
+        ControlButton(
+          theme: theme,
+          icon: Icons.fit_screen,
+          tooltip: 'Fit graph',
+          onTap: onFit,
+        ),
+        if (onAddNote != null) ...[
+  const SizedBox(height: 8),
+  ControlButton(
+    theme: theme,
+    icon: Icons.sticky_note_2_outlined,
+    tooltip: 'Add note',
+    onTap: onAddNote!,
+  ),
+],
       ],
     );
   }
@@ -1673,9 +2378,19 @@ class _ControlButtonState extends State<ControlButton> {
                 shape: BoxShape.circle,
                 color: _hovered ? t.surfaceHover : t.controlsBg,
                 border: Border.all(color: t.border),
-                boxShadow: [BoxShadow(color: t.shadow, blurRadius: 10, offset: const Offset(0, 3))],
+                boxShadow: [
+                  BoxShadow(
+                    color: t.shadow,
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
               ),
-              child: Icon(widget.icon, size: 17, color: _hovered ? t.text : t.textDim),
+              child: Icon(
+                widget.icon,
+                size: 17,
+                color: _hovered ? t.text : t.textDim,
+              ),
             ),
           ),
         ),

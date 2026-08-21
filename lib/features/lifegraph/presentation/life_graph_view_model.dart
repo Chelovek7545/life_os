@@ -13,6 +13,7 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
+import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
 import 'package:life_os/core/ui/graph/graph_view.dart' as gv;
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:rxdart/rxdart.dart';
@@ -27,6 +28,7 @@ class LifeGraphViewModel {
     required this.projectsRepository,
     required this.tasksRepository,
     required this.positionsRepository,
+    required this.notesRepository,
     required this.graphBuilder,
   });
 
@@ -38,6 +40,7 @@ class LifeGraphViewModel {
   final ProjectsRepository projectsRepository;
   final TasksRepository tasksRepository;
   final GraphPositionsRepository positionsRepository;
+  final GraphNotesRepository notesRepository;
   final GraphBuilder graphBuilder;
 
   String? _currentSphereId;
@@ -58,6 +61,12 @@ class LifeGraphViewModel {
       BehaviorSubject.seeded(const <gv.GraphNode>[]);
   Stream<List<gv.GraphNode>> get graphStream => _graphSubject.stream;
   List<gv.GraphNode> get graph => _graphSubject.value;
+
+  /// Стрим заметок для [GraphView].
+  final BehaviorSubject<List<gv.GraphNote>> _notesSubject =
+      BehaviorSubject.seeded(const <gv.GraphNote>[]);
+  Stream<List<gv.GraphNote>> get notesStream => _notesSubject.stream;
+  List<gv.GraphNote> get notes => _notesSubject.value;
 
   final BehaviorSubject<List<Sphere>> _spheresSubject =
       BehaviorSubject<List<Sphere>>.seeded([]);
@@ -80,6 +89,7 @@ class LifeGraphViewModel {
   List<Task> get tasks => _tasksSubject.value;
 
   StreamSubscription? _projectsSubscription;
+  StreamSubscription? _notesSubscription;
 
   /// Кэш доменных нод текущей сферы — нужен для CRUD (тип, цвет и т.п.).
   List<GraphNode> _domainNodes = const [];
@@ -128,21 +138,7 @@ class LifeGraphViewModel {
     await _switchToSphere(sphereId);
   }
 
-  Future<void> _switchToSphere(String sphereId) async {
-    _currentSphereId = sphereId;
-    _cancelPendingSave();
-    await positionsRepository.saveLastSphereId(sphereId);
-    await _loadPositions(sphereId);
-    saveStatus.value = GraphSaveStatus.saved;
-    _domainNodes = const [];
-    _graphSubject.add(const []); // сбрасываем устаревшие данные прошлой сферы
-    _graphSubscription?.cancel();
-    _graphSubscription = graphBuilder.watchGraph(sphereId).listen((nodes) {
-      _domainNodes = nodes;
-      _graphSubject.add(_toViewNodes(nodes));
-      
-    }, onError: (e) => debugPrint('Graph stream error: $e'));
-  }
+  
 
   Future<void> _loadPositions(String sphereId) async {
     final loaded = await positionsRepository.loadPositions(sphereId);
@@ -655,16 +651,126 @@ class LifeGraphViewModel {
   void dispose() {
     _disposed = true;
     _cancelPendingSave();
+    _cancelPendingNotesSave();
     _graphSubscription?.cancel();
     _spheresSubscription?.cancel();
     _goalsSubscription?.cancel();
     _tasksSubscription?.cancel();
     _projectsSubscription?.cancel();
+    _notesSubscription?.cancel();
     saveStatus.dispose();
     _graphSubject.close();
     _spheresSubject.close();
     _goalsSubject.close();
     _tasksSubject.close();
     _projectsSubject.close();
+    _notesSubject.close();
+  }
+
+  // ── Notes (стикеры) ────────────────────────────────────────────────────────────
+
+  /// Создаёт новую заметку в центре видимой области.
+  Future<void> createNote() async {
+    if (_currentSphereId == null) return;
+    final center = Offset(worldCenter, worldCenter);
+    final note = gv.GraphNote(
+      id: 'note_${DateTime.now().millisecondsSinceEpoch}',
+      index: notes.length,
+      size: const Size(212, 150),
+      text: '',
+      position: _clampPosition(center, const Size(212, 150)),
+    );
+    _notesSubject.add([...notes, note]);
+    await _scheduleSaveNotes();
+  }
+
+  /// Обновляет текст заметки.
+  Future<void> updateNoteText(String id, String text) async {
+    final updatedNotes = notes.map((n) {
+      if (n.id != id) return n;
+      final cloned = n.clone();
+      cloned.text = text;
+      return cloned;
+    }).toList();
+    _notesSubject.add(updatedNotes);
+    await _scheduleSaveNotes();
+  }
+
+  /// Live-курсор драга заметки: обновляет позицию в памяти без эмиссии.
+  void moveNote(String id, double x, double y) {
+    if (_currentSphereId == null) return;
+    Size size = const Size(212, 150);
+    for (final n in notes) {
+      if (n.id == id) {
+        size = n.size;
+        break;
+      }
+    }
+    final updatedNotes = notes.map((n) {
+      if (n.id != id) return n;
+      final cloned = n.clone();
+      cloned.position = _clampPosition(Offset(x, y), size);
+      return cloned;
+    }).toList();
+    _notesSubject.add(updatedNotes);
+  }
+
+  /// Точка коммита драга заметки: сохраняет позицию (с debounce).
+  void commitNoteMove(String id, double x, double y) {
+    if (_currentSphereId == null) return;
+    moveNote(id, x, y);
+    _scheduleSaveNotes();
+  }
+
+  /// Удаляет заметку.
+  Future<void> removeNote(String id) async {
+    final updatedNotes = notes.where((n) => n.id != id).toList();
+    _notesSubject.add(updatedNotes);
+    await _scheduleSaveNotes();
+  }
+
+  /// Загружает заметки для текущей сферы.
+  Future<void> _loadNotes(String sphereId) async {
+    final loaded = await notesRepository.loadNotes(sphereId);
+    if (loaded != null) {
+      _notesSubject.add(loaded);
+    } else {
+      _notesSubject.add(const <gv.GraphNote>[]);
+    }
+  }
+
+  Timer? _saveNotesTimer;
+
+  void _cancelPendingNotesSave() {
+    _saveNotesTimer?.cancel();
+    _saveNotesTimer = null;
+  }
+
+  Future<void> _scheduleSaveNotes() async {
+    _cancelPendingNotesSave();
+    _saveNotesTimer = Timer(const Duration(milliseconds: 400), () async {
+      final sphereId = _currentSphereId;
+      if (sphereId == null) return;
+      await notesRepository.saveNotes(sphereId, List.of(notes));
+    });
+  }
+
+  /// Переключает текущую сферу (граф) и загружает её позиции и заметки.
+  Future<void> _switchToSphere(String sphereId) async {
+    _currentSphereId = sphereId;
+    _cancelPendingSave();
+    _cancelPendingNotesSave();
+    await positionsRepository.saveLastSphereId(sphereId);
+    await _loadPositions(sphereId);
+    await _loadNotes(sphereId);
+    saveStatus.value = GraphSaveStatus.saved;
+    _domainNodes = const [];
+    _graphSubject.add(const []); // сбрасываем устаревшие данные прошлой сферы
+    _graphSubscription?.cancel();
+    _graphSubscription = graphBuilder.watchGraph(sphereId).listen((nodes) {
+      _domainNodes = nodes;
+      _graphSubject.add(_toViewNodes(nodes));
+      
+    }, onError: (e) => debugPrint('Graph stream error: $e'));
   }
 }

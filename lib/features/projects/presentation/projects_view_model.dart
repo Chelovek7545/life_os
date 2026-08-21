@@ -38,6 +38,11 @@ class ProjectsViewModel {
     return _taskRepo.watchTasksForProject(projectId);
   }
 
+  Stream<List<Task>> watchAllTasks(){
+    return _taskRepo.watchTasks();
+  } 
+
+
   Future<void> updateTask(Task task) async {
     await _taskRepo.updateTask(task);
   }
