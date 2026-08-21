@@ -79,6 +79,7 @@ class DependencyContainer {
 
     graphPositionsRepository = GraphPositionsRepository();
     graphNotesRepository = GraphNotesRepository();
+    graphNotesRepository.init();
     graphBuilder = GraphBuilder(
       spheresRepository: spheresRepository,
       goalsRepository: goalsRepository,

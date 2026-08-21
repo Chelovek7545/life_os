@@ -155,7 +155,7 @@ class GraphNode {
 class GraphNote {
   final String id;
   final int index; // порядок создания — стаггер появления и лёгкий наклон
-  final Size size;
+  Size size; // mutable, чтобы поддерживать локальный ресайз
   String text; // содержимое; меняется только через NoteTextChangedAction
   Offset position; // top-left, мировые координаты
 
@@ -209,6 +209,12 @@ sealed class GraphAction {
       MoveNoteEndAction;
   factory GraphAction.removeNote({required String id}) = RemoveNoteAction;
   factory GraphAction.selectNote(String? id) = SelectNoteAction;
+  
+  // Ресайз заметок
+  factory GraphAction.resizeNote({required String id, required Size size}) =
+      ResizeNoteAction;
+  factory GraphAction.resizeNoteEnd({required String id, required Size size}) =
+      ResizeNoteEndAction;
 }
 
 /// Double-tap on empty canvas. [at] is a suggested top-left position.
@@ -303,6 +309,20 @@ class SelectNoteAction extends GraphAction {
   const SelectNoteAction(this.id);
 }
 
+/// Живой ресайз заметки: высокочастотный, можно дропать.
+class ResizeNoteAction extends GraphAction {
+  final String id;
+  final Size size;
+  const ResizeNoteAction({required this.id, required this.size});
+}
+
+/// Ресайз завершён. Точка коммита.
+class ResizeNoteEndAction extends GraphAction {
+  final String id;
+  final Size size;
+  const ResizeNoteEndAction({required this.id, required this.size});
+}
+
 /// What a custom node renderer receives.
 class NodeState {
   final GraphNode node;
@@ -383,6 +403,9 @@ class NoteState {
 
   /// Обновить размер заметки (при изменении через ручки изменения размера).
   final ValueChanged<Size>? onResize;
+  
+  /// Завершение изменения размера (коммит).
+  final VoidCallback? onResizeEnd;
 
   const NoteState({
     required this.note,
@@ -401,11 +424,12 @@ class NoteState {
     required this.dragUpdate,
     required this.dragEnd,
     this.onResize,
+    this.onResizeEnd,
   });
 }
 
 typedef NoteWidgetBuilder =
-    Widget Function(BuildContext context, NoteState state, VoidCallback onResize);
+    Widget Function(BuildContext context, NoteState state);
 
 // ════════════════════════════════════════════════════════════════════════════
 // 3 · Camera — optional imperative handle
@@ -522,6 +546,7 @@ class _GraphViewState extends State<GraphView>
   StreamSubscription<List<GraphNote>>? _subNotes;
   String? _selectedNoteId;
   String? _draggingNoteId;
+  String? _resizingNoteId;
   String? _editingNoteId;
   final Map<String, String> _noteDrafts = {}; // noteId -> драфт текста
   bool _firstNotesEmit = false;
@@ -589,6 +614,7 @@ class _GraphViewState extends State<GraphView>
       _selectedId = null;
       _firstEmit = false;
       _booted = false;
+      _bootStarted = false;
       _collapsed
         ..clear()
         ..addAll(widget.initiallyCollapsed);
@@ -597,17 +623,6 @@ class _GraphViewState extends State<GraphView>
       _suckTo.clear();
       _suckOrigin.clear();
       _childrenIdx = {};
-      _subscribe(widget.nodes);
-    }
-
-    if (old.nodes != widget.nodes) {
-      _nodes.clear();
-      _reveals.clear();
-      _ghosts.clear();
-      _selectedId = null;
-      _firstEmit = false;
-      _booted = false;
-      _bootStarted = false;
       _subscribe(widget.nodes);
     }
     if (old.notes != widget.notes) {
@@ -684,11 +699,12 @@ class _GraphViewState extends State<GraphView>
         changed = true;
       } else if (existing.text != fresh.text ||
           existing.index != fresh.index ||
-          existing.size != fresh.size) {
+          (existing.size != fresh.size && fresh.id != _resizingNoteId)) {
         _notes[fresh.id] = fresh;
         // Пока идёт редактирование, текст из хоста не перекрывает драфт.
         if (fresh.id == _editingNoteId) fresh.text = existing.text;
         if (fresh.id == _draggingNoteId) fresh.position = existing.position;
+        if (fresh.id == _resizingNoteId) fresh.size = existing.size;
         changed = true;
       } else if (existing.position != fresh.position &&
           fresh.id != _draggingNoteId) {
@@ -1017,7 +1033,7 @@ class _GraphViewState extends State<GraphView>
 
   void _dragStart(GraphNode n, DragStartDetails d) {
     _commitNoteEdit();
-_selectedNoteId = null;
+    _selectedNoteId = null;
     _dragGrab = n.position - _sceneFromGlobal(d.globalPosition);
     _draggingId = n.id;
     if (_selectedId != n.id) {
@@ -1047,7 +1063,7 @@ _selectedNoteId = null;
     );
   }
 
-  // ── Notes: создание, редактирование, драг ────────────────────────────────
+  // ── Notes: создание, редактирование, драг, ресайз ──────────────────────────
 
   void _requestNote() {
     HapticFeedback.selectionClick();
@@ -1125,6 +1141,18 @@ _selectedNoteId = null;
     _act(GraphAction.moveNoteEnd(id: n.id, to: n.position));
   }
 
+  void _noteResizeUpdate(GraphNote n, Size size) {
+    _resizingNoteId = n.id;
+    n.size = size;
+    _act(GraphAction.resizeNote(id: n.id, size: size));
+    setState(() {});
+  }
+
+  void _noteResizeEnd(GraphNote n) {
+    if (_resizingNoteId == n.id) _resizingNoteId = null;
+    _act(GraphAction.resizeNoteEnd(id: n.id, size: n.size));
+  }
+
   // ── Camera math ────────────────────────────────────────────────────────────
 
   RenderBox? get _viewerBox =>
@@ -1147,32 +1175,33 @@ _selectedNoteId = null;
   void _applyFly() => _ctrl.value = _flyAnim!.value;
 
   @override
-void fitView({required bool animate}) {
-  final box = _viewerBox;
-  if (box == null || (_nodes.isEmpty && _notes.isEmpty)) return;
+  void fitView({required bool animate}) {
+    final box = _viewerBox;
+    if (box == null || (_nodes.isEmpty && _notes.isEmpty)) return;
 
-  Rect? rect;
-  for (final n in _nodes.values) {
-    final r = n.position & n.size;
-    rect = rect == null ? r : rect.expandToInclude(r);
-  }
-  for (final n in _notes.values) {
-    final r = n.position & n.size;
-    rect = rect == null ? r : rect.expandToInclude(r);
-  }
-  rect = rect!.inflate(150);
+    Rect? rect;
+    for (final n in _nodes.values) {
+      final r = n.position & n.size;
+      rect = rect == null ? r : rect.expandToInclude(r);
+    }
+    for (final n in _notes.values) {
+      final r = n.position & n.size;
+      rect = rect == null ? r : rect.expandToInclude(r);
+    }
+    rect = rect!.inflate(150);
 
-  final vp = box.size;
-  final s = math.min(vp.width / rect.width, vp.height / rect.height)
-      .clamp(widget.minScale, 1.1);
-  final m = Matrix4.identity()
-    ..scale(s, s)
-    ..translate(
-      (vp.width / 2 - s * rect.center.dx) / s,
-      (vp.height / 2 - s * rect.center.dy) / s,
-    );
-  animate ? _flyTo(m) : _ctrl.value = m;
-}
+    final vp = box.size;
+    final s = math.min(vp.width / rect.width, vp.height / rect.height)
+        .clamp(widget.minScale, 1.1);
+    final m = Matrix4.identity()
+      ..scale(s, s)
+      ..translate(
+        (vp.width / 2 - s * rect.center.dx) / s,
+        (vp.height / 2 - s * rect.center.dy) / s,
+      );
+    animate ? _flyTo(m) : _ctrl.value = m;
+  }
+
   @override
   void zoomBy(double f) {
     final box = _viewerBox;
@@ -1413,40 +1442,42 @@ void fitView({required bool animate}) {
                     ),
                   ...nodeLayer,
                   // Заметки — под призраками и нодами.
-for (final nt in _notes.values)
-  Positioned(
-    key: ValueKey('note:${nt.id}'), // префикс, чтобы не collide с ключами нод
-    left: nt.position.dx,
-    top: nt.position.dy,
-    width: nt.size.width,
-    height: nt.size.height,
-    child: _PopIn(
-      delayMs: _booted ? 0 : math.min(nt.index * 90, 600),
-      child: (widget.noteBuilder ?? _defaultNoteBuilder)(
-        context,
-        NoteState(
-          note: nt,
-          size: nt.size,
-          text: _noteDrafts[nt.id] ?? nt.text,
-          selected: _selectedNoteId == nt.id,
-          editing: _editingNoteId == nt.id,
-          canDelete: widget.longPressDeletes,
-          accent: theme.accentFor(nt.index),
-          select: () => _noteSelect(nt),
-          beginEdit: () => _beginNoteEdit(nt),
-          endEdit: _commitNoteEdit,
-          updateText: (t) => _updateNoteDraft(nt, t),
-          remove: () {
-            HapticFeedback.mediumImpact();
-            _act(GraphAction.removeNote(id: nt.id));
-          },
-          dragStart: (d) => _noteDragStart(nt, d),
-          dragUpdate: (d) => _noteDragUpdate(nt, d),
-          dragEnd: (_) => _noteDragEnd(nt),
-        ),
-      ),
-    ),
-  ),
+                  for (final nt in _notes.values)
+                    Positioned(
+                      key: ValueKey('note:${nt.id}'), // префикс, чтобы не collide с ключами нод
+                      left: nt.position.dx,
+                      top: nt.position.dy,
+                      width: nt.size.width,
+                      height: nt.size.height,
+                      child: _PopIn(
+                        delayMs: _booted ? 0 : math.min(nt.index * 90, 600),
+                        child: (widget.noteBuilder ?? _defaultNoteBuilder)(
+                          context,
+                          NoteState(
+                            note: nt,
+                            size: nt.size,
+                            text: _noteDrafts[nt.id] ?? nt.text,
+                            selected: _selectedNoteId == nt.id,
+                            editing: _editingNoteId == nt.id,
+                            canDelete: widget.longPressDeletes,
+                            accent: theme.accentFor(nt.index),
+                            select: () => _noteSelect(nt),
+                            beginEdit: () => _beginNoteEdit(nt),
+                            endEdit: _commitNoteEdit,
+                            updateText: (t) => _updateNoteDraft(nt, t),
+                            remove: () {
+                              HapticFeedback.mediumImpact();
+                              _act(GraphAction.removeNote(id: nt.id));
+                            },
+                            dragStart: (d) => _noteDragStart(nt, d),
+                            dragUpdate: (d) => _noteDragUpdate(nt, d),
+                            dragEnd: (_) => _noteDragEnd(nt),
+                            onResize: (size) => _noteResizeUpdate(nt, size),
+                            onResizeEnd: () => _noteResizeEnd(nt),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1471,8 +1502,9 @@ for (final nt in _notes.values)
 
   Widget _defaultBuilder(BuildContext context, NodeState state) =>
       DefaultNodeCard(state: state, theme: widget.theme);
-Widget _defaultNoteBuilder(BuildContext context, NoteState state) =>
-    DefaultNoteCard(state: state, theme: widget.theme);
+      
+  Widget _defaultNoteBuilder(BuildContext context, NoteState state) =>
+      DefaultNoteCard(state: state, theme: widget.theme);
 }
 
 
@@ -1753,7 +1785,7 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
   }
 }
 
-/// Дефолтная заметка-стикер: драг, выделение, инлайн-редактирование текста.
+/// Дефолтная заметка-стикер: драг, выделение, инлайн-редактирование текста и ресайз.
 /// Полностью заменяется через [GraphView.noteBuilder].
 class DefaultNoteCard extends StatefulWidget {
   final NoteState state;
@@ -1935,6 +1967,42 @@ class _DefaultNoteCardState extends State<DefaultNoteCard> {
                 ),
               ),
             ),
+          // Ручка изменения размера (Resize grip)
+          Positioned(
+            right: -8,
+            bottom: -8,
+            child: IgnorePointer(
+              ignoring: !_hovered || s.editing,
+              child: AnimatedOpacity(
+                opacity: _hovered && !s.editing ? 1 : 0,
+                duration: const Duration(milliseconds: 150),
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.resizeDownRight,
+                  child: GestureDetector(
+                    onPanUpdate: (d) {
+                      final w = (s.size.width + d.delta.dx).clamp(120.0, 800.0);
+                      final h = (s.size.height + d.delta.dy).clamp(80.0, 800.0);
+                      s.onResize?.call(Size(w, h));
+                    },
+                    onPanEnd: (_) => s.onResizeEnd?.call(),
+                    child: Container(
+                      width: 16,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        color: t.surfaceHover,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: t.border),
+                      ),
+                      child: CustomPaint(
+                        size: const Size(16, 16),
+                        painter: _ResizeGripPainter(color: t.textDim),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -2119,6 +2187,23 @@ class _DashedBorder extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DashedBorder old) => old.color != color;
+}
+
+class _ResizeGripPainter extends CustomPainter {
+  final Color color;
+  const _ResizeGripPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    // Рисуем три точки в правом нижнем углу, как стандартный "грип" ресайза
+    canvas.drawCircle(Offset(size.width - 3, size.height - 3), 1.5, paint);
+    canvas.drawCircle(Offset(size.width - 3, size.height - 8), 1.5, paint);
+    canvas.drawCircle(Offset(size.width - 8, size.height - 3), 1.5, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -2321,14 +2406,14 @@ class _ZoomControls extends StatelessWidget {
           onTap: onFit,
         ),
         if (onAddNote != null) ...[
-  const SizedBox(height: 8),
-  ControlButton(
-    theme: theme,
-    icon: Icons.sticky_note_2_outlined,
-    tooltip: 'Add note',
-    onTap: onAddNote!,
-  ),
-],
+          const SizedBox(height: 8),
+          ControlButton(
+            theme: theme,
+            icon: Icons.sticky_note_2_outlined,
+            tooltip: 'Add note',
+            onTap: onAddNote!,
+          ),
+        ],
       ],
     );
   }

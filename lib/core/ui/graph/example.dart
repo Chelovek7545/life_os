@@ -54,9 +54,11 @@ class GraphNodeStore {
   }
 
   Future<void> apply(GraphAction action) async {
-    // MoveAction is a live cursor — never delay or persist it per-event.
+    // MoveAction, MoveNoteAction and ResizeNoteAction are live cursors — 
+    // never delay or persist them per-event.
     if (action is! MoveAction &&
         action is! MoveNoteAction &&
+        action is! ResizeNoteAction &&
         latency > Duration.zero) {
       await Future.delayed(latency);
     }
@@ -88,7 +90,10 @@ class GraphNodeStore {
         _removeNote(id);
       case SelectNoteAction():
         return; // selection lives in the view; nothing to store
-
+      case ResizeNoteAction(:final id, :final size):
+        _resizeNote(id, size);
+      case ResizeNoteEndAction(:final id, :final size):
+        _resizeNote(id, size);
     }
     _emit();
   }
@@ -129,6 +134,7 @@ class GraphNodeStore {
 
   void clearAll() {
     _nodes.clear();
+    _notes.clear();
     _emit();
   }
 
@@ -261,6 +267,19 @@ class GraphNodeStore {
     );
   }
 
+  void _resizeNote(String id, Size size) {
+    final i = _notes.indexWhere((n) => n.id == id);
+    if (i == -1) return;
+    final n = _notes[i];
+    _notes[i] = GraphNote(
+      id: n.id,
+      index: n.index,
+      size: size,
+      text: n.text,
+      position: n.position,
+    );
+  }
+
   void _removeNote(String id) {
     _notes.removeWhere((n) => n.id == id);
   }
@@ -390,11 +409,23 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         MoveNoteEndAction(:final id) => 'moveNoteEnd($id)',
         RemoveNoteAction(:final id) => 'removeNote($id)',
         SelectNoteAction(:final id) => 'selectNote(${id ?? '∅'})',
+        ResizeNoteAction(:final id) => 'resizeNote($id)',
+        ResizeNoteEndAction(:final id) => 'resizeNoteEnd($id)',
       };
 
   void _onAction(GraphAction a) {
-    if (a is! MoveAction && a is! SelectAction) _log(_Kind.action, '→ ${_describe(a)}');
-    if (a is MoveEndAction) _log(_Kind.action, '→ ${_describe(a)}');
+    // Filter out high-frequency cursor events and local selection
+    if (a is! MoveAction && 
+        a is! MoveNoteAction && 
+        a is! ResizeNoteAction && 
+        a is! SelectAction && 
+        a is! SelectNoteAction) {
+      _log(_Kind.action, '→ ${_describe(a)}');
+    }
+    // Log commit points
+    if (a is MoveEndAction || a is MoveNoteEndAction || a is ResizeNoteEndAction) {
+      _log(_Kind.action, '→ ${_describe(a)}');
+    }
     unawaited(_store.apply(a));
   }
 

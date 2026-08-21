@@ -48,7 +48,7 @@ class _MainScreenState extends State<MainScreen> {
         },
       ),
       ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
-      const ResourcesScreen(),
+      ResourcesScreen(repo: widget.diContainer.graphNotesRepository,),
     ];
   }
 

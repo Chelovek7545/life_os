@@ -165,6 +165,13 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         break;
       case graph.SelectNoteAction():
         break;
+      // ── Resize actions ────────────────────────────────────────────────────
+      case graph.ResizeNoteAction(:final id, :final size):
+        // Live-курсор ресайза: обновляем в памяти, без персиста.
+        widget.viewModel.resizeNote(id, size.width, size.height);
+      case graph.ResizeNoteEndAction(:final id, :final size):
+        // Точка коммита — сохраняем финальный размер с debounce.
+        widget.viewModel.commitNoteResize(id, size.width, size.height);
     }
   }
 

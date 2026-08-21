@@ -722,6 +722,28 @@ class LifeGraphViewModel {
     _scheduleSaveNotes();
   }
 
+  /// Live-курсор ресайза заметки: обновляет size в памяти без персиста.
+  /// Границы синхронизированы с clamp в DefaultNoteCard (120..800 / 80..800).
+  void resizeNote(String id, double width, double height) {
+    if (_currentSphereId == null) return;
+    final clampedWidth = width.clamp(120.0, 800.0);
+    final clampedHeight = height.clamp(80.0, 800.0);
+    final updatedNotes = notes.map((n) {
+      if (n.id != id) return n;
+      final cloned = n.clone();
+      cloned.size = Size(clampedWidth, clampedHeight);
+      return cloned;
+    }).toList();
+    _notesSubject.add(updatedNotes);
+  }
+
+  /// Точка коммита ресайза заметки: сохраняет размер (с debounce).
+  void commitNoteResize(String id, double width, double height) {
+    if (_currentSphereId == null) return;
+    resizeNote(id, width, height);
+    _scheduleSaveNotes();
+  }
+
   /// Удаляет заметку.
   Future<void> removeNote(String id) async {
     final updatedNotes = notes.where((n) => n.id != id).toList();
