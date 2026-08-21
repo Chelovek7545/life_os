@@ -150,6 +150,8 @@ sealed class GraphAction {
   factory GraphAction.moveEnd({required String id, required Offset to}) = MoveEndAction;
   factory GraphAction.remove({required String id}) = RemoveAction;
   factory GraphAction.select(String? id) = SelectAction;
+  factory GraphAction.toggleCollapse({required String id, required bool collapsed}) =
+      ToggleCollapseAction;
 }
 
 /// Double-tap on empty canvas. [at] is a suggested top-left position.
@@ -194,16 +196,39 @@ class SelectAction extends GraphAction {
   const SelectAction(this.id);
 }
 
+/// Нода свёрнута/развёрнута. View само прячет поддерево (с анимацией);
+/// событие информационное — хост может персистить состояние и позже
+/// восстановить его через [GraphView.initiallyCollapsed].
+class ToggleCollapseAction extends GraphAction {
+  final String id;
+  final bool collapsed;
+  const ToggleCollapseAction({required this.id, required this.collapsed});
+}
+
 /// What a custom node renderer receives.
 class NodeState {
   final GraphNode node;
   final Size size;
   final bool selected;
   final bool canDelete;
+
+  /// Есть ли у ноды дети (для показа шеврона сворачивания).
+  final bool hasChildren;
+
+  /// Свёрнута ли нода прямо сейчас.
+  final bool collapsed;
+
+  /// Сколько потомков скрыто под свёрнутой нодой (для бейджа «+N»).
+  final int hiddenCount;
+
   final Color accent;
   final VoidCallback select;
   final VoidCallback addChild;
   final VoidCallback remove;
+
+  /// Свернуть/развернуть поддерево этой ноды (с анимацией).
+  final VoidCallback toggleCollapse;
+
   final GestureDragStartCallback dragStart;
   final GestureDragUpdateCallback dragUpdate;
   final GestureDragEndCallback dragEnd;
@@ -213,10 +238,14 @@ class NodeState {
     required this.size,
     required this.selected,
     required this.canDelete,
+    required this.hasChildren,
+    required this.collapsed,
+    required this.hiddenCount,
     required this.accent,
     required this.select,
     required this.addChild,
     required this.remove,
+    required this.toggleCollapse,
     required this.dragStart,
     required this.dragUpdate,
     required this.dragEnd,
@@ -259,6 +288,9 @@ class GraphView extends StatefulWidget {
   /// Source of truth. Must emit the FULL node list on every event and
   /// deliver the current state on listen (drift `.watch()` and rxdart
   /// `BehaviorSubject` both behave this way).
+  ///
+  /// ВАЖНО для сворачивания: стрим должен продолжать отдавать и скрытые
+  /// ветки — view прячет их сам, а при разворачивании данные нужны на месте.
   final Stream<List<GraphNode>> nodes;
 
   /// User intent. Wire it to your store/bloc/repository.
@@ -273,6 +305,10 @@ class GraphView extends StatefulWidget {
   final bool longPressDeletes;
   final double minScale;
   final double maxScale;
+
+  /// Ноды, которые стартуют свёрнутыми (поддеревья скрыты сразу).
+  /// Используйте, чтобы восстановить сохранённое состояние.
+  final Set<String> initiallyCollapsed;
 
   /// How long an optimistic ghost waits for the real node before fading out.
   final Duration ghostTimeout;
@@ -290,6 +326,7 @@ class GraphView extends StatefulWidget {
     this.longPressDeletes = true,
     this.minScale = 0.25,
     this.maxScale = 2.5,
+    this.initiallyCollapsed = const {},
     this.ghostTimeout = const Duration(milliseconds: 2500),
   });
 
@@ -302,12 +339,11 @@ class _GraphViewState extends State<GraphView>
     implements _CameraDelegate {
   final TransformationController _ctrl = TransformationController();
   final GlobalKey _viewerKey = GlobalKey();
-
   final Map<String, GraphNode> _nodes = {};
   String? _selectedId;
   String? _draggingId;
-
   StreamSubscription<List<GraphNode>>? _sub;
+
   final List<_Ghost> _ghosts = [];
   int _ghostSeq = 0;
 
@@ -322,26 +358,45 @@ class _GraphViewState extends State<GraphView>
   bool _booted = false;
   bool _firstEmit = false;
 
+  // ── Collapse / fold state ────────────────────────────────────────────────
+  final Set<String> _collapsed = {};            // id свёрнутых нод
+  final Map<String, double> _suck = {};         // прогресс сворачивания 0..1
+  final Map<String, double> _suckFrom = {};     // откуда стартовала анимация
+  final Map<String, double> _suckTo = {};       // куда идёт
+  final Map<String, Offset> _suckOrigin = {};   // точка «всасывания» (центр ноды)
+  Map<String, List<String>> _childrenIdx = {};  // parentId -> [childId]
+  late final AnimationController _foldCtrl;
+  late final CurvedAnimation _foldCurved;
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    widget.camera?._delegate = this;   
+    widget.camera?._delegate = this;
+
+    _collapsed.addAll(widget.initiallyCollapsed);
+
     _revealCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 750));
     _revealCurved = CurvedAnimation(parent: _revealCtrl, curve: Curves.easeOutCubic);
     _revealCtrl.addListener(_onRevealTick);
+
+    _foldCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 420));
+    _foldCurved = CurvedAnimation(parent: _foldCtrl, curve: Curves.easeInOutCubic);
+    _foldCtrl.addListener(_onFoldTick);
+
     _flyCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 380));
+
     _subscribe(widget.nodes);
   }
 
   @override
   void didUpdateWidget(covariant GraphView old) {
     super.didUpdateWidget(old);
-  if (old.camera != widget.camera) {
-    old.camera?._delegate = null;           
-    widget.camera?._delegate = this;
-  }
+    if (old.camera != widget.camera) {
+      old.camera?._delegate = null;
+      widget.camera?._delegate = this;
+    }
     if (old.nodes != widget.nodes) {
       _nodes.clear();
       _reveals.clear();
@@ -349,6 +404,12 @@ class _GraphViewState extends State<GraphView>
       _selectedId = null;
       _firstEmit = false;
       _booted = false;
+      _collapsed..clear()..addAll(widget.initiallyCollapsed);
+      _suck.clear();
+      _suckFrom.clear();
+      _suckTo.clear();
+      _suckOrigin.clear();
+      _childrenIdx = {};
       _subscribe(widget.nodes);
     }
   }
@@ -358,6 +419,7 @@ class _GraphViewState extends State<GraphView>
     widget.camera?._delegate = null;
     _sub?.cancel();
     _revealCtrl.dispose();
+    _foldCtrl.dispose();
     _flyCtrl.dispose();
     _ctrl.dispose();
     super.dispose();
@@ -402,6 +464,15 @@ class _GraphViewState extends State<GraphView>
     }
 
     if (_selectedId != null && !_nodes.containsKey(_selectedId)) _selectedId = null;
+
+    // Fold bookkeeping: чистим состояние удалённых нод, строим индекс детей.
+    _collapsed.removeWhere((id) => !_nodes.containsKey(id));
+    _suck.removeWhere((id, _) => !_nodes.containsKey(id));
+    _suckFrom.removeWhere((id, _) => !_nodes.containsKey(id));
+    _suckTo.removeWhere((id, _) => !_nodes.containsKey(id));
+    _suckOrigin.removeWhere((id, _) => !_nodes.containsKey(id));
+    _rebuildChildrenIndex();
+
     _retireGhosts(byId.values);
     _syncReveals();
 
@@ -447,6 +518,137 @@ class _GraphViewState extends State<GraphView>
     if (dirty) setState(() {});
   }
 
+  // ── Collapse / expand ──────────────────────────────────────────────────────
+
+  void _rebuildChildrenIndex() {
+    _childrenIdx = {};
+    for (final n in _nodes.values) {
+      final p = n.parentId;
+      if (p != null) (_childrenIdx[p] ??= <String>[]).add(n.id);
+    }
+  }
+
+  Offset _centerOf(GraphNode n) =>
+      n.position + Offset(n.size.width / 2, n.size.height / 2);
+
+  /// Все потомки ноды (любой глубины). Защита от циклов через [seen].
+  List<GraphNode> _descendantsOf(String id) {
+    final out = <GraphNode>[];
+    final seen = <String>{id};
+    final stack = List<String>.of(_childrenIdx[id] ?? const []);
+    while (stack.isNotEmpty) {
+      final cid = stack.removeLast();
+      if (!seen.add(cid)) continue;
+      final c = _nodes[cid];
+      if (c == null) continue;
+      out.add(c);
+      final more = _childrenIdx[cid];
+      if (more != null) stack.addAll(more);
+    }
+    return out;
+  }
+
+  /// Ближайший свёрнутый предок (null, если нода видима).
+  String? _collapsedAncestorOf(GraphNode n) {
+    var pid = n.parentId;
+    var guard = 0;
+    while (pid != null && guard++ < 100000) {
+      if (_collapsed.contains(pid)) return pid;
+      pid = _nodes[pid]?.parentId;
+    }
+    return null;
+  }
+
+  bool _isFoldedAway(GraphNode n) => _collapsedAncestorOf(n) != null;
+
+  void _toggleCollapse(GraphNode n) =>
+      _setCollapsed(n, !_collapsed.contains(n.id));
+
+  void _setCollapsed(GraphNode n, bool collapsing,
+      {bool notify = true, bool haptic = true}) {
+    if (haptic) HapticFeedback.selectionClick();
+
+    final starts = <String, double>{};
+    final targets = <String, double>{};
+
+    if (collapsing) {
+      final into = _centerOf(n);
+      for (final d in _descendantsOf(n.id)) {
+        if (_collapsedAncestorOf(d) != null) continue; // уже скрыта глубже
+        starts[d.id] = _suck[d.id] ?? 0;
+        targets[d.id] = 1;
+        _suckOrigin[d.id] = into;
+      }
+      _collapsed.add(n.id);
+    } else {
+      _collapsed.remove(n.id);
+      for (final d in _descendantsOf(n.id)) {
+        if (_collapsedAncestorOf(d) != null) continue; // остаётся скрытой другой нодой
+        starts[d.id] = _suck[d.id] ?? 1;
+        targets[d.id] = 0;
+      }
+    }
+
+    if (notify) {
+      _act(GraphAction.toggleCollapse(id: n.id, collapsed: collapsing));
+    }
+    if (targets.isEmpty) {
+      setState(() {});
+      return;
+    }
+
+    _suckFrom.addAll(starts);
+    _suckTo.addAll(targets);
+    starts.forEach((id, v) => _suck.putIfAbsent(id, () => v));
+    _foldCtrl.forward(from: 0);
+    setState(() {});
+  }
+
+  void _onFoldTick() {
+    final t = _foldCurved.value;
+    if (_suckTo.isEmpty) return;
+    final done = t >= 1.0;
+    for (final id in _suckTo.keys.toList()) {
+      final from = _suckFrom[id] ?? 0;
+      final to = _suckTo[id]!;
+      _suck[id] = from + (to - from) * t;
+      if (done) {
+        if (to <= 0) {
+          _suck.remove(id);
+          _suckOrigin.remove(id);
+        }
+        _suckFrom.remove(id);
+        _suckTo.remove(id);
+      }
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// Где и с какой прозрачностью/масштабом рисовать ноду прямо сейчас.
+  /// vis == 0 ⇒ нода полностью свёрнута под предка (рисуется невидимой,
+  /// чтобы сохранить элемент в дереве и не перезапускать boot-анимации).
+  _Visual _visualOf(GraphNode n) {
+    final foldedUnder = _collapsedAncestorOf(n);
+    final double p =
+        (_suck[n.id] ?? (foldedUnder != null ? 1.0 : 0.0)).clamp(0.0, 1.0);
+    if (p >= 1) return _Visual(n.position & n.size, 0);
+    if (p <= 0) return _Visual(n.position & n.size, 1);
+
+    Offset? into = _suckOrigin[n.id];
+    if (into == null && foldedUnder != null) {
+      final host = _nodes[foldedUnder];
+      if (host != null) into = _centerOf(host);
+    }
+    if (into == null) {
+      final parent = n.parentId == null ? null : _nodes[n.parentId!];
+      if (parent != null) into = _centerOf(parent);
+    }
+    if (into == null) return _Visual(n.position & n.size, 1 - p);
+
+    final target = Offset(into.dx - n.size.width / 2, into.dy - n.size.height / 2);
+    return _Visual(Offset.lerp(n.position, target, p)! & n.size, 1 - p);
+  }
+
   // ── Ghosts — optimistic placeholders while the host round-trips ────────────
 
   void _spawnGhost({required String? parentId, required Offset at, required Color accent}) {
@@ -486,6 +688,10 @@ class _GraphViewState extends State<GraphView>
 
   void _requestChild(GraphNode parent) {
     HapticFeedback.selectionClick();
+    // Добавление ребёнка в свёрнутую ноду автоматически разворачивает её.
+    if (_collapsed.contains(parent.id)) {
+      _setCollapsed(parent, false, notify: false, haptic: false);
+    }
     final pos = _childSpot(parent);
     _spawnGhost(
       parentId: parent.id,
@@ -566,7 +772,8 @@ class _GraphViewState extends State<GraphView>
 
   @override
   void fitView({required bool animate}) {
-    final all = _nodes.values.toList();
+    // Скрытые сворачиванием ноды в кадр не попадают.
+    final all = _nodes.values.where((n) => !_isFoldedAway(n)).toList();
     final box = _viewerBox;
     if (all.isEmpty || box == null) return;
 
@@ -597,7 +804,6 @@ class _GraphViewState extends State<GraphView>
     final s0 = _ctrl.value.getMaxScaleOnAxis();
     final s1 = (s0 * f).clamp(widget.minScale, widget.maxScale);
     f = s1 / s0;
-
     final c = _ctrl.toScene(box.size.center(Offset.zero));
     final around = Matrix4.identity()
       ..translate(c.dx, c.dy)
@@ -612,14 +818,12 @@ class _GraphViewState extends State<GraphView>
     final vp = box.size;
     final screen = MatrixUtils.transformPoint(_ctrl.value, scenePoint);
     const m = 110.0;
-
     double dx = 0, dy = 0;
     if (screen.dx < m) dx = m - screen.dx;
     if (screen.dx > vp.width - m) dx = vp.width - m - screen.dx;
     if (screen.dy < m) dy = m - screen.dy;
     if (screen.dy > vp.height - m) dy = vp.height - m - screen.dy;
     if (dx == 0 && dy == 0) return;
-
     _flyTo(Matrix4.translationValues(dx, dy, 0)..multiply(_ctrl.value));
   }
 
@@ -638,12 +842,19 @@ class _GraphViewState extends State<GraphView>
       if (n.parentId == null) continue;
       final from = _nodes[n.parentId!];
       if (from == null) continue;
+      final vf = _visualOf(from);
+      final vt = _visualOf(n);
+      final alpha = math.min(vf.vis, vt.vis);
+      if (alpha <= 0.01) continue;
       out.add(_EdgeSpec(
         from,
         n,
         theme.accentFor(from.depth),
         theme.accentFor(n.depth),
         _reveals['${from.id}>${n.id}'] ?? 1,
+        alpha,
+        vf.rect,
+        vt.rect,
       ));
     }
     return out;
@@ -654,6 +865,62 @@ class _GraphViewState extends State<GraphView>
     final theme = widget.theme;
     final l = widget.layout;
     final ns = l.nodeSize;
+
+    // Слой нод с учётом сворачивания: лерп позиции к центру свёрнутой ноды,
+    // масштаб и прозрачность по прогрессу.
+    final nodeLayer = <Widget>[];
+    for (final n in _nodes.values) {
+      final v = _visualOf(n);
+      final isCollapsed = _collapsed.contains(n.id);
+      nodeLayer.add(
+        Positioned(
+          key: ValueKey(n.id),
+          left: v.rect.left,
+          top: v.rect.top,
+          width: n.size.width,
+          height: n.size.height,
+          child: IgnorePointer(
+            ignoring: v.vis < 1, // во время анимации и в скрытом виде жесты не ловим
+            child: Opacity(
+              opacity: v.vis,
+              child: Transform.scale(
+                scale: v.vis,
+                child: _PopIn(
+                  delayMs: _booted ? 0 : math.min(n.index * 120, 600),
+                  child: (widget.nodeBuilder ?? _defaultBuilder)(
+                    context,
+                    NodeState(
+                      node: n,
+                      size: n.size,
+                      selected: _selectedId == n.id,
+                      canDelete: widget.longPressDeletes,
+                      hasChildren: _childrenIdx[n.id]?.isNotEmpty ?? false,
+                      collapsed: isCollapsed,
+                      hiddenCount: isCollapsed ? _descendantsOf(n.id).length : 0,
+                      accent: theme.accentFor(n.depth),
+                      select: () {
+                        _selectedId = n.id;
+                        _act(GraphAction.select(n.id));
+                        setState(() {});
+                      },
+                      addChild: () => _requestChild(n),
+                      remove: () {
+                        HapticFeedback.mediumImpact();
+                        _act(GraphAction.remove(id: n.id));
+                      },
+                      toggleCollapse: () => _toggleCollapse(n),
+                      dragStart: (d) => _dragStart(n, d),
+                      dragUpdate: (d) => _dragUpdate(n, d),
+                      dragEnd: (_) => _dragEnd(n),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return ClipRect(
       child: Stack(
@@ -695,7 +962,6 @@ class _GraphViewState extends State<GraphView>
               ),
             ),
           ),
-
           InteractiveViewer(
             key: _viewerKey,
             transformationController: _ctrl,
@@ -728,7 +994,6 @@ class _GraphViewState extends State<GraphView>
                       child: CustomPaint(painter: _EdgesPainter(_buildEdges(theme), theme)),
                     ),
                   ),
-
                   // Ghosts sit under real nodes.
                   for (final g in _ghosts)
                     Positioned(
@@ -745,46 +1010,11 @@ class _GraphViewState extends State<GraphView>
                         onGone: () => _ghostGone(g),
                       ),
                     ),
-
-                  for (final n in _nodes.values)
-                    Positioned(
-                      key: ValueKey(n.id),
-                      left: n.position.dx,
-                      top: n.position.dy,
-                      width: n.size.width,
-                      height: n.size.height,
-                      child: _PopIn(
-                        delayMs: _booted ? 0 : math.min(n.index * 120, 600),
-                        child: (widget.nodeBuilder ?? _defaultBuilder)(
-                          context,
-                          NodeState(
-                            node: n,
-                            size: n.size,
-                            selected: _selectedId == n.id,
-                            canDelete: widget.longPressDeletes,
-                            accent: theme.accentFor(n.depth),
-                            select: () {
-                              _selectedId = n.id;
-                              _act(GraphAction.select(n.id));
-                              setState(() {});
-                            },
-                            addChild: () => _requestChild(n),
-                            remove: () {
-                              HapticFeedback.mediumImpact();
-                              _act(GraphAction.remove(id: n.id));
-                            },
-                            dragStart: (d) => _dragStart(n, d),
-                            dragUpdate: (d) => _dragUpdate(n, d),
-                            dragEnd: (_) => _dragEnd(n),
-                          ),
-                        ),
-                      ),
-                    ),
+                  ...nodeLayer,
                 ],
               ),
             ),
           ),
-
           if (widget.showControls)
             Positioned(
               right: 16,
@@ -806,7 +1036,6 @@ class _GraphViewState extends State<GraphView>
       DefaultNodeCard(state: state, theme: widget.theme);
 }
 
-
 // ════════════════════════════════════════════════════════════════════════════
 // 5 · Default node card
 // ════════════════════════════════════════════════════════════════════════════
@@ -814,7 +1043,6 @@ class _GraphViewState extends State<GraphView>
 class DefaultNodeCard extends StatefulWidget {
   final NodeState state;
   final GraphViewTheme theme;
-
   const DefaultNodeCard({super.key, required this.state, required this.theme});
 
   @override
@@ -842,6 +1070,8 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: s.select,
+            // Двойной тап по карточке — свернуть/развернуть ветку.
+            onDoubleTap: (s.hasChildren || s.collapsed) ? s.toggleCollapse : null,
             onLongPress: s.canDelete ? s.remove : null,
             onPanStart: s.dragStart,
             onPanUpdate: s.dragUpdate,
@@ -920,7 +1150,6 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
               ),
             ),
           ),
-
           if (s.canDelete)
             Positioned(
               top: -9,
@@ -949,7 +1178,6 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
                 ),
               ),
             ),
-
           Positioned(
             right: -15,
             top: s.size.height / 2 - 16,
@@ -994,6 +1222,68 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
               ),
             ),
           ),
+          // Шеврон сворачивания — снизу по центру карточки.
+          if (s.hasChildren || s.collapsed)
+            Positioned(
+              left: s.size.width / 2 - 11,
+              bottom: -12,
+              child: Tooltip(
+                message: s.collapsed ? 'Развернуть ветку' : 'Свернуть ветку',
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: s.toggleCollapse,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: s.collapsed ? s.accent : t.surfaceHover,
+                        border: Border.all(color: t.canvas, width: 2.5),
+                        boxShadow: [
+                          BoxShadow(color: t.shadow, blurRadius: 6, offset: const Offset(0, 2)),
+                        ],
+                      ),
+                      child: Icon(
+                        s.collapsed ? Icons.chevron_right : Icons.expand_more,
+                        size: 14,
+                        color: s.collapsed ? const Color(0xFF08161B) : t.textDim,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          // Бейдж «+N» — сколько потомков скрыто.
+          if (s.collapsed && s.hiddenCount > 0)
+            Positioned(
+              left: s.size.width / 2 + 16,
+              bottom: -9,
+              child: IgnorePointer(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: t.surface,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(color: s.accent.withOpacity(0.55)),
+                    boxShadow: [
+                      BoxShadow(color: t.shadow, blurRadius: 6, offset: const Offset(0, 2)),
+                    ],
+                  ),
+                  child: Text(
+                    '+${s.hiddenCount}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.4,
+                      color: s.accent,
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -1003,7 +1293,6 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
 class _PopIn extends StatefulWidget {
   final int delayMs;
   final Widget child;
-
   const _PopIn({required this.delayMs, required this.child});
 
   @override
@@ -1052,13 +1341,19 @@ class _Ghost {
   final String? parentId;
   final Offset position;
   final Color accent;
-
   const _Ghost({
     required this.id,
     required this.parentId,
     required this.position,
     required this.accent,
   });
+}
+
+/// Текущее визуальное состояние ноды с учётом анимации сворачивания.
+class _Visual {
+  final Rect rect;
+  final double vis; // 1 = полностью видима, 0 = спрятана
+  const _Visual(this.rect, this.vis);
 }
 
 class _GhostNode extends StatefulWidget {
@@ -1136,7 +1431,6 @@ class _GhostNodeState extends State<_GhostNode> with SingleTickerProviderStateMi
 class _DashedBorder extends CustomPainter {
   final Color color;
   final double radius;
-
   const _DashedBorder({required this.color, required this.radius});
 
   @override
@@ -1169,7 +1463,6 @@ class _DashedBorder extends CustomPainter {
 
 class _GridPainter extends CustomPainter {
   final GraphViewTheme theme;
-
   const _GridPainter(this.theme);
 
   @override
@@ -1219,25 +1512,24 @@ class _EdgeSpec {
   final Color cFrom;
   final Color cTo;
   final double reveal;
-
-  const _EdgeSpec(this.from, this.to, this.cFrom, this.cTo, this.reveal);
+  final double alpha; // видимость с учётом сворачивания
+  final Rect rectFrom;
+  final Rect rectTo;
+  const _EdgeSpec(this.from, this.to, this.cFrom, this.cTo, this.reveal, this.alpha,
+      this.rectFrom, this.rectTo);
 }
 
 class _EdgesPainter extends CustomPainter {
   final List<_EdgeSpec> edges;
   final GraphViewTheme theme;
-
   const _EdgesPainter(this.edges, this.theme);
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final e in edges) {
-      final a = Offset(
-        e.from.position.dx + e.from.size.width + 18,
-        e.from.position.dy + e.from.size.height / 2,
-      );
-      final b = Offset(e.to.position.dx - 8, e.to.position.dy + e.to.size.height / 2);
-
+      if (e.alpha <= 0.01) continue;
+      final a = Offset(e.rectFrom.right + 18, e.rectFrom.center.dy);
+      final b = Offset(e.rectTo.left - 8, e.rectTo.center.dy);
       final dx = math.max(56.0, (b.dx - a.dx) * 0.55);
       final path = Path()
         ..moveTo(a.dx, a.dy)
@@ -1256,7 +1548,7 @@ class _EdgesPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
           ..strokeWidth = 8
-          ..color = e.cTo.withOpacity(0.12),
+          ..color = e.cTo.withOpacity(0.12 * e.alpha),
       );
       canvas.drawPath(
         drawn,
@@ -1264,13 +1556,16 @@ class _EdgesPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
           ..strokeWidth = 2.4
-          ..shader = ui.Gradient.linear(a, b, [e.cFrom.withOpacity(0.55), e.cTo]),
+          ..shader = ui.Gradient.linear(a, b, [
+            e.cFrom.withOpacity(0.55 * e.alpha),
+            e.cTo.withOpacity(e.alpha),
+          ]),
       );
 
       if (e.reveal < 1 && pm != null) {
         final tip = pm.getTangentForOffset(pm.length * e.reveal)?.position ?? b;
-        canvas.drawCircle(tip, 7, Paint()..color = theme.text.withOpacity(0.18));
-        canvas.drawCircle(tip, 3.2, Paint()..color = theme.text);
+        canvas.drawCircle(tip, 7, Paint()..color = theme.text.withOpacity(0.18 * e.alpha));
+        canvas.drawCircle(tip, 3.2, Paint()..color = theme.text.withOpacity(e.alpha));
       }
     }
   }

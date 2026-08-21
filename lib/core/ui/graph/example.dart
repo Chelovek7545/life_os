@@ -62,6 +62,8 @@ class GraphNodeStore {
         _removeSubtree(id);
       case SelectAction():
         return; // selection lives in the view; nothing to store
+      case ToggleCollapseAction():
+        return;
     }
     _emit();
   }
@@ -277,6 +279,8 @@ class _PlaygroundScreenState extends State<PlaygroundScreen> {
         MoveEndAction(:final id) => 'moveEnd($id)',
         RemoveAction(:final id) => 'remove($id)',
         SelectAction(:final id) => 'select(${id ?? '∅'})',
+    // TODO: Handle this case.
+    ToggleCollapseAction() => ''
       };
 
   void _onAction(GraphAction a) {

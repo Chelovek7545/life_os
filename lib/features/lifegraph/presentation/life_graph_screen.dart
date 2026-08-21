@@ -144,6 +144,8 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         break;
       case graph.SelectAction():
         break;
+      case graph.ToggleCollapseAction():
+        break;
     }
   }
 

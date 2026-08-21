@@ -41,6 +41,7 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
   @override
   Widget build(BuildContext context) {
     final n = widget.node;
+    final s = widget.state;
     final size = widget.state.size;
 
     return MouseRegion(
@@ -52,7 +53,8 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
         children: [
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () {
+            onDoubleTap: (s.hasChildren || s.collapsed) ? s.toggleCollapse : null,
+            onLongPress: () {
               widget.state.select();
               widget.onTap();
             },
@@ -153,6 +155,68 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                         ),
                         child: const Icon(Icons.add, size: 17, color: Color(0xFF08161B)),
                       ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          // Шеврон сворачивания — снизу по центру карточки.
+          if (s.hasChildren || s.collapsed)
+            Positioned(
+              left: s.size.width / 2 - 11,
+              bottom: -12,
+              child: Tooltip(
+                message: s.collapsed ? 'Развернуть ветку' : 'Свернуть ветку',
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: s.toggleCollapse,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: s.collapsed ? s.accent : AppColors.surfaceContainerHigh,
+                        border: Border.all(color: AppColors.surfaceContainer, width: 2.5),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black12, blurRadius: 6, offset: const Offset(0, 2)),
+                        ],
+                      ),
+                      child: Icon(
+                        s.collapsed ? Icons.chevron_right : Icons.expand_more,
+                        size: 14,
+                        color: s.collapsed ? const Color(0xFF08161B) : AppColors.onSurface,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          // Бейдж «+N» — сколько потомков скрыто.
+          if (s.collapsed && s.hiddenCount > 0)
+            Positioned(
+              left: s.size.width / 2 + 16,
+              bottom: -9,
+              child: IgnorePointer(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(color: s.accent.withOpacity(0.55)),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black26, blurRadius: 6, offset: const Offset(0, 2)),
+                    ],
+                  ),
+                  child: Text(
+                    '+${s.hiddenCount}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.4,
+                      color: s.accent,
                     ),
                   ),
                 ),

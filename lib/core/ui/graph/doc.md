@@ -71,6 +71,7 @@ GraphView(
 | `MoveEndAction(id, to)` | отпускание/отмена драга | **точка коммита** — писать в БД здесь |
 | `RemoveAction(id)` | long-press / ✕ | удаление (поддерево — решение хоста) |
 | `SelectAction(id)` | тап по узлу / фону | информационно; выделение живёт в виджете |
+| `ToggleCollapseAction(id, collapsed)` | Cворачивание нод |
 
 Обработчик хоста — исчерпывающий `switch` (sealed гарантирует полноту):
 
@@ -82,6 +83,7 @@ void _onAction(GraphAction a) => switch (a) {
   MoveEndAction(:final id, :final to) => repo.persistPosition(id, to),
   RemoveAction(:final id) => repo.removeSubtree(id),
   SelectAction(:final id) => panel.focus(id),
+  ToggleCollapseAction() => 
 };
 ```
 
@@ -141,6 +143,7 @@ GraphView(
     MoveEndAction(:final id, :final to) => db.updatePosition(id, to),
     RemoveAction(:final id) => db.deleteSubtree(id),
     SelectAction() => null,
+    ToggleCollapseAction():
   },
 )
 ```
