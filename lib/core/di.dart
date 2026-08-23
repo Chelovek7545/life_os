@@ -3,6 +3,7 @@ import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
 import 'package:life_os/features/resources/data/obsidian_repository.dart';
+import 'package:life_os/features/resources/presentation/resources_view_model.dart';
 import 'package:life_os/features/settings/settings_service.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
@@ -55,6 +56,7 @@ class DependencyContainer {
   // late final AiCoachViewModel aiCoachViewModel;
   late final GetTasksWithProjectsUseCase taskWithPrjct;
   late final HabitsViewModel habitsViewModel;
+  late final ResourcesViewModel resourcesViewModel;
 
   void init() {
     database = AppDatabase();
@@ -80,10 +82,10 @@ class DependencyContainer {
     //   apiClient,
     // );
     obsidianRepository = ObsidianRepository();
-    obsidianRepository.scanVault(SettingsService.obsidianVaultPath.value);
-    SettingsService.obsidianVaultPath.addListener(() {
-      obsidianRepository.scanVault(SettingsService.obsidianVaultPath.value);
-    });
+    // obsidianRepository.scanVault(SettingsService.obsidianVaultPath.value, (){},(e){});
+    // SettingsService.obsidianVaultPath.addListener(() {
+    //   obsidianRepository.scanVault(SettingsService.obsidianVaultPath.value, (){},(e){} );
+    // });
 
     graphPositionsRepository = GraphPositionsRepository();
     graphNotesRepository = GraphNotesRepository(obsidianRepository: obsidianRepository);
@@ -128,6 +130,12 @@ class DependencyContainer {
 
     habitsViewModel = HabitsViewModel(habitsRepository);
     habitsViewModel.initialize();
+    resourcesViewModel = ResourcesViewModel(graphNotesRepo: graphNotesRepository, obsidianRepo: obsidianRepository);
+    
+    //resourcesViewModel.scanVault(SettingsService.obsidianVaultPath.value);
+    SettingsService.obsidianVaultPath.addListener(() {
+      resourcesViewModel.scanVault(SettingsService.obsidianVaultPath.value);
+    });
     // moodViewModel = MoodViewModel(moodRepository, AiMoodAnalyzer(apiClient));
     // aiCoachViewModel = AiCoachViewModel(aiRepository);
   }

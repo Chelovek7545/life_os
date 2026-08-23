@@ -277,16 +277,16 @@ class ObsidianNote {
 
 class ObsidianRepository extends ChangeNotifier {
   List<ObsidianNote> _notes = [];
-  bool _isLoading = false;
-  String? _error;
+  // bool _isLoading = false;
+  // String? _error;
   String? _currentVaultPath;
 
   StreamSubscription<FileSystemEvent>? _vaultWatcher;
   Timer? _debounceTimer;
 
   List<ObsidianNote> get notes => _notes;
-  bool get isLoading => _isLoading;
-  String? get error => _error;
+  // bool get isLoading => _isLoading;
+  // String? get error => _error;
 
   /// Возвращает дерево иерархии папок и заметок в виде [HierarchyNode]
   List<HierarchyNode> getHierarchyTree() {
@@ -329,27 +329,32 @@ class ObsidianRepository extends ChangeNotifier {
   }
 
   /// Сканирует Vault по указанному пути и запускает отслеживание файловой системы
-  Future<void> scanVault(String vaultPath) async {
+  
+
+  Future<void> scanVault(String vaultPath, Function() onLoading, Function(String error) onError) async {
+
     _currentVaultPath = vaultPath;
     _startWatching(vaultPath);
 
     if (vaultPath.isEmpty) {
       _notes = [];
-      _error = null;
+      //_error = null;
       notifyListeners();
       return;
     }
 
-    _isLoading = true;
-    _error = null;
+    //_isLoading = true;
+    onLoading();
+    //_error = null;
     notifyListeners();
 
     try {
       final dir = Directory(vaultPath);
       if (!await dir.exists()) {
-        _error = 'Указанная папка не существует';
+        //_error =
+         onError('Указанная папка не существует');
         _notes = [];
-        _isLoading = false;
+        //_isLoading = false;
         notifyListeners();
         return;
       }
@@ -358,12 +363,12 @@ class ObsidianRepository extends ChangeNotifier {
       await _scanDirectory(dir, vaultPath, loadedNotes);
 
       _notes = loadedNotes;
-      _error = null;
+      //_error = null;
     } catch (e) {
-      _error = 'Ошибка чтения хранилища: $e';
+      onError('Ошибка чтения хранилища: $e');
       _notes = [];
     } finally {
-      _isLoading = false;
+      //_isLoading = false;
       notifyListeners();
     }
   }

@@ -49,9 +49,7 @@ class _MainScreenState extends State<MainScreen> {
       ),
       ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
       ResourcesScreen(
-        repo: widget.diContainer.graphNotesRepository,
-        obsidianRepo: widget.diContainer.obsidianRepository,
-        viewModel: widget.diContainer.lifeGraphViewModel,
+        viewModel: widget.diContainer.resourcesViewModel,
       ),
     ];
   }

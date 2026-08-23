@@ -3,20 +3,17 @@ import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
 import 'package:life_os/features/resources/data/obsidian_repository.dart';
+import 'package:life_os/features/resources/presentation/resources_view_model.dart';
 import 'package:life_os/features/settings/settings_service.dart';
-import 'package:life_os/core/ui/graph/graph_view.dart' as gv;
 
 class ResourcesScreen extends StatelessWidget {
   const ResourcesScreen({
     super.key,
-    required this.repo,
-    required this.obsidianRepo,
     required this.viewModel,
   });
 
-  final GraphNotesRepository repo;
-  final ObsidianRepository obsidianRepo;
-  final LifeGraphViewModel viewModel;
+
+  final ResourcesViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +41,7 @@ class ResourcesScreen extends StatelessWidget {
                       icon: const Icon(Icons.refresh),
                       tooltip: 'Обновить Obsidian Vault',
                       onPressed: () {
-                        obsidianRepo.scanVault(
+                        viewModel.scanVault(
                           SettingsService.obsidianVaultPath.value,
                         );
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -74,7 +71,6 @@ class ResourcesScreen extends StatelessWidget {
           // --- ОБСИДИАН СЕКЦИЯ (ИЕРАРХИЯ) ---
           SliverToBoxAdapter(
             child: _ObsidianHierarchySection(
-              obsidianRepo: obsidianRepo,
               viewModel: viewModel,
             ),
           ),
@@ -97,9 +93,10 @@ class ResourcesScreen extends StatelessWidget {
 
           // Ленивая сетка карточек графа без shrinkWrap
           ListenableBuilder(
-            listenable: repo,
+            listenable: viewModel,
             builder: (context, _) {
-              final notes = repo.getAllNotes();
+              final notes = viewModel.getAllNotes();
+              
               if (notes.isEmpty) {
                 return const SliverToBoxAdapter(
                   child: Card(
@@ -146,15 +143,15 @@ class ResourcesScreen extends StatelessWidget {
 
 class _ObsidianHierarchySection extends StatelessWidget {
   const _ObsidianHierarchySection({
-    required this.obsidianRepo,
     required this.viewModel,
   });
 
-  final ObsidianRepository obsidianRepo;
-  final LifeGraphViewModel viewModel;
+  
+  final ResourcesViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
+
     return ValueListenableBuilder<String>(
       valueListenable: SettingsService.obsidianVaultPath,
       builder: (context, vaultPath, _) {
@@ -183,11 +180,11 @@ class _ObsidianHierarchySection extends StatelessWidget {
             ),
           );
         }
-
+        
         return ListenableBuilder(
-          listenable: obsidianRepo,
+          listenable: viewModel,
           builder: (context, _) {
-            if (obsidianRepo.isLoading) {
+            if (viewModel.isLoading) {
               return const Center(
                 child: Padding(
                   padding: EdgeInsets.all(24.0),
@@ -196,20 +193,20 @@ class _ObsidianHierarchySection extends StatelessWidget {
               );
             }
 
-            if (obsidianRepo.error != null) {
+            if (viewModel.error != null) {
               return Card(
                 color: Colors.red.withValues(alpha: 0.15),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Text(
-                    obsidianRepo.error!,
+                    viewModel.error!,
                     style: const TextStyle(color: Colors.redAccent),
                   ),
                 ),
               );
             }
-
-            final treeNodes = obsidianRepo.getHierarchyTree();
+            
+            final treeNodes = viewModel.getHierarchyTree();
             if (treeNodes.isEmpty) {
               return const Card(
                 child: Padding(
@@ -234,7 +231,7 @@ class _ObsidianHierarchySection extends StatelessWidget {
                     final content = await note.readContent();
 
                     if (context.mounted) {
-                      _openNoteEditorDialog(context, note, content, obsidianRepo);
+                      _openNoteEditorDialog(context, note, content);
                     }
                   }
                 },
@@ -250,17 +247,18 @@ class _ObsidianHierarchySection extends StatelessWidget {
                       ),
                       tooltip: 'Перекинуть на граф',
                       onPressed: () async {
-                        final content = await note.readContent();
-                        await viewModel.createNoteWithText(
-                          title: note.title,
-                          text: content,
-                          obsidianPath: note.absolutePath,
-                        );
+                        // final content = await note.readContent();
+                        // await viewModel.createNoteWithText(
+                        //   title: note.title,
+                        //   text: content,
+                        //   obsidianPath: note.absolutePath,
+                        // );
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                'Заметка "${note.title}" перенесена на граф!',
+                                'Will be made later'
+                                //'Заметка "${note.title}" перенесена на граф!',
                               ),
                               duration: const Duration(seconds: 2),
                             ),
@@ -283,14 +281,13 @@ class _ObsidianHierarchySection extends StatelessWidget {
     BuildContext context,
     ObsidianNote note,
     String initialContent,
-    ObsidianRepository repo,
   ) {
     showDialog(
       context: context,
       builder: (ctx) => _NoteEditorDialog(
         note: note,
         initialContent: initialContent,
-        repo: repo,
+        viewModel: viewModel,
       ),
     );
   }
@@ -300,12 +297,12 @@ class _ObsidianHierarchySection extends StatelessWidget {
 class _NoteEditorDialog extends StatefulWidget {
   final ObsidianNote note;
   final String initialContent;
-  final ObsidianRepository repo;
+  final ResourcesViewModel viewModel;
 
   const _NoteEditorDialog({
     required this.note,
     required this.initialContent,
-    required this.repo,
+    required this.viewModel,
   });
 
   @override
@@ -351,7 +348,7 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
         ),
         FilledButton(
           onPressed: () async {
-            await widget.repo.updateNoteContent(
+            await widget.viewModel.updateNoteContent(
               widget.note.absolutePath,
               _controller.text,
             );
