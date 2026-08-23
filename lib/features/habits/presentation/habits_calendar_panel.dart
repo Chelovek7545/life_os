@@ -14,6 +14,9 @@ import 'package:life_os/features/habits/presentation/widgets/habit_calendar_map.
 class HabitsCalendarPanel extends StatelessWidget {
   const HabitsCalendarPanel({super.key, required this.viewModel, required this.progress});
 
+  /// Минимальная высота тела, при которой ещё видны подсказка и табы.
+  static const double _minBodyHeight = 80;
+
   final HabitsViewModel viewModel;
   final double progress;
 
@@ -25,8 +28,9 @@ class HabitsCalendarPanel extends StatelessWidget {
         // При сжатии шторки тело может стать короче фиксированных элементов
         // (подсказка + табы). Тогда контент не помещается и выдаёт overflow —
         // прячем его целиком, шапка остаётся перетаскиваемой.
-
-
+        if (constraints.maxHeight < _minBodyHeight) {
+          return const SizedBox.shrink();
+        }
 
         return Material(
           type: MaterialType.transparency,

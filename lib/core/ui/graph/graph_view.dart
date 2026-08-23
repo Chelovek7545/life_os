@@ -158,6 +158,7 @@ class GraphNote {
   Size size; // mutable, чтобы поддерживать локальный ресайз
   String text; // содержимое; меняется только через NoteTextChangedAction
   Offset position; // top-left, мировые координаты
+  String? obsidianPath; // путь к файлу Obsidian .md (если привязано)
 
   GraphNote({
     required this.id,
@@ -165,6 +166,7 @@ class GraphNote {
     this.size = const Size(212, 150),
     this.text = '',
     required this.position,
+    this.obsidianPath,
   });
 
   GraphNote clone() => GraphNote(
@@ -173,6 +175,7 @@ class GraphNote {
     size: size,
     text: text,
     position: position,
+    obsidianPath: obsidianPath,
   );
 }
 
@@ -484,6 +487,10 @@ class GraphView extends StatefulWidget {
   final bool showControls;
   final bool doubleTapCreatesRoot;
   final bool longPressDeletes;
+
+  /// Кнопка удаления (×) на заметках и long-press удаление заметок.
+  /// Отдельный флаг: [longPressDeletes] управляет только нодами.
+  final bool notesDeletable;
   final double minScale;
   final double maxScale;
 
@@ -505,6 +512,7 @@ class GraphView extends StatefulWidget {
     this.showControls = true,
     this.doubleTapCreatesRoot = true,
     this.longPressDeletes = true,
+    this.notesDeletable = true,
     this.minScale = 0.25,
     this.maxScale = 2.5,
     this.initiallyCollapsed = const {},
@@ -1459,7 +1467,7 @@ class _GraphViewState extends State<GraphView>
                             text: _noteDrafts[nt.id] ?? nt.text,
                             selected: _selectedNoteId == nt.id,
                             editing: _editingNoteId == nt.id,
-                            canDelete: widget.longPressDeletes,
+                            canDelete: widget.notesDeletable,
                             accent: theme.accentFor(nt.index),
                             select: () => _noteSelect(nt),
                             beginEdit: () => _beginNoteEdit(nt),

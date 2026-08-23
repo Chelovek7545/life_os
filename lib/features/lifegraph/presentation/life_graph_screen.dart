@@ -12,6 +12,8 @@ import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart
 import 'package:life_os/features/lifegraph/presentation/widgets/node_edit_dialog.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/existing_task_picker_dialog.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
+import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
+import 'package:life_os/features/resources/data/obsidian_repository.dart';
 
 /// Экран графа жизни: сфера -> цель -> проект -> задача.
 ///
@@ -31,6 +33,15 @@ class LifeGraphScreen extends StatefulWidget {
 class _LifeGraphScreenState extends State<LifeGraphScreen> {
   final graph.GraphViewCamera _camera = graph.GraphViewCamera();
   String? _syncedSphereId;
+
+  @override
+  void initState() {
+    super.initState();
+    // При каждом заходе в граф подтягиваем заметки из хранилища и Obsidian.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.viewModel.refreshNotes();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +97,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                       nodeBuilder: _nodeBuilder,
                       doubleTapCreatesRoot: false,
                       longPressDeletes: false,
+                      notesDeletable: true,
                     ),
                   ),
                   if (stale)
@@ -149,7 +161,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         break;
       // Notes actions
       case graph.CreateNoteAction():
-        widget.viewModel.createNote();
+        _showCreateNoteOptions(context);
         break;
       case graph.NoteTextChangedAction(:final id, :final text):
         widget.viewModel.updateNoteText(id, text);
@@ -292,7 +304,91 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     );
   }
 
-  Future<void> _showDeleteDialog(GraphNode node) async {
+  Future<void> _showCreateNoteOptions(BuildContext context) async {
+    final choice = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainer,
+        title: const Text('Добавить заметку'),
+        content: const Text('Выберите способ создания заметки на графе:'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 0),
+            child: const Text('Пустой стикер'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, 1),
+            child: const Text('Выбрать из Obsidian Vault'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+        ],
+      ),
+    );
+
+    if (choice == null) return;
+    if (!mounted) return;
+
+    if (choice == 0) {
+      widget.viewModel.createNote();
+    } else if (choice == 1) {
+      _showObsidianNotePicker(context);
+    }
+  }
+
+  Future<void> _showObsidianNotePicker(BuildContext context) async {
+    final treeNodes = widget.viewModel.getObsidianHierarchy();
+    if (treeNodes.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('В Obsidian Vault нет заметок или путь не указан.')),
+      );
+      return;
+    }
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainer,
+        title: const Text('Выберите заметку из Obsidian'),
+        content: SizedBox(
+          width: 500,
+          height: 400,
+          child: SingleChildScrollView(
+            child: HierarchyColumn(
+              height: 1000,
+              nodes: treeNodes,
+              emptyText: 'Заметки не найдены',
+              onNodeTap: (node) {
+                if (node.type == NodeType.note && node.data is ObsidianNote) {
+                  final note = node.data as ObsidianNote;
+                  Navigator.pop(ctx);
+                  
+                  widget.viewModel.createNoteWithText(
+                    title: note.title,
+                    text: note.content,
+                    obsidianPath: note.absolutePath,
+                  );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Заметка "${note.title}" добавлена на граф!')),
+                  );
+                }
+              },
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+        ],
+      ),
+    );
+  }
+
+Future<void> _showDeleteDialog(GraphNode node) async {
     final keepChildren = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -321,6 +417,9 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     }
   }
 }
+
+
+
 
 // ── Вспомогательные виджеты ─────────────────────────────────────────────────
 

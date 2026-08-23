@@ -244,7 +244,7 @@ class HierarchyPanel extends StatelessWidget {
 
             final nodes = buildHierarchyTree(projects, tasks);
 
-            return HierarchyColumn(nodes: nodes);
+            return HierarchyColumn(nodes: nodes, height: MediaQuery.sizeOf(context).height - 100,);
           },
         );
       },

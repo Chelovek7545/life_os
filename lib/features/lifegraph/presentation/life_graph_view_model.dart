@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:life_os/core/utils/wrapped.dart';
+import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
 import 'package:life_os/features/spheres/data/spheres_repository.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
 import 'package:life_os/features/goals/data/goals_repository.dart';
@@ -13,7 +15,8 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
-import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
+import 'package:life_os/features/resources/data/obsidian_repository.dart';
+import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:life_os/core/ui/graph/graph_view.dart' as gv;
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:rxdart/rxdart.dart';
@@ -30,6 +33,7 @@ class LifeGraphViewModel {
     required this.positionsRepository,
     required this.notesRepository,
     required this.graphBuilder,
+    required this.obsidianRepository,
   });
 
   /// Координата центра мира: корень (сфера) размещается здесь, если нет сохранённой позиции.
@@ -42,6 +46,9 @@ class LifeGraphViewModel {
   final GraphPositionsRepository positionsRepository;
   final GraphNotesRepository notesRepository;
   final GraphBuilder graphBuilder;
+  final ObsidianRepository obsidianRepository;
+
+  List<HierarchyNode> getObsidianHierarchy() => obsidianRepository.getHierarchyTree();
 
   String? _currentSphereId;
   String? get currentSphereId => _currentSphereId;
@@ -126,6 +133,7 @@ class LifeGraphViewModel {
     _tasksSubscription = tasksRepository.watchTasks().listen((tasks) {
       _tasksSubject.add(tasks);
     }, onError: (e) => debugPrint('Tasks stream error: $e'));
+    obsidianRepository.addListener(_onObsidianChanged);
     _projectsSubscription = projectsRepository.watchAllProjects().listen((
       projects,
     ) {
@@ -650,6 +658,7 @@ class LifeGraphViewModel {
 
   void dispose() {
     _disposed = true;
+    obsidianRepository.removeListener(_onObsidianChanged);
     _cancelPendingSave();
     _cancelPendingNotesSave();
     _graphSubscription?.cancel();
@@ -684,16 +693,44 @@ class LifeGraphViewModel {
     await _scheduleSaveNotes();
   }
 
+  /// Создаёт заметку на графе на основе текста (например, из Obsidian).
+  Future<void> createNoteWithText({
+    required String title,
+    required String text,
+    String? obsidianPath,
+  }) async {
+    if (_currentSphereId == null) return;
+    final center = Offset(worldCenter, worldCenter);
+    final noteText = obsidianPath != null ? text : (title.isNotEmpty ? '$title\n\n$text' : text);
+    final note = gv.GraphNote(
+      id: 'note_${DateTime.now().millisecondsSinceEpoch}',
+      index: notes.length,
+      size: const Size(250, 180),
+      text: noteText,
+      position: _clampPosition(center, const Size(250, 180)),
+      obsidianPath: obsidianPath,
+    );
+    _notesSubject.add([...notes, note]);
+    await _scheduleSaveNotes();
+  }
+
   /// Обновляет текст заметки.
   Future<void> updateNoteText(String id, String text) async {
+    String? path;
     final updatedNotes = notes.map((n) {
       if (n.id != id) return n;
       final cloned = n.clone();
       cloned.text = text;
+      path = cloned.obsidianPath;
       return cloned;
     }).toList();
     _notesSubject.add(updatedNotes);
     await _scheduleSaveNotes();
+
+    // Двусторонняя связь: обновить файл Obsidian если заметка привязана к нему
+    if (path != null && path!.isNotEmpty) {
+      await obsidianRepository.updateNoteContent(path!, text);
+    }
   }
 
   /// Live-курсор драга заметки: обновляет позицию в памяти без эмиссии.
@@ -751,13 +788,71 @@ class LifeGraphViewModel {
     await _scheduleSaveNotes();
   }
 
-  /// Загружает заметки для текущей сферы.
+  /// Перечитывает заметки текущей сферы из хранилища; текст заметок,
+  /// привязанных к Obsidian, подтягивается заново из файлов по путям.
+  /// Вызывается при каждом заходе на экран графа.
+  Future<void> refreshNotes() async {
+    final sphereId = _currentSphereId;
+    if (sphereId == null) return;
+    await _loadNotes(sphereId);
+  }
+
+  /// Загружает заметки для текущей сферы. При каждом заходе в граф текст
+  /// заметок, привязанных к Obsidian, подтягивается заново из файла по пути.
   Future<void> _loadNotes(String sphereId) async {
     final loaded = await notesRepository.loadNotes(sphereId);
     if (loaded != null) {
-      _notesSubject.add(loaded);
+      final refreshed = <gv.GraphNote>[];
+      for (final note in loaded) {
+        final path = note.obsidianPath;
+        if (path != null && path.isNotEmpty) {
+          try {
+            final file = File(path);
+            if (await file.exists()) {
+              final cloned = note.clone();
+              cloned.text = await file.readAsString();
+              refreshed.add(cloned);
+              continue;
+            }
+          } catch (e) {
+            debugPrint('Error syncing obsidian note from file: $e');
+          }
+        }
+        refreshed.add(note);
+      }
+      _notesSubject.add(refreshed);
     } else {
       _notesSubject.add(const <gv.GraphNote>[]);
+    }
+  }
+
+  void _onObsidianChanged() {
+    if (_currentSphereId == null || notes.isEmpty) return;
+    var changed = false;
+    final updated = notes.map((n) {
+      if (n.obsidianPath != null) {
+        final obsNote = obsidianRepository.notes.firstWhere(
+          (on) => on.absolutePath == n.obsidianPath,
+          orElse: () => ObsidianNote(
+            absolutePath: '',
+            relativePath: '',
+            title: '',
+            content: '',
+            modifiedAt: DateTime.now(),
+          ),
+        );
+        // if (obsNote.absolutePath.isNotEmpty && obsNote.content != n.text) {
+        //   changed = true;
+        //   final cloned = n.clone();
+        //   cloned.text = obsNote.content;
+        //   return cloned;
+        // }
+      }
+      return n;
+    }).toList();
+
+    if (changed) {
+      _notesSubject.add(updated);
     }
   }
 

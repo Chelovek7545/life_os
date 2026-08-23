@@ -70,9 +70,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
             //() => _showLanguageDialog(context),
           ),
 
-          const Divider(),
+           const Divider(),
 
-          _buildSectionHeader(context, 'Optimization'),
+          _buildSectionHeader(context, 'Obsidian Integration'),
+
+          ValueListenableBuilder<String>(
+            valueListenable: SettingsService.obsidianVaultPath,
+            builder: (context, vaultPath, child) {
+              return ListTile(
+                leading: const Icon(Icons.folder_open_outlined),
+                title: const Text('Путь к хранилищу Obsidian (Vault)'),
+                subtitle: Text(
+                  vaultPath.isEmpty ? 'Не указан' : vaultPath,
+                  style: TextStyle(
+                    color: vaultPath.isEmpty ? Colors.orange : Colors.grey.shade600,
+                    fontSize: 13,
+                  ),
+                ),
+                trailing: const Icon(Icons.edit_outlined),
+                onTap: () => _showVaultPathDialog(context, vaultPath),
+              );
+            },
+          ),
+
+          const Divider(),
 
           ValueListenableBuilder<bool>(
             valueListenable: SettingsService.hasBlur,
@@ -113,7 +134,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  // Заголовок секции
+  void _showVaultPathDialog(BuildContext context, String currentPath) {
+    final controller = TextEditingController(text: currentPath);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Путь к Obsidian Vault'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Например: C:\\Users\\Name\\Documents\\MyVault',
+            helperText: 'Укажите абсолютный путь к папке с заметками',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () {
+              SettingsService.setObsidianVaultPath(controller.text.trim());
+              Navigator.pop(ctx);
+            },
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+  }
   Widget _buildSectionHeader(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),

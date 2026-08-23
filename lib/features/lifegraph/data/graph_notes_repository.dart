@@ -1,28 +1,31 @@
 import 'dart:convert';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart'; // для ChangeNotifier
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:life_os/core/ui/graph/graph_view.dart' as gv;
+import 'package:life_os/features/resources/data/obsidian_repository.dart';
 
-/// Хранилище заметок графа (стикеры) в SharedPreferences.
-///
-/// Каждый граф (сфера) — отдельный ключ со снимком:
-/// `{ "v": 1, "notes": { "noteId": {"x": 100.0, "y": 200.0, "w": 212, "h": 150, "text": "..."} } }`.
+abstract class GraphNoteType {
+  static const String obsidian = 'obsidianNote';
+  static const String graph = 'graphNote';
+}
+
 class GraphNotesRepository extends ChangeNotifier {
-  GraphNotesRepository({this.prefix = 'graph_notes'});
+  GraphNotesRepository({
+    required this.obsidianRepository,
+    this.prefix = 'graph_notes',
+  });
 
+  final ObsidianRepository obsidianRepository;
   final String prefix;
   static const int _version = 1;
 
-  /// Кэш всех заметок в памяти: Map<sphereId, List<Note>>
   final Map<String, List<gv.GraphNote>> _cache = {};
   bool _initialized = false;
 
   String _key(String sphereId) => '$prefix.$sphereId';
 
-  /// Инициализация: загружает весь кэш из SharedPreferences.
-  /// Должна быть вызвана один раз при старте приложения.
   Future<void> init() async {
     if (_initialized) return;
     final prefs = await SharedPreferences.getInstance();
@@ -34,21 +37,17 @@ class GraphNotesRepository extends ChangeNotifier {
       final sphereId = key.substring('$prefix.'.length);
       try {
         final data = jsonDecode(raw) as Map<String, dynamic>;
-        final notes = _parseNotes(data);
+        final notes = await _parseNotes(data);
         if (notes != null) _cache[sphereId] = notes;
-      } catch (_) {
-        // повреждённая запись — пропускаем
-      }
+      } catch (_) {}
     }
     _initialized = true;
   }
 
-  /// Синхронное получение всех заметок из кэша.
   List<gv.GraphNote> getAllNotes() {
     return _cache.values.expand((notes) => notes).toList();
   }
 
-  /// Синхронное получение заметок конкретной сферы.
   List<gv.GraphNote> getNotes(String sphereId) {
     return _cache[sphereId] ?? [];
   }
@@ -60,22 +59,37 @@ class GraphNotesRepository extends ChangeNotifier {
 
   Future<void> saveNotes(String sphereId, List<gv.GraphNote> notes) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key(sphereId), jsonEncode({
-      'v': _version,
-      'notes': Map.fromIterables(
-        notes.map((n) => n.id),
-        notes.map((n) => {
+
+    final serializedNotes = Map.fromIterables(
+      notes.map((n) => n.id),
+      notes.map((n) {
+        final isObsidian = n.obsidianPath != null;
+        final type = isObsidian ? GraphNoteType.obsidian : GraphNoteType.graph;
+
+        final noteData = <String, dynamic>{
+          'type': type,
           'x': n.position.dx,
           'y': n.position.dy,
           'w': n.size.width,
           'h': n.size.height,
-          'text': n.text,
           'index': n.index,
-        }),
-      ),
+        };
+
+        if (isObsidian) {
+          noteData['obsidianPath'] = n.obsidianPath;
+        } else {
+          noteData['text'] = n.text;
+        }
+
+        return noteData;
+      }),
+    );
+
+    await prefs.setString(_key(sphereId), jsonEncode({
+      'v': _version,
+      'notes': serializedNotes,
     }));
 
-    // Обновляем кэш и уведомляем всех слушателей
     _cache[sphereId] = List.from(notes);
     notifyListeners();
   }
@@ -88,26 +102,47 @@ class GraphNotesRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  List<gv.GraphNote>? _parseNotes(Map<String, dynamic> data) {
+  /// Асинхронный парсинг с параллельной подгрузкой файлов Obsidian
+  Future<List<gv.GraphNote>?> _parseNotes(Map<String, dynamic> data) async {
     if (data['v'] != _version) return null;
     final notes = data['notes'] as Map<String, dynamic>?;
     if (notes == null) return null;
 
-    return notes.entries.map((entry) {
-      final map = entry.value as Map<String, dynamic>;
-      return gv.GraphNote(
-        id: entry.key,
-        index: (map['index'] as num?)?.toInt() ?? 0,
-        size: ui.Size(
-          (map['w'] as num?)?.toDouble() ?? 212.0,
-          (map['h'] as num?)?.toDouble() ?? 150.0,
-        ),
-        text: map['text'] as String? ?? '',
-        position: ui.Offset(
-          (map['x'] as num?)?.toDouble() ?? 0.0,
-          (map['y'] as num?)?.toDouble() ?? 0.0,
-        ),
-      );
-    }).toList();
+    final parsedNotes = await Future.wait(
+      notes.entries.map((entry) async {
+        final map = entry.value as Map<String, dynamic>;
+        final obsidianPath = map['obsidianPath'] as String?;
+
+        final type = map['type'] as String? ??
+            (obsidianPath != null ? GraphNoteType.obsidian : GraphNoteType.graph);
+
+        final isObsidian = type == GraphNoteType.obsidian;
+
+        String content = '';
+        if (isObsidian && obsidianPath != null && obsidianPath.isNotEmpty) {
+          // Считываем контент .md файла через ObsidianRepository
+          content = await obsidianRepository.getNoteContent(obsidianPath);
+        } else {
+          content = map['text'] as String? ?? '';
+        }
+
+        return gv.GraphNote(
+          id: entry.key,
+          index: (map['index'] as num?)?.toInt() ?? 0,
+          size: ui.Size(
+            (map['w'] as num?)?.toDouble() ?? 212.0,
+            (map['h'] as num?)?.toDouble() ?? 150.0,
+          ),
+          text: content,
+          position: ui.Offset(
+            (map['x'] as num?)?.toDouble() ?? 0.0,
+            (map['y'] as num?)?.toDouble() ?? 0.0,
+          ),
+          obsidianPath: obsidianPath,
+        );
+      }),
+    );
+
+    return parsedNotes;
   }
 }

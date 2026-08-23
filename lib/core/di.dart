@@ -2,6 +2,8 @@
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
+import 'package:life_os/features/resources/data/obsidian_repository.dart';
+import 'package:life_os/features/settings/settings_service.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
@@ -43,6 +45,7 @@ class DependencyContainer {
 
   late final GraphPositionsRepository graphPositionsRepository;
   late final GraphNotesRepository graphNotesRepository;
+  late final ObsidianRepository obsidianRepository;
   late final GraphBuilder graphBuilder;
   late final LifeGraphViewModel lifeGraphViewModel;
 
@@ -76,10 +79,16 @@ class DependencyContainer {
     //   MoodLocalDS(localDatabase),
     //   apiClient,
     // );
+    obsidianRepository = ObsidianRepository();
+    obsidianRepository.scanVault(SettingsService.obsidianVaultPath.value);
+    SettingsService.obsidianVaultPath.addListener(() {
+      obsidianRepository.scanVault(SettingsService.obsidianVaultPath.value);
+    });
 
     graphPositionsRepository = GraphPositionsRepository();
-    graphNotesRepository = GraphNotesRepository();
+    graphNotesRepository = GraphNotesRepository(obsidianRepository: obsidianRepository);
     graphNotesRepository.init();
+    
     graphBuilder = GraphBuilder(
       spheresRepository: spheresRepository,
       goalsRepository: goalsRepository,
@@ -94,6 +103,7 @@ class DependencyContainer {
       positionsRepository: graphPositionsRepository,
       notesRepository: graphNotesRepository,
       graphBuilder: graphBuilder,
+      obsidianRepository: obsidianRepository,
     );
     lifeGraphViewModel.initialize();
 
