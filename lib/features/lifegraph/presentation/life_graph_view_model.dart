@@ -34,10 +34,12 @@ class LifeGraphViewModel {
     required this.notesRepository,
     required this.graphBuilder,
     required this.obsidianRepository,
+    //required this._currentSphereId,
   });
 
   /// Координата центра мира: корень (сфера) размещается здесь, если нет сохранённой позиции.
   static const double worldCenter = 2000.0;
+
 
   final SpheresRepository spheresRepository;
   final GoalsRepository goalsRepository;
@@ -48,15 +50,22 @@ class LifeGraphViewModel {
   final GraphBuilder graphBuilder;
   final ObsidianRepository obsidianRepository;
 
-  List<HierarchyNode> getObsidianHierarchy() => obsidianRepository.getHierarchyTree();
+  List<HierarchyNode> getObsidianHierarchy() =>
+      obsidianRepository.getHierarchyTree();
 
   String? _currentSphereId;
   String? get currentSphereId => _currentSphereId;
 
-  bool _initialized = false;
 
-  /// true после первой эмиссии списка сфер — экран может сменить сплэш.
-  bool get initialized => _initialized;
+  Stream<List<Task>> get tasksStream => tasksRepository.watchTasks();
+
+
+
+  Stream<List<Sphere>> get spheresStream => spheresRepository.watchAllSpheres();
+
+
+  
+
 
   /// Статус автосохранения позиций (для бейджа draft / saving… / saved).
   final ValueNotifier<GraphSaveStatus> saveStatus = ValueNotifier(
@@ -75,78 +84,22 @@ class LifeGraphViewModel {
   Stream<List<gv.GraphNote>> get notesStream => _notesSubject.stream;
   List<gv.GraphNote> get notes => _notesSubject.value;
 
-  final BehaviorSubject<List<Sphere>> _spheresSubject =
-      BehaviorSubject<List<Sphere>>.seeded([]);
-  Stream<List<Sphere>> get spheresStream => _spheresSubject.stream;
-  List<Sphere> get spheres => _spheresSubject.value;
-
-  final BehaviorSubject<List<Goal>> _goalsSubject =
-      BehaviorSubject<List<Goal>>.seeded([]);
-  Stream<List<Goal>> get goalsStream => _goalsSubject.stream;
-  List<Goal> get goals => _goalsSubject.value;
-
-  final BehaviorSubject<List<Project>> _projectsSubject =
-      BehaviorSubject<List<Project>>.seeded([]);
-  Stream<List<Project>> get projectsStream => _projectsSubject.stream;
-  List<Project> get projects => _projectsSubject.value;
-
-  final BehaviorSubject<List<Task>> _tasksSubject =
-      BehaviorSubject<List<Task>>.seeded([]);
-  Stream<List<Task>> get tasksStream => _tasksSubject.stream;
-  List<Task> get tasks => _tasksSubject.value;
-
-  StreamSubscription? _projectsSubscription;
   StreamSubscription? _notesSubscription;
+  StreamSubscription? _graphSubscription;
 
   /// Кэш доменных нод текущей сферы — нужен для CRUD (тип, цвет и т.п.).
   List<GraphNode> _domainNodes = const [];
 
   final Map<String, Offset> _positions = {};
-  StreamSubscription? _graphSubscription;
-  StreamSubscription? _spheresSubscription;
-  StreamSubscription? _goalsSubscription;
-  StreamSubscription? _tasksSubscription;
-  Timer? _savePositionsTimer;
-  String? _lastSphereId;
-  bool _disposed = false;
 
-  /// Инициализация: загружает список сфер и восстанавливает последнюю
-  /// просматриваемую сферу (либо выбирает первую).
-  Future<void> initialize() async {
-    _lastSphereId = await positionsRepository.loadLastSphereId();
-    _spheresSubscription = spheresRepository.watchAllSpheres().listen((
-      spheres,
-    ) {
-      _spheresSubject.add(spheres);
-      _initialized = true;
-      if (spheres.isNotEmpty && _currentSphereId == null) {
-        final last = _lastSphereId;
-        final target = (last != null && spheres.any((s) => s.id == last))
-            ? last
-            : spheres.first.id;
-        _switchToSphere(target);
-      }
-    }, onError: (e) => debugPrint('Spheres stream error: $e'));
-    _goalsSubscription = goalsRepository.watchAllGoals().listen((goals) {
-      _goalsSubject.add(goals);
-    }, onError: (e) => debugPrint('Goals stream error: $e'));
-    _tasksSubscription = tasksRepository.watchTasks().listen((tasks) {
-      _tasksSubject.add(tasks);
-    }, onError: (e) => debugPrint('Tasks stream error: $e'));
-    obsidianRepository.addListener(_onObsidianChanged);
-    _projectsSubscription = projectsRepository.watchAllProjects().listen((
-      projects,
-    ) {
-      _projectsSubject.add(projects);
-    }, onError: (e) => debugPrint('Projects stream error: $e'));
-  }
+  Timer? _savePositionsTimer;
+
+  bool _disposed = false;
 
   /// Переключает текущую сферу (граф).
   Future<void> switchSphere(String sphereId) async {
     await _switchToSphere(sphereId);
   }
-
-  
 
   Future<void> _loadPositions(String sphereId) async {
     final loaded = await positionsRepository.loadPositions(sphereId);
@@ -156,15 +109,15 @@ class LifeGraphViewModel {
     }
   }
 
-  /// Создаёт новую сферу и переключается на неё.
-  Future<void> createSphere({
-    required String name,
-    String color = '#FFB59C',
-  }) async {
-    final sphere = Sphere.create(name: name, color: color);
-    await spheresRepository.addSphere(sphere);
-    await _switchToSphere(sphere.id);
-  }
+  // /// Создаёт новую сферу и переключается на неё.
+  // Future<void> createSphere({
+  //   required String name,
+  //   String color = '#FFB59C',
+  // }) async {
+  //   final sphere = Sphere.create(name: name, color: color);
+  //   await spheresRepository.addSphere(sphere);
+  //   await _switchToSphere(sphere.id);
+  // }
 
   /// Добавляет дочернюю ноду к указанному родителю (по иерархии сферы).
   Future<void> addChild({
@@ -205,18 +158,20 @@ class LifeGraphViewModel {
         break;
 
       case GraphNodeType.project:
-      print(parentId);
-        final project = parentType == GraphNodeType.project ? Project.create(
-          name: title,
-          description: description,
-          color: color ?? '#4A90D9',
-          parentProjectId: parentId,
-        ) : Project.create(
-          name: title,
-          description: description,
-          color: color ?? '#4A90D9',
-          goalId: parentId,
-        );
+        print(parentId);
+        final project = parentType == GraphNodeType.project
+            ? Project.create(
+                name: title,
+                description: description,
+                color: color ?? '#4A90D9',
+                parentProjectId: parentId,
+              )
+            : Project.create(
+                name: title,
+                description: description,
+                color: color ?? '#4A90D9',
+                goalId: parentId,
+              );
         await projectsRepository.addProject(project);
         _positions[project.id] = newPos;
         await _scheduleSavePositions();
@@ -658,21 +613,14 @@ class LifeGraphViewModel {
 
   void dispose() {
     _disposed = true;
-    obsidianRepository.removeListener(_onObsidianChanged);
+    //obsidianRepository.removeListener(_onObsidianChanged);
     _cancelPendingSave();
     _cancelPendingNotesSave();
     _graphSubscription?.cancel();
-    _spheresSubscription?.cancel();
-    _goalsSubscription?.cancel();
-    _tasksSubscription?.cancel();
-    _projectsSubscription?.cancel();
+
     _notesSubscription?.cancel();
     saveStatus.dispose();
     _graphSubject.close();
-    _spheresSubject.close();
-    _goalsSubject.close();
-    _tasksSubject.close();
-    _projectsSubject.close();
     _notesSubject.close();
   }
 
@@ -701,7 +649,9 @@ class LifeGraphViewModel {
   }) async {
     if (_currentSphereId == null) return;
     final center = Offset(worldCenter, worldCenter);
-    final noteText = obsidianPath != null ? text : (title.isNotEmpty ? '$title\n\n$text' : text);
+    final noteText = obsidianPath != null
+        ? text
+        : (title.isNotEmpty ? '$title\n\n$text' : text);
     final note = gv.GraphNote(
       id: 'note_${DateTime.now().millisecondsSinceEpoch}',
       index: notes.length,
@@ -826,35 +776,35 @@ class LifeGraphViewModel {
     }
   }
 
-  void _onObsidianChanged() {
-    if (_currentSphereId == null || notes.isEmpty) return;
-    var changed = false;
-    final updated = notes.map((n) {
-      if (n.obsidianPath != null) {
-        final obsNote = obsidianRepository.notes.firstWhere(
-          (on) => on.absolutePath == n.obsidianPath,
-          orElse: () => ObsidianNote(
-            absolutePath: '',
-            relativePath: '',
-            title: '',
-            content: '',
-            modifiedAt: DateTime.now(),
-          ),
-        );
-        // if (obsNote.absolutePath.isNotEmpty && obsNote.content != n.text) {
-        //   changed = true;
-        //   final cloned = n.clone();
-        //   cloned.text = obsNote.content;
-        //   return cloned;
-        // }
-      }
-      return n;
-    }).toList();
+  // void _onObsidianChanged() {
+  //   if (_currentSphereId == null || notes.isEmpty) return;
+  //   var changed = false;
+  //   final updated = notes.map((n) {
+  //     if (n.obsidianPath != null) {
+  //       final obsNote = obsidianRepository.notes.firstWhere(
+  //         (on) => on.absolutePath == n.obsidianPath,
+  //         orElse: () => ObsidianNote(
+  //           absolutePath: '',
+  //           relativePath: '',
+  //           title: '',
+  //           content: '',
+  //           modifiedAt: DateTime.now(),
+  //         ),
+  //       );
+  //       // if (obsNote.absolutePath.isNotEmpty && obsNote.content != n.text) {
+  //       //   changed = true;
+  //       //   final cloned = n.clone();
+  //       //   cloned.text = obsNote.content;
+  //       //   return cloned;
+  //       // }
+  //     }
+  //     return n;
+  //   }).toList();
 
-    if (changed) {
-      _notesSubject.add(updated);
-    }
-  }
+  //   if (changed) {
+  //     _notesSubject.add(updated);
+  //   }
+  // }
 
   Timer? _saveNotesTimer;
 
@@ -887,7 +837,6 @@ class LifeGraphViewModel {
     _graphSubscription = graphBuilder.watchGraph(sphereId).listen((nodes) {
       _domainNodes = nodes;
       _graphSubject.add(_toViewNodes(nodes));
-      
     }, onError: (e) => debugPrint('Graph stream error: $e'));
   }
 }

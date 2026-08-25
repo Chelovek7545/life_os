@@ -31,7 +31,7 @@ class _MainScreenState extends State<MainScreen> {
     // Инициализируем экраны единоразово при загрузке виджета
     _pages = [
       PulseScreen(
-        viewModel: widget.diContainer.lifeGraphViewModel,
+        viewModel: widget.diContainer.pulseScreenViewModel,
         habitsViewModel: widget.diContainer.habitsViewModel,
         onOpenTask: _openTaskFromPulse,
         onCompleteTask: (task) =>

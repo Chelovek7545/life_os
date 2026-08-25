@@ -2,11 +2,11 @@
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
+import 'package:life_os/features/lifegraph/presentation/pulse_screen_view_model.dart';
 import 'package:life_os/features/resources/data/obsidian_repository.dart';
 import 'package:life_os/features/resources/presentation/resources_view_model.dart';
 import 'package:life_os/features/settings/settings_service.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
-import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
 import 'package:life_os/features/projects/presentation/projects_view_model.dart';
@@ -48,8 +48,8 @@ class DependencyContainer {
   late final GraphNotesRepository graphNotesRepository;
   late final ObsidianRepository obsidianRepository;
   late final GraphBuilder graphBuilder;
-  late final LifeGraphViewModel lifeGraphViewModel;
 
+  late final PulseScreenViewModel pulseScreenViewModel;
   late final TasksViewModel tasksViewModel;
   // late final MoodViewModel moodViewModel;
   late final ProjectsViewModel projectViewModel;
@@ -97,7 +97,7 @@ class DependencyContainer {
       projectsRepository: projectsRepository,
       tasksRepository: tasksRepository,
     );
-    lifeGraphViewModel = LifeGraphViewModel(
+    pulseScreenViewModel = PulseScreenViewModel(
       spheresRepository: spheresRepository,
       goalsRepository: goalsRepository,
       projectsRepository: projectsRepository,
@@ -107,7 +107,7 @@ class DependencyContainer {
       graphBuilder: graphBuilder,
       obsidianRepository: obsidianRepository,
     );
-    lifeGraphViewModel.initialize();
+    pulseScreenViewModel.initialize();
 
     taskWithPrjct = GetTasksWithProjectsUseCase(
       tasksRepository,
@@ -144,7 +144,7 @@ class DependencyContainer {
     tasksViewModel.dispose();
     projectViewModel.dispose();
     habitsViewModel.dispose();
-    lifeGraphViewModel.dispose();
+    pulseScreenViewModel.dispose();
     database.close();
   }
 }

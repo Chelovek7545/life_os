@@ -14,6 +14,7 @@ import 'package:life_os/features/lifegraph/presentation/widgets/existing_task_pi
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
 import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:life_os/features/resources/data/obsidian_repository.dart';
+import 'package:life_os/features/tasks/domain/task_model.dart';
 
 /// Экран графа жизни: сфера -> цель -> проект -> задача.
 ///
@@ -43,6 +44,13 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     });
   }
 
+  //TODO
+  @override
+  void dispose() {
+    super.dispose();
+    widget.viewModel.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -68,66 +76,64 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   }
 
   Widget _buildContent(BuildContext context) {
-    return !widget.viewModel.initialized
-        ? const _GraphSplash()
-        : StreamBuilder<List<graph.GraphNode>>(
-            stream: widget.viewModel.graphStream,
-            builder: (context, snapshot) {
-              final nodes = snapshot.data ?? const <graph.GraphNode>[];
-              final sphereId = widget.viewModel.currentSphereId;
-              if (sphereId == null) {
-                _syncedSphereId = null;
-                return const _EmptyState();
-              }
+    return StreamBuilder<List<graph.GraphNode>>(
+      stream: widget.viewModel.graphStream,
+      builder: (context, snapshot) {
+        final nodes = snapshot.data ?? const <graph.GraphNode>[];
+        final sphereId = widget.viewModel.currentSphereId;
+        if (sphereId == null) {
+          _syncedSphereId = null;
+          return const _EmptyState();
+        }
 
-              final ready = nodes.any((n) => n.parentId == null && n.id == sphereId);
-              if (ready) _maybeFit(sphereId);
-              final stale = _syncedSphereId != sphereId;
+        final ready = nodes.any((n) => n.parentId == null && n.id == sphereId);
+        if (ready) _maybeFit(sphereId);
+        final stale = _syncedSphereId != sphereId;
 
-              return Stack(
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: graph.GraphView(
+                nodes: widget.viewModel.graphStream,
+                notes: widget.viewModel.notesStream,
+                onAction: _onAction,
+                camera: _camera,
+                theme: AppGraphThemes.dark,
+                layout: appGraphLayout(),
+                nodeBuilder: _nodeBuilder,
+                doubleTapCreatesRoot: false,
+                longPressDeletes: false,
+                notesDeletable: true,
+              ),
+            ),
+            if (stale)
+              const Positioned.fill(
+                child: Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                ),
+              ),
+            Positioned(
+              left: 18,
+              bottom: 18,
+              child: _StatsChip(count: nodes.length),
+            ),
+            Positioned(
+              right: 18,
+              top: 18,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Positioned.fill(
-                    child: graph.GraphView(
-                      nodes: widget.viewModel.graphStream,
-                      notes: widget.viewModel.notesStream,
-                      onAction: _onAction,
-                      camera: _camera,
-                      theme: AppGraphThemes.dark,
-                      layout: appGraphLayout(),
-                      nodeBuilder: _nodeBuilder,
-                      doubleTapCreatesRoot: false,
-                      longPressDeletes: false,
-                      notesDeletable: true,
-                    ),
-                  ),
-                  if (stale)
-                    const Positioned.fill(
-                      child: Center(
-                        child: CircularProgressIndicator(color: AppColors.primary),
-                      ),
-                    ),
-                  Positioned(
-                    left: 18,
-                    bottom: 18,
-                    child: _StatsChip(count: nodes.length),
-                  ),
-                  Positioned(
-                    right: 18,
-                    top: 18,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        _SphereDropdown(viewModel: widget.viewModel),
-                        const SizedBox(width: 10),
-                        _SaveBadge(viewModel: widget.viewModel),
-                      ],
-                    ),
-                  ),
+                  _SphereDropdown(viewModel: widget.viewModel),
+                  const SizedBox(width: 10),
+                  _SaveBadge(viewModel: widget.viewModel),
                 ],
-              );
-            },
-          );
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   /// Как только пришли данные для текущей сферы — вписываем граф в канвас.
@@ -237,15 +243,14 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       );
       if (typeNew == null) return;
       switch (typeNew) {
-        case 0: 
-        await _showExistingTaskPicker(parent);
-        return;
+        case 0:
+          await _showExistingTaskPicker(parent);
+          return;
         case 1:
-        childType = GraphNodeType.task;
-        case 2: 
-        childType = GraphNodeType.project;
+          childType = GraphNodeType.task;
+        case 2:
+          childType = GraphNodeType.project;
         default:
-        
       }
     }
 
@@ -254,40 +259,49 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       context: context,
       builder: (ctx) => AddChildDialog(
         childNodeType: childType ?? GraphNodeType.values[parent.type.index + 1],
-        onSave: ({
-          required title,
-          required description,
-          color,
-          dueDate,
-          startsAt,
-          endsAt,
-        }) {
-          return widget.viewModel.addChild(
-        childNodeType: childType ?? GraphNodeType.values[parent.type.index + 1],
+        onSave:
+            ({
+              required title,
+              required description,
+              color,
+              dueDate,
+              startsAt,
+              endsAt,
+            }) {
+              return widget.viewModel.addChild(
+                childNodeType:
+                    childType ?? GraphNodeType.values[parent.type.index + 1],
 
-            parentId: parent.id,
-            title: title,
-            description: description,
-            color: color,
-            dueDate: dueDate,
-            startsAt: startsAt,
-            endsAt: endsAt,
-          );
-        },
+                parentId: parent.id,
+                title: title,
+                description: description,
+                color: color,
+                dueDate: dueDate,
+                startsAt: startsAt,
+                endsAt: endsAt,
+              );
+            },
       ),
     );
   }
 
   Future<void> _showExistingTaskPicker(GraphNode project) async {
-    final candidates = widget.viewModel.tasks
-        .where((t) => t.projectId == null)
-        .toList();
     await showDialog<void>(
       context: context,
-      builder: (ctx) => ExistingTaskPickerDialog(
-        tasks: candidates,
-        onSelect: (taskId) => widget.viewModel
-            .attachExistingTaskToProject(projectId: project.id, taskId: taskId),
+      builder: (ctx) => StreamBuilder(
+        stream: widget.viewModel.tasksStream,
+        builder: (context, asyncSnapshot) {
+          final List<Task> candidates = asyncSnapshot.data != null
+              ? asyncSnapshot.data!.where((t) => t.projectId == null).toList()
+              : [];
+          return ExistingTaskPickerDialog(
+            tasks: candidates,
+            onSelect: (taskId) => widget.viewModel.attachExistingTaskToProject(
+              projectId: project.id,
+              taskId: taskId,
+            ),
+          );
+        },
       ),
     );
   }
@@ -342,7 +356,9 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     final treeNodes = widget.viewModel.getObsidianHierarchy();
     if (treeNodes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('В Obsidian Vault нет заметок или путь не указан.')),
+        const SnackBar(
+          content: Text('В Obsidian Vault нет заметок или путь не указан.'),
+        ),
       );
       return;
     }
@@ -364,14 +380,18 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                 if (node.type == NodeType.note && node.data is ObsidianNote) {
                   final note = node.data as ObsidianNote;
                   Navigator.pop(ctx);
-                  
+
                   widget.viewModel.createNoteWithText(
                     title: note.title,
                     text: note.content,
                     obsidianPath: note.absolutePath,
                   );
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Заметка "${note.title}" добавлена на граф!')),
+                    SnackBar(
+                      content: Text(
+                        'Заметка "${note.title}" добавлена на граф!',
+                      ),
+                    ),
                   );
                 }
               },
@@ -388,14 +408,16 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     );
   }
 
-Future<void> _showDeleteDialog(GraphNode node) async {
+  Future<void> _showDeleteDialog(GraphNode node) async {
     final keepChildren = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceContainer,
         title: const Text('Удалить ноду?'),
-        content: Text('Нода "${node.title}" будет удалена. '
-            'Что сделать с дочерними элементами?'),
+        content: Text(
+          'Нода "${node.title}" будет удалена. '
+          'Что сделать с дочерними элементами?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -418,9 +440,6 @@ Future<void> _showDeleteDialog(GraphNode node) async {
   }
 }
 
-
-
-
 // ── Вспомогательные виджеты ─────────────────────────────────────────────────
 
 class _SphereDropdown extends StatelessWidget {
@@ -442,7 +461,11 @@ class _SphereDropdown extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             //border: Border.all(color: AppColors.borderGlass),
             boxShadow: const [
-              BoxShadow(color: Color(0x33000000), blurRadius: 12, offset: Offset(0, 4)),
+              BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
             ],
           ),
           child: DropdownButton<String>(
@@ -479,7 +502,11 @@ class _StatsChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.borderGlass),
         boxShadow: const [
-          BoxShadow(color: Color(0x33000000), blurRadius: 12, offset: Offset(0, 4)),
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
         ],
       ),
       child: Text(
@@ -513,7 +540,11 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.account_tree_rounded, size: 64, color: Colors.white38),
+          const Icon(
+            Icons.account_tree_rounded,
+            size: 64,
+            color: Colors.white38,
+          ),
           const SizedBox(height: 16),
           const Text(
             'Сфера пуста',
@@ -533,14 +564,17 @@ class _GraphSplash extends StatefulWidget {
   State<_GraphSplash> createState() => _GraphSplashState();
 }
 
-class _GraphSplashState extends State<_GraphSplash> with SingleTickerProviderStateMixin {
+class _GraphSplashState extends State<_GraphSplash>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))
-      ..repeat();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat();
   }
 
   @override
@@ -560,13 +594,18 @@ class _GraphSplashState extends State<_GraphSplash> with SingleTickerProviderSta
             height: 90,
             child: AnimatedBuilder(
               animation: _ctrl,
-              builder: (_, _) => CustomPaint(painter: _SplashGraph(_ctrl.value)),
+              builder: (_, _) =>
+                  CustomPaint(painter: _SplashGraph(_ctrl.value)),
             ),
           ),
           const SizedBox(height: 18),
           const Text(
             'Восстанавливаем граф…',
-            style: TextStyle(fontSize: 12, letterSpacing: 0.5, color: AppColors.onSurfaceVariant),
+            style: TextStyle(
+              fontSize: 12,
+              letterSpacing: 0.5,
+              color: AppColors.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -605,7 +644,11 @@ class _SplashGraph extends CustomPainter {
         9 + 3 * pulse,
         Paint()..color = AppColors.primary.withValues(alpha: 0.14),
       );
-      canvas.drawCircle(pts[i], 4.5 + 1.8 * pulse, Paint()..color = AppColors.primary);
+      canvas.drawCircle(
+        pts[i],
+        4.5 + 1.8 * pulse,
+        Paint()..color = AppColors.primary,
+      );
     }
   }
 
@@ -641,7 +684,11 @@ class _SaveBadge extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             border: Border.all(color: AppColors.borderGlass),
             boxShadow: const [
-              BoxShadow(color: Color(0x33000000), blurRadius: 12, offset: Offset(0, 4)),
+              BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
             ],
           ),
           child: Row(
