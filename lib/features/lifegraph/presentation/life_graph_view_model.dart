@@ -650,7 +650,7 @@ class LifeGraphViewModel {
     if (_currentSphereId == null) return;
     final center = Offset(worldCenter, worldCenter);
     final noteText = obsidianPath != null
-        ? text
+        ? await obsidianRepository.getNoteContent(obsidianPath)
         : (title.isNotEmpty ? '$title\n\n$text' : text);
     final note = gv.GraphNote(
       id: 'note_${DateTime.now().millisecondsSinceEpoch}',
