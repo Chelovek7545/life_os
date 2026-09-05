@@ -6,6 +6,8 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io';
+import 'package:life_os/features/routine/data/routine_repository.dart'
+    show createRoutineSchema;
 
 part 'database.g.dart';
 
@@ -63,7 +65,7 @@ class Goals extends Table {
   TextColumn get description => text()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
-  
+
   TextColumn get color => text()(); // Hex color, например "#FF5733"
   DateTimeColumn get dueDate => dateTime().nullable()();
   TextColumn get sphereId => text().nullable()(); // FK к Spheres
@@ -99,8 +101,10 @@ class Habits extends Table {
   TextColumn get color => text().withDefault(const Constant('#FF5C00'))();
   IntColumn get typeKind => intEnum<HabitTypeKind>()();
   TextColumn get timeOfDay => text().nullable()(); // "HH:mm" для TimeHabit
-  IntColumn get daysOfWeek => integer().withDefault(const Constant(254))(); // bitmask
-  IntColumn get durationWeeks => integer().nullable()(); // null = без ограничения
+  IntColumn get daysOfWeek =>
+      integer().withDefault(const Constant(254))(); // bitmask
+  IntColumn get durationWeeks =>
+      integer().nullable()(); // null = без ограничения
   TextColumn get reminderTime => text().nullable()(); // "HH:mm"
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -130,16 +134,18 @@ class HabitEntries extends Table {
 }
 
 // Часть 2: Определение базы данных
-@DriftDatabase(tables: [
-  Tasks,
-  Projects,
-  Tags,
-  TaskTagEntries,
-  Goals,
-  Spheres,
-  Habits,
-  HabitEntries,
-])
+@DriftDatabase(
+  tables: [
+    Tasks,
+    Projects,
+    Tags,
+    TaskTagEntries,
+    Goals,
+    Spheres,
+    Habits,
+    HabitEntries,
+  ],
+)
 class AppDatabase extends _$AppDatabase {
   // Конструктор
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
@@ -151,17 +157,20 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration {
     return MigrationStrategy(
       onCreate: (Migrator m) async {
         await m.createAll();
+        await createRoutineSchema(this);
       },
       onUpgrade: (Migrator m, int from, int to) async {
         if (from <= 2) {
-          await m.database.customStatement('DROP TABLE IF EXISTS dashboard_widgets');
+          await m.database.customStatement(
+            'DROP TABLE IF EXISTS dashboard_widgets',
+          );
         }
         if (from <= 4) {
           // Миграция v4 была сломана: зависела от несуществующей таблицы `spaces`
@@ -205,7 +214,10 @@ class AppDatabase extends _$AppDatabase {
         if (from < 8) {
           await m.addColumn(projects, projects.parentProejectId);
         }
-      }, 
+        if (from < 9) {
+          await createRoutineSchema(this);
+        }
+      },
     );
   }
 }
@@ -230,6 +242,21 @@ LazyDatabase _openConnection() {
     //   await file.delete();
     // }
 
-    return NativeDatabase(file);
+    return openPulseDatabaseFile(file);
   });
+}
+
+/// Opens the local database, taking a consistent pre-migration backup.
+NativeDatabase openPulseDatabaseFile(File file) {
+  return NativeDatabase(
+    file,
+    setup: (db) {
+      if (db.userVersion > 0 && db.userVersion < 9) {
+        // SQLite makes a consistent backup including committed WAL contents.
+        final backup =
+            '${file.path}.before-routine-${DateTime.now().microsecondsSinceEpoch}.bak';
+        db.execute('VACUUM INTO ?', [backup]);
+      }
+    },
+  );
 }

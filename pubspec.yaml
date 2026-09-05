@@ -26,6 +26,7 @@ dependencies:
   shared_preferences: ^2.5.5
 
 dev_dependencies:
+  sqlite3: ^3.5.0
   flutter_test:
     sdk: flutter
   drift_dev: ^2.33.0

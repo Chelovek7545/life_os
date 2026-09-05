@@ -9,6 +9,15 @@ import 'package:life_os/features/projects/presentation/projects_screen.dart';
 import 'package:life_os/features/resources/presentation/resources_screen.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/tasks/presentation/tasks_screen.dart';
+import 'package:life_os/features/routine/presentation/routine_screen.dart';
+
+const _navigationItems = [
+  (Icons.bolt_rounded, 'PULSE'),
+  (Icons.format_list_bulleted_rounded, 'TASKS'),
+  (Icons.view_quilt_outlined, 'РАСПОРЯДОК'),
+  (Icons.hub_outlined, 'PROJECTS'),
+  (Icons.menu_book_rounded, 'LIBRARY'),
+];
 
 class MainScreen extends StatefulWidget {
   final DependencyContainer diContainer;
@@ -47,10 +56,9 @@ class _MainScreenState extends State<MainScreen> {
           }
         },
       ),
+      RoutineScreen(repository: widget.diContainer.routineRepository),
       ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
-      ResourcesScreen(
-        viewModel: widget.diContainer.resourcesViewModel,
-      ),
+      ResourcesScreen(viewModel: widget.diContainer.resourcesViewModel),
     ];
   }
 
@@ -84,7 +92,6 @@ class _MainScreenState extends State<MainScreen> {
 
     return SafeArea(
       child: Scaffold(
-        
         bottomNavigationBar: isLandscape
             ? null
             : SlidingNavBar(
@@ -93,7 +100,7 @@ class _MainScreenState extends State<MainScreen> {
               ),
         backgroundColor: AppColors.surfaceDim,
         resizeToAvoidBottomInset: _resizeToAvoidBottomInset,
-        
+
         // 2. Единая структура дерева виджетов!
         // body ВСЕГДА начинается с Row. В портретном режиме NavRail просто исчезает,
         // а Expanded(child: mainArea) остается на своем месте в дереве.
@@ -111,20 +118,16 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 }
+
 class _LandscapeNavRail extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
 
   const _LandscapeNavRail({required this.selectedIndex, required this.onTap});
 
-  static const itemCount = 4;
+  static int get itemCount => _navigationItems.length;
 
-  static const items = [
-    (Icons.bolt_rounded, 'PULSE'),
-    (Icons.format_list_bulleted_rounded, 'TASKS'),
-    (Icons.hub_outlined, 'PROJECTS'),
-    (Icons.menu_book_rounded, 'LIBRARY'),
-  ];
+  static const items = _navigationItems;
 
   static const itemHeight = 74.5;
   static const double navBarWidth = 80.0;
@@ -204,6 +207,8 @@ class _LandscapeNavRail extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           items[index].$2,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: AppTypography.codeLabel.copyWith(
                             color: selected
                                 ? AppColors.primaryContainer
@@ -220,7 +225,7 @@ class _LandscapeNavRail extends StatelessWidget {
                                   blurRadius: 20,
                                 ),
                             ],
-                            fontSize: 10,
+                            fontSize: index == 2 ? 8 : 10,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -271,15 +276,9 @@ class SlidingNavBar extends StatelessWidget {
     required this.onTap,
   });
 
-  static const itemCount = 4;
+  static int get itemCount => _navigationItems.length;
 
-  static const items = [
-    (Icons.bolt_rounded, 'PULSE'),
-    (Icons.format_list_bulleted_rounded, 'TASKS'),
-    (Icons.hub_outlined, 'PROJECTS'),
-    (Icons.menu_book_rounded, 'LIBRARY'),
-    //(Icons.gps_fixed_rounded, 'Goals'),
-  ];
+  static const items = _navigationItems;
 
   @override
   Widget build(BuildContext context) {
@@ -359,6 +358,8 @@ class SlidingNavBar extends StatelessWidget {
                             const SizedBox(height: 2),
                             Text(
                               items[index].$2,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: AppTypography.codeLabel.copyWith(
                                 color: selected
                                     ? AppColors.primaryContainer
@@ -375,7 +376,7 @@ class SlidingNavBar extends StatelessWidget {
                                       blurRadius: 20,
                                     ),
                                 ],
-                                fontSize: 10,
+                                fontSize: index == 2 ? 8 : 10,
                               ),
                             ),
                             const SizedBox(height: 2),
