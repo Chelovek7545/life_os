@@ -63,7 +63,10 @@ class GraphBuilder {
 
         final tasks = allTasks
             .where(
-              (t) => t.projectId != null && projectIds.contains(t.projectId),
+              (t) =>
+                  t.parentTaskId == null &&
+                  t.projectId != null &&
+                  projectIds.contains(t.projectId),
             )
             .toList();
         final subTasks = allTasks

@@ -252,6 +252,38 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           childType = GraphNodeType.project;
         default:
       }
+    } else if (parent.type == GraphNodeType.task) {
+      final typeNew = await showDialog<int>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surfaceContainer,
+          title: const Text('Добавить в задачу'),
+          content: const Text('Что добавить?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 0),
+              child: const Text('Существующую задачу'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, 1),
+              child: const Text('Новую подзадачу'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Отмена'),
+            ),
+          ],
+        ),
+      );
+      if (typeNew == null) return;
+      switch (typeNew) {
+        case 0:
+          await _showExistingTaskForTaskPicker(parent);
+          return;
+        case 1:
+          childType = GraphNodeType.subTask;
+        default:
+      }
     }
 
     if (!mounted) return;
@@ -298,6 +330,31 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
             tasks: candidates,
             onSelect: (taskId) => widget.viewModel.attachExistingTaskToProject(
               projectId: project.id,
+              taskId: taskId,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showExistingTaskForTaskPicker(GraphNode parentTask) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StreamBuilder(
+        stream: widget.viewModel.tasksStream,
+        builder: (context, asyncSnapshot) {
+          final List<Task> candidates = asyncSnapshot.data != null
+              ? asyncSnapshot.data!
+                  .where((t) => t.id != parentTask.id && t.parentTaskId == null)
+                  .toList()
+              : [];
+          return ExistingTaskPickerDialog(
+            title: 'Добавить существующую подзадачу',
+            emptyText: 'Нет доступных задач для подзадачи',
+            tasks: candidates,
+            onSelect: (taskId) => widget.viewModel.attachExistingTaskToTask(
+              parentTaskId: parentTask.id,
               taskId: taskId,
             ),
           );

@@ -239,6 +239,32 @@ class LifeGraphViewModel {
     await _scheduleSavePositions();
   }
 
+  /// Привязывает уже существующую задачу к другой задаче как подзадачу.
+  Future<void> attachExistingTaskToTask({
+    required String parentTaskId,
+    required String taskId,
+  }) async {
+    if (_currentSphereId == null) return;
+    final existing = await tasksRepository.getById(taskId);
+    if (existing == null || existing.id == parentTaskId) return;
+
+    await tasksRepository.updateTask(
+      existing.copyWith(parentTaskId: Wrapped(parentTaskId)),
+    );
+
+    final parentView = graph.firstWhere(
+      (n) => n.id == parentTaskId,
+      orElse: () => throw StateError('Parent not found'),
+    );
+    final parentPos = _positions[parentTaskId] ?? parentView.position;
+    final newPos = _clampPosition(
+      Offset(parentPos.dx + 280, parentPos.dy),
+      graphNodeSizeOf(GraphNodeType.subTask),
+    );
+    _positions[taskId] = newPos;
+    await _scheduleSavePositions();
+  }
+
   /// Обновляет ноду (переименование, описание, цвет, статус задачи).
   Future<void> updateNode(GraphNode updated) async {
     final current = _domainNode(updated.id);

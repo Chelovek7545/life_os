@@ -7,11 +7,15 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 class ExistingTaskPickerDialog extends StatefulWidget {
   final List<Task> tasks;
   final ValueChanged<String> onSelect;
+  final String title;
+  final String emptyText;
 
   const ExistingTaskPickerDialog({
     super.key,
     required this.tasks,
     required this.onSelect,
+    this.title = 'Добавить существующую задачу',
+    this.emptyText = 'Нет задач без проекта',
   });
 
   @override
@@ -33,7 +37,7 @@ class _ExistingTaskPickerDialogState extends State<ExistingTaskPickerDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: AppColors.surfaceContainer,
-      title: const Text('Добавить существующую задачу'),
+      title: Text(widget.title),
       content: SizedBox(
         width: 360,
         height: 360,
@@ -51,10 +55,10 @@ class _ExistingTaskPickerDialogState extends State<ExistingTaskPickerDialog> {
             const SizedBox(height: 12),
             Expanded(
               child: _filtered.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
-                        'Нет задач без проекта',
-                        style: TextStyle(color: AppColors.onSurfaceVariant),
+                        widget.emptyText,
+                        style: const TextStyle(color: AppColors.onSurfaceVariant),
                       ),
                     )
                   : ListView.separated(
