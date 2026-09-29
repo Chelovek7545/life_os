@@ -10,6 +10,7 @@ import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart'
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
+import 'package:life_os/features/resources/data/obsidian_repository.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
 import 'package:life_os/features/projects/presentation/projects_view_model.dart';
@@ -61,6 +62,7 @@ void main() {
       dc.graphPositionsRepository = positionsRepo;
       dc.graphNotesRepository = GraphNotesRepository();
       dc.graphBuilder = graphBuilder;
+      dc.obsidianRepository = ObsidianRepository();
       dc.lifeGraphViewModel = LifeGraphViewModel(
         spheresRepository: spheresRepo,
         goalsRepository: goalsRepo,
@@ -69,6 +71,7 @@ void main() {
         positionsRepository: positionsRepo,
         notesRepository: dc.graphNotesRepository,
         graphBuilder: graphBuilder,
+        obsidianRepository: dc.obsidianRepository,
       );
       dc.lifeGraphViewModel.initialize();
 

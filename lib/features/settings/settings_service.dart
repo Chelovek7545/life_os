@@ -3,21 +3,26 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class SettingsService {
   static const String _blurKey = 'has_blur_enabled';
+  static const String _obsidianPathKey = 'obsidian_vault_path';
   
-  // ValueNotifier хранит текущее значение и уведомляет служащие виджеты об изменении
   static final ValueNotifier<bool> hasBlur = ValueNotifier<bool>(true);
+  static final ValueNotifier<String> obsidianVaultPath = ValueNotifier<String>('');
 
-  // Инициализация при старте приложения
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    // Считываем сохранённое значение (по умолчанию true)
     hasBlur.value = prefs.getBool(_blurKey) ?? true;
+    obsidianVaultPath.value = prefs.getString(_obsidianPathKey) ?? '';
   }
 
-  // Метод для изменения и сохранения значения
   static Future<void> setHasBlur(bool value) async {
-    hasBlur.value = value; // Уведомляет все ValueListenableBuilder
+    hasBlur.value = value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_blurKey, value); // Сохраняет на диск
+    await prefs.setBool(_blurKey, value);
+  }
+
+  static Future<void> setObsidianVaultPath(String path) async {
+    obsidianVaultPath.value = path;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_obsidianPathKey, path);
   }
 }

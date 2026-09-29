@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/utils/color_format.dart';
+import 'package:life_os/core/utils/smart_task_input.dart';
 import 'package:life_os/core/utils/wrapped.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/projects/presentation/widgets/project_card.dart';
@@ -124,6 +125,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                       
                       return Column(
                         children: [
+                          SmartTaskInput(),
                           Container(
                             height: 500,
                             child: SingleChildScrollView(

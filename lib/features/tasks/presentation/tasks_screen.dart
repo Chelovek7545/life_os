@@ -369,11 +369,7 @@ class TasksScreenState extends State<TasksScreen> {
                     ),
                     const Divider(height: 1),
                     Flexible(
-                      child: ListView(
-                        shrinkWrap: true,
-                        padding: EdgeInsets.zero,
-                        children: [_buildHierarchyContent()],
-                      ),
+                      child: _buildHierarchyContent(),
                     ),
                   ],
                 ),
@@ -397,6 +393,7 @@ class TasksScreenState extends State<TasksScreen> {
           builder: (context, taskSnapshot) {
             final tasks = taskSnapshot.data ?? const <Task>[];
             return HierarchyColumn(
+              height: 500,
               nodes: buildHierarchyTree(projects, tasks),
               draggableBuilder: _buildDraggableHierarchyNode,
             );

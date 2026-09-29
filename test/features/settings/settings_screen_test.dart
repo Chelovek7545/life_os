@@ -15,7 +15,7 @@ void main() {
 
       expect(find.text('ОСНОВНЫЕ'), findsOneWidget);
       expect(find.text('ПРЕДПОЧТЕНИЯ'), findsOneWidget);
-      expect(find.text('OPTIMIZATION'), findsOneWidget);
+      expect(find.text('OBSIDIAN INTEGRATION'), findsOneWidget);
       expect(find.text('О СИСТЕМЕ'), findsOneWidget);
     });
 
@@ -47,8 +47,24 @@ void main() {
       expect(find.byIcon(Icons.blur_on), findsOneWidget);
     });
 
+    testWidgets('renders obsidian vault path row', (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
+
+      expect(find.text('Путь к хранилищу Obsidian (Vault)'), findsOneWidget);
+      expect(find.text('Не указан'), findsOneWidget);
+      expect(find.byIcon(Icons.folder_open_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+    });
+
     testWidgets('renders about section', (tester) async {
       await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
+
+      // 'О программе' уходит за экран после добавления секции Obsidian.
+      await tester.scrollUntilVisible(
+        find.text('О программе'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
 
       expect(find.text('О программе'), findsOneWidget);
       expect(find.byIcon(Icons.info_outline), findsOneWidget);

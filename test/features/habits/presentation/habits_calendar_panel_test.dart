@@ -76,7 +76,7 @@ void main() {
         createTestWidget(
           child: SizedBox(
             height: 500,
-            child: HabitsCalendarPanel(viewModel: viewModel),
+            child: HabitsCalendarPanel(viewModel: viewModel, progress: 1.0),
           ),
         ),
       );
@@ -146,7 +146,7 @@ void main() {
               scrollableBody: false,
               header: const SizedBox(height: 60),
               bodyBuilder: (progress, snapIndex) =>
-                  HabitsCalendarPanel(viewModel: viewModel),
+                  HabitsCalendarPanel(viewModel: viewModel, progress: progress),
             ),
           ),
         ),
@@ -175,7 +175,7 @@ void main() {
               scrollableBody: false,
               header: const SizedBox(width: double.infinity, height: 60),
               bodyBuilder: (progress, snapIndex) =>
-                  HabitsCalendarPanel(viewModel: viewModel),
+                  HabitsCalendarPanel(viewModel: viewModel, progress: progress),
             ),
           ),
         ),

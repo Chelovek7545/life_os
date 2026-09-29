@@ -19,7 +19,7 @@ import 'package:life_os/features/habits/presentation/habits_view_model.dart';
 import 'package:life_os/features/habits/presentation/todays_habits_panel.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
-import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
+import 'package:life_os/features/lifegraph/presentation/pulse_screen_view_model.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/create_sphere_dialog.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
@@ -51,7 +51,7 @@ Task? _activeTaskOf(List<Task> tasks) {
 /// PULSE — список сфер жизни. По тапу открывает [LifeGraphScreen] (граф сферы)
 /// через [Navigator.push]. Создание сферы — кнопкой в AppBar.
 class PulseScreen extends StatefulWidget {
-  final LifeGraphViewModel viewModel;
+  final PulseScreenViewModel viewModel;
   final HabitsViewModel habitsViewModel;
   final ValueChanged<Task>? onOpenTask;
   final ValueChanged<Task>? onCompleteTask;
@@ -200,11 +200,11 @@ class _PulseScreenState extends State<PulseScreen> {
   }
 
   Future<void> _openGraph(BuildContext context, Sphere sphere) async {
-    await widget.viewModel.switchSphere(sphere.id);
+    final vmGraph = await widget.viewModel.openGraph(sphere.id);
     if (!context.mounted) return;
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => LifeGraphScreen(viewModel: widget.viewModel),
+        builder: (_) => LifeGraphScreen(viewModel: vmGraph),
       ),
     );
   }
@@ -220,7 +220,7 @@ class _PulseScreenState extends State<PulseScreen> {
 /// Панель иерархии: проект -> задача -> subtask. Строит дерево из
 /// live-стримов проектов и задач (subtask = задача с заполненным parentTaskId).
 class HierarchyPanel extends StatelessWidget {
-  final LifeGraphViewModel viewModel;
+  final PulseScreenViewModel viewModel;
   final bool expand;
 
   const HierarchyPanel({
@@ -244,7 +244,7 @@ class HierarchyPanel extends StatelessWidget {
 
             final nodes = buildHierarchyTree(projects, tasks);
 
-            return HierarchyColumn(nodes: nodes);
+            return HierarchyColumn(nodes: nodes, height: MediaQuery.sizeOf(context).height - 100,);
           },
         );
       },
@@ -341,7 +341,7 @@ class _GoalTile extends StatelessWidget {
 
 /// Панель списка сфер с кнопкой создания.
 class _SpheresPanel extends StatelessWidget {
-  final LifeGraphViewModel viewModel;
+  final PulseScreenViewModel viewModel;
   final VoidCallback onCreate;
   final ValueChanged<Sphere> onOpenSphere;
   final bool expand;
@@ -421,7 +421,7 @@ class _SpheresPanel extends StatelessWidget {
 
 /// Блок целей внутри панели сфер: заголовок + список целей (display-only).
 class _GoalsSection extends StatelessWidget {
-  final LifeGraphViewModel viewModel;
+  final PulseScreenViewModel viewModel;
   final bool expand;
 
   const _GoalsSection({required this.viewModel, this.expand = true});
@@ -501,7 +501,7 @@ class _GoalsSection extends StatelessWidget {
 /// Центральная панель Pulse: активная задача «сейчас» + статистика
 /// выполненных задач за последние 7 дней.
 class _StatsPanel extends StatelessWidget {
-  final LifeGraphViewModel viewModel;
+  final PulseScreenViewModel viewModel;
   final bool expand;
   final ValueChanged<Task>? onOpenTask;
   final ValueChanged<Task>? onCompleteTask;
@@ -1152,7 +1152,7 @@ class _WeekBarsState extends State<_WeekBars> {
 /// Строка списка сфер: цвет-индикатор, название, счётчик нод и дата создания.
 class _SphereTile extends StatelessWidget {
   final Sphere sphere;
-  final LifeGraphViewModel viewModel;
+  final PulseScreenViewModel viewModel;
   final VoidCallback onTap;
 
   const _SphereTile({
@@ -1232,7 +1232,7 @@ class _SphereTile extends StatelessWidget {
 
 /// Счётчик нод сферы (без корня-сферы) через live-стрим графа.
 class _SphereNodeCount extends StatelessWidget {
-  final LifeGraphViewModel viewModel;
+  final PulseScreenViewModel viewModel;
   final String sphereId;
 
   const _SphereNodeCount({required this.viewModel, required this.sphereId});
