@@ -1,5 +1,6 @@
 // core/di/dependency_container.dart
 import 'package:life_os/core/database/database.dart';
+import 'package:life_os/features/routine/data/routine_repository.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen_view_model.dart';
@@ -28,6 +29,9 @@ class DependencyContainer {
   DependencyContainer._internal();
 
   late final AppDatabase database;
+  RoutineRepository? _routineRepository;
+  RoutineRepository get routineRepository =>
+      _routineRepository ??= RoutineRepository(database);
   late final TasksDao tasksDAO;
   late final ProjectsDao projectsDao;
   late final SpheresDao spheresDao;
@@ -88,9 +92,11 @@ class DependencyContainer {
     // });
 
     graphPositionsRepository = GraphPositionsRepository();
-    graphNotesRepository = GraphNotesRepository(obsidianRepository: obsidianRepository);
+    graphNotesRepository = GraphNotesRepository(
+      obsidianRepository: obsidianRepository,
+    );
     graphNotesRepository.init();
-    
+
     graphBuilder = GraphBuilder(
       spheresRepository: spheresRepository,
       goalsRepository: goalsRepository,
@@ -130,8 +136,11 @@ class DependencyContainer {
 
     habitsViewModel = HabitsViewModel(habitsRepository);
     habitsViewModel.initialize();
-    resourcesViewModel = ResourcesViewModel(graphNotesRepo: graphNotesRepository, obsidianRepo: obsidianRepository);
-    
+    resourcesViewModel = ResourcesViewModel(
+      graphNotesRepo: graphNotesRepository,
+      obsidianRepo: obsidianRepository,
+    );
+
     //resourcesViewModel.scanVault(SettingsService.obsidianVaultPath.value);
     SettingsService.obsidianVaultPath.addListener(() {
       resourcesViewModel.scanVault(SettingsService.obsidianVaultPath.value);
@@ -141,6 +150,8 @@ class DependencyContainer {
   }
 
   void dispose() {
+    _routineRepository?.dispose();
+    _routineRepository = null;
     tasksViewModel.dispose();
     projectViewModel.dispose();
     habitsViewModel.dispose();

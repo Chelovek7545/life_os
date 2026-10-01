@@ -24,6 +24,7 @@ void main() {
 
       expect(find.text('PULSE'), findsOneWidget);
       expect(find.text('TASKS'), findsOneWidget);
+      expect(find.text('РАСПОРЯДОК'), findsOneWidget);
       expect(find.text('PROJECTS'), findsOneWidget);
       expect(find.text('LIBRARY'), findsOneWidget);
     });
