@@ -93,6 +93,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
             },
           ),
 
+          ValueListenableBuilder<String>(
+            valueListenable: SettingsService.tgToken,
+            builder: (context, token, child) {
+              return ListTile(
+                leading: const Icon(Icons.key_outlined),
+                title: const Text('Ключ Telegram-бота'),
+                subtitle: Text(
+                  token.isEmpty ? 'Не указан' : token,
+                  style: TextStyle(
+                    color: token.isEmpty ? Colors.orange : Colors.grey.shade600,
+                    fontSize: 13,
+                  ),
+                ),
+                trailing: const Icon(Icons.edit_outlined),
+                onTap: () => _showTelegramTokenDialog(context, token),
+              );
+            },
+          ),
+
           const Divider(),
 
           ValueListenableBuilder<bool>(
@@ -163,6 +182,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+
+  void _showTelegramTokenDialog(BuildContext context, String currentToken) {
+    final controller = TextEditingController(text: currentToken);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ключ Telegram-бота'),
+        content: TextField(
+          controller: controller,
+          obscureText: true,
+          decoration: const InputDecoration(
+            hintText: 'Введите токен бота',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () {
+              SettingsService.tgToken.value = controller.text.trim();
+              Navigator.pop(ctx);
+            },
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSectionHeader(BuildContext context, String title) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),

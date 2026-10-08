@@ -1,5 +1,6 @@
 // core/di/dependency_container.dart
 import 'package:life_os/core/database/database.dart';
+import 'package:life_os/core/local_bot_service.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen_view_model.dart';
@@ -58,6 +59,8 @@ class DependencyContainer {
   late final HabitsViewModel habitsViewModel;
   late final ResourcesViewModel resourcesViewModel;
 
+  late final LocalBotService localBotService;
+
   void init() {
     database = AppDatabase();
     tasksDAO = TasksDao(database);
@@ -114,6 +117,11 @@ class DependencyContainer {
       projectsRepository,
     );
 
+    localBotService = LocalBotService(
+      tasksWithProjectsUseCase: taskWithPrjct,
+
+    );
+
     // aiRepository = AiCoachRepository(apiClient);
     tasksViewModel = TasksViewModel(
       tasksRepository,
@@ -145,6 +153,7 @@ class DependencyContainer {
     projectViewModel.dispose();
     habitsViewModel.dispose();
     pulseScreenViewModel.dispose();
+    localBotService.stopBot();
     database.close();
   }
 }

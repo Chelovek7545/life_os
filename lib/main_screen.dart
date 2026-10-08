@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/animated_indexed_stack.dart';
 import 'package:life_os/core/di.dart';
+import 'package:life_os/core/local_bot_service.dart';
+import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
@@ -48,9 +50,7 @@ class _MainScreenState extends State<MainScreen> {
         },
       ),
       ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
-      ResourcesScreen(
-        viewModel: widget.diContainer.resourcesViewModel,
-      ),
+      ResourcesScreen(viewModel: widget.diContainer.resourcesViewModel),
     ];
   }
 
@@ -84,7 +84,6 @@ class _MainScreenState extends State<MainScreen> {
 
     return SafeArea(
       child: Scaffold(
-        
         bottomNavigationBar: isLandscape
             ? null
             : SlidingNavBar(
@@ -93,7 +92,7 @@ class _MainScreenState extends State<MainScreen> {
               ),
         backgroundColor: AppColors.surfaceDim,
         resizeToAvoidBottomInset: _resizeToAvoidBottomInset,
-        
+
         // 2. Единая структура дерева виджетов!
         // body ВСЕГДА начинается с Row. В портретном режиме NavRail просто исчезает,
         // а Expanded(child: mainArea) остается на своем месте в дереве.
@@ -103,6 +102,7 @@ class _MainScreenState extends State<MainScreen> {
               _LandscapeNavRail(
                 selectedIndex: _selectedIndex,
                 onTap: _onItemTapped,
+                botService: widget.diContainer.localBotService,
               ),
             Expanded(child: mainArea),
           ],
@@ -111,11 +111,17 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 }
+
 class _LandscapeNavRail extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
+  final LocalBotService _botService;
 
-  const _LandscapeNavRail({required this.selectedIndex, required this.onTap});
+  _LandscapeNavRail({
+    required this.selectedIndex,
+    required this.onTap,
+    required this._botService,
+  });
 
   static const itemCount = 4;
 
@@ -129,9 +135,45 @@ class _LandscapeNavRail extends StatelessWidget {
   static const itemHeight = 74.5;
   static const double navBarWidth = 80.0;
 
+  void _toggleBot() async {
+    try {
+      if (_botService.isRunning.value) {
+        _botService?.stopBot();
+      } else {
+
+        await _botService!.startBot();
+      }
+    } on Exception catch (e) {
+      print(e);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Высота навигационной панели
+        //     _botService.onTokenRequested = () async {
+        //   final controller = TextEditingController();
+        //   return showDialog<String>(
+        //     context: context,
+        //     builder: (context) => AlertDialog(
+        //       title: const Text('Введите Token Telegram бота'),
+        //       content: TextField(
+        //         controller: controller,
+        //         decoration: const InputDecoration(hintText: '123456789:ABC...'),
+        //       ),
+        //       actions: [
+        //         TextButton(
+        //           onPressed: () => Navigator.pop(context, null),
+        //           child: const Text('Отмена'),
+        //         ),
+        //         ElevatedButton(
+        //           onPressed: () => Navigator.pop(context, controller.text),
+        //           child: const Text('Сохранить'),
+        //         ),
+        //       ],
+        //     ),
+        //   );
+        // };
 
     return Container(
       width: navBarWidth,
@@ -144,6 +186,25 @@ class _LandscapeNavRail extends StatelessWidget {
       child: Stack(
         alignment: AlignmentGeometry.center,
         children: [
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: ValueListenableBuilder(
+              valueListenable: _botService.isRunning,
+              builder: (context, value, child) {
+                return TextButton(
+                  style: _botService.isRunning.value
+                      ? AppButtonStyles.activeButtonStyle.copyWith(
+                          padding: WidgetStatePropertyAll(EdgeInsets.all(20)),
+                        )
+                      : AppButtonStyles.baseButtonStyle.copyWith(
+                          padding: WidgetStatePropertyAll(EdgeInsets.all(20)),
+                        ),
+                  onPressed: _toggleBot,
+                  child: Text("TG", style: AppTypography.codeLabel),
+                );
+              },
+            ),
+          ),
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,

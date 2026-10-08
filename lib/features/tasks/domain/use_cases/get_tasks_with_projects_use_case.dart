@@ -36,4 +36,16 @@ class GetTasksWithProjectsUseCase {
       },
     );
   }
+
+  Future<List<TaskWithProject>> getTasksWithProjects() async {
+  final tasks = await _taskRepository.getAllTasks();
+  final projects = await _projectRepository.getAllProjects();
+
+  return tasks.map((task) {
+    final project = projects.firstWhereOrNull(
+      (p) => p.id == task.projectId,
+    );
+    return TaskWithProject(task: task, project: project);
+  }).toList();
+}
 }

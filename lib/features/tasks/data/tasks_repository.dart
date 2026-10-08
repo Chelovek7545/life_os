@@ -1,3 +1,4 @@
+import 'package:life_os/features/tasks/data/extensions/tag_model_extension.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 
@@ -25,6 +26,15 @@ class TasksRepository {
 
   Future<Task?> getById(String id) =>
       _dao.getById(id).then((v) => v?.toDomain());
+
+  Future<List<Task>> getAllTasks() async {
+    final tasksWithTags = await _dao.getAllTasksWithTags();
+    return tasksWithTags.entries.map((entry) {
+      return entry.key.toDomain(
+        tags: entry.value.map((e) => e.toDomain()).toList(),
+      );
+    }).toList();
+  }
 
   Future<void> addTask(Task task) async {
     try {
