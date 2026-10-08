@@ -6,6 +6,7 @@ import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
+import 'package:life_os/core/ui/app_notifiacations.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
 import 'package:life_os/features/projects/presentation/projects_screen.dart';
 import 'package:life_os/features/resources/presentation/resources_screen.dart';
@@ -140,7 +141,6 @@ class _LandscapeNavRail extends StatelessWidget {
       if (_botService.isRunning.value) {
         _botService?.stopBot();
       } else {
-
         await _botService!.startBot();
       }
     } on Exception catch (e) {
@@ -151,29 +151,49 @@ class _LandscapeNavRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Высота навигационной панели
-        //     _botService.onTokenRequested = () async {
-        //   final controller = TextEditingController();
-        //   return showDialog<String>(
-        //     context: context,
-        //     builder: (context) => AlertDialog(
-        //       title: const Text('Введите Token Telegram бота'),
-        //       content: TextField(
-        //         controller: controller,
-        //         decoration: const InputDecoration(hintText: '123456789:ABC...'),
-        //       ),
-        //       actions: [
-        //         TextButton(
-        //           onPressed: () => Navigator.pop(context, null),
-        //           child: const Text('Отмена'),
-        //         ),
-        //         ElevatedButton(
-        //           onPressed: () => Navigator.pop(context, controller.text),
-        //           child: const Text('Сохранить'),
-        //         ),
-        //       ],
-        //     ),
-        //   );
-        // };
+    //     _botService.onTokenRequested = () async {
+    //   final controller = TextEditingController();
+    //   return showDialog<String>(
+    //     context: context,
+    //     builder: (context) => AlertDialog(
+    //       title: const Text('Введите Token Telegram бота'),
+    //       content: TextField(
+    //         controller: controller,
+    //         decoration: const InputDecoration(hintText: '123456789:ABC...'),
+    //       ),
+    //       actions: [
+    //         TextButton(
+    //           onPressed: () => Navigator.pop(context, null),
+    //           child: const Text('Отмена'),
+    //         ),
+    //         ElevatedButton(
+    //           onPressed: () => Navigator.pop(context, controller.text),
+    //           child: const Text('Сохранить'),
+    //         ),
+    //       ],
+    //     ),
+    //   );
+    // };
+
+    _botService.onTokenRequested = () async {
+      if (context.mounted) {
+        AppNotification.show(
+          context,
+          message: "Добавье токен в настройках",
+          alignment: Alignment.bottomCenter,
+        );
+      }
+    };
+    _botService.onInvalidToken = (errorMessage) async {
+      if (context.mounted) {
+        AppNotification.show(
+          context,
+          message: errorMessage,
+          type: ToastType.error,
+          alignment: Alignment.bottomCenter,
+        );
+      }
+    };
 
     return Container(
       width: navBarWidth,

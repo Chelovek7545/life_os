@@ -11,6 +11,7 @@ class GlassPanel extends StatelessWidget {
   final double blurLevel;
   final bool hasBlur;
   final Color? color; 
+  final BoxConstraints? constraints;
   const GlassPanel(
     {
     super.key,
@@ -20,13 +21,14 @@ class GlassPanel extends StatelessWidget {
     this.borderColor,
     this.blurLevel = 8,
     this.hasBlur = true,
-    this.color,
+    this.color, this.constraints,
   });
 
   @override
   Widget build(BuildContext context) {
     Widget container(bool blurAllowed) => Container(
       padding: padding,
+      constraints: constraints,
       decoration: BoxDecoration(
         color: blurAllowed
             ? color ?? AppColors.surfaceGlass

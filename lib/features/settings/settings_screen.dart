@@ -203,7 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           FilledButton(
             onPressed: () {
-              SettingsService.tgToken.value = controller.text.trim();
+              SettingsService.setTgToken(controller.text.trim());
               Navigator.pop(ctx);
             },
             child: const Text('Сохранить'),
