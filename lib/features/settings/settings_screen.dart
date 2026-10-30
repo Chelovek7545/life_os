@@ -66,11 +66,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const Icon(Icons.chevron_right),
               ],
             ),
-            onTap: (){}
+            onTap: () {},
             //() => _showLanguageDialog(context),
           ),
 
-           const Divider(),
+          const Divider(),
 
           _buildSectionHeader(context, 'Obsidian Integration'),
 
@@ -83,7 +83,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: Text(
                   vaultPath.isEmpty ? 'Не указан' : vaultPath,
                   style: TextStyle(
-                    color: vaultPath.isEmpty ? Colors.orange : Colors.grey.shade600,
+                    color: vaultPath.isEmpty
+                        ? Colors.orange
+                        : Colors.grey.shade600,
                     fontSize: 13,
                   ),
                 ),
@@ -100,7 +102,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 leading: const Icon(Icons.key_outlined),
                 title: const Text('Ключ Telegram-бота'),
                 subtitle: Text(
-                  token.isEmpty ? 'Не указан' : token,
+                  token.isEmpty ? 'Не указан' : 'Указан',
                   style: TextStyle(
                     color: token.isEmpty ? Colors.orange : Colors.grey.shade600,
                     fontSize: 13,
@@ -110,6 +112,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => _showTelegramTokenDialog(context, token),
               );
             },
+          ),
+
+          ValueListenableBuilder<String>(
+            valueListenable: SettingsService.tgAllowedUsers,
+            builder: (context, ids, child) => ListTile(
+              leading: const Icon(Icons.lock_outline),
+              title: const Text('Разрешённые Telegram User ID'),
+              subtitle: Text(
+                ids.isEmpty ? 'Не указаны — бот не запустится' : ids,
+              ),
+              trailing: const Icon(Icons.edit_outlined),
+              onTap: () => _showTelegramUsersDialog(context, ids),
+            ),
           ),
 
           const Divider(),
@@ -192,9 +207,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: TextField(
           controller: controller,
           obscureText: true,
-          decoration: const InputDecoration(
-            hintText: 'Введите токен бота',
-          ),
+          decoration: const InputDecoration(hintText: 'Введите токен бота'),
         ),
         actions: [
           TextButton(
@@ -204,6 +217,50 @@ class _SettingsScreenState extends State<SettingsScreen> {
           FilledButton(
             onPressed: () {
               SettingsService.setTgToken(controller.text.trim());
+              Navigator.pop(ctx);
+            },
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTelegramUsersDialog(BuildContext context, String currentIds) {
+    final controller = TextEditingController(text: currentIds);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Разрешённые Telegram User ID'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: '123456789, 987654321',
+            helperText:
+                'Числовые ID через запятую. Пустой список закрывает доступ.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final ids = controller.text.trim();
+              if (ids.isNotEmpty &&
+                  (!RegExp(r'^\d+(?:[,;\s]+\d+)*$').hasMatch(ids) ||
+                      ids
+                          .split(RegExp(r'[,;\s]+'))
+                          .any((value) => (int.tryParse(value) ?? 0) <= 0))) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Введите числовые User ID через запятую.'),
+                  ),
+                );
+                return;
+              }
+              SettingsService.setTgAllowedUsers(ids);
               Navigator.pop(ctx);
             },
             child: const Text('Сохранить'),

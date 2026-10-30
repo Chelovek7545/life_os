@@ -69,6 +69,8 @@ class Task {
     this.projectId,
     this.parentTaskId,
     this.space,
+    this.spaceId,
+    this.priority = 0,
   });
 
   final String id;
@@ -86,6 +88,8 @@ class Task {
   final String? projectId;
   final String? parentTaskId;
   final String? space;
+  final String? spaceId;
+  final int priority;
   final int timerSeconds;
   final double effortWeight;
   final List<Tag> tags;
@@ -128,6 +132,8 @@ class Task {
     Wrapped<String?>? projectId,
     Wrapped<String?>? parentTaskId,
     Wrapped<String?>? space,
+    Wrapped<String?>? spaceId,
+    int? priority,
     int? timerSeconds,
     double? effortWeight,
     List<Tag>? tags,
@@ -144,9 +150,12 @@ class Task {
       endsAt: endsAt != null ? endsAt.value : this.endsAt,
 
       projectId: projectId != null ? projectId.value : this.projectId,
-      parentTaskId:
-          parentTaskId != null ? parentTaskId.value : this.parentTaskId,
+      parentTaskId: parentTaskId != null
+          ? parentTaskId.value
+          : this.parentTaskId,
       space: space != null ? space.value : this.space,
+      spaceId: spaceId != null ? spaceId.value : this.spaceId,
+      priority: priority ?? this.priority,
       timerSeconds: timerSeconds ?? this.timerSeconds,
       effortWeight: effortWeight ?? this.effortWeight,
       tags: tags ?? this.tags,

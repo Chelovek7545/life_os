@@ -67,6 +67,14 @@ class MockProjectsViewModel extends _i1.Mock implements _i2.ProjectsViewModel {
           as _i3.Stream<List<_i6.Task>>);
 
   @override
+  _i3.Stream<List<_i6.Task>> watchAllTasks() =>
+      (super.noSuchMethod(
+            Invocation.method(#watchAllTasks, []),
+            returnValue: _i3.Stream<List<_i6.Task>>.empty(),
+          )
+          as _i3.Stream<List<_i6.Task>>);
+
+  @override
   _i3.Future<void> updateTask(_i6.Task? task) =>
       (super.noSuchMethod(
             Invocation.method(#updateTask, [task]),

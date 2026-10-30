@@ -9,6 +9,18 @@ import 'dart:io';
 
 part 'database.g.dart';
 
+@DataClassName('WorkLogModel')
+class WorkLogs extends Table {
+  TextColumn get id => text()(); // UUID
+  IntColumn get status => integer()();
+  TextColumn get taskId => text().references(Tasks, #id, onDelete: KeyAction.cascade)();
+  DateTimeColumn get date => dateTime()();
+  TextColumn get description => text()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DataClassName('TaskModel')
 class Tasks extends Table {
   TextColumn get id => text()(); // UUID
@@ -139,6 +151,7 @@ class HabitEntries extends Table {
   Spheres,
   Habits,
   HabitEntries,
+  WorkLogs,
 ])
 class AppDatabase extends _$AppDatabase {
   // Конструктор
@@ -151,7 +164,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration {
@@ -204,6 +217,9 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from < 8) {
           await m.addColumn(projects, projects.parentProejectId);
+        }
+        if (from < 9) {
+          await m.createTable(workLogs);
         }
       }, 
     );

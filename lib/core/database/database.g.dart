@@ -4013,6 +4013,364 @@ class HabitEntriesCompanion extends UpdateCompanion<HabitEntryModel> {
   }
 }
 
+class $WorkLogsTable extends WorkLogs
+    with TableInfo<$WorkLogsTable, WorkLogModel> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WorkLogsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<int> status = GeneratedColumn<int>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _taskIdMeta = const VerificationMeta('taskId');
+  @override
+  late final GeneratedColumn<String> taskId = GeneratedColumn<String>(
+    'task_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES tasks (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _dateMeta = const VerificationMeta('date');
+  @override
+  late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
+    'date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, status, taskId, date, description];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'work_logs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WorkLogModel> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('task_id')) {
+      context.handle(
+        _taskIdMeta,
+        taskId.isAcceptableOrUnknown(data['task_id']!, _taskIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_taskIdMeta);
+    }
+    if (data.containsKey('date')) {
+      context.handle(
+        _dateMeta,
+        date.isAcceptableOrUnknown(data['date']!, _dateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dateMeta);
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_descriptionMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  WorkLogModel map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WorkLogModel(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}status'],
+      )!,
+      taskId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}task_id'],
+      )!,
+      date: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}date'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      )!,
+    );
+  }
+
+  @override
+  $WorkLogsTable createAlias(String alias) {
+    return $WorkLogsTable(attachedDatabase, alias);
+  }
+}
+
+class WorkLogModel extends DataClass implements Insertable<WorkLogModel> {
+  final String id;
+  final int status;
+  final String taskId;
+  final DateTime date;
+  final String description;
+  const WorkLogModel({
+    required this.id,
+    required this.status,
+    required this.taskId,
+    required this.date,
+    required this.description,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['status'] = Variable<int>(status);
+    map['task_id'] = Variable<String>(taskId);
+    map['date'] = Variable<DateTime>(date);
+    map['description'] = Variable<String>(description);
+    return map;
+  }
+
+  WorkLogsCompanion toCompanion(bool nullToAbsent) {
+    return WorkLogsCompanion(
+      id: Value(id),
+      status: Value(status),
+      taskId: Value(taskId),
+      date: Value(date),
+      description: Value(description),
+    );
+  }
+
+  factory WorkLogModel.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WorkLogModel(
+      id: serializer.fromJson<String>(json['id']),
+      status: serializer.fromJson<int>(json['status']),
+      taskId: serializer.fromJson<String>(json['taskId']),
+      date: serializer.fromJson<DateTime>(json['date']),
+      description: serializer.fromJson<String>(json['description']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'status': serializer.toJson<int>(status),
+      'taskId': serializer.toJson<String>(taskId),
+      'date': serializer.toJson<DateTime>(date),
+      'description': serializer.toJson<String>(description),
+    };
+  }
+
+  WorkLogModel copyWith({
+    String? id,
+    int? status,
+    String? taskId,
+    DateTime? date,
+    String? description,
+  }) => WorkLogModel(
+    id: id ?? this.id,
+    status: status ?? this.status,
+    taskId: taskId ?? this.taskId,
+    date: date ?? this.date,
+    description: description ?? this.description,
+  );
+  WorkLogModel copyWithCompanion(WorkLogsCompanion data) {
+    return WorkLogModel(
+      id: data.id.present ? data.id.value : this.id,
+      status: data.status.present ? data.status.value : this.status,
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
+      date: data.date.present ? data.date.value : this.date,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkLogModel(')
+          ..write('id: $id, ')
+          ..write('status: $status, ')
+          ..write('taskId: $taskId, ')
+          ..write('date: $date, ')
+          ..write('description: $description')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, status, taskId, date, description);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WorkLogModel &&
+          other.id == this.id &&
+          other.status == this.status &&
+          other.taskId == this.taskId &&
+          other.date == this.date &&
+          other.description == this.description);
+}
+
+class WorkLogsCompanion extends UpdateCompanion<WorkLogModel> {
+  final Value<String> id;
+  final Value<int> status;
+  final Value<String> taskId;
+  final Value<DateTime> date;
+  final Value<String> description;
+  final Value<int> rowid;
+  const WorkLogsCompanion({
+    this.id = const Value.absent(),
+    this.status = const Value.absent(),
+    this.taskId = const Value.absent(),
+    this.date = const Value.absent(),
+    this.description = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  WorkLogsCompanion.insert({
+    required String id,
+    required int status,
+    required String taskId,
+    required DateTime date,
+    required String description,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       status = Value(status),
+       taskId = Value(taskId),
+       date = Value(date),
+       description = Value(description);
+  static Insertable<WorkLogModel> custom({
+    Expression<String>? id,
+    Expression<int>? status,
+    Expression<String>? taskId,
+    Expression<DateTime>? date,
+    Expression<String>? description,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (status != null) 'status': status,
+      if (taskId != null) 'task_id': taskId,
+      if (date != null) 'date': date,
+      if (description != null) 'description': description,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  WorkLogsCompanion copyWith({
+    Value<String>? id,
+    Value<int>? status,
+    Value<String>? taskId,
+    Value<DateTime>? date,
+    Value<String>? description,
+    Value<int>? rowid,
+  }) {
+    return WorkLogsCompanion(
+      id: id ?? this.id,
+      status: status ?? this.status,
+      taskId: taskId ?? this.taskId,
+      date: date ?? this.date,
+      description: description ?? this.description,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<int>(status.value);
+    }
+    if (taskId.present) {
+      map['task_id'] = Variable<String>(taskId.value);
+    }
+    if (date.present) {
+      map['date'] = Variable<DateTime>(date.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkLogsCompanion(')
+          ..write('id: $id, ')
+          ..write('status: $status, ')
+          ..write('taskId: $taskId, ')
+          ..write('date: $date, ')
+          ..write('description: $description, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -4024,6 +4382,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SpheresTable spheres = $SpheresTable(this);
   late final $HabitsTable habits = $HabitsTable(this);
   late final $HabitEntriesTable habitEntries = $HabitEntriesTable(this);
+  late final $WorkLogsTable workLogs = $WorkLogsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4037,6 +4396,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     spheres,
     habits,
     habitEntries,
+    workLogs,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -4060,6 +4420,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('habit_entries', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'tasks',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('work_logs', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -4122,6 +4489,24 @@ final class $$TasksTableReferences
     ).filter((f) => f.taskId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_taskTagEntriesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$WorkLogsTable, List<WorkLogModel>>
+  _workLogsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.workLogs,
+    aliasName: 'tasks__id__work_logs__task_id',
+  );
+
+  $$WorkLogsTableProcessedTableManager get workLogsRefs {
+    final manager = $$WorkLogsTableTableManager(
+      $_db,
+      $_db.workLogs,
+    ).filter((f) => f.taskId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_workLogsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -4233,6 +4618,31 @@ class $$TasksTableFilterComposer extends Composer<_$AppDatabase, $TasksTable> {
           }) => $$TaskTagEntriesTableFilterComposer(
             $db: $db,
             $table: $db.taskTagEntries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> workLogsRefs(
+    Expression<bool> Function($$WorkLogsTableFilterComposer f) f,
+  ) {
+    final $$WorkLogsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.workLogs,
+      getReferencedColumn: (t) => t.taskId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkLogsTableFilterComposer(
+            $db: $db,
+            $table: $db.workLogs,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -4422,6 +4832,31 @@ class $$TasksTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> workLogsRefs<T extends Object>(
+    Expression<T> Function($$WorkLogsTableAnnotationComposer a) f,
+  ) {
+    final $$WorkLogsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.workLogs,
+      getReferencedColumn: (t) => t.taskId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkLogsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.workLogs,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$TasksTableTableManager
@@ -4437,7 +4872,7 @@ class $$TasksTableTableManager
           $$TasksTableUpdateCompanionBuilder,
           (TaskModel, $$TasksTableReferences),
           TaskModel,
-          PrefetchHooks Function({bool taskTagEntriesRefs})
+          PrefetchHooks Function({bool taskTagEntriesRefs, bool workLogsRefs})
         > {
   $$TasksTableTableManager(_$AppDatabase db, $TasksTable table)
     : super(
@@ -4532,37 +4967,63 @@ class $$TasksTableTableManager
                     (e.readTable(table), $$TasksTableReferences(db, table, e)),
               )
               .toList(),
-          prefetchHooksCallback: ({taskTagEntriesRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [
-                if (taskTagEntriesRefs) db.taskTagEntries,
-              ],
-              addJoins: null,
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (taskTagEntriesRefs)
-                    await $_getPrefetchedData<
-                      TaskModel,
-                      $TasksTable,
-                      TaskTagEntry
-                    >(
-                      currentTable: table,
-                      referencedTable: $$TasksTableReferences
-                          ._taskTagEntriesRefsTable(db),
-                      managerFromTypedResult: (p0) => $$TasksTableReferences(
-                        db,
-                        table,
-                        p0,
-                      ).taskTagEntriesRefs,
-                      referencedItemsForCurrentItem: (item, referencedItems) =>
-                          referencedItems.where((e) => e.taskId == item.id),
-                      typedResults: items,
-                    ),
-                ];
+          prefetchHooksCallback:
+              ({taskTagEntriesRefs = false, workLogsRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (taskTagEntriesRefs) db.taskTagEntries,
+                    if (workLogsRefs) db.workLogs,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (taskTagEntriesRefs)
+                        await $_getPrefetchedData<
+                          TaskModel,
+                          $TasksTable,
+                          TaskTagEntry
+                        >(
+                          currentTable: table,
+                          referencedTable: $$TasksTableReferences
+                              ._taskTagEntriesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$TasksTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).taskTagEntriesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.taskId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (workLogsRefs)
+                        await $_getPrefetchedData<
+                          TaskModel,
+                          $TasksTable,
+                          WorkLogModel
+                        >(
+                          currentTable: table,
+                          referencedTable: $$TasksTableReferences
+                              ._workLogsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$TasksTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).workLogsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.taskId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -4579,7 +5040,7 @@ typedef $$TasksTableProcessedTableManager =
       $$TasksTableUpdateCompanionBuilder,
       (TaskModel, $$TasksTableReferences),
       TaskModel,
-      PrefetchHooks Function({bool taskTagEntriesRefs})
+      PrefetchHooks Function({bool taskTagEntriesRefs, bool workLogsRefs})
     >;
 typedef $$ProjectsTableCreateCompanionBuilder =
     ProjectsCompanion Function({
@@ -6711,6 +7172,325 @@ typedef $$HabitEntriesTableProcessedTableManager =
       HabitEntryModel,
       PrefetchHooks Function({bool habitId})
     >;
+typedef $$WorkLogsTableCreateCompanionBuilder =
+    WorkLogsCompanion Function({
+      required String id,
+      required int status,
+      required String taskId,
+      required DateTime date,
+      required String description,
+      Value<int> rowid,
+    });
+typedef $$WorkLogsTableUpdateCompanionBuilder =
+    WorkLogsCompanion Function({
+      Value<String> id,
+      Value<int> status,
+      Value<String> taskId,
+      Value<DateTime> date,
+      Value<String> description,
+      Value<int> rowid,
+    });
+
+final class $$WorkLogsTableReferences
+    extends BaseReferences<_$AppDatabase, $WorkLogsTable, WorkLogModel> {
+  $$WorkLogsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $TasksTable _taskIdTable(_$AppDatabase db) =>
+      db.tasks.createAlias('work_logs__task_id__tasks__id');
+
+  $$TasksTableProcessedTableManager get taskId {
+    final $_column = $_itemColumn<String>('task_id')!;
+
+    final manager = $$TasksTableTableManager(
+      $_db,
+      $_db.tasks,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_taskIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$WorkLogsTableFilterComposer
+    extends Composer<_$AppDatabase, $WorkLogsTable> {
+  $$WorkLogsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$TasksTableFilterComposer get taskId {
+    final $$TasksTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.taskId,
+      referencedTable: $db.tasks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TasksTableFilterComposer(
+            $db: $db,
+            $table: $db.tasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$WorkLogsTableOrderingComposer
+    extends Composer<_$AppDatabase, $WorkLogsTable> {
+  $$WorkLogsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get date => $composableBuilder(
+    column: $table.date,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$TasksTableOrderingComposer get taskId {
+    final $$TasksTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.taskId,
+      referencedTable: $db.tasks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TasksTableOrderingComposer(
+            $db: $db,
+            $table: $db.tasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$WorkLogsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WorkLogsTable> {
+  $$WorkLogsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get date =>
+      $composableBuilder(column: $table.date, builder: (column) => column);
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  $$TasksTableAnnotationComposer get taskId {
+    final $$TasksTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.taskId,
+      referencedTable: $db.tasks,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TasksTableAnnotationComposer(
+            $db: $db,
+            $table: $db.tasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$WorkLogsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WorkLogsTable,
+          WorkLogModel,
+          $$WorkLogsTableFilterComposer,
+          $$WorkLogsTableOrderingComposer,
+          $$WorkLogsTableAnnotationComposer,
+          $$WorkLogsTableCreateCompanionBuilder,
+          $$WorkLogsTableUpdateCompanionBuilder,
+          (WorkLogModel, $$WorkLogsTableReferences),
+          WorkLogModel,
+          PrefetchHooks Function({bool taskId})
+        > {
+  $$WorkLogsTableTableManager(_$AppDatabase db, $WorkLogsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WorkLogsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WorkLogsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WorkLogsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<int> status = const Value.absent(),
+                Value<String> taskId = const Value.absent(),
+                Value<DateTime> date = const Value.absent(),
+                Value<String> description = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => WorkLogsCompanion(
+                id: id,
+                status: status,
+                taskId: taskId,
+                date: date,
+                description: description,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required int status,
+                required String taskId,
+                required DateTime date,
+                required String description,
+                Value<int> rowid = const Value.absent(),
+              }) => WorkLogsCompanion.insert(
+                id: id,
+                status: status,
+                taskId: taskId,
+                date: date,
+                description: description,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable(table),
+                  $$WorkLogsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({taskId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (taskId) {
+                      state =
+                          state.withJoin(
+                                currentTable: table,
+                                currentColumn: table.taskId,
+                                referencedTable: $$WorkLogsTableReferences
+                                    ._taskIdTable(db),
+                                referencedColumn: $$WorkLogsTableReferences
+                                    ._taskIdTable(db)
+                                    .id,
+                              )
+                              as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$WorkLogsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WorkLogsTable,
+      WorkLogModel,
+      $$WorkLogsTableFilterComposer,
+      $$WorkLogsTableOrderingComposer,
+      $$WorkLogsTableAnnotationComposer,
+      $$WorkLogsTableCreateCompanionBuilder,
+      $$WorkLogsTableUpdateCompanionBuilder,
+      (WorkLogModel, $$WorkLogsTableReferences),
+      WorkLogModel,
+      PrefetchHooks Function({bool taskId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6730,4 +7510,6 @@ class $AppDatabaseManager {
       $$HabitsTableTableManager(_db, _db.habits);
   $$HabitEntriesTableTableManager get habitEntries =>
       $$HabitEntriesTableTableManager(_db, _db.habitEntries);
+  $$WorkLogsTableTableManager get workLogs =>
+      $$WorkLogsTableTableManager(_db, _db.workLogs);
 }

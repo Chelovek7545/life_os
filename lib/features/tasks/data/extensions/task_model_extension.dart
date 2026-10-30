@@ -19,6 +19,8 @@ extension TaskDataToDomain on TaskModel {
       projectId: projectId,
       parentTaskId: parentTaskId,
       space: space,
+      spaceId: spaceId,
+      priority: priority,
       timerSeconds: timerSeconds,
       effortWeight: effortWeight,
       tags: tags ?? const [],
@@ -43,6 +45,8 @@ extension TaskToDrift on Task {
       projectId: Value(projectId),
       parentTaskId: Value(parentTaskId),
       space: Value(space),
+      spaceId: Value(spaceId),
+      priority: Value(priority),
       timerSeconds: Value(timerSeconds),
       effortWeight: Value(effortWeight),
     );

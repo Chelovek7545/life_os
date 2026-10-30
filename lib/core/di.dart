@@ -1,6 +1,7 @@
 // core/di/dependency_container.dart
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/core/local_bot_service.dart';
+import 'package:life_os/core/bot/bot_task_store.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen_view_model.dart';
@@ -20,6 +21,8 @@ import 'package:life_os/features/habits/data/habits_repository.dart';
 import 'package:life_os/features/habits/presentation/habits_view_model.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
+import 'package:life_os/features/tasks/data/work_logs_dao.dart';
+import 'package:life_os/features/tasks/data/work_logs_repository.dart';
 import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
 import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
 
@@ -34,6 +37,7 @@ class DependencyContainer {
   late final SpheresDao spheresDao;
   late final GoalsDao goalsDao;
   late final HabitsDao habitsDao;
+  late final WorkLogsDao workLogsDao;
   // late final ApiClient apiClient;
   // late final SyncService syncService;
 
@@ -42,6 +46,7 @@ class DependencyContainer {
   late final SpheresRepository spheresRepository;
   late final GoalsRepository goalsRepository;
   late final HabitsRepository habitsRepository;
+  late final WorkLogsRepository workLogsRepository;
   // late final MoodRepository moodRepository;
   // late final AiCoachRepository aiRepository;
 
@@ -80,6 +85,8 @@ class DependencyContainer {
     goalsRepository = GoalsRepository(goalsDao);
     habitsDao = HabitsDao(database);
     habitsRepository = HabitsRepository(habitsDao);
+    workLogsDao = WorkLogsDao(database);
+    workLogsRepository = WorkLogsRepository(workLogsDao);
     // moodRepository = MoodRepository(
     //   MoodLocalDS(localDatabase),
     //   apiClient,
@@ -91,9 +98,11 @@ class DependencyContainer {
     // });
 
     graphPositionsRepository = GraphPositionsRepository();
-    graphNotesRepository = GraphNotesRepository(obsidianRepository: obsidianRepository);
+    graphNotesRepository = GraphNotesRepository(
+      obsidianRepository: obsidianRepository,
+    );
     graphNotesRepository.init();
-    
+
     graphBuilder = GraphBuilder(
       spheresRepository: spheresRepository,
       goalsRepository: goalsRepository,
@@ -118,8 +127,9 @@ class DependencyContainer {
     );
 
     localBotService = LocalBotService(
-      tasksWithProjectsUseCase: taskWithPrjct,
-
+      taskStore: BotTaskStore(database),
+      tasksRepository: tasksRepository,
+      workLogsRepository: workLogsRepository,
     );
 
     // aiRepository = AiCoachRepository(apiClient);
@@ -138,8 +148,11 @@ class DependencyContainer {
 
     habitsViewModel = HabitsViewModel(habitsRepository);
     habitsViewModel.initialize();
-    resourcesViewModel = ResourcesViewModel(graphNotesRepo: graphNotesRepository, obsidianRepo: obsidianRepository);
-    
+    resourcesViewModel = ResourcesViewModel(
+      graphNotesRepo: graphNotesRepository,
+      obsidianRepo: obsidianRepository,
+    );
+
     //resourcesViewModel.scanVault(SettingsService.obsidianVaultPath.value);
     SettingsService.obsidianVaultPath.addListener(() {
       resourcesViewModel.scanVault(SettingsService.obsidianVaultPath.value);

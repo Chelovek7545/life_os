@@ -10,6 +10,7 @@ import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/core/utils/wrapped.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:life_os/features/tasks/presentation/components/work_logs_section.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 typedef OnTaskSubmit = void Function(Task task);
@@ -604,6 +605,10 @@ class TaskFormContentState extends State<TaskFormContent> {
                     ],
                   ),
                 ),
+                if (widget.task.id.isNotEmpty && widget.isEditMode) ...[
+                  const SizedBox(height: 16),
+                  WorkLogsSection(taskId: widget.task.id),
+                ],
                 if (isEditMode)
                   ElevatedButton(
                     style: AppButtonStyles.saveButton,

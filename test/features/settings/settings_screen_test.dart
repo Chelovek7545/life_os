@@ -16,6 +16,11 @@ void main() {
       expect(find.text('ОСНОВНЫЕ'), findsOneWidget);
       expect(find.text('ПРЕДПОЧТЕНИЯ'), findsOneWidget);
       expect(find.text('OBSIDIAN INTEGRATION'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('О СИСТЕМЕ'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('О СИСТЕМЕ'), findsOneWidget);
     });
 
@@ -43,6 +48,11 @@ void main() {
     testWidgets('renders blur toggle', (tester) async {
       await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
 
+      await tester.scrollUntilVisible(
+        find.text('Эффект размытия (Blur)'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('Эффект размытия (Blur)'), findsOneWidget);
       expect(find.byIcon(Icons.blur_on), findsOneWidget);
     });
@@ -51,9 +61,19 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: SettingsScreen()));
 
       expect(find.text('Путь к хранилищу Obsidian (Vault)'), findsOneWidget);
-      expect(find.text('Не указан'), findsOneWidget);
+      final row = find.ancestor(
+        of: find.text('Путь к хранилищу Obsidian (Vault)'),
+        matching: find.byType(ListTile),
+      );
+      expect(
+        find.descendant(of: row, matching: find.text('Не указан')),
+        findsOneWidget,
+      );
       expect(find.byIcon(Icons.folder_open_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
+      expect(
+        find.descendant(of: row, matching: find.byIcon(Icons.edit_outlined)),
+        findsOneWidget,
+      );
     });
 
     testWidgets('renders about section', (tester) async {

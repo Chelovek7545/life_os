@@ -139,12 +139,12 @@ class _LandscapeNavRail extends StatelessWidget {
   void _toggleBot() async {
     try {
       if (_botService.isRunning.value) {
-        _botService?.stopBot();
+        await _botService.stopBot();
       } else {
-        await _botService!.startBot();
+        await _botService.startBot();
       }
     } on Exception catch (e) {
-      print(e);
+      debugPrint('Ошибка переключения Telegram-бота: $e');
     }
   }
 
@@ -183,8 +183,19 @@ class _LandscapeNavRail extends StatelessWidget {
           alignment: Alignment.bottomCenter,
         );
       }
+      return null;
     };
     _botService.onInvalidToken = (errorMessage) async {
+      if (context.mounted) {
+        AppNotification.show(
+          context,
+          message: errorMessage,
+          type: ToastType.error,
+          alignment: Alignment.bottomCenter,
+        );
+      }
+    };
+    _botService.onPollingError = (errorMessage) async {
       if (context.mounted) {
         AppNotification.show(
           context,

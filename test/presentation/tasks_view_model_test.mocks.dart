@@ -61,6 +61,14 @@ class MockTasksRepository extends _i1.Mock implements _i2.TasksRepository {
           as _i3.Future<_i4.Task?>);
 
   @override
+  _i3.Future<List<_i4.Task>> getAllTasks() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllTasks, []),
+            returnValue: _i3.Future<List<_i4.Task>>.value(<_i4.Task>[]),
+          )
+          as _i3.Future<List<_i4.Task>>);
+
+  @override
   _i3.Future<void> addTask(_i4.Task? task) =>
       (super.noSuchMethod(
             Invocation.method(#addTask, [task]),
@@ -104,6 +112,16 @@ class MockGetTasksWithProjectsUseCase extends _i1.Mock
             returnValue: _i3.Stream<List<_i5.TaskWithProject>>.empty(),
           )
           as _i3.Stream<List<_i5.TaskWithProject>>);
+
+  @override
+  _i3.Future<List<_i5.TaskWithProject>> getTasksWithProjects() =>
+      (super.noSuchMethod(
+            Invocation.method(#getTasksWithProjects, []),
+            returnValue: _i3.Future<List<_i5.TaskWithProject>>.value(
+              <_i5.TaskWithProject>[],
+            ),
+          )
+          as _i3.Future<List<_i5.TaskWithProject>>);
 }
 
 /// A class which mocks [ProjectsRepository].
