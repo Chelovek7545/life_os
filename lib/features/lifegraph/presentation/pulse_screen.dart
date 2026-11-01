@@ -1,3 +1,5 @@
+import 'package:plugin_ui/plugin_ui.dart';
+import 'pulse_panel_slots.dart';
 import 'package:graph_api/graph_api.dart';
 import 'package:life_os/features/tasks/presentation/task_status_visuals.dart';
 import 'package:flutter/material.dart';
@@ -6,7 +8,6 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
-import 'package:life_os/core/ui/collapsible_sheet.dart';
 import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:life_os/core/ui/hierarchy/build_hierarchy_tree.dart';
 import 'package:life_os/core/ui/layout/split_view.dart';
@@ -15,14 +16,10 @@ import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/goals/domain/goal_model.dart';
-import 'package:life_os/features/habits/presentation/habits_calendar_panel.dart';
-import 'package:life_os/features/habits/presentation/habits_sheet.dart';
-import 'package:life_os/features/habits/presentation/habits_view_model.dart';
-import 'package:life_os/features/habits/presentation/todays_habits_panel.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen_view_model.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/create_sphere_dialog.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
@@ -53,7 +50,7 @@ Task? _activeTaskOf(List<Task> tasks) {
 /// через [Navigator.push]. Создание сферы — кнопкой в AppBar.
 class PulseScreen extends StatefulWidget {
   final PulseScreenViewModel viewModel;
-  final HabitsViewModel habitsViewModel;
+  final PluginUiRegistry registry;
   final ValueChanged<Task>? onOpenTask;
   final ValueChanged<Task>? onCompleteTask;
   final Widget? portraitAppBarAction;
@@ -61,7 +58,7 @@ class PulseScreen extends StatefulWidget {
   const PulseScreen({
     super.key,
     required this.viewModel,
-    required this.habitsViewModel,
+    required this.registry,
     this.onOpenTask,
     this.onCompleteTask,
     this.portraitAppBarAction,
@@ -72,12 +69,6 @@ class PulseScreen extends StatefulWidget {
 }
 
 class _PulseScreenState extends State<PulseScreen> {
-  bool _isHabitsMapVisible = false;
-
-  void _openHabitsMap() => setState(() => _isHabitsMapVisible = true);
-
-  void _closeHabitsMap() => setState(() => _isHabitsMapVisible = false);
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -89,13 +80,11 @@ class _PulseScreenState extends State<PulseScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          IconButton(
-            tooltip: 'Habits',
-            onPressed: () => showAllHabitsSheet(
-              context: context,
-              viewModel: widget.habitsViewModel,
-            ),
-            icon: const Icon(Icons.repeat_rounded),
+          PluginPanelSlot(
+            registry: widget.registry,
+            slot: PulsePanelSlots.toolbar,
+            layout: (_, panels) =>
+                Row(mainAxisSize: MainAxisSize.min, children: panels),
           ),
           if (MediaQuery.orientationOf(context) == Orientation.portrait &&
               widget.portraitAppBarAction != null)
@@ -122,22 +111,23 @@ class _PulseScreenState extends State<PulseScreen> {
 
           final Widget body;
           if (isSplit) {
-            final centerColumn = Column(
-              children: [
-                Expanded(
-                  child: _StatsPanel(
-                    viewModel: widget.viewModel,
-                    onOpenTask: widget.onOpenTask,
-                    onCompleteTask: widget.onCompleteTask,
+            final centerColumn = PluginPanelSlot(
+              registry: widget.registry,
+              slot: PulsePanelSlots.center,
+              expand: true,
+              layout: (context, panels) => Column(
+                children: [
+                  Expanded(
+                    child: _StatsPanel(
+                      viewModel: widget.viewModel,
+                      onOpenTask: widget.onOpenTask,
+                      onCompleteTask: widget.onCompleteTask,
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: TodaysHabitsPanel(
-                    viewModel: widget.habitsViewModel,
-                    onOpenCalendar: _openHabitsMap,
-                  ),
-                ),
-              ],
+                  for (final panel in panels)
+                    Expanded(key: panel.key, child: panel),
+                ],
+              ),
             );
             body = SplitView(
               minSizes: [300, 300, 300],
@@ -155,52 +145,45 @@ class _PulseScreenState extends State<PulseScreen> {
               children: [hierarchyPanel, centerColumn, spheresPanel],
             );
           } else {
-            body = ListView(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              children: [
-                _StatsPanel(
-                  viewModel: widget.viewModel,
-                  expand: false,
-                  onOpenTask: widget.onOpenTask,
-                  onCompleteTask: widget.onCompleteTask,
-                ),
-                const SizedBox(height: 12),
-                TodaysHabitsPanel(
-                  viewModel: widget.habitsViewModel,
-                  onOpenCalendar: _openHabitsMap,
-                  expand: false,
-                ),
-                const SizedBox(height: 12),
-                HierarchyPanel(viewModel: widget.viewModel, expand: false),
-                const SizedBox(height: 12),
-                _SpheresPanel(
-                  viewModel: widget.viewModel,
-                  expand: false,
-                  onCreate: () => _showCreateSphereDialog(context),
-                  onOpenSphere: (sphere) => _openGraph(context, sphere),
-                ),
-              ],
+            body = PluginPanelSlot(
+              registry: widget.registry,
+              slot: PulsePanelSlots.center,
+              layout: (context, panels) => ListView(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                children: [
+                  _StatsPanel(
+                    viewModel: widget.viewModel,
+                    expand: false,
+                    onOpenTask: widget.onOpenTask,
+                    onCompleteTask: widget.onCompleteTask,
+                  ),
+                  for (final panel in panels) ...[
+                    const SizedBox(height: 12),
+                    panel,
+                  ],
+                  const SizedBox(height: 12),
+                  HierarchyPanel(viewModel: widget.viewModel, expand: false),
+                  const SizedBox(height: 12),
+                  _SpheresPanel(
+                    viewModel: widget.viewModel,
+                    expand: false,
+                    onCreate: () => _showCreateSphereDialog(context),
+                    onOpenSphere: (sphere) => _openGraph(context, sphere),
+                  ),
+                ],
+              ),
             );
           }
-          final List<double> snapPoints = [
-            60,
-            190,
-            MediaQuery.sizeOf(context).height * 0.85,
-          ];
           return Stack(
             children: [
               body,
-              if (_isHabitsMapVisible)
-                CollapsibleSheet(
-                  snapPoints: snapPoints,
-
-                  initialHeight: MediaQuery.sizeOf(context).height * 0.85,
-                  header: HabitsMapHeader(onClose: _closeHabitsMap),
-                  bodyBuilder: (progress, snapIndex) => HabitsCalendarPanel(
-                    viewModel: widget.habitsViewModel,
-                    progress: progress,
-                  ),
+              Positioned.fill(
+                child: PluginPanelSlot(
+                  registry: widget.registry,
+                  slot: PulsePanelSlots.overlay,
+                  layout: (context, panels) => Stack(children: panels),
                 ),
+              ),
             ],
           );
         },

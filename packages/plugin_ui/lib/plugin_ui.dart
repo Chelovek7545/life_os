@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:plugin_runtime/plugin_runtime.dart';
+part 'src/surfaces.dart';
 
 enum PluginActionLocation { appBar, navigationRail }
 
@@ -36,6 +37,9 @@ class PluginNotice {
 class PluginUiRegistry extends ChangeNotifier {
   final Map<String, List<PluginActionContribution>> _actions = {};
   final Map<String, List<PluginSettingsContribution>> _settings = {};
+  final Map<String, List<PluginScreenContribution>> _screens = {};
+  final Map<String, List<PluginPanelContribution>> _panels = {};
+  final Map<String, Object> _owners = {};
   final _notices = StreamController<PluginNotice>.broadcast();
   bool _disposed = false;
   Stream<PluginNotice> get notices => _notices.stream;
@@ -48,32 +52,74 @@ class PluginUiRegistry extends ChangeNotifier {
             .where((action) => action.locations.contains(location)),
       );
 
+  List<PluginScreenContribution> get screens => _ordered(
+    _screens.values.expand((items) => items),
+    (screen) => screen.order,
+  );
+  List<PluginPanelContribution> panelsFor(String slot) => _ordered(
+    _panels.values
+        .expand((items) => items)
+        .where((panel) => panel.slot == slot),
+    (panel) => panel.order,
+  );
+  List<T> _ordered<T>(Iterable<T> values, int Function(T) order) {
+    final indexed = values.toList().asMap().entries.toList()
+      ..sort((a, b) {
+        final result = order(a.value).compareTo(order(b.value));
+        return result != 0 ? result : a.key.compareTo(b.key);
+      });
+    return List.unmodifiable(indexed.map((entry) => entry.value));
+  }
+
+  LocalKey? contributionKey(String id) {
+    for (final owner in _owners.keys) {
+      if ((_screens[owner] ?? const []).any((item) => item.id == id) ||
+          (_panels[owner] ?? const []).any((item) => item.id == id)) {
+        return ValueKey((_owners[owner], id));
+      }
+    }
+    return null;
+  }
+
   void register(
     String owner, {
     List<PluginActionContribution> actions = const [],
     List<PluginSettingsContribution> settings = const [],
+    List<PluginScreenContribution> screens = const [],
+    List<PluginPanelContribution> panels = const [],
   }) {
     if (_disposed) throw StateError('UI registry is disposed.');
-    if (_actions.containsKey(owner))
+    if (_owners.containsKey(owner)) {
       throw ArgumentError('Plugin UI is already registered: $owner');
+    }
     final ids = <String>{
       ..._actions.values.expand((items) => items).map((item) => item.id),
       ..._settings.values.expand((items) => items).map((item) => item.id),
+      ..._screens.values.expand((items) => items).map((item) => item.id),
+      ..._panels.values.expand((items) => items).map((item) => item.id),
     };
     for (final id in [
       ...actions.map((item) => item.id),
       ...settings.map((item) => item.id),
+      ...screens.map((item) => item.id),
+      ...panels.map((item) => item.id),
     ]) {
       if (!ids.add(id)) throw ArgumentError('Duplicate UI contribution: $id');
     }
     _actions[owner] = List.unmodifiable(actions);
     _settings[owner] = List.unmodifiable(settings);
+    _screens[owner] = List.unmodifiable(screens);
+    _panels[owner] = List.unmodifiable(panels);
+    _owners[owner] = Object();
     notifyListeners();
   }
 
   void unregister(String owner) {
-    final existed = _actions.remove(owner) != null;
+    final existed = _owners.remove(owner) != null;
+    _actions.remove(owner);
     _settings.remove(owner);
+    _screens.remove(owner);
+    _panels.remove(owner);
     if (existed && !_disposed) notifyListeners();
   }
 
@@ -84,6 +130,12 @@ class PluginUiRegistry extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _owners.clear();
+    _actions.clear();
+    _settings.clear();
+    _screens.clear();
+    _panels.clear();
+    notifyListeners();
     unawaited(_notices.close());
     super.dispose();
   }
@@ -95,12 +147,19 @@ class UiPluginRegistration implements AppPlugin {
     required this.registry,
     List<PluginActionContribution> actions = const [],
     List<PluginSettingsContribution> settings = const [],
+    List<PluginScreenContribution> screens = const [],
+    List<PluginPanelContribution> panels = const [],
   }) : actions = List.unmodifiable(actions),
-       settings = List.unmodifiable(settings);
+       settings = List.unmodifiable(settings),
+       screens = List.unmodifiable(screens),
+       panels = List.unmodifiable(panels);
   final AppPlugin plugin;
   final PluginUiRegistry registry;
   final List<PluginActionContribution> actions;
   final List<PluginSettingsContribution> settings;
+  final List<PluginScreenContribution> screens;
+  final List<PluginPanelContribution> panels;
+  bool _registered = false;
   @override
   String get id => plugin.id;
   @override
@@ -108,15 +167,23 @@ class UiPluginRegistration implements AppPlugin {
   @override
   Future<void> start() async {
     await plugin.start();
-    registry.register(id, actions: actions, settings: settings);
+    registry.register(
+      id,
+      actions: actions,
+      settings: settings,
+      screens: screens,
+      panels: panels,
+    );
+    _registered = true;
   }
 
   @override
   Future<void> stop() async {
     try {
-      await plugin.stop();
+      if (_registered) registry.unregister(id);
     } finally {
-      registry.unregister(id);
+      _registered = false;
+      await plugin.stop();
     }
   }
 }

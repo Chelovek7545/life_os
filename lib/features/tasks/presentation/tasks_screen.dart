@@ -16,8 +16,7 @@ import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
-import 'package:life_os/core/utils/wrapped.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:life_os/features/settings/settings_screen.dart';
 import 'package:life_os/features/tasks/domain/task_filter_config.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
@@ -363,17 +362,14 @@ class TasksScreenState extends State<TasksScreen> {
                           const Spacer(),
                           IconButton(
                             icon: const Icon(Icons.close),
-                            onPressed: () => setState(
-                              () => _showHierarchyOverlay = false,
-                            ),
+                            onPressed: () =>
+                                setState(() => _showHierarchyOverlay = false),
                           ),
                         ],
                       ),
                     ),
                     const Divider(height: 1),
-                    Flexible(
-                      child: _buildHierarchyContent(),
-                    ),
+                    Flexible(child: _buildHierarchyContent()),
                   ],
                 ),
               ),
@@ -405,7 +401,6 @@ class TasksScreenState extends State<TasksScreen> {
       },
     );
   }
-
 
   Widget _buildDraggableHierarchyNode(HierarchyNode node, Widget child) {
     final task = node.data;
@@ -460,10 +455,7 @@ class TasksScreenState extends State<TasksScreen> {
                       SizedBox(width: 4),
                       Text(
                         'Drop on calendar',
-                        style: TextStyle(
-                          color: Colors.white54,
-                          fontSize: 11,
-                        ),
+                        style: TextStyle(color: Colors.white54, fontSize: 11),
                       ),
                     ],
                   ),
@@ -984,10 +976,9 @@ class TasksScreenState extends State<TasksScreen> {
           forceExpanded: forceExpanded,
           onFormVisibilityChanged: (value) =>
               widget.onFormVisibilityChanged?.call(value),
-          onCancel: (){
+          onCancel: () {
             widget.viewModel.hideForm();
-            if(forceExpanded) widget.viewModel.disableForm();
-
+            if (forceExpanded) widget.viewModel.disableForm();
           },
           height: forceExpanded
               ? constraints.maxHeight
@@ -998,11 +989,11 @@ class TasksScreenState extends State<TasksScreen> {
           onDelete: (taskId) {
             widget.viewModel.deleteTask(taskId);
             widget.viewModel.hideForm();
-            if(forceExpanded) widget.viewModel.disableForm();
+            if (forceExpanded) widget.viewModel.disableForm();
           },
-          onSubmit: (task){
+          onSubmit: (task) {
             _submitTask(task);
-            if(forceExpanded) widget.viewModel.disableForm();
+            if (forceExpanded) widget.viewModel.disableForm();
           },
         );
       },
@@ -1383,12 +1374,12 @@ class _TasksHeader extends StatelessWidget {
               icon: const Icon(Icons.inbox_rounded, color: Colors.white),
             ),
           ),
-          if(MediaQuery.sizeOf(context).width > 410)
-          IconButton(
-            tooltip: 'Hierarchy',
-            onPressed: onToggleHierarchy,
-            icon: const Icon(Icons.account_tree_rounded, color: Colors.white),
-          ),
+          if (MediaQuery.sizeOf(context).width > 410)
+            IconButton(
+              tooltip: 'Hierarchy',
+              onPressed: onToggleHierarchy,
+              icon: const Icon(Icons.account_tree_rounded, color: Colors.white),
+            ),
           Spacer(),
           SizedBox(
             width: 150,

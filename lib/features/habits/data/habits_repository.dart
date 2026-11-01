@@ -1,23 +1,27 @@
+import 'package:habits_api/habits_api.dart';
 import 'package:life_os/features/habits/data/habit_model_extension.dart';
 import 'package:life_os/features/habits/data/habits_dao.dart';
-import 'package:life_os/features/habits/domain/habit_entry_model.dart';
-import 'package:life_os/features/habits/domain/habit_model.dart';
 import 'package:life_os/core/storage/storage_exception.dart';
 
-class HabitsRepository {
+class HabitsRepository implements HabitsApi {
   HabitsRepository(this._dao);
 
   final HabitsDao _dao;
 
+  @override
   Stream<List<Habit>> watchActiveHabits() => _dao.watchActiveHabits();
 
+  @override
   Stream<List<HabitEntry>> watchAllEntries() => _dao.watchAllEntries();
 
+  @override
   Future<List<Habit>> getAllHabits() => _dao.getAllHabits();
 
+  @override
   Future<Habit?> getHabitById(String id) async =>
       (await _dao.getHabitById(id))?.toDomain();
 
+  @override
   Future<void> addHabit(Habit habit) async {
     try {
       await _dao.createHabit(habit.toDrift());
@@ -26,6 +30,7 @@ class HabitsRepository {
     }
   }
 
+  @override
   Future<void> updateHabit(Habit habit) async {
     try {
       await _dao.updateHabit(habit);
@@ -34,6 +39,7 @@ class HabitsRepository {
     }
   }
 
+  @override
   Future<void> archiveHabit(String id) async {
     try {
       await _dao.archiveHabit(id);
@@ -42,6 +48,7 @@ class HabitsRepository {
     }
   }
 
+  @override
   Future<void> deleteHabit(String id) async {
     try {
       await _dao.deleteHabit(id);
@@ -50,6 +57,7 @@ class HabitsRepository {
     }
   }
 
+  @override
   Future<void> setEntryStatus(
     String habitId,
     String dateKey,

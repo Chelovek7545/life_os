@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:habits_api/habits_api.dart';
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
@@ -5,10 +7,7 @@ import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/utils/date_format.dart';
-import 'package:life_os/features/habits/domain/habit_model.dart';
-import 'package:life_os/features/habits/domain/habit_schedule.dart';
-import 'package:life_os/features/habits/domain/habit_type.dart';
-import 'package:life_os/features/habits/domain/habit_visuals.dart';
+import 'package:life_os/features/habits/presentation/habit_visuals.dart';
 
 class HabitEditForm extends StatefulWidget {
   const HabitEditForm({
@@ -19,8 +18,8 @@ class HabitEditForm extends StatefulWidget {
   });
 
   final Habit? initial;
-  final ValueChanged<Habit> onSave;
-  final VoidCallback? onDelete;
+  final FutureOr<void> Function(Habit) onSave;
+  final FutureOr<void> Function()? onDelete;
 
   @override
   State<HabitEditForm> createState() => _HabitEditFormState();
@@ -35,6 +34,9 @@ class _HabitEditFormState extends State<HabitEditForm> {
   late String _color;
   TimeOfDay? _reminderTime;
 
+  bool _busy = false;
+  String? _error;
+
   bool get _isEditing => widget.initial != null;
 
   @override
@@ -47,7 +49,7 @@ class _HabitEditFormState extends State<HabitEditForm> {
     _durationWeeks = initial?.schedule.durationWeeks;
     _icon = initial?.icon ?? 'task_alt';
     _color = initial?.colorHex ?? kHabitColors.first;
-    _reminderTime = initial?.reminderTime;
+    _reminderTime = initial?.reminderTime?.toTimeOfDay();
   }
 
   @override
@@ -59,10 +61,11 @@ class _HabitEditFormState extends State<HabitEditForm> {
   Future<void> _pickTime() async {
     final picked = await showTimePicker(
       context: context,
-      initialTime: _type.time ?? const TimeOfDay(hour: 9, minute: 0),
+      initialTime:
+          _type.time?.toTimeOfDay() ?? const TimeOfDay(hour: 9, minute: 0),
     );
-    if (picked != null) {
-      setState(() => _type = TimeHabit(time: picked));
+    if (picked != null && mounted) {
+      setState(() => _type = TimeHabit(time: habitTimeFromTimeOfDay(picked)));
     }
   }
 
@@ -76,7 +79,8 @@ class _HabitEditFormState extends State<HabitEditForm> {
     }
   }
 
-  void _save() {
+  Future<void> _save() async {
+    if (_busy) return;
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
 
@@ -85,18 +89,40 @@ class _HabitEditFormState extends State<HabitEditForm> {
       durationWeeks: _durationWeeks,
     );
 
-    widget.onSave(
-      (widget.initial ?? Habit.create(title: title, type: _type))
-          .copyWith(
-            title: title,
-            type: _type,
-            schedule: schedule,
-            icon: _icon,
-            colorHex: _color,
-            reminderTime: _reminderTime,
-            clearReminderTime: _reminderTime == null,
-          ),
+    await _run(
+      () => widget.onSave(
+        (widget.initial ?? Habit.create(title: title, type: _type)).copyWith(
+          title: title,
+          type: _type,
+          schedule: schedule,
+          icon: _icon,
+          colorHex: _color,
+          reminderTime: _reminderTime == null
+              ? null
+              : habitTimeFromTimeOfDay(_reminderTime!),
+          clearReminderTime: _reminderTime == null,
+        ),
+      ),
     );
+  }
+
+  Future<void> _run(FutureOr<void> Function() action) async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await action();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'Не удалось сохранить изменения. Попробуйте ещё раз.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -120,12 +146,17 @@ class _HabitEditFormState extends State<HabitEditForm> {
                 if (_isEditing && widget.onDelete != null)
                   IconButton(
                     tooltip: 'Delete',
-                    onPressed: widget.onDelete,
-                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    onPressed: _busy ? null : () => _run(widget.onDelete!),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.redAccent,
+                    ),
                   ),
                 IconButton(
                   tooltip: 'Close',
-                  onPressed: () => Navigator.of(context).maybePop(),
+                  onPressed: _busy
+                      ? null
+                      : () => Navigator.of(context).maybePop(),
                   icon: const Icon(Icons.close),
                 ),
               ],
@@ -133,6 +164,7 @@ class _HabitEditFormState extends State<HabitEditForm> {
             const SizedBox(height: AppSpacing.sm),
             TextField(
               controller: _titleController,
+              enabled: !_busy,
               style: AppTypography.bodyMd,
               decoration: const InputDecoration(
                 hintText: 'Drink water, read 20 pages…',
@@ -156,8 +188,8 @@ class _HabitEditFormState extends State<HabitEditForm> {
                     HabitTypeKind.lunch => const LunchHabit(),
                     HabitTypeKind.evening => const EveningHabit(),
                     HabitTypeKind.time => const TimeHabit(
-                        time: TimeOfDay(hour: 9, minute: 0),
-                      ),
+                      time: HabitTime(hour: 9, minute: 0),
+                    ),
                     HabitTypeKind.morning => const MorningHabit(),
                   };
                 });
@@ -272,7 +304,9 @@ class _HabitEditFormState extends State<HabitEditForm> {
                     child: Icon(
                       entry.value,
                       size: 20,
-                      color: selected ? Colors.white : AppColors.onSurfaceVariant,
+                      color: selected
+                          ? Colors.white
+                          : AppColors.onSurfaceVariant,
                     ),
                   ),
                 );
@@ -304,11 +338,15 @@ class _HabitEditFormState extends State<HabitEditForm> {
                 );
               }).toList(),
             ),
+            if (_error != null) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+            ],
             const SizedBox(height: AppSpacing.xl),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _save,
+                onPressed: _busy ? null : _save,
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
                   shape: RoundedRectangleBorder(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/theme/app_colors.dart';
@@ -5,10 +6,10 @@ import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/ui/date_pick_button.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart';
 
 class EditProjectCard extends StatefulWidget {
-  final Function(
+  final FutureOr<void> Function(
     String name,
     String description,
     String color,
@@ -35,6 +36,32 @@ class EditProjectCardState extends State<EditProjectCard> {
   late final TextEditingController _descController;
   String _selectedColor = '#4A90D9';
   DateTime? _dueDate;
+  bool _saving = false;
+  String? _error;
+
+  Future<void> _save() async {
+    if (_saving || !_formKey.currentState!.validate()) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onSave(
+        _nameController.text,
+        _descController.text,
+        _selectedColor,
+        _dueDate,
+      );
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'Не удалось сохранить проект. Повторите попытку.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   // A quick palette of preset hex colors for your Life OS style
   final List<String> _colorPalette = [
@@ -83,175 +110,175 @@ class EditProjectCardState extends State<EditProjectCard> {
     return Material(
       type: MaterialType.transparency,
       child: Container(
-      margin: const EdgeInsets.only(bottom: 16),
+        margin: const EdgeInsets.only(bottom: 16),
 
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(color: AppColors.borderGlass),
-      ),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+          border: Border.all(color: AppColors.borderGlass),
+        ),
 
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                (widget.project == null
-                        ? 'CONFIGURE NEW PROJECT'
-                        : 'EDIT PROJECT')
-                    .toUpperCase(),
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primaryContainer,
-                  letterSpacing: 1.4,
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _nameController,
-                decoration: InputDecoration(
-                  labelText: 'OBJECT TITLE',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  isDense: true,
-                  filled: true,
-                  fillColor: Theme.of(
-                    context,
-                  ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.04),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 14,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  (widget.project == null
+                          ? 'CONFIGURE NEW PROJECT'
+                          : 'EDIT PROJECT')
+                      .toUpperCase(),
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryContainer,
+                    letterSpacing: 1.4,
                   ),
                 ),
-                style: theme.textTheme.bodyMedium,
-                validator: (val) =>
-                    val == null || val.isEmpty ? 'Введите название' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _descController,
-                decoration: InputDecoration(
-                  labelText: 'DESCRIPTION MODULE',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _nameController,
+                  decoration: InputDecoration(
+                    labelText: 'OBJECT TITLE',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    isDense: true,
+                    filled: true,
+                    fillColor: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withValues(alpha: 0.04),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 14,
+                    ),
                   ),
-                  isDense: true,
-                  filled: true,
-                  fillColor: Theme.of(
-                    context,
-                  ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.02),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 12,
-                  ),
+                  style: theme.textTheme.bodyMedium,
+                  validator: (val) =>
+                      val == null || val.isEmpty ? 'Введите название' : null,
                 ),
-                maxLines: 3,
-                style: theme.textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 16),
-              // Horizontal Color Selection List
-              SizedBox(
-                height: 50,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _colorPalette.length,
-                  itemBuilder: (context, index) {
-                    final hexColor = _colorPalette[index];
-                    final isSelected = _selectedColor == hexColor;
-                    final color = parseHexColor(hexColor);
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _descController,
+                  decoration: InputDecoration(
+                    labelText: 'DESCRIPTION MODULE',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    isDense: true,
+                    filled: true,
+                    fillColor: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withValues(alpha: 0.02),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                  ),
+                  maxLines: 3,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 16),
+                // Horizontal Color Selection List
+                SizedBox(
+                  height: 50,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _colorPalette.length,
+                    itemBuilder: (context, index) {
+                      final hexColor = _colorPalette[index];
+                      final isSelected = _selectedColor == hexColor;
+                      final color = parseHexColor(hexColor);
 
-                    return GestureDetector(
-                      onTap: () => setState(() => _selectedColor = hexColor),
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 6.0),
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                          border: isSelected
-                              ? Border.all(color: Colors.black, width: 3.0)
+                      return GestureDetector(
+                        onTap: () => setState(() => _selectedColor = hexColor),
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 6.0),
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            border: isSelected
+                                ? Border.all(color: Colors.black, width: 3.0)
+                                : null,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.1),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: isSelected
+                              ? const Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                  size: 20,
+                                )
                               : null,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.1),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
                         ),
-                        child: isSelected
-                            ? const Icon(
-                                Icons.check,
-                                color: Colors.white,
-                                size: 20,
-                              )
-                            : null,
-                      ),
-                    );
-                  },
-                ),
-              ),
-              SizedBox(height: AppSpacing.lg),
-
-              SizedBox(
-                width: 200,
-                child: datePickButton(
-                  context,
-                  label: _dueDate == null ? "Due date" : formatDate(_dueDate!),
-                  onDateChange: (DateTime? d) => setState(() {
-                    _dueDate = d;
-                  }),
-                ),
-              ),
-              SizedBox(height: AppSpacing.lg),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: widget.onCancel,
-                    child: Text(
-                      'CANCEL',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  ElevatedButton(
-                    style: AppButtonStyles.saveButton,
-                    onPressed: () {
-                      if (_formKey.currentState!.validate()) {
-                        widget.onSave(
-                          _nameController.text,
-                          _descController.text,
-                          _selectedColor,
-                          _dueDate,
-                        );
-                      }
+                      );
                     },
-                    child: Text(
-                      widget.project == null
-                          ? 'INITIALIZE PROJECT'
-                          : 'SAVE CHANGES',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+                  ),
+                ),
+                SizedBox(height: AppSpacing.lg),
+
+                SizedBox(
+                  width: 200,
+                  child: datePickButton(
+                    context,
+                    label: _dueDate == null
+                        ? "Due date"
+                        : formatDate(_dueDate!),
+                    onDateChange: (DateTime? d) => setState(() {
+                      _dueDate = d;
+                    }),
+                  ),
+                ),
+                SizedBox(height: AppSpacing.lg),
+
+                if (_error != null)
+                  Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: _saving ? null : widget.onCancel,
+                      child: Text(
+                        'CANCEL',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: AppSpacing.md),
+                    ElevatedButton(
+                      style: AppButtonStyles.saveButton,
+                      onPressed: _saving ? null : _save,
+                      child: Text(
+                        widget.project == null
+                            ? 'INITIALIZE PROJECT'
+                            : 'SAVE CHANGES',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

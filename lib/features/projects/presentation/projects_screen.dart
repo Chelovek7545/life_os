@@ -3,12 +3,10 @@ import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/smart_task_input.dart';
-import 'package:life_os/core/utils/wrapped.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:life_os/features/projects/presentation/widgets/project_card.dart';
 import 'package:life_os/features/projects/presentation/widgets/project_editing_card.dart';
-import 'package:life_os/features/projects/presentation/projects_state.dart';
-import 'package:life_os/features/projects/presentation/projects_view_model.dart';
+import 'package:projects_plugin/projects_logic.dart';
 
 class ProjectsScreen extends StatefulWidget {
   const ProjectsScreen({super.key, required this.viewModel});
@@ -31,6 +29,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   }
 
   void _closeProjectForm() {
+    if (!mounted) return;
     setState(() {
       _isCreating = false;
       _editingProject = null;
@@ -90,169 +89,182 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     final theme = Theme.of(context);
 
     return Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'Projects',
-              style: theme.textTheme.displaySmall?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onSurface,
-              ),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            'Projects',
+            style: theme.textTheme.displaySmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: theme.colorScheme.onSurface,
             ),
+          ),
 
-            const SizedBox(height: AppMargins.sm),
+          const SizedBox(height: AppMargins.sm),
 
-            Expanded(
-              child: StreamBuilder<ProjectsScreenState>(
-                stream: widget.viewModel.state,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (!snapshot.hasData) return const SizedBox.shrink();
+          Expanded(
+            child: StreamBuilder<ProjectsScreenState>(
+              stream: widget.viewModel.state,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData) return const SizedBox.shrink();
 
-                  return snapshot.data!.when(
-                    loading: () =>
-                        const Center(child: CircularProgressIndicator()),
-                    error: (e) => Center(child: Text(e)),
-                    loaded: (projects, _, _) {
-                      final itemCount =
-                          (projects.isEmpty && _isCreating == false)
-                          ? 2
-                          : projects.length + 1;
-                      
-                      return Column(
-                        children: [
-                          SmartTaskInput(),
-                          Container(
-                            height: 500,
-                            child: SingleChildScrollView(
-                              child: StreamBuilder(
-                                stream: widget.viewModel.watchAllTasks(),
-                                builder: (context, asyncSnapshot) {
-                                  final tasks = asyncSnapshot.data;
-                                  if (tasks == null || tasks is! Iterable || tasks.isEmpty) {
-                                    return const SizedBox.shrink();
-                                  }
-                              
-                                  return DataTable(
-                                    columns: const [
-                                      DataColumn(label: Text('Task')),
-                                      DataColumn(label: Text('Project')),
-                                      DataColumn(label: Text('Status')),
+                return snapshot.data!.when(
+                  loading: () =>
+                      const Center(child: CircularProgressIndicator()),
+                  error: (e) => Center(child: Text(e)),
+                  loaded: (projects, _, _) {
+                    final itemCount = (projects.isEmpty && _isCreating == false)
+                        ? 2
+                        : projects.length + 1;
 
-                                    ],
-                                    rows: tasks.map<DataRow>((task) {
-                                      final dynamic value = task;
-                                      final title = value.title ?? value.name ?? value.toString();
-                                      final isCompleted = value.isCompleted ?? value.completed ?? false;
-                                  
-                                      return DataRow(
-                                        cells: [
-                                          DataCell(Text(title.toString())),
-                                          DataCell(Text(task.projectId.toString())),
-
-                                          DataCell(
-                                            Text(isCompleted == true ? 'Completed' : 'Pending'),
-                                          ),
-                                        ],
-                                      );
-                                    }).toList(),
-                                  );
+                    return Column(
+                      children: [
+                        SmartTaskInput(),
+                        Container(
+                          height: 500,
+                          child: SingleChildScrollView(
+                            child: StreamBuilder(
+                              stream: widget.viewModel.watchAllTasks(),
+                              builder: (context, asyncSnapshot) {
+                                final tasks = asyncSnapshot.data;
+                                if (tasks == null ||
+                                    tasks is! Iterable ||
+                                    tasks.isEmpty) {
+                                  return const SizedBox.shrink();
                                 }
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: ListView.separated(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              itemCount: itemCount,
-                              separatorBuilder: (_, _) => const SizedBox(height: 10),
-                              itemBuilder: (context, index) {
-                                if (index == 0) {
-                                  return AnimatedSwitcher(
-                                    duration: const Duration(milliseconds: 400),
-                                    reverseDuration: const Duration(
-                                      milliseconds: 300,
-                                    ),
-                                    switchInCurve: Curves.easeOutCubic,
-                                    switchOutCurve: Curves.easeInCubic,
-                                    transitionBuilder: (child, animation) {
-                                      return FadeTransition(
-                                        opacity: animation,
-                                        child: SizeTransition(
-                                          sizeFactor: animation,
-                                          //axisAlignment: -1.0,
-                                          child: child,
+
+                                return DataTable(
+                                  columns: const [
+                                    DataColumn(label: Text('Task')),
+                                    DataColumn(label: Text('Project')),
+                                    DataColumn(label: Text('Status')),
+                                  ],
+                                  rows: tasks.map<DataRow>((task) {
+                                    final dynamic value = task;
+                                    final title =
+                                        value.title ??
+                                        value.name ??
+                                        value.toString();
+                                    final isCompleted =
+                                        value.isCompleted ??
+                                        value.completed ??
+                                        false;
+
+                                    return DataRow(
+                                      cells: [
+                                        DataCell(Text(title.toString())),
+                                        DataCell(
+                                          Text(task.projectId.toString()),
                                         ),
-                                      );
-                                    },
-                                    child: _isCreating
-                                        ? SizedBox(
-                                            key: const ValueKey('project_form'),
-                                            width: double.infinity,
-                                            child: _buildCreateProjectForm(),
-                                          )
-                                        : SizedBox(
-                                            key: const ValueKey('project_button'),
-                                            width: double.infinity,
-                                            child: Align(
-                                              alignment: Alignment.center,
-                                              child: ElevatedButton(
-                                                onPressed: () {
-                                                  _startEditingProject();
-                                                },
-                                                style: AppButtonStyles.saveButton
-                                                    .copyWith(
-                                                      padding:
-                                                          const WidgetStatePropertyAll(
-                                                            EdgeInsets.all(
-                                                              AppSpacing.xl,
-                                                            ),
-                                                          ),
-                                                    ),
-                                                child: const Text(
-                                                  'New project',
-                                                  style: TextStyle(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
+
+                                        DataCell(
+                                          Text(
+                                            isCompleted == true
+                                                ? 'Completed'
+                                                : 'Pending',
                                           ),
-                                  );
-                                }
-                                if (projects.isEmpty && index == 1) {
-                                  return _buildEmptyState();
-                                }
-                                final projectIndex = index - 1;
-                                final project = projects[projectIndex];
-                            
-                                return ProjectCard(
-                                  title: project.name,
-                                  description: project.description,
-                                  color: parseHexColor(project.color),
-                                  dueDate: project.dueDate,
-                                  project: project,
-                                  viewModel: widget.viewModel,
-                                  onEditRequested: () =>
-                                      _startEditingProject(project: project),
+                                        ),
+                                      ],
+                                    );
+                                  }).toList(),
                                 );
                               },
                             ),
                           ),
-                        ],
-                      );
-                    },
-                  );
-                },
-              ),
+                        ),
+                        Expanded(
+                          child: ListView.separated(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            itemCount: itemCount,
+                            separatorBuilder: (_, _) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, index) {
+                              if (index == 0) {
+                                return AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 400),
+                                  reverseDuration: const Duration(
+                                    milliseconds: 300,
+                                  ),
+                                  switchInCurve: Curves.easeOutCubic,
+                                  switchOutCurve: Curves.easeInCubic,
+                                  transitionBuilder: (child, animation) {
+                                    return FadeTransition(
+                                      opacity: animation,
+                                      child: SizeTransition(
+                                        sizeFactor: animation,
+                                        //axisAlignment: -1.0,
+                                        child: child,
+                                      ),
+                                    );
+                                  },
+                                  child: _isCreating
+                                      ? SizedBox(
+                                          key: const ValueKey('project_form'),
+                                          width: double.infinity,
+                                          child: _buildCreateProjectForm(),
+                                        )
+                                      : SizedBox(
+                                          key: const ValueKey('project_button'),
+                                          width: double.infinity,
+                                          child: Align(
+                                            alignment: Alignment.center,
+                                            child: ElevatedButton(
+                                              onPressed: () {
+                                                _startEditingProject();
+                                              },
+                                              style: AppButtonStyles.saveButton
+                                                  .copyWith(
+                                                    padding:
+                                                        const WidgetStatePropertyAll(
+                                                          EdgeInsets.all(
+                                                            AppSpacing.xl,
+                                                          ),
+                                                        ),
+                                                  ),
+                                              child: const Text(
+                                                'New project',
+                                                style: TextStyle(
+                                                  fontSize: 16,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                );
+                              }
+                              if (projects.isEmpty && index == 1) {
+                                return _buildEmptyState();
+                              }
+                              final projectIndex = index - 1;
+                              final project = projects[projectIndex];
+
+                              return ProjectCard(
+                                title: project.name,
+                                description: project.description,
+                                color: parseHexColor(project.color),
+                                dueDate: project.dueDate,
+                                project: project,
+                                viewModel: widget.viewModel,
+                                onEditRequested: () =>
+                                    _startEditingProject(project: project),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
             ),
-          ],
-        ),
-      );
+          ),
+        ],
+      ),
+    );
   }
 }

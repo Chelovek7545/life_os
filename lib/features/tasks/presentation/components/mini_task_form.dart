@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/utils/color_format.dart';
-import 'package:life_os/core/utils/wrapped.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 /// Компактная форма быстрого создания задачи: название + проект.

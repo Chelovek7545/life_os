@@ -4,6 +4,50 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('pure packages and Telegram cannot depend on app internals', () {
     const forbidden = {
+      'core_contracts': [
+        'dart:io',
+        'dart:ui',
+        'package:flutter/',
+        'package:life_os/',
+        'package:drift/',
+        'package:tasks_api/',
+        'package:projects_api/',
+      ],
+      'habits_api': [
+        'dart:io',
+        'dart:ui',
+        'package:flutter/',
+        'package:life_os/',
+        'package:drift/',
+        'package:habits_plugin/',
+        'package:tasks_api/',
+        'package:plugin_ui/',
+      ],
+      'habits_plugin': [
+        'dart:io',
+        'package:life_os/',
+        'package:drift/',
+        'package:projects_plugin/',
+        'package:obsidian_plugin/',
+        'package:telegram_plugin/',
+      ],
+      'projects_api': [
+        'dart:io',
+        'dart:ui',
+        'package:flutter/',
+        'package:life_os/',
+        'package:drift/',
+        'package:tasks_api/',
+        'package:projects_plugin/',
+        'package:graph_api/',
+      ],
+      'projects_plugin': [
+        'dart:io',
+        'package:life_os/',
+        'package:drift/',
+        'package:obsidian_plugin/',
+        'package:telegram_plugin/',
+      ],
       'spheres_api': [
         'dart:ui',
         'package:flutter/',
@@ -49,6 +93,8 @@ void main() {
         'package:plugin_ui/',
       ],
       'plugin_ui': [
+        'package:habits_api/',
+        'package:habits_plugin/',
         'package:life_os/',
         'package:tasks_api/',
         'package:notes_api/',
@@ -207,6 +253,91 @@ void main() {
         if (!file.path.endsWith('.dart')) continue;
         expect(
           file.readAsStringSync().contains('core/di.dart'),
+          isFalse,
+          reason: file.path,
+        );
+      }
+    },
+  );
+  test('shell screens and Pulse panels are supplied by modules', () {
+    final shell = File('lib/main_screen.dart').readAsStringSync();
+    for (final forbidden in [
+      'package:life_os/features/',
+      'PulseScreen(',
+      'TasksScreen(',
+      'ProjectsScreen(',
+      'ResourcesScreen(',
+      'openTaskInEditor',
+      'itemCount = 4',
+      'static const items',
+    ]) {
+      expect(shell.contains(forbidden), isFalse, reason: forbidden);
+    }
+    expect(shell.contains('PluginScreenDeck'), isTrue);
+    final pulse = File(
+      'lib/features/lifegraph/presentation/pulse_screen.dart',
+    ).readAsStringSync();
+    for (final forbidden in [
+      'features/habits/',
+      'HabitsViewModel',
+      'TodaysHabitsPanel(',
+      'HabitsCalendarPanel(',
+    ]) {
+      expect(pulse.contains(forbidden), isFalse, reason: forbidden);
+    }
+    expect(pulse.contains('PluginPanelSlot'), isTrue);
+  });
+  test('habits lifecycle and logic are owned by the plugin package', () {
+    final root = File('lib/app/dependency_container.dart').readAsStringSync();
+    expect(root.contains('HabitsViewModel(habitsRepository)'), isFalse);
+    expect(root.contains('habitsViewModel.initialize()'), isFalse);
+    expect(root.contains('habitsViewModel.dispose'), isFalse);
+    expect(root.contains('...habitsPlugin.plugins'), isTrue);
+    for (final file in [
+      'packages/habits_plugin/lib/habits_logic.dart',
+      'packages/habits_plugin/lib/src/habits_state.dart',
+      'packages/habits_plugin/lib/src/habits_view_model.dart',
+    ]) {
+      final source = File(file).readAsStringSync();
+      expect(source.contains('package:flutter/'), isFalse, reason: file);
+      expect(source.contains('/data/'), isFalse, reason: file);
+    }
+    final adapter = File(
+      'lib/features/habits/data/habits_repository.dart',
+    ).readAsStringSync();
+    expect(adapter.contains('implements HabitsApi'), isTrue);
+    final uiComposition = File(
+      'lib/app/plugins/application_ui_modules.dart',
+    ).readAsStringSync();
+    expect(uiComposition.contains('HabitsViewModel'), isFalse);
+  });
+  test(
+    'project consumers use the public API and the plugin owns its model lifetime',
+    () {
+      for (final file in [
+        'lib/features/tasks/presentation/tasks_view_model.dart',
+        'lib/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart',
+        'lib/features/lifegraph/presentation/pulse_screen_view_model.dart',
+        'lib/core/ui/hierarchy/build_hierarchy_tree.dart',
+      ]) {
+        final source = File(file).readAsStringSync();
+        expect(
+          source.contains('features/projects/domain/'),
+          isFalse,
+          reason: file,
+        );
+        expect(source.contains('package:projects_api/'), isTrue, reason: file);
+      }
+      final root = File('lib/app/dependency_container.dart').readAsStringSync();
+      expect(root.contains('projectViewModel.initialize()'), isFalse);
+      expect(root.contains('projectViewModel.dispose'), isFalse);
+      expect(root.contains('...projectsPlugin.plugins'), isTrue);
+      for (final file in Directory(
+        'packages/projects_plugin/lib/src',
+      ).listSync().whereType<File>()) {
+        if (file.path.endsWith('projects_plugin.dart')) continue;
+        expect(
+          file.readAsStringSync().contains('package:flutter/'),
           isFalse,
           reason: file.path,
         );

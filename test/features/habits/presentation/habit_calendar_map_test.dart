@@ -15,7 +15,7 @@ void main() {
       id: 'h-1',
       title: 'Read',
       type: const MorningHabit(),
-      schedule: const HabitSchedule(daysOfWeek: kAllWeekdays),
+      schedule: HabitSchedule(daysOfWeek: kAllWeekdays),
       colorHex: '#4FC3F7',
       createdAt: DateTime(now.year, now.month, 1),
       updatedAt: DateTime.now(),

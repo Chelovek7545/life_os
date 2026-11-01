@@ -13,7 +13,7 @@ import 'package:life_os/core/ui/fixed_fade_mask.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/date_format.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 import 'mini_task_form.dart';

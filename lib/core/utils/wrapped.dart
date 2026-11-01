@@ -1,1 +1,1 @@
-export 'package:tasks_api/tasks_api.dart' show Wrapped;
+export 'package:core_contracts/core_contracts.dart' show Wrapped;

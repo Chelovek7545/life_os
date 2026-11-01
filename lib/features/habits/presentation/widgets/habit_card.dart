@@ -1,11 +1,11 @@
+import 'package:habits_plugin/habits_logic.dart';
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/utils/date_format.dart';
-import 'package:life_os/features/habits/domain/habit_visuals.dart';
-import 'package:life_os/features/habits/presentation/habits_state.dart';
+import 'package:life_os/features/habits/presentation/habit_visuals.dart';
 
 class HabitCard extends StatelessWidget {
   const HabitCard({
@@ -30,8 +30,7 @@ class HabitCard extends StatelessWidget {
     String daysLabel;
     if (days.length == 7) {
       daysLabel = 'Every day';
-    } else if (days.length == 5 &&
-        days.containsAll({1, 2, 3, 4, 5})) {
+    } else if (days.length == 5 && days.containsAll({1, 2, 3, 4, 5})) {
       daysLabel = 'Weekdays';
     } else if (days.length == 2 && days.containsAll({6, 7})) {
       daysLabel = 'Weekends';
@@ -62,7 +61,10 @@ class HabitCard extends StatelessWidget {
     final accent = habitColorFor(habit.colorHex);
 
     return GlassPanel(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
+      ),
       borderRadius: AppRadius.xl,
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.xl),
@@ -78,11 +80,7 @@ class HabitCard extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppRadius.lg),
                 border: Border.all(color: accent.withValues(alpha: 0.4)),
               ),
-              child: Icon(
-                habitIconFor(habit.icon),
-                color: accent,
-                size: 22,
-              ),
+              child: Icon(habitIconFor(habit.icon), color: accent, size: 22),
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(

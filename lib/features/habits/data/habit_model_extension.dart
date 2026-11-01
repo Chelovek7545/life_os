@@ -1,9 +1,6 @@
+import 'package:habits_api/habits_api.dart';
 import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
-import 'package:life_os/features/habits/domain/habit_entry_model.dart';
-import 'package:life_os/features/habits/domain/habit_model.dart';
-import 'package:life_os/features/habits/domain/habit_schedule.dart';
-import 'package:life_os/features/habits/domain/habit_type.dart';
 
 extension HabitDataToDomain on HabitModel {
   Habit toDomain() {

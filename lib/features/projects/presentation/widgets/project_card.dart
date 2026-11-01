@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/utils/date_format.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
-import 'package:life_os/features/projects/presentation/projects_view_model.dart';
+import 'package:projects_api/projects_api.dart';
+import 'package:projects_plugin/projects_logic.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 class ProjectCard extends StatefulWidget {

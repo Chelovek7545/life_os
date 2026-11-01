@@ -1,6 +1,12 @@
 import 'package:graph_api/graph_api.dart';
 import 'package:graph_ui/graph_ui.dart';
 import 'plugins/life_graph_modules.dart';
+import 'plugins/application_ui_modules.dart';
+import 'plugins/projects_plugin_adapter.dart';
+import 'plugins/habits_plugin_adapter.dart';
+import 'package:habits_plugin/habits_plugin.dart';
+import 'package:projects_plugin/projects_plugin.dart';
+import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/spheres/domain/spheres_graph_contributor.dart';
 import 'package:obsidian_plugin/obsidian_plugin.dart';
 import 'package:plugin_ui/plugin_ui.dart';
@@ -21,14 +27,12 @@ import 'package:life_os/features/resources/presentation/resources_view_model.dar
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
-import 'package:life_os/features/projects/presentation/projects_view_model.dart';
 import 'package:life_os/features/spheres/data/spheres_dao.dart';
 import 'package:life_os/features/spheres/data/spheres_repository.dart';
 import 'package:life_os/features/goals/data/goals_dao.dart';
 import 'package:life_os/features/goals/data/goals_repository.dart';
 import 'package:life_os/features/habits/data/habits_dao.dart';
 import 'package:life_os/features/habits/data/habits_repository.dart';
-import 'package:life_os/features/habits/presentation/habits_view_model.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:life_os/features/tasks/data/work_logs_dao.dart';
@@ -49,6 +53,7 @@ class DependencyContainer {
     ),
     Iterable<AppPlugin> additionalPlugins = const [],
     Iterable<GraphModule> graphModules = const [],
+    Iterable<UiModuleSpec> uiModules = const [],
   }) : database = database ?? AppDatabase() {
     tasksDAO = TasksDao(this.database);
     projectsDao = ProjectsDao(this.database);
@@ -64,6 +69,7 @@ class DependencyContainer {
     workLogsRepository = WorkLogsRepository(workLogsDao);
     obsidianRepository = enableObsidian ? ObsidianVault() : null;
     ui = PluginUiRegistry();
+    navigation = PluginNavigationController(ui);
     graphPositionsRepository = GraphPositionsRepository();
     graphNotesRepository = GraphNotesRepository();
     graphContributors = GraphContributorRegistry();
@@ -96,11 +102,7 @@ class DependencyContainer {
       taskWithPrjct,
       projectsRepository,
     );
-    projectViewModel = ProjectsViewModel(
-      repository: projectsRepository,
-      taskRepo: tasksRepository,
-    );
-    habitsViewModel = HabitsViewModel(habitsRepository);
+    habitsPlugin = createHabitsPlugin(habits: habitsRepository, ui: ui);
     resourcesViewModel = ResourcesViewModel(
       notes: graphNotesRepository,
       vault: obsidianRepository,
@@ -113,12 +115,25 @@ class DependencyContainer {
             workLogsRepository: workLogsRepository,
           )
         : null;
+    projectsPlugin = createProjectsPlugin(
+      projects: projectsRepository,
+      tasks: tasksRepository,
+      contributors: graphContributors,
+      presentations: graphPresentations,
+      editors: graphEditors,
+      commands: graphCommands,
+      ui: ui,
+      delete: (request) => DriftGraphDeletion(this.database).delete(
+        GraphNodeType.project,
+        request.node.id,
+        keepChildren: request.keepChildren,
+      ),
+    );
     plugins = PluginHost([
       for (final module in [
         ...lifeGraphModules(
           spheres: spheresRepository,
           goals: goalsRepository,
-          projects: projectsRepository,
           tasks: tasksRepository,
           deletion: DriftGraphDeletion(this.database),
         ),
@@ -134,6 +149,16 @@ class DependencyContainer {
       if (obsidianRepository != null)
         registerObsidianUi(obsidianRepository!, AppVaultSettings(), ui),
       if (localBotService != null) registerTelegramUi(localBotService!, ui),
+      ...applicationUiModules(
+        registry: ui,
+        pulse: pulseScreenViewModel,
+        tasks: tasksViewModel,
+        resources: resourcesViewModel,
+        workLogs: workLogsRepository,
+      ),
+      ...projectsPlugin.plugins,
+      ...habitsPlugin.plugins,
+      for (final module in uiModules) registerUiModule(module, ui),
       ...additionalPlugins,
     ]);
   }
@@ -142,6 +167,7 @@ class DependencyContainer {
   final bool enableTelegram;
   final bool enableObsidian;
   late final PluginUiRegistry ui;
+  late final PluginNavigationController navigation;
   late final PluginHost plugins;
   late final TasksDao tasksDAO;
   late final ProjectsDao projectsDao;
@@ -165,9 +191,11 @@ class DependencyContainer {
   late final GraphCommandRegistry graphCommands;
   late final PulseScreenViewModel pulseScreenViewModel;
   late final TasksViewModel tasksViewModel;
-  late final ProjectsViewModel projectViewModel;
+  late final ProjectsPlugin projectsPlugin;
+  ProjectsViewModel get projectViewModel => projectsPlugin.viewModel;
   late final GetTasksWithProjectsUseCase taskWithPrjct;
-  late final HabitsViewModel habitsViewModel;
+  late final HabitsPlugin habitsPlugin;
+  HabitsViewModel get habitsViewModel => habitsPlugin.viewModel;
   late final ResourcesViewModel resourcesViewModel;
   late final LocalBotService? localBotService;
   Future<void>? _initialization;
@@ -185,8 +213,6 @@ class DependencyContainer {
     await plugins.start();
     await pulseScreenViewModel.initialize();
     tasksViewModel.initialize();
-    projectViewModel.initialize();
-    habitsViewModel.initialize();
   }
 
   Future<void> dispose() => _disposal ??= _dispose();
@@ -208,8 +234,6 @@ class DependencyContainer {
     await close('graphs', pulseScreenViewModel.closeGraphs);
     await close('plugins', plugins.stop);
     await close('tasks', tasksViewModel.dispose);
-    await close('projects', projectViewModel.dispose);
-    await close('habits', habitsViewModel.dispose);
     await close('pulse', pulseScreenViewModel.dispose);
     await close('resources', () async {
       resourcesViewModel.dispose();
@@ -221,6 +245,7 @@ class DependencyContainer {
     await close('graphNotes', graphNotesRepository.dispose);
     if (obsidianRepository != null)
       await close('obsidian', obsidianRepository!.dispose);
+    await close('navigation', navigation.dispose);
     await close('pluginUi', ui.dispose);
     await close('database', database.close);
     if (failures.isNotEmpty) throw PluginLifecycleException(failures);

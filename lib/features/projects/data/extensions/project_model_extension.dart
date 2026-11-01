@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart';
 
 /// Extension для преобразования Drift модели в domain модель
 extension ProjectDataToDomain on ProjectModel {

@@ -4,7 +4,7 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/ui/collapsible_sheet.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 import 'task_form_content.dart';

@@ -10,8 +10,7 @@ import 'package:life_os/core/ui/date_and_time_pick_button.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
-import 'package:life_os/core/utils/wrapped.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:life_os/features/tasks/presentation/components/work_logs_section.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
@@ -507,11 +506,12 @@ class TaskFormContentState extends State<TaskFormContent> {
                                     if (projectsAsync != null)
                                       ...projectsAsync.map((project) {
                                         return DropdownMenuEntry<String?>(
-                                          style: AppButtonStyles.menuButtonStyle(
-                                            bgColor: parseHexColor(
-                                              project.color,
-                                            ),
-                                          ),
+                                          style:
+                                              AppButtonStyles.menuButtonStyle(
+                                                bgColor: parseHexColor(
+                                                  project.color,
+                                                ),
+                                              ),
                                           value: project.id,
                                           label: project.name,
                                           labelWidget: Row(
@@ -612,7 +612,10 @@ class TaskFormContentState extends State<TaskFormContent> {
                 if (widget.task.id.isNotEmpty && widget.isEditMode) ...[
                   const SizedBox(height: 16),
                   if (widget.workLogs != null)
-                    WorkLogsSection(taskId: widget.task.id, repository: widget.workLogs!),
+                    WorkLogsSection(
+                      taskId: widget.task.id,
+                      repository: widget.workLogs!,
+                    ),
                 ],
                 if (isEditMode)
                   ElevatedButton(

@@ -3,6 +3,21 @@ import 'package:graph_api/graph_api.dart';
 import 'package:graph_ui/graph_ui.dart';
 import '../../domain/graph_node.dart';
 import 'node_edit_dialog.dart';
+import 'graph_node_card.dart';
+import 'graph_node_sizes.dart';
+
+GraphNodePresentation builtinGraphPresentation(GraphNodeType type) =>
+    GraphNodePresentation(
+      kind: type.name,
+      size: graphNodeSizeOf(type),
+      builder: (_, node, interaction) => GraphNodeCard(
+        state: interaction,
+        node: GraphNode.fromData(node),
+        onTap: interaction.edit,
+        onAddChild: interaction.addChild,
+        onDelete: interaction.remove,
+      ),
+    );
 
 GraphNodeEditor builtinGraphEditor(GraphNodeType type) => GraphNodeEditor(
   kind: type.name,

@@ -34,7 +34,7 @@ void main() {
       id: 'h2',
       title: 'Second',
       type: const LunchHabit(),
-      schedule: const HabitSchedule(daysOfWeek: [1, 2, 3, 4, 5, 6, 7]),
+      schedule: HabitSchedule(daysOfWeek: [1, 2, 3, 4, 5, 6, 7]),
       createdAt: DateTime(2026, 1, 1),
       updatedAt: DateTime(2026, 1, 1),
     );
@@ -111,10 +111,7 @@ void main() {
     });
 
     test('today not yet completed keeps the running streak', () {
-      final entries = [
-        completed('2026-08-08'),
-        completed('2026-08-09'),
-      ];
+      final entries = [completed('2026-08-08'), completed('2026-08-09')];
       final result = calculator.calculate(
         habit: habit(),
         entries: entries,

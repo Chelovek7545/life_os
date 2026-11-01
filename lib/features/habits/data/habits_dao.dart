@@ -1,8 +1,7 @@
+import 'package:habits_api/habits_api.dart';
 import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/habits/data/habit_model_extension.dart';
-import 'package:life_os/features/habits/domain/habit_entry_model.dart';
-import 'package:life_os/features/habits/domain/habit_model.dart';
 import 'package:uuid/uuid.dart';
 
 part 'habits_dao.g.dart';
@@ -20,7 +19,9 @@ class HabitsDao extends DatabaseAccessor<AppDatabase> with _$HabitsDaoMixin {
   // =============== HABITS: READ ===============
 
   Future<List<Habit>> getAllHabits() async {
-    final rows = await (select(habits)..where((h) => h.isArchived.equals(false))).get();
+    final rows = await (select(
+      habits,
+    )..where((h) => h.isArchived.equals(false))).get();
     return rows.map((row) => row.toDomain()).toList();
   }
 
@@ -34,9 +35,9 @@ class HabitsDao extends DatabaseAccessor<AppDatabase> with _$HabitsDaoMixin {
   }
 
   Stream<List<Habit>> watchAllHabits() {
-    return select(habits).watch().map(
-      (rows) => rows.map((row) => row.toDomain()).toList(),
-    );
+    return select(
+      habits,
+    ).watch().map((rows) => rows.map((row) => row.toDomain()).toList());
   }
 
   Future<HabitModel?> getHabitById(String id) async {
@@ -69,16 +70,18 @@ class HabitsDao extends DatabaseAccessor<AppDatabase> with _$HabitsDaoMixin {
   // =============== ENTRIES ===============
 
   Future<HabitEntry?> getEntry(String habitId, String dateKey) async {
-    final row = await (select(habitEntries)
-          ..where((e) => e.habitId.equals(habitId) & e.dateKey.equals(dateKey)))
-        .getSingleOrNull();
+    final row =
+        await (select(habitEntries)..where(
+              (e) => e.habitId.equals(habitId) & e.dateKey.equals(dateKey),
+            ))
+            .getSingleOrNull();
     return row?.toDomain();
   }
 
   Stream<List<HabitEntry>> watchAllEntries() {
-    return select(habitEntries).watch().map(
-      (rows) => rows.map((row) => row.toDomain()).toList(),
-    );
+    return select(
+      habitEntries,
+    ).watch().map((rows) => rows.map((row) => row.toDomain()).toList());
   }
 
   /// Идемпотентно ставит статус записи на день (habitId + dateKey).
@@ -102,7 +105,9 @@ class HabitsDao extends DatabaseAccessor<AppDatabase> with _$HabitsDaoMixin {
         ),
       );
     } else {
-      await (update(habitEntries)..where((e) => e.id.equals(existing.id))).write(
+      await (update(
+        habitEntries,
+      )..where((e) => e.id.equals(existing.id))).write(
         HabitEntriesCompanion(
           status: Value(status),
           completedAt: status == HabitEntryStatus.completed

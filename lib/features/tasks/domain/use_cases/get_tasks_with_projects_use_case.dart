@@ -1,5 +1,4 @@
-import 'package:life_os/features/projects/domain/projects_api.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:tasks_api/tasks_api.dart';
 import 'package:rxdart/rxdart.dart';
 
@@ -12,10 +11,12 @@ class TaskWithProject {
 class GetTasksWithProjectsUseCase {
   GetTasksWithProjectsUseCase(this._tasks, this._projects);
   final TaskQueries _tasks;
-  final ProjectsApi _projects;
+  final ProjectsQueries _projects;
 
   Stream<List<TaskWithProject>> call() => Rx.combineLatest2(
-    _tasks.watchTasks(), _projects.watchAllProjects(), _join,
+    _tasks.watchTasks(),
+    _projects.watchAllProjects(),
+    _join,
   );
 
   Future<List<TaskWithProject>> getTasksWithProjects() async =>
@@ -23,6 +24,10 @@ class GetTasksWithProjectsUseCase {
 
   List<TaskWithProject> _join(List<Task> tasks, List<Project> projects) {
     final byId = {for (final project in projects) project.id: project};
-    return tasks.map((task) => TaskWithProject(task: task, project: byId[task.projectId])).toList();
+    return tasks
+        .map(
+          (task) => TaskWithProject(task: task, project: byId[task.projectId]),
+        )
+        .toList();
   }
 }

@@ -1,0 +1,16 @@
+name: projects_plugin
+publish_to: none
+version: 0.1.0
+environment:
+  sdk: ^3.12.0
+resolution: workspace
+dependencies:
+  flutter:
+    sdk: flutter
+  projects_api: ^0.1.0
+  tasks_api: ^0.1.0
+  graph_api: ^0.1.0
+  graph_ui: ^0.1.0
+  plugin_runtime: ^0.1.0
+  plugin_ui: ^0.1.0
+  rxdart: ^0.28.0

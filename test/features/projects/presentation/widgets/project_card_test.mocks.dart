@@ -5,12 +5,10 @@
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 import 'dart:async' as _i3;
 
-import 'package:life_os/features/projects/domain/project_model.dart' as _i5;
-import 'package:life_os/features/projects/presentation/projects_state.dart'
-    as _i4;
-import 'package:life_os/features/projects/presentation/projects_view_model.dart'
-    as _i2;
 import 'package:mockito/mockito.dart' as _i1;
+import 'package:projects_api/projects_api.dart' as _i5;
+import 'package:projects_plugin/src/projects_state.dart' as _i4;
+import 'package:projects_plugin/src/projects_view_model.dart' as _i2;
 import 'package:tasks_api/tasks_api.dart' as _i6;
 
 // ignore_for_file: type=lint
@@ -45,43 +43,18 @@ class MockProjectsViewModel extends _i1.Mock implements _i2.ProjectsViewModel {
           as _i3.Stream<_i4.ProjectsScreenState>);
 
   @override
-  _i3.Future<_i5.Project?> getProject(String? id) =>
-      (super.noSuchMethod(
-            Invocation.method(#getProject, [id]),
-            returnValue: _i3.Future<_i5.Project?>.value(),
-          )
-          as _i3.Future<_i5.Project?>);
-
-  @override
   void initialize() => super.noSuchMethod(
     Invocation.method(#initialize, []),
     returnValueForMissingStub: null,
   );
 
   @override
-  _i3.Stream<List<_i6.Task>> watchTaskByProject(String? projectId) =>
+  _i3.Future<_i5.Project?> getProject(String? id) =>
       (super.noSuchMethod(
-            Invocation.method(#watchTaskByProject, [projectId]),
-            returnValue: _i3.Stream<List<_i6.Task>>.empty(),
+            Invocation.method(#getProject, [id]),
+            returnValue: _i3.Future<_i5.Project?>.value(),
           )
-          as _i3.Stream<List<_i6.Task>>);
-
-  @override
-  _i3.Stream<List<_i6.Task>> watchAllTasks() =>
-      (super.noSuchMethod(
-            Invocation.method(#watchAllTasks, []),
-            returnValue: _i3.Stream<List<_i6.Task>>.empty(),
-          )
-          as _i3.Stream<List<_i6.Task>>);
-
-  @override
-  _i3.Future<void> updateTask(_i6.Task? task) =>
-      (super.noSuchMethod(
-            Invocation.method(#updateTask, [task]),
-            returnValue: _i3.Future<void>.value(),
-            returnValueForMissingStub: _i3.Future<void>.value(),
-          )
-          as _i3.Future<void>);
+          as _i3.Future<_i5.Project?>);
 
   @override
   _i3.Future<void> addProjects(_i5.Project? project) =>
@@ -109,6 +82,31 @@ class MockProjectsViewModel extends _i1.Mock implements _i2.ProjectsViewModel {
             returnValueForMissingStub: _i3.Future<void>.value(),
           )
           as _i3.Future<void>);
+
+  @override
+  _i3.Future<void> updateTask(_i6.Task? task) =>
+      (super.noSuchMethod(
+            Invocation.method(#updateTask, [task]),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
+  _i3.Stream<List<_i6.Task>> watchTaskByProject(String? projectId) =>
+      (super.noSuchMethod(
+            Invocation.method(#watchTaskByProject, [projectId]),
+            returnValue: _i3.Stream<List<_i6.Task>>.empty(),
+          )
+          as _i3.Stream<List<_i6.Task>>);
+
+  @override
+  _i3.Stream<List<_i6.Task>> watchAllTasks() =>
+      (super.noSuchMethod(
+            Invocation.method(#watchAllTasks, []),
+            returnValue: _i3.Stream<List<_i6.Task>>.empty(),
+          )
+          as _i3.Stream<List<_i6.Task>>);
 
   @override
   _i3.Future<void> dispose() =>

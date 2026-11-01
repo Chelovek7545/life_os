@@ -1,7 +1,6 @@
+import 'package:habits_api/habits_api.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
-import 'package:life_os/features/habits/domain/habit_entry_model.dart';
-import 'package:life_os/features/habits/domain/habit_type.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;

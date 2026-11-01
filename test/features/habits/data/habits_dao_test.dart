@@ -25,7 +25,7 @@ void main() {
     final habit = Habit.create(
       title: 'Read 20 pages',
       type: const EveningHabit(),
-      schedule: const HabitSchedule(daysOfWeek: [1, 3, 5], durationWeeks: 2),
+      schedule: HabitSchedule(daysOfWeek: [1, 3, 5], durationWeeks: 2),
       icon: 'menu_book',
       colorHex: '#4FC3F7',
     );
@@ -44,19 +44,24 @@ void main() {
   });
 
   test('set entry status creates then updates idempotently', () async {
-    final habit = Habit.create(
-      title: 'Water',
-      type: const MorningHabit(),
-    );
+    final habit = Habit.create(title: 'Water', type: const MorningHabit());
     await dao.createHabit(habit.toDrift());
 
-    await dao.setEntryStatus(habit.id, '2026-08-10', HabitEntryStatus.completed);
+    await dao.setEntryStatus(
+      habit.id,
+      '2026-08-10',
+      HabitEntryStatus.completed,
+    );
     var entries = await dao.watchAllEntries().first;
     expect(entries, hasLength(1));
     expect(entries.first.status, HabitEntryStatus.completed);
 
     // повторная установка не должна плодить дубли
-    await dao.setEntryStatus(habit.id, '2026-08-10', HabitEntryStatus.completed);
+    await dao.setEntryStatus(
+      habit.id,
+      '2026-08-10',
+      HabitEntryStatus.completed,
+    );
     entries = await dao.watchAllEntries().first;
     expect(entries, hasLength(1));
 
@@ -67,12 +72,13 @@ void main() {
   });
 
   test('deleting a habit cascades its entries', () async {
-    final habit = Habit.create(
-      title: 'Water',
-      type: const MorningHabit(),
-    );
+    final habit = Habit.create(title: 'Water', type: const MorningHabit());
     await dao.createHabit(habit.toDrift());
-    await dao.setEntryStatus(habit.id, '2026-08-10', HabitEntryStatus.completed);
+    await dao.setEntryStatus(
+      habit.id,
+      '2026-08-10',
+      HabitEntryStatus.completed,
+    );
 
     await dao.deleteHabit(habit.id);
 

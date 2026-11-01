@@ -1,4 +1,1 @@
-class Wrapped<T> {
-  final T value;
-  const Wrapped(this.value);
-}
+export 'package:core_contracts/core_contracts.dart' show Wrapped;

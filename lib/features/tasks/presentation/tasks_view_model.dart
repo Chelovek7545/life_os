@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:life_os/core/utils/datetime_utils.dart';
-import 'package:life_os/features/projects/domain/projects_api.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:tasks_api/tasks_api.dart' show TasksApi;
 import 'package:life_os/features/tasks/domain/task_filter_config.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
@@ -54,7 +53,7 @@ class TasksUiFlags {
 class TasksViewModel {
   final TasksApi _repository;
   final GetTasksWithProjectsUseCase _taskWithProjectUseCase;
-  final ProjectsApi _projectsRepository;
+  final ProjectsQueries _projectsRepository;
 
   TasksViewModel(
     this._repository,

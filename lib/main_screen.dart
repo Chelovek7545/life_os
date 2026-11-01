@@ -1,65 +1,25 @@
-import 'package:plugin_ui/plugin_ui.dart';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:life_os/animated_indexed_stack.dart';
+import 'package:plugin_ui/plugin_ui.dart';
 import 'package:life_os/app/dependency_container.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/app_notifiacations.dart';
-import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
-import 'package:life_os/features/projects/presentation/projects_screen.dart';
-import 'package:life_os/features/resources/presentation/resources_screen.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
-import 'package:life_os/features/tasks/presentation/tasks_screen.dart';
 
 class MainScreen extends StatefulWidget {
-  final DependencyContainer diContainer;
   const MainScreen({super.key, required this.diContainer});
-
+  final DependencyContainer diContainer;
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _selectedIndex = 0;
-  bool _resizeToAvoidBottomInset = true;
   StreamSubscription<PluginNotice>? _notices;
-
-  // 1. Фиксируем список страниц в памяти ОДИН раз!
-  late final List<Widget> _pages;
-
   @override
   void initState() {
     super.initState();
-    // Инициализируем экраны единоразово при загрузке виджета
-    _pages = [
-      PulseScreen(
-        viewModel: widget.diContainer.pulseScreenViewModel,
-        habitsViewModel: widget.diContainer.habitsViewModel,
-        portraitAppBarAction: PluginActions(
-          registry: widget.diContainer.ui,
-          location: PluginActionLocation.appBar,
-          compact: true,
-        ),
-        onOpenTask: _openTaskFromPulse,
-        onCompleteTask: (task) =>
-            widget.diContainer.tasksViewModel.toggleTask(task),
-      ),
-      TasksScreen(
-        workLogs: widget.diContainer.workLogsRepository,
-        viewModel: widget.diContainer.tasksViewModel,
-        onFormVisibilityChanged: (visible) {
-          if (_resizeToAvoidBottomInset != visible) {
-            setState(() {
-              _resizeToAvoidBottomInset = visible;
-            });
-          }
-        },
-      ),
-      ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
-      ResourcesScreen(viewModel: widget.diContainer.resourcesViewModel),
-    ];
     _notices = widget.diContainer.ui.notices.listen((notice) {
       if (!mounted) return;
       AppNotification.show(
@@ -84,385 +44,195 @@ class _MainScreenState extends State<MainScreen> {
     super.dispose();
   }
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-  }
-
-  void _openTaskFromPulse(Task task) {
-    _onItemTapped(1);
-    widget.diContainer.tasksViewModel.openTaskInEditor(task);
-  }
-
   @override
-  Widget build(BuildContext context) {
-    final isLandscape =
-        MediaQuery.orientationOf(context) == Orientation.landscape;
-
-    final mainArea = AnimatedIndexedStack(
-      index: _selectedIndex,
-      duration: const Duration(milliseconds: 250),
-      children: _pages,
-    );
-
-    return SafeArea(
-      child: Scaffold(
-        appBar: isLandscape || _selectedIndex == 0
-            ? null
-            : AppBar(
-                toolbarHeight: 56,
-                backgroundColor: AppColors.surfaceDim,
-                title: Text(
-                  _LandscapeNavRail.items[_selectedIndex].$2,
-                  style: AppTypography.codeLabel,
-                ),
-                actions: [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: PluginActions(
-                      registry: widget.diContainer.ui,
-                      location: PluginActionLocation.appBar,
-                      compact: true,
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.diContainer.navigation,
+    builder: (context, _) {
+      final registry = widget.diContainer.ui;
+      final navigation = widget.diContainer.navigation;
+      final destinations = registry.screens;
+      final selected = navigation.selected;
+      final index = destinations.indexWhere(
+        (screen) => screen.id == navigation.selectedId,
+      );
+      final landscape =
+          MediaQuery.orientationOf(context) == Orientation.landscape;
+      void select(int index) => navigation.open(destinations[index].id);
+      return SafeArea(
+        child: Scaffold(
+          appBar: landscape || selected == null || selected.ownsAppBar
+              ? null
+              : AppBar(
+                  toolbarHeight: 56,
+                  backgroundColor: AppColors.surfaceDim,
+                  title: Text(selected.label, style: AppTypography.codeLabel),
+                  actions: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: PluginActions(
+                        registry: registry,
+                        location: PluginActionLocation.appBar,
+                        compact: true,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-        bottomNavigationBar: isLandscape
-            ? null
-            : SlidingNavBar(
-                selectedIndex: _selectedIndex,
-                onTap: _onItemTapped,
-              ),
-        backgroundColor: AppColors.surfaceDim,
-        resizeToAvoidBottomInset: _resizeToAvoidBottomInset,
-
-        // 2. Единая структура дерева виджетов!
-        // body ВСЕГДА начинается с Row. В портретном режиме NavRail просто исчезает,
-        // а Expanded(child: mainArea) остается на своем месте в дереве.
-        body: Row(
-          children: [
-            if (isLandscape)
-              _LandscapeNavRail(
-                selectedIndex: _selectedIndex,
-                onTap: _onItemTapped,
-                pluginActions: PluginActions(
-                  registry: widget.diContainer.ui,
-                  location: PluginActionLocation.navigationRail,
+                  ],
                 ),
-              ),
-            Expanded(child: mainArea),
-          ],
+          bottomNavigationBar: landscape || destinations.isEmpty
+              ? null
+              : SlidingNavBar(
+                  destinations: destinations,
+                  selectedIndex: index,
+                  onTap: select,
+                ),
+          backgroundColor: AppColors.surfaceDim,
+          resizeToAvoidBottomInset: navigation.resizeToAvoidBottomInset,
+          body: Row(
+            children: [
+              if (landscape && destinations.isNotEmpty)
+                _LandscapeNavRail(
+                  destinations: destinations,
+                  selectedIndex: index,
+                  onTap: select,
+                  pluginActions: PluginActions(
+                    registry: registry,
+                    location: PluginActionLocation.navigationRail,
+                  ),
+                ),
+              Expanded(child: PluginScreenDeck(navigation: navigation)),
+            ],
+          ),
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
 }
 
 class _LandscapeNavRail extends StatelessWidget {
-  final int selectedIndex;
-  final ValueChanged<int> onTap;
-  final Widget pluginActions;
-
   const _LandscapeNavRail({
+    required this.destinations,
     required this.selectedIndex,
     required this.onTap,
     required this.pluginActions,
   });
-
-  static const itemCount = 4;
-
-  static const items = [
-    (Icons.bolt_rounded, 'PULSE'),
-    (Icons.format_list_bulleted_rounded, 'TASKS'),
-    (Icons.hub_outlined, 'PROJECTS'),
-    (Icons.menu_book_rounded, 'LIBRARY'),
-  ];
-
-  static const itemHeight = 74.5;
-  static const double navBarWidth = 80.0;
-
+  final List<PluginScreenContribution> destinations;
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
+  final Widget pluginActions;
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: navBarWidth,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceDim,
-        // borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppColors.borderGlass),
-      ),
-      child: Stack(
-        alignment: AlignmentGeometry.center,
-        children: [
-          Align(alignment: Alignment.bottomCenter, child: pluginActions),
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            top: itemHeight * selectedIndex,
-            left: 0,
-            right: 0,
-            child: Container(
-              margin: EdgeInsets.symmetric(vertical: itemHeight * 0.05),
-              height: 70,
-              decoration: BoxDecoration(
-                border: Border.all(color: AppColors.borderGlass),
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(AppRadius.full),
+  Widget build(BuildContext context) => Container(
+    width: 80,
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.surfaceDim,
+      border: Border.all(color: AppColors.borderGlass),
+    ),
+    child: Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            itemCount: destinations.length,
+            itemBuilder: (context, index) => InkWell(
+              key: ValueKey('navigation-rail:${destinations[index].id}'),
+              borderRadius: BorderRadius.circular(AppRadius.full),
+              onTap: () => onTap(index),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                height: 74.5,
+                decoration: BoxDecoration(
+                  color: selectedIndex == index
+                      ? AppColors.surface
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                  border: Border.all(
+                    color: selectedIndex == index
+                        ? AppColors.borderGlass
+                        : Colors.transparent,
+                  ),
+                ),
+                child: _DestinationLabel(
+                  destination: destinations[index],
+                  selected: selectedIndex == index,
+                ),
               ),
             ),
           ),
-
-          Column(
-            children: List.generate(itemCount, (index) {
-              bool selected = selectedIndex == index;
-              return Padding(
-                padding: EdgeInsetsGeometry.symmetric(vertical: 16),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => onTap(index),
-                  child: AnimatedScale(
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOutBack,
-                    scale: selected ? 1.05 : 1.0,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          decoration: BoxDecoration(
-                            boxShadow: [
-                              if (selected)
-                                BoxShadow(
-                                  color: const Color.fromARGB(
-                                    255,
-                                    255,
-                                    68,
-                                    0,
-                                  ).withValues(alpha: 0.6),
-                                  blurRadius: 15,
-                                  spreadRadius: -4,
-                                ),
-                            ],
-                          ),
-                          child: Icon(
-                            items[index].$1,
-                            color: selected
-                                ? AppColors.primaryContainer
-                                : AppColors.onBackground,
-
-                            size: 26,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          items[index].$2,
-                          style: AppTypography.codeLabel.copyWith(
-                            color: selected
-                                ? AppColors.primaryContainer
-                                : AppColors.onBackground,
-                            shadows: [
-                              if (selected)
-                                Shadow(
-                                  color: const Color.fromARGB(
-                                    255,
-                                    255,
-                                    68,
-                                    0,
-                                  ).withValues(alpha: 0.8),
-                                  blurRadius: 20,
-                                ),
-                            ],
-                            fontSize: 10,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        AnimatedOpacity(
-                          opacity: selected ? 1 : 0,
-                          duration: const Duration(milliseconds: 200),
-                          child: Container(
-                            height: 2.5,
-                            width: 20,
-                            decoration: BoxDecoration(
-                              color: AppColors.primaryContainer,
-                              borderRadius: BorderRadius.circular(12),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color.fromARGB(
-                                    255,
-                                    255,
-                                    68,
-                                    0,
-                                  ).withValues(alpha: 0.6),
-                                  blurRadius: 15,
-                                  spreadRadius: -4,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-        ],
-      ),
-    );
-  }
+        ),
+        pluginActions,
+      ],
+    ),
+  );
 }
 
 class SlidingNavBar extends StatelessWidget {
-  final int selectedIndex;
-  final ValueChanged<int> onTap;
-
   const SlidingNavBar({
     super.key,
+    required this.destinations,
     required this.selectedIndex,
     required this.onTap,
   });
-
-  static const itemCount = 4;
-
-  static const items = [
-    (Icons.bolt_rounded, 'PULSE'),
-    (Icons.format_list_bulleted_rounded, 'TASKS'),
-    (Icons.hub_outlined, 'PROJECTS'),
-    (Icons.menu_book_rounded, 'LIBRARY'),
-    //(Icons.gps_fixed_rounded, 'Goals'),
-  ];
-
+  final List<PluginScreenContribution> destinations;
+  final int selectedIndex;
+  final ValueChanged<int> onTap;
   @override
   Widget build(BuildContext context) {
+    if (destinations.isEmpty) return const SizedBox.shrink();
     return LayoutBuilder(
       builder: (context, constraints) {
-        final itemWidth = (constraints.maxWidth - 24 - 4) / itemCount;
-        final double navBarHeight = constraints.maxHeight * 0.1 > 70.0
-            ? constraints.maxHeight * 0.1
-            : 70.0; // Высота навигационной панели
+        final width = math.max(
+          constraints.maxWidth - 24,
+          destinations.length * 76.0,
+        );
+        final itemWidth = width / destinations.length;
         return Container(
-          height: navBarHeight,
+          height: 74,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surfaceDim,
-            // borderRadius: BorderRadius.circular(28),
             border: Border.all(color: AppColors.borderGlass),
           ),
-          child: Stack(
-            alignment: AlignmentGeometry.center,
-            children: [
-              AnimatedPositioned(
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-                left: itemWidth * selectedIndex,
-                top: 1,
-                bottom: 1,
-                child: Container(
-                  margin: EdgeInsets.symmetric(horizontal: itemWidth * 0.05),
-                  width: itemWidth * 0.9,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.borderGlass),
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(AppRadius.full),
-                  ),
-                ),
-              ),
-
-              Row(
-                children: List.generate(itemCount, (index) {
-                  bool selected = selectedIndex == index;
-                  return Expanded(
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: () => onTap(index),
-                      child: AnimatedScale(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeOutBack,
-                        scale: selected ? 1.05 : 1.0,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                boxShadow: [
-                                  if (selected)
-                                    BoxShadow(
-                                      color: const Color.fromARGB(
-                                        255,
-                                        255,
-                                        68,
-                                        0,
-                                      ).withValues(alpha: 0.6),
-                                      blurRadius: 15,
-                                      spreadRadius: -4,
-                                    ),
-                                ],
-                              ),
-                              child: Icon(
-                                items[index].$1,
-                                color: selected
-                                    ? AppColors.primaryContainer
-                                    : AppColors.onBackground,
-
-                                size: 26,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              items[index].$2,
-                              style: AppTypography.codeLabel.copyWith(
-                                color: selected
-                                    ? AppColors.primaryContainer
-                                    : AppColors.onBackground,
-                                shadows: [
-                                  if (selected)
-                                    Shadow(
-                                      color: const Color.fromARGB(
-                                        255,
-                                        255,
-                                        68,
-                                        0,
-                                      ).withValues(alpha: 0.8),
-                                      blurRadius: 20,
-                                    ),
-                                ],
-                                fontSize: 10,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            AnimatedOpacity(
-                              opacity: selected ? 1 : 0,
-                              duration: const Duration(milliseconds: 200),
-                              child: Container(
-                                height: 2.5,
-                                width: 20,
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryContainer,
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color.fromARGB(
-                                        255,
-                                        255,
-                                        68,
-                                        0,
-                                      ).withValues(alpha: 0.6),
-                                      blurRadius: 15,
-                                      spreadRadius: -4,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: width,
+              child: Stack(
+                children: [
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                    left: itemWidth * selectedIndex + itemWidth * .05,
+                    top: 1,
+                    bottom: 1,
+                    width: itemWidth * .9,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        border: Border.all(color: AppColors.borderGlass),
+                        borderRadius: BorderRadius.circular(AppRadius.full),
                       ),
                     ),
-                  );
-                }),
+                  ),
+                  Row(
+                    children: [
+                      for (var i = 0; i < destinations.length; i++)
+                        SizedBox(
+                          width: itemWidth,
+                          child: InkWell(
+                            key: ValueKey(
+                              'navigation-bar:${destinations[i].id}',
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => onTap(i),
+                            child: _DestinationLabel(
+                              destination: destinations[i],
+                              selected: selectedIndex == i,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       },
@@ -470,71 +240,53 @@ class SlidingNavBar extends StatelessWidget {
   }
 }
 
-class CustomBottomNavBar extends StatelessWidget {
-  final int selectedIndex;
-  final ValueChanged<int> onTap;
-
-  const CustomBottomNavBar({
-    super.key,
-    required this.selectedIndex,
-    required this.onTap,
-  });
-
+class _DestinationLabel extends StatelessWidget {
+  const _DestinationLabel({required this.destination, required this.selected});
+  final PluginScreenContribution destination;
+  final bool selected;
   @override
-  Widget build(BuildContext context) {
-    const items = [
-      (Icons.bolt_rounded, 'Pulse'),
-      (Icons.format_list_bulleted_rounded, 'Tasks'),
-      (Icons.grid_view_rounded, 'Projects'),
-      (Icons.menu_book_rounded, 'Library'),
-      (Icons.gps_fixed_rounded, 'Goals'),
-    ];
-
-    const accent = Color(0xFFE4C4B8);
-    const selectedBg = Color(0xFF3A2821);
-    const navBg = Color(0xFF181818);
-
-    return Container(
-      //margin: const EdgeInsets.all(2),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: navBg,
-        // borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(items.length, (index) {
-          final selected = selectedIndex == index;
-
-          return GestureDetector(
-            onTap: () => onTap(index),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: selected ? selectedBg : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(items[index].$1, color: accent, size: 26),
-                  const SizedBox(height: 6),
-                  Text(
-                    items[index].$2,
-                    style: const TextStyle(
-                      color: accent,
-                      fontSize: 14,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ],
-              ),
+  Widget build(BuildContext context) => AnimatedScale(
+    duration: const Duration(milliseconds: 200),
+    curve: Curves.easeOutBack,
+    scale: selected ? 1.05 : 1,
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          destination.icon,
+          size: 26,
+          color: selected ? AppColors.primaryContainer : AppColors.onBackground,
+          shadows: selected
+              ? [const Shadow(color: Color(0x99FF4400), blurRadius: 15)]
+              : null,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          destination.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTypography.codeLabel.copyWith(
+            fontSize: 10,
+            color: selected
+                ? AppColors.primaryContainer
+                : AppColors.onBackground,
+          ),
+        ),
+        const SizedBox(height: 2),
+        AnimatedOpacity(
+          opacity: selected ? 1 : 0,
+          duration: const Duration(milliseconds: 200),
+          child: Container(
+            height: 2.5,
+            width: 20,
+            decoration: BoxDecoration(
+              color: AppColors.primaryContainer,
+              borderRadius: BorderRadius.circular(12),
             ),
-          );
-        }),
-      ),
-    );
-  }
+          ),
+        ),
+      ],
+    ),
+  );
 }

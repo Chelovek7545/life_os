@@ -1,10 +1,9 @@
+import 'package:habits_api/habits_api.dart';
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
-import 'package:life_os/features/habits/domain/habit_entry_model.dart';
-import 'package:life_os/features/habits/domain/habit_model.dart';
-import 'package:life_os/features/habits/domain/habit_visuals.dart';
+import 'package:life_os/features/habits/presentation/habit_visuals.dart';
 
 const List<String> _monthNames = [
   'Январь',

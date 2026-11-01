@@ -1,7 +1,1 @@
-class StorageException implements Exception {
-  StorageException(this.message, [this.cause]);
-  final String message;
-  final Object? cause;
-  @override
-  String toString() => message;
-}
+export 'package:core_contracts/core_contracts.dart' show StorageException;

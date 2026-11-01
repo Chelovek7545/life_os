@@ -1,9 +1,8 @@
+import 'package:habits_plugin/habits_logic.dart';
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
-import 'package:life_os/features/habits/presentation/habits_state.dart';
-import 'package:life_os/features/habits/presentation/habits_view_model.dart';
 import 'package:life_os/features/habits/presentation/widgets/habit_calendar_map.dart';
 
 /// Содержимое шторки с картой выполненных дней по каждой привычке.
@@ -12,14 +11,17 @@ import 'package:life_os/features/habits/presentation/widgets/habit_calendar_map.
 /// (кружки за каждый день месяца, закрашенные, если привычка выполнена).
 /// Используется внутри [CollapsibleSheet] на экране Pulse.
 class HabitsCalendarPanel extends StatelessWidget {
-  const HabitsCalendarPanel({super.key, required this.viewModel, required this.progress});
+  const HabitsCalendarPanel({
+    super.key,
+    required this.viewModel,
+    required this.progress,
+  });
 
   /// Минимальная высота тела, при которой ещё видны подсказка и табы.
   static const double _minBodyHeight = 80;
 
   final HabitsViewModel viewModel;
   final double progress;
-
 
   @override
   Widget build(BuildContext context) {

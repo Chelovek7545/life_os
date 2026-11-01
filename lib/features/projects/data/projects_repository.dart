@@ -1,6 +1,5 @@
-import '../domain/projects_api.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/projects/data/extensions/project_model_extension.dart';
 import 'package:life_os/core/storage/storage_exception.dart';
 

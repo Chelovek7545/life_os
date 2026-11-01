@@ -8,7 +8,7 @@ void main() {
       const HabitsLoading(),
     );
     expect(await subject.first, isA<HabitsLoading>());
-    subject.add(const HabitsLoaded(habits: []));
+    subject.add(HabitsLoaded(habits: []));
     expect(subject.value, isA<HabitsLoaded>());
     expect(await subject.first, isA<HabitsLoaded>());
     await subject.close();

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:plugin_ui/plugin_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/main_screen.dart';
@@ -16,8 +17,12 @@ void main() {
               onSurface: Colors.white,
             ),
           ),
-          home: const Scaffold(
-            body: SlidingNavBar(selectedIndex: 0, onTap: _noop),
+          home: Scaffold(
+            body: SlidingNavBar(
+              destinations: testDestinations,
+              selectedIndex: 0,
+              onTap: _noop,
+            ),
           ),
         ),
       );
@@ -39,8 +44,12 @@ void main() {
               onSurface: Colors.white,
             ),
           ),
-          home: const Scaffold(
-            body: SlidingNavBar(selectedIndex: 2, onTap: _noop),
+          home: Scaffold(
+            body: SlidingNavBar(
+              destinations: testDestinations,
+              selectedIndex: 2,
+              onTap: _noop,
+            ),
           ),
         ),
       );
@@ -62,6 +71,7 @@ void main() {
           ),
           home: Scaffold(
             body: SlidingNavBar(
+              destinations: testDestinations,
               selectedIndex: 0,
               onTap: (index) => tapped = index,
             ),
@@ -78,3 +88,13 @@ void main() {
 }
 
 void _noop(int _) {}
+
+final testDestinations = [
+  for (final label in ['PULSE', 'TASKS', 'PROJECTS', 'LIBRARY'])
+    PluginScreenContribution(
+      id: label,
+      label: label,
+      icon: Icons.home,
+      builder: (_, _) => const SizedBox(),
+    ),
+];

@@ -9,6 +9,11 @@ environment:
 
 
 workspace:
+  - packages/core_contracts
+  - packages/habits_api
+  - packages/habits_plugin
+  - packages/projects_api
+  - packages/projects_plugin
   - packages/tasks_api
   - packages/plugin_runtime
   - packages/telegram_plugin
@@ -21,6 +26,11 @@ workspace:
   - packages/plugin_ui
 
 dependencies:
+  core_contracts: ^0.1.0
+  habits_api: ^0.1.0
+  habits_plugin: ^0.1.0
+  projects_api: ^0.1.0
+  projects_plugin: ^0.1.0
   spheres_api: ^0.1.0
   goals_api: ^0.1.0
   graph_api: ^0.1.0

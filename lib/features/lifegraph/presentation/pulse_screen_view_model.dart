@@ -8,8 +8,7 @@ import '../domain/canvas_note.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
-import 'package:life_os/features/projects/domain/projects_api.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:notes_api/notes_api.dart';
 import 'package:spheres_api/spheres_api.dart';
 import 'package:tasks_api/tasks_api.dart';
@@ -19,7 +18,7 @@ class PulseScreenViewModel {
   final Set<LifeGraphViewModel> _graphs = {};
   final SpheresApi spheresRepository;
   final GoalsApi goalsRepository;
-  final ProjectsApi projectsRepository;
+  final ProjectsQueries projectsRepository;
   final TasksApi tasksRepository;
   final GraphPositionsRepository positionsRepository;
   final CanvasNotesStore notesRepository;

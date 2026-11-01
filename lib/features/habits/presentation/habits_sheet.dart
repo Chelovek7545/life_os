@@ -1,13 +1,12 @@
+import 'package:habits_plugin/habits_logic.dart';
+import 'package:habits_api/habits_api.dart';
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/utils/date_format.dart';
-import 'package:life_os/features/habits/domain/habit_model.dart';
-import 'package:life_os/features/habits/domain/habit_visuals.dart';
-import 'package:life_os/features/habits/presentation/habits_state.dart';
-import 'package:life_os/features/habits/presentation/habits_view_model.dart';
+import 'package:life_os/features/habits/presentation/habit_visuals.dart';
 import 'package:life_os/features/habits/presentation/widgets/habit_edit_form.dart';
 
 /// Окно со списком всех привычек.
@@ -46,13 +45,14 @@ Future<void> showHabitEditSheet({
         onDelete: habit == null
             ? null
             : () async {
+                viewModel.editingHabit = habit;
                 await viewModel.deleteEditingHabit();
                 if (context.mounted) Navigator.of(context).pop();
               },
-        onSave: (updated) {
+        onSave: (updated) async {
           viewModel.editingHabit = habit;
-          viewModel.saveDraft(updated);
-          Navigator.of(context).pop();
+          await viewModel.saveDraft(updated);
+          if (context.mounted) Navigator.of(context).pop();
         },
       ),
     ),
@@ -86,8 +86,10 @@ class _AllHabitsSheet extends StatelessWidget {
                 IconButton(
                   tooltip: 'New habit',
                   icon: const Icon(Icons.add),
-                  onPressed: () =>
-                      showHabitEditSheet(context: context, viewModel: viewModel),
+                  onPressed: () => showHabitEditSheet(
+                    context: context,
+                    viewModel: viewModel,
+                  ),
                 ),
                 IconButton(
                   tooltip: 'Close',
@@ -130,10 +132,10 @@ class _AllHabitsSheet extends StatelessWidget {
                           onTap: () {
                             viewModel.startEditing(item.habit);
                             showHabitEditSheet(
-                            context: context,
-                            viewModel: viewModel,
-                            habit: item.habit,
-                          );
+                              context: context,
+                              viewModel: viewModel,
+                              habit: item.habit,
+                            );
                           },
                         );
                       },

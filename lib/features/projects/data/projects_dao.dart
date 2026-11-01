@@ -1,5 +1,5 @@
 import 'package:drift/drift.dart';
-import '../domain/project_model.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:life_os/core/database/database.dart';
 import 'extensions/project_model_extension.dart';
 
