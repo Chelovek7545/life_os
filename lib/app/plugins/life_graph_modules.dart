@@ -2,24 +2,19 @@ import 'package:graph_ui/graph_ui.dart';
 import 'package:graph_api/graph_api.dart';
 import 'package:life_os/features/spheres/presentation/spheres_graph_ui.dart';
 import 'package:life_os/features/goals/presentation/goals_graph_ui.dart';
-import 'package:life_os/features/tasks/presentation/tasks_graph_ui.dart';
 import 'package:life_os/features/lifegraph/domain/graph_deletion.dart';
 import 'package:life_os/features/spheres/domain/spheres_graph_commands.dart';
 import 'package:life_os/features/goals/domain/goals_graph_commands.dart';
-import 'package:life_os/features/tasks/domain/tasks_graph_commands.dart';
 import 'package:spheres_api/spheres_api.dart';
 import 'package:goals_api/goals_api.dart';
-import 'package:tasks_api/tasks_api.dart';
 import 'package:life_os/features/spheres/domain/spheres_graph_contributor.dart';
 import 'package:life_os/features/goals/domain/goals_graph_contributor.dart';
-import 'package:life_os/features/tasks/domain/tasks_graph_contributor.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/builtin_graph_forms.dart';
 
 List<GraphModule> lifeGraphModules({
   required SpheresApi spheres,
   required GoalsApi goals,
-  required TasksApi tasks,
   required GraphDeletion deletion,
 }) => [
   GraphModule(
@@ -44,21 +39,6 @@ List<GraphModule> lifeGraphModules({
     commands: [
       goalsGraphCommands(goals, delete: _delete(deletion, GraphNodeType.goal)),
     ],
-  ),
-  GraphModule(
-    id: 'tasks.graph',
-    dependencies: {'projects.graph'},
-    contributors: [TasksGraphContributor(tasks)],
-    editors: tasksGraphEditors(),
-    childActions: tasksGraphChildActions(tasks),
-    presentations: [
-      builtinGraphPresentation(GraphNodeType.task),
-      builtinGraphPresentation(GraphNodeType.subTask),
-    ],
-    commands: tasksGraphCommands(
-      tasks,
-      delete: _delete(deletion, GraphNodeType.task),
-    ),
   ),
 ];
 

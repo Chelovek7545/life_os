@@ -4,6 +4,8 @@ import 'plugins/life_graph_modules.dart';
 import 'plugins/application_ui_modules.dart';
 import 'plugins/projects_plugin_adapter.dart';
 import 'plugins/habits_plugin_adapter.dart';
+import 'plugins/tasks_plugin_adapter.dart';
+import 'package:tasks_plugin/tasks_plugin.dart';
 import 'package:habits_plugin/habits_plugin.dart';
 import 'package:projects_plugin/projects_plugin.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
@@ -37,8 +39,6 @@ import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:life_os/features/tasks/data/work_logs_dao.dart';
 import 'package:life_os/features/tasks/data/work_logs_repository.dart';
-import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
-import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
 
 class DependencyContainer {
   DependencyContainer({
@@ -93,15 +93,6 @@ class DependencyContainer {
       commands: graphCommands,
       obsidianRepository: obsidianRepository,
     );
-    taskWithPrjct = GetTasksWithProjectsUseCase(
-      tasksRepository,
-      projectsRepository,
-    );
-    tasksViewModel = TasksViewModel(
-      tasksRepository,
-      taskWithPrjct,
-      projectsRepository,
-    );
     habitsPlugin = createHabitsPlugin(habits: habitsRepository, ui: ui);
     resourcesViewModel = ResourcesViewModel(
       notes: graphNotesRepository,
@@ -129,12 +120,26 @@ class DependencyContainer {
         keepChildren: request.keepChildren,
       ),
     );
+    tasksPlugin = createTasksPlugin(
+      tasks: tasksRepository,
+      projects: projectsRepository,
+      workLogs: workLogsRepository,
+      ui: ui,
+      contributors: graphContributors,
+      presentations: graphPresentations,
+      editors: graphEditors,
+      commands: graphCommands,
+      delete: (request) => DriftGraphDeletion(this.database).delete(
+        GraphNodeType.task,
+        request.node.id,
+        keepChildren: request.keepChildren,
+      ),
+    );
     plugins = PluginHost([
       for (final module in [
         ...lifeGraphModules(
           spheres: spheresRepository,
           goals: goalsRepository,
-          tasks: tasksRepository,
           deletion: DriftGraphDeletion(this.database),
         ),
         ...graphModules,
@@ -152,12 +157,12 @@ class DependencyContainer {
       ...applicationUiModules(
         registry: ui,
         pulse: pulseScreenViewModel,
-        tasks: tasksViewModel,
+        completeTask: (task) => tasksPlugin.viewModel.toggleTask(task),
         resources: resourcesViewModel,
-        workLogs: workLogsRepository,
       ),
       ...projectsPlugin.plugins,
       ...habitsPlugin.plugins,
+      ...tasksPlugin.plugins,
       for (final module in uiModules) registerUiModule(module, ui),
       ...additionalPlugins,
     ]);
@@ -190,10 +195,10 @@ class DependencyContainer {
   late final GraphEditorRegistry graphEditors;
   late final GraphCommandRegistry graphCommands;
   late final PulseScreenViewModel pulseScreenViewModel;
-  late final TasksViewModel tasksViewModel;
+  late final TasksPlugin tasksPlugin;
+  TasksViewModel get tasksViewModel => tasksPlugin.viewModel;
   late final ProjectsPlugin projectsPlugin;
   ProjectsViewModel get projectViewModel => projectsPlugin.viewModel;
-  late final GetTasksWithProjectsUseCase taskWithPrjct;
   late final HabitsPlugin habitsPlugin;
   HabitsViewModel get habitsViewModel => habitsPlugin.viewModel;
   late final ResourcesViewModel resourcesViewModel;
@@ -212,7 +217,6 @@ class DependencyContainer {
     await graphNotesRepository.init();
     await plugins.start();
     await pulseScreenViewModel.initialize();
-    tasksViewModel.initialize();
   }
 
   Future<void> dispose() => _disposal ??= _dispose();
@@ -233,7 +237,6 @@ class DependencyContainer {
 
     await close('graphs', pulseScreenViewModel.closeGraphs);
     await close('plugins', plugins.stop);
-    await close('tasks', tasksViewModel.dispose);
     await close('pulse', pulseScreenViewModel.dispose);
     await close('resources', () async {
       resourcesViewModel.dispose();

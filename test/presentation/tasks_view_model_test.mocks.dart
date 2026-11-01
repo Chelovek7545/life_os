@@ -7,11 +7,10 @@ import 'dart:async' as _i3;
 
 import 'package:life_os/features/projects/data/projects_repository.dart' as _i6;
 import 'package:life_os/features/tasks/data/tasks_repository.dart' as _i2;
-import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart'
-    as _i5;
 import 'package:mockito/mockito.dart' as _i1;
 import 'package:projects_api/projects_api.dart' as _i7;
 import 'package:tasks_api/tasks_api.dart' as _i4;
+import 'package:tasks_plugin/src/get_tasks_with_projects_use_case.dart' as _i5;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values

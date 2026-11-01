@@ -474,11 +474,13 @@ void main() {
             .offset;
       }
 
-      testWidgets('renders 7 day headers with dates', (tester) async {
+      testWidgets('renders current week headers inside the three-week buffer', (
+        tester,
+      ) async {
         await tester.pumpWidget(weekBody(events: const []));
 
         for (final day in ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']) {
-          expect(find.text(day), findsOneWidget);
+          expect(find.text(day), findsNWidgets(3));
         }
         for (final day in [10, 11, 12, 13, 14, 15, 16]) {
           expect(find.text('$day'), findsWidgets);
@@ -505,24 +507,24 @@ void main() {
         await tester.pumpWidget(weekBody(events: [event]));
 
         final box = tester.getTopLeft(find.text('Weekly Event'));
-        const offset = 12.0;
-        const columnWidth = 320.0;
-        // Wednesday is the 3rd column (index 2)
-        final columnStart = offset + 2 * columnWidth;
-        final columnEnd = offset + 3 * columnWidth;
+        final column = find.byKey(
+          ValueKey(('timeline.day', DateTime(2026, 8, 12))),
+        );
+        final columnStart = tester.getTopLeft(column).dx;
+        final columnEnd = tester.getTopRight(column).dx;
         expect(box.dx, greaterThan(columnStart));
         expect(box.dx, lessThan(columnEnd));
-        // It must not start in the Tuesday column (index 1)
-        expect(box.dx, greaterThan(offset + 1.5 * columnWidth));
       });
 
-      testWidgets('does not render events outside the week', (tester) async {
+      testWidgets('does not render events outside the buffered weeks', (
+        tester,
+      ) async {
         final event = TaskEvent(
           task: createMockTask(),
           title: 'Outside Week',
           startMinutes: 540,
           durationMinutes: 60,
-          date: DateTime(2026, 8, 20), // next week
+          date: DateTime(2026, 8, 31), // outside all three buffered weeks
         );
 
         await tester.pumpWidget(weekBody(events: [event]));
@@ -695,7 +697,20 @@ void main() {
 
         await tester.pumpWidget(weekBody(events: const []));
 
-        final before = tester.getTopLeft(find.text('WED')).dx;
+        final wednesday = find.byKey(
+          ValueKey(('timeline.day', DateTime(2026, 8, 12))),
+        );
+        final before = tester.getTopLeft(wednesday).dx;
+        final initialOffset = tester
+            .widgetList<SingleChildScrollView>(
+              find.byType(SingleChildScrollView),
+            )
+            .firstWhere(
+              (w) =>
+                  w.scrollDirection == Axis.horizontal && w.controller != null,
+            )
+            .controller!
+            .offset;
 
         await tester.dragFrom(const Offset(400, 400), const Offset(-400, 0));
         await tester.pumpAndSettle();
@@ -706,11 +721,11 @@ void main() {
             )
             .firstWhere((w) => w.scrollDirection == Axis.horizontal);
         final offset = horizontalScroller.controller!.offset;
-        expect(offset, closeTo(400, 1));
+        expect(offset, greaterThan(initialOffset));
 
         // Day headers follow the scroll so they stay aligned with the columns.
-        final after = tester.getTopLeft(find.text('WED')).dx;
-        expect(before - after, closeTo(offset, 1));
+        final after = tester.getTopLeft(wednesday).dx;
+        expect(before - after, closeTo(offset - initialOffset, 1));
       });
 
       testWidgets('week stays day-aligned when side panel width toggles '
@@ -803,7 +818,9 @@ void main() {
 
         await tester.pumpWidget(weekBody(events: const []));
 
-        final before = tester.getTopLeft(find.text('09:00')).dy;
+        final before =
+            (tester.getTopLeft(find.text('10:00')).dy -
+            tester.getTopLeft(find.text('09:00')).dy);
 
         final g1 = await tester.createGesture();
         final g2 = await tester.createGesture();
@@ -820,9 +837,12 @@ void main() {
         await g2.up();
         await tester.pumpAndSettle();
 
-        final after = tester.getTopLeft(find.text('09:00')).dy;
-        // 140 * 2.0 = 280, clamped to max 240; hour 9 moves down by 9 * 100.
-        expect(after - before, closeTo(9 * 100, 1));
+        final after =
+            (tester.getTopLeft(find.text('10:00')).dy -
+            tester.getTopLeft(find.text('09:00')).dy);
+        // Check hour spacing independently of the preserved zoom focal point.
+        // 140 * 2.0 is clamped to 240, so adjacent hours spread by 100.
+        expect(after - before, closeTo(100, 1));
       });
 
       testWidgets('zoom in increases hour slot height', (tester) async {
@@ -833,14 +853,18 @@ void main() {
         await tester.pumpWidget(
           weekBody(events: const [], onWeekChange: (_) {}),
         );
-        final before = tester.getTopLeft(find.text('09:00')).dy;
+        final before =
+            (tester.getTopLeft(find.text('10:00')).dy -
+            tester.getTopLeft(find.text('09:00')).dy);
 
         await tester.tap(find.byIcon(Icons.add));
         await tester.pumpAndSettle();
-        final after = tester.getTopLeft(find.text('09:00')).dy;
+        final after =
+            (tester.getTopLeft(find.text('10:00')).dy -
+            tester.getTopLeft(find.text('09:00')).dy);
 
-        // Hour height goes 140 -> 168, so hour 9 moves down by 9 * 28
-        expect(after - before, closeTo(9 * 140 * 0.2, 1));
+        // Adjacent hour spacing grows from 140 to 168.
+        expect(after - before, closeTo(140 * 0.2, 1));
       });
 
       testWidgets('zoom out decreases hour slot height', (tester) async {
@@ -851,14 +875,18 @@ void main() {
         await tester.pumpWidget(
           weekBody(events: const [], onWeekChange: (_) {}),
         );
-        final before = tester.getTopLeft(find.text('09:00')).dy;
+        final before =
+            (tester.getTopLeft(find.text('10:00')).dy -
+            tester.getTopLeft(find.text('09:00')).dy);
 
         await tester.tap(find.byIcon(Icons.remove));
         await tester.pumpAndSettle();
-        final after = tester.getTopLeft(find.text('09:00')).dy;
+        final after =
+            (tester.getTopLeft(find.text('10:00')).dy -
+            tester.getTopLeft(find.text('09:00')).dy);
 
-        // Hour height goes 140 -> ~116.67, so hour 9 moves up
-        expect(before - after, closeTo(9 * 140 * (1 - 1 / 1.2), 1));
+        // Adjacent hour spacing shrinks from 140 to about 116.67.
+        expect(before - after, closeTo(140 * (1 - 1 / 1.2), 1));
       });
     });
 

@@ -495,7 +495,7 @@ void main() {
     });
 
     group('projects', () {
-      test('watchProjects delegates to projects repository', () {
+      test('watchProjects delegates to projects repository', () async {
         final stream = Stream<List<Project>>.value([]);
         when(
           mockProjectsRepository.watchAllProjects(),
@@ -503,7 +503,7 @@ void main() {
 
         final result = viewModel.watchProjects();
 
-        expect(result, stream);
+        expect(await result.first, isEmpty);
         verify(mockProjectsRepository.watchAllProjects()).called(1);
       });
     });

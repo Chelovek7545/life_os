@@ -93,6 +93,7 @@ void main() {
         'package:plugin_ui/',
       ],
       'plugin_ui': [
+        'package:tasks_plugin/',
         'package:habits_api/',
         'package:habits_plugin/',
         'package:life_os/',
@@ -101,7 +102,16 @@ void main() {
         'package:telegram_plugin/',
         'package:obsidian_plugin/',
       ],
+      'tasks_plugin': [
+        'dart:io',
+        'package:life_os/',
+        'package:drift/',
+        'package:projects_plugin/',
+        'package:habits_plugin/',
+        'package:telegram_plugin/',
+      ],
       'tasks_api': [
+        'package:tasks_plugin/',
         'package:flutter/',
         'dart:ui',
         'package:drift/',
@@ -287,6 +297,38 @@ void main() {
     }
     expect(pulse.contains('PluginPanelSlot'), isTrue);
   });
+  test(
+    'tasks plugin owns state, work log lifetimes and graph registrations',
+    () {
+      final root = File('lib/app/dependency_container.dart').readAsStringSync();
+      expect(root.contains('tasksViewModel.initialize()'), isFalse);
+      expect(root.contains('tasksViewModel.dispose'), isFalse);
+      expect(root.contains('TasksViewModel('), isFalse);
+      expect(root.contains('GetTasksWithProjectsUseCase('), isFalse);
+      expect(root.contains('...tasksPlugin.plugins'), isTrue);
+      final builtinGraph = File(
+        'lib/app/plugins/life_graph_modules.dart',
+      ).readAsStringSync();
+      expect(builtinGraph.contains('tasks.graph'), isFalse);
+      final builtinUi = File(
+        'lib/app/plugins/application_ui_modules.dart',
+      ).readAsStringSync();
+      expect(builtinUi.contains('TasksViewModel'), isFalse);
+      expect(builtinUi.contains('tasksScreenModule'), isFalse);
+      for (final file in Directory(
+        'packages/tasks_plugin/lib/src',
+      ).listSync().whereType<File>()) {
+        if (file.path.endsWith('tasks_plugin.dart') ||
+            file.path.endsWith('work_logs_view_model.dart')) {
+          continue;
+        }
+        final source = file.readAsStringSync();
+        expect(source.contains('package:flutter/'), isFalse, reason: file.path);
+        expect(source.contains('package:life_os/'), isFalse, reason: file.path);
+        expect(source.contains('package:drift/'), isFalse, reason: file.path);
+      }
+    },
+  );
   test('habits lifecycle and logic are owned by the plugin package', () {
     final root = File('lib/app/dependency_container.dart').readAsStringSync();
     expect(root.contains('HabitsViewModel(habitsRepository)'), isFalse);
@@ -315,8 +357,8 @@ void main() {
     'project consumers use the public API and the plugin owns its model lifetime',
     () {
       for (final file in [
-        'lib/features/tasks/presentation/tasks_view_model.dart',
-        'lib/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart',
+        'packages/tasks_plugin/lib/src/tasks_view_model.dart',
+        'packages/tasks_plugin/lib/src/get_tasks_with_projects_use_case.dart',
         'lib/features/lifegraph/presentation/pulse_screen_view_model.dart',
         'lib/core/ui/hierarchy/build_hierarchy_tree.dart',
       ]) {

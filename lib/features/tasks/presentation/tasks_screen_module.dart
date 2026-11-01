@@ -1,8 +1,8 @@
+import 'package:tasks_plugin/tasks_logic.dart';
 import 'package:flutter/material.dart';
 import 'package:plugin_ui/plugin_ui.dart';
 import 'package:tasks_api/tasks_api.dart';
 import 'tasks_screen.dart';
-import 'tasks_view_model.dart';
 
 UiModuleSpec tasksScreenModule(
   TasksViewModel viewModel,

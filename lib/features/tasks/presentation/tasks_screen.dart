@@ -1,3 +1,4 @@
+import 'package:tasks_plugin/tasks_logic.dart';
 import 'package:tasks_api/tasks_api.dart' show WorkLogsApi;
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
@@ -18,15 +19,11 @@ import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:projects_api/projects_api.dart';
 import 'package:life_os/features/settings/settings_screen.dart';
-import 'package:life_os/features/tasks/domain/task_filter_config.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
-import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
 import 'package:life_os/features/tasks/presentation/components/date_header.dart';
 import 'package:life_os/features/tasks/presentation/components/day_calendar.dart';
 import 'package:life_os/features/tasks/presentation/components/timeline.dart';
-import 'package:life_os/features/tasks/presentation/task_state.dart';
-import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
 
 const double _kHeaderHeight = 42.0;
 const double _kPeriodTabsHeight = 45.0;

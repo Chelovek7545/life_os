@@ -29,7 +29,7 @@ Features
 
 ## Architecture
 
-The modular migration introduces a Pub workspace with shared contracts, pure Dart task/note/sphere/goal/project/habits APIs, projects and habits plugins with explicit storage and UI adapters, optional Telegram/Obsidian plugins, registered screens/panels/actions/settings, and extensible graph contributions. See [the migration guide](docs/modular-architecture.md) for current boundaries, validation, and remaining steps.
+The modular migration introduces a Pub workspace with shared contracts, pure Dart task/note/sphere/goal/project/habits APIs, projects, habits and tasks plugins with explicit storage and UI adapters, optional Telegram/Obsidian plugins, registered screens/panels/actions/settings, and extensible graph contributions. See [the migration guide](docs/modular-architecture.md) for current boundaries, validation, and remaining steps.
 
 ### Existing feature layout
 

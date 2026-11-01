@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:tasks_api/tasks_api.dart' show WorkLogsApi;
 import 'package:life_os/features/tasks/domain/work_log_model.dart';
-import 'package:life_os/features/tasks/presentation/work_logs_view_model.dart';
+import 'package:tasks_plugin/tasks_plugin.dart' show WorkLogsViewModel;
 
 class WorkLogsSection extends StatefulWidget {
   const WorkLogsSection({
@@ -19,7 +19,6 @@ class WorkLogsSection extends StatefulWidget {
 
 class _WorkLogsSectionState extends State<WorkLogsSection> {
   late WorkLogsViewModel _viewModel;
-  final TextEditingController _descController = TextEditingController();
 
   @override
   void initState() {
@@ -39,58 +38,28 @@ class _WorkLogsSectionState extends State<WorkLogsSection> {
 
   @override
   void dispose() {
-    _descController.dispose();
     _viewModel.dispose();
     super.dispose();
   }
 
   void _showAddDialog({WorkLog? existing}) {
-    if (existing != null) {
-      _descController.text = existing.description;
-    } else {
-      _descController.clear();
-    }
-
-    showDialog(
+    final model = _viewModel;
+    showDialog<void>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(
-            existing == null ? 'Добавить ворклог' : 'Редактировать ворклог',
-          ),
-          content: TextField(
-            controller: _descController,
-            decoration: const InputDecoration(
-              labelText: 'Описание этапа',
-              hintText: 'Что было сделано...',
-            ),
-            maxLines: 3,
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Отмена'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final text = _descController.text.trim();
-                if (text.isNotEmpty) {
-                  if (existing == null) {
-                    await _viewModel.addWorkLog(description: text);
-                  } else {
-                    await _viewModel.updateWorkLog(
-                      existing.copyWith(description: text),
-                    );
-                  }
-                }
-                if (mounted) Navigator.pop(context);
-              },
-              child: const Text('Сохранить'),
-            ),
-          ],
-        );
-      },
+      builder: (_) => _WorkLogEditor(model: model, existing: existing),
     );
+  }
+
+  Future<void> _run(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось сохранить изменения.')),
+        );
+      }
+    }
   }
 
   @override
@@ -147,8 +116,11 @@ class _WorkLogsSectionState extends State<WorkLogsSection> {
                           Checkbox(
                             value: log.status == 1,
                             onChanged: (val) {
-                              _viewModel.updateWorkLog(
-                                log.copyWith(status: (val == true) ? 1 : 0),
+                              final model = _viewModel;
+                              _run(
+                                () => model.updateWorkLog(
+                                  log.copyWith(status: (val == true) ? 1 : 0),
+                                ),
                               );
                             },
                           ),
@@ -162,7 +134,10 @@ class _WorkLogsSectionState extends State<WorkLogsSection> {
                               size: 18,
                               color: Colors.red,
                             ),
-                            onPressed: () => _viewModel.deleteWorkLog(log.id),
+                            onPressed: () {
+                              final model = _viewModel;
+                              _run(() => model.deleteWorkLog(log.id));
+                            },
                           ),
                         ],
                       ),
@@ -175,4 +150,78 @@ class _WorkLogsSectionState extends State<WorkLogsSection> {
       },
     );
   }
+}
+
+class _WorkLogEditor extends StatefulWidget {
+  const _WorkLogEditor({required this.model, this.existing});
+  final WorkLogsViewModel model;
+  final WorkLog? existing;
+  @override
+  State<_WorkLogEditor> createState() => _WorkLogEditorState();
+}
+
+class _WorkLogEditorState extends State<_WorkLogEditor> {
+  late final _controller = TextEditingController(
+    text: widget.existing?.description ?? '',
+  );
+  bool _saving = false;
+  String? _error;
+  Future<void> _save() async {
+    if (_saving) return;
+    final text = _controller.text.trim();
+    if (text.isEmpty) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      if (widget.existing case final log?) {
+        await widget.model.updateWorkLog(log.copyWith(description: text));
+      } else {
+        await widget.model.addWorkLog(description: text);
+      }
+      if (mounted) Navigator.of(context).pop();
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'Не удалось сохранить запись. Попробуйте ещё раз.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(
+      widget.existing == null ? 'Добавить ворклог' : 'Редактировать ворклог',
+    ),
+    content: TextField(
+      controller: _controller,
+      enabled: !_saving,
+      maxLines: 3,
+      decoration: InputDecoration(
+        labelText: 'Описание этапа',
+        hintText: 'Что было сделано...',
+        errorText: _error,
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _saving ? null : () => Navigator.of(context).pop(),
+        child: const Text('Отмена'),
+      ),
+      ElevatedButton(
+        onPressed: _saving ? null : _save,
+        child: const Text('Сохранить'),
+      ),
+    ],
+  );
 }

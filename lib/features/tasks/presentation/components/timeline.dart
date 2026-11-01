@@ -2148,7 +2148,6 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
   @override
   Widget build(BuildContext context) {
     final today = _dateOnly(DateTime.now());
-    print("Start of week: ${widget.weekStart}");
     final weekEnd = _addDays(widget.weekStart, 6);
     final visibleStart = _addDays(widget.weekStart, -_weekBufferDays);
     final hasNav = widget.onWeekChange != null;
@@ -2234,6 +2233,9 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
                       'Next week',
                       () => widget.onWeekChange!(_addDays(widget.weekStart, 7)),
                     ),
+                    const SizedBox(width: 10),
+                    _glassIconButton(Icons.remove, 'Zoom out', widget.onZoomOut),
+                    _glassIconButton(Icons.add, 'Zoom in', widget.onZoomIn),
                   ],
                 ),
               ),
@@ -2279,6 +2281,7 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
                             );
 
                             return SizedBox(
+                              key: ValueKey(('timeline.day', _dateOnly(date))),
                               width: widget.columnWidth,
                               child: Material(
                                 color: Colors.transparent,
@@ -2526,7 +2529,11 @@ class _FlexibleSnapScrollPhysics extends ScrollPhysics {
     }
 
     const tolerance = Tolerance.defaultTolerance;
-    final target = _getTargetPixels(position, tolerance, velocity);
+    final minTarget = (position.minScrollExtent / step).ceil() * step;
+    final maxTarget = (position.maxScrollExtent / step).floor() * step;
+    final target = _getTargetPixels(position, tolerance, velocity)
+        .clamp(minTarget, math.max(minTarget, maxTarget))
+        .toDouble();
 
     // Если текущая позиция уже достаточно близка к цели — ничего не делаем
     if ((target - position.pixels).abs() < tolerance.distance) {

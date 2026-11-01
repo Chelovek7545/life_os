@@ -144,7 +144,7 @@ class _TaskCardState extends State<TaskCard>
       onHorizontalDragUpdate: widget.onDelete != null ? _onDragUpdate : null,
       onHorizontalDragEnd: widget.onDelete != null ? _onDragEnd : null,
       onLongPress: widget.onLongPress,
-      //onTap: widget.onTap,
+      onTap: widget.onTap,
       onDoubleTap: widget.onSelected,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 200),

@@ -32,7 +32,7 @@ jobs:
         run: flutter pub run build_runner build
 
       - name: Check module boundaries and lifecycle
-        run: flutter test test/architecture test/core/plugins test/core/storage test/features/resources/data test/features/lifegraph test/features/projects test/features/habits test/app test/main_screen_test.dart
+        run: flutter test test/architecture test/core/plugins test/core/storage test/features/resources/data test/features/lifegraph test/features/projects test/features/habits test/features/tasks test/presentation/tasks_view_model_test.dart test/presentation/components/timeline_test.dart test/core/ui/task_card_test.dart test/app test/main_screen_test.dart
 
       - name: Analyze
         run: flutter analyze --fatal-warnings
