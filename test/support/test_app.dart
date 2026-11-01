@@ -1,3 +1,4 @@
+import 'package:graph_ui/graph_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/native.dart';
@@ -8,12 +9,14 @@ import 'package:life_os/app/dependency_container.dart';
 Future<DependencyContainer> createTestApp({
   bool enableTelegram = false,
   bool enableObsidian = true,
+  Iterable<GraphModule> graphModules = const [],
 }) async {
   SharedPreferences.setMockInitialValues({});
   final container = DependencyContainer(
     database: AppDatabase(NativeDatabase.memory()),
     enableTelegram: enableTelegram,
     enableObsidian: enableObsidian,
+    graphModules: graphModules,
   );
   await container.init();
   return container;

@@ -13,8 +13,8 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 /// задач) и статус (для задач). Также предлагает удаление ноды.
 class NodeEditDialog extends StatefulWidget {
   final GraphNode node;
-  final ValueChanged<GraphNode> onSave;
-  final ValueChanged<bool> onDelete; // keepChildren
+  final Future<void> Function(GraphNode) onSave;
+  final Future<void> Function(bool) onDelete; // keepChildren
 
   const NodeEditDialog({
     super.key,
@@ -32,6 +32,28 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
   late final TextEditingController _subtitleController;
   String _selectedColor = '#4A90D9';
   TaskStatus? _selectedStatus;
+  bool _saving = false;
+  String? _error;
+
+  Future<void> _submit(Future<void> Function() action) async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await action();
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error = 'Не удалось выполнить действие. Повторите попытку.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   static const List<String> _colors = [
     '#4A90D9',
@@ -64,7 +86,9 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isTask = widget.node.type == GraphNodeType.task || widget.node.type == GraphNodeType.subTask;
+    final isTask =
+        widget.node.type == GraphNodeType.task ||
+        widget.node.type == GraphNodeType.subTask;
 
     return AlertDialog(
       backgroundColor: AppColors.surfaceContainer,
@@ -124,13 +148,15 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
                   colors: TaskStatus.values.map((e) => e.color).toList(),
                   onSelectionChanged: (int p1) {
                     _selectedStatus = TaskStatus.values[p1];
-                    setState(() {
-                      
-                    });
+                    setState(() {});
                   },
-                  selectedIndex: TaskStatus.values.indexOf(_selectedStatus ?? TaskStatus.open),
+                  selectedIndex: TaskStatus.values.indexOf(
+                    _selectedStatus ?? TaskStatus.open,
+                  ),
                 ),
               ],
+              if (_error != null)
+                Text(_error!, style: const TextStyle(color: Colors.redAccent)),
             ],
           ),
         ),
@@ -142,23 +168,24 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
             'Удалить',
             style: TextStyle(color: Colors.redAccent),
           ),
-          onPressed: () => _confirmDelete(context),
+          onPressed: _saving ? null : () => _confirmDelete(context),
         ),
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _saving ? null : () => Navigator.pop(context),
           child: const Text('Отмена'),
         ),
         FilledButton(
-          onPressed: () {
-            final updated = widget.node.copyWith(
-              title: _titleController.text.trim(),
-              subtitle: _subtitleController.text.trim(),
-              color: _selectedColor,
-              taskStatus: _selectedStatus,
-            );
-            widget.onSave(updated);
-            Navigator.pop(context);
-          },
+          onPressed: _saving
+              ? null
+              : () {
+                  final updated = widget.node.copyWith(
+                    title: _titleController.text.trim(),
+                    subtitle: _subtitleController.text.trim(),
+                    color: _selectedColor,
+                    taskStatus: _selectedStatus,
+                  );
+                  _submit(() => widget.onSave(updated));
+                },
           child: const Text('Сохранить'),
         ),
       ],
@@ -167,6 +194,8 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
 
   String get _dialogTitle {
     switch (widget.node.type) {
+      case GraphNodeType.external:
+        return 'Узел';
       case GraphNodeType.sphere:
         return 'Редактировать сферу';
       case GraphNodeType.goal:
@@ -180,9 +209,8 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
     }
   }
 
-  void _confirmDelete(BuildContext context) {
-    Navigator.pop(context);
-    showDialog(
+  Future<void> _confirmDelete(BuildContext context) async {
+    final keepChildren = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceContainer,
@@ -193,17 +221,11 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
         ),
         actions: [
           TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              widget.onDelete(false); // каскадно
-            },
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Удалить всё поддерево'),
           ),
           FilledButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              widget.onDelete(true); // только ноду, дети станут осиротевшими
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Сохранить детей (станут невидимыми)'),
           ),
           TextButton(
@@ -213,6 +235,9 @@ class _NodeEditDialogState extends State<NodeEditDialog> {
         ],
       ),
     );
+    if (keepChildren != null && mounted) {
+      await _submit(() => widget.onDelete(keepChildren));
+    }
   }
 }
 
@@ -247,6 +272,7 @@ class _AddChildDialogState extends State<AddChildDialog> {
   DateTime? _startsAt;
   DateTime? _endsAt;
   bool _saving = false;
+  String? _error;
 
   static const List<String> _colors = [
     '#4A90D9',
@@ -385,6 +411,8 @@ class _AddChildDialogState extends State<AddChildDialog> {
                   ),
                 ),
               ],
+              if (_error != null)
+                Text(_error!, style: const TextStyle(color: Colors.redAccent)),
             ],
           ),
         ),
@@ -399,16 +427,30 @@ class _AddChildDialogState extends State<AddChildDialog> {
               ? null
               : () async {
                   if (_titleController.text.trim().isEmpty) return;
-                  setState(() => _saving = true);
-                  await widget.onSave(
-                    title: _titleController.text.trim(),
-                    description: _description,
-                    color: _selectedColor,
-                    dueDate: _dueDate,
-                    startsAt: _startsAt,
-                    endsAt: _endsAt,
-                  );
-                  if (context.mounted) Navigator.pop(context);
+                  setState(() {
+                    _saving = true;
+                    _error = null;
+                  });
+                  try {
+                    await widget.onSave(
+                      title: _titleController.text.trim(),
+                      description: _description,
+                      color: _selectedColor,
+                      dueDate: _dueDate,
+                      startsAt: _startsAt,
+                      endsAt: _endsAt,
+                    );
+                    if (context.mounted) Navigator.pop(context);
+                  } catch (_) {
+                    if (mounted) {
+                      setState(
+                        () => _error =
+                            'Не удалось создать узел. Повторите попытку.',
+                      );
+                    }
+                  } finally {
+                    if (mounted) setState(() => _saving = false);
+                  }
                 },
           child: _saving
               ? const SizedBox(
@@ -424,6 +466,8 @@ class _AddChildDialogState extends State<AddChildDialog> {
 
   String _childName(GraphNodeType type) {
     switch (type) {
+      case GraphNodeType.external:
+        return 'узел';
       case GraphNodeType.sphere:
         return '';
       case GraphNodeType.goal:
@@ -443,16 +487,10 @@ class _AddChildDialogState extends State<AddChildDialog> {
     final selected = await chooseDateOnly(context, _startsAt);
     if (selected == null || !mounted) return;
     _onStartsAtChange(
-      selected.copyWith(
-        hour: _startsAt?.hour,
-        minute: _startsAt?.minute,
-      ),
+      selected.copyWith(hour: _startsAt?.hour, minute: _startsAt?.minute),
     );
     _onEndsAtChange(
-      selected.copyWith(
-        hour: _endsAt?.hour,
-        minute: _endsAt?.minute,
-      ),
+      selected.copyWith(hour: _endsAt?.hour, minute: _endsAt?.minute),
     );
   }
 
@@ -476,10 +514,7 @@ class _AddChildDialogState extends State<AddChildDialog> {
     final selected = await chooseTimeForDate(context, _endsAt ?? _startsAt!);
     if (selected != null && _validateEnd(selected) && mounted) {
       _onEndsAtChange(
-        _startsAt?.copyWith(
-          hour: selected.hour,
-          minute: selected.minute,
-        ),
+        _startsAt?.copyWith(hour: selected.hour, minute: selected.minute),
       );
     }
   }

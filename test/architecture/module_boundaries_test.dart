@@ -4,6 +4,36 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('pure packages and Telegram cannot depend on app internals', () {
     const forbidden = {
+      'spheres_api': [
+        'dart:ui',
+        'package:flutter/',
+        'package:drift/',
+        'package:life_os/',
+        'package:graph_ui/',
+      ],
+      'goals_api': [
+        'dart:ui',
+        'package:flutter/',
+        'package:drift/',
+        'package:life_os/',
+        'package:graph_ui/',
+      ],
+      'graph_api': [
+        'dart:ui',
+        'package:flutter/',
+        'package:drift/',
+        'package:life_os/',
+        'package:tasks_api/',
+        'package:spheres_api/',
+        'package:goals_api/',
+        'package:graph_ui/',
+      ],
+      'graph_ui': [
+        'package:life_os/',
+        'package:tasks_api/',
+        'package:spheres_api/',
+        'package:goals_api/',
+      ],
       'notes_api': [
         'dart:io',
         'dart:ui',
@@ -70,6 +100,102 @@ void main() {
       expect(store.contains('graph_view.dart'), isFalse);
       expect(store.contains('obsidian_repository.dart'), isFalse);
       expect(store.contains('dart:ui'), isFalse);
+    },
+  );
+  test('graph assembly and feature contributors depend only on contracts', () {
+    final builder = File(
+      'lib/features/lifegraph/domain/graph_builder.dart',
+    ).readAsStringSync();
+    expect(builder.contains('features/tasks'), isFalse);
+    expect(builder.contains('features/projects'), isFalse);
+    expect(builder.contains('features/goals'), isFalse);
+    expect(builder.contains('features/spheres'), isFalse);
+    for (final file in [
+      'lib/features/spheres/domain/spheres_graph_contributor.dart',
+      'lib/features/goals/domain/goals_graph_contributor.dart',
+      'lib/features/projects/domain/projects_graph_contributor.dart',
+      'lib/features/tasks/domain/tasks_graph_contributor.dart',
+      'lib/features/spheres/domain/spheres_graph_commands.dart',
+      'lib/features/goals/domain/goals_graph_commands.dart',
+      'lib/features/projects/domain/projects_graph_commands.dart',
+      'lib/features/tasks/domain/tasks_graph_commands.dart',
+      'lib/features/lifegraph/presentation/life_graph_view_model.dart',
+      'lib/features/lifegraph/presentation/pulse_screen_view_model.dart',
+    ]) {
+      final source = File(file).readAsStringSync();
+      expect(
+        source.contains('/data/goals_repository.dart'),
+        isFalse,
+        reason: file,
+      );
+      expect(
+        source.contains('/data/spheres_repository.dart'),
+        isFalse,
+        reason: file,
+      );
+      if (file.contains('_graph_contributor') ||
+          file.contains('_graph_commands')) {
+        expect(source.contains('/data/'), isFalse, reason: file);
+      }
+    }
+  });
+  test('graph view model routes mutations through module commands', () {
+    final source = File(
+      'lib/features/lifegraph/presentation/life_graph_view_model.dart',
+    ).readAsStringSync();
+    for (final forbidden in [
+      'GoalsApi',
+      'ProjectsApi',
+      'TasksApi',
+      'SpheresApi',
+      'GraphDeletion',
+      'GraphNodeType.',
+      'Task.blank(',
+      'Goal.create(',
+      'Project.create(',
+      'spheresRepository.update',
+      'tasksRepository.update',
+      'TaskQueries',
+      'tasksStream',
+      'attachExistingTask',
+    ]) {
+      expect(source.contains(forbidden), isFalse, reason: forbidden);
+    }
+    expect(source.contains('GraphCommandRegistry'), isTrue);
+  });
+  test(
+    'graph screen obtains node forms from modules without built-in routing',
+    () {
+      final source = File(
+        'lib/features/lifegraph/presentation/life_graph_screen.dart',
+      ).readAsStringSync();
+      for (final forbidden in [
+        'GraphNodeType',
+        'NodeEditDialog',
+        'AddChildDialog',
+        'ExistingTaskPickerDialog',
+        'tasksStream',
+        'features/tasks/',
+        '.isLeaf',
+        '_showAddChildDialog',
+      ]) {
+        expect(source.contains(forbidden), isFalse, reason: forbidden);
+      }
+      expect(source.contains('GraphNodeDialogs'), isTrue);
+      for (final file in [
+        'lib/features/spheres/presentation/spheres_graph_ui.dart',
+        'lib/features/goals/presentation/goals_graph_ui.dart',
+        'lib/features/projects/presentation/projects_graph_ui.dart',
+        'lib/features/tasks/presentation/tasks_graph_ui.dart',
+      ]) {
+        final adapter = File(file).readAsStringSync();
+        expect(
+          adapter.contains('life_graph_view_model.dart'),
+          isFalse,
+          reason: file,
+        );
+        expect(adapter.contains('/data/'), isFalse, reason: file);
+      }
     },
   );
   test(

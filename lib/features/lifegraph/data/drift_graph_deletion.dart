@@ -13,6 +13,8 @@ class DriftGraphDeletion implements GraphDeletion {
     String id, {
     required bool keepChildren,
   }) => database.transaction(() async {
+    if (type == GraphNodeType.external)
+      throw UnsupportedError('External nodes use their module commands.');
     final db = database;
     final spheres = <String>{if (type == GraphNodeType.sphere) id};
     final goals = <String>{if (type == GraphNodeType.goal) id};

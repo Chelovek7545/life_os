@@ -7,7 +7,7 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 /// в графе. По тапу по задаче вызывает [onSelect] с её id.
 class ExistingTaskPickerDialog extends StatefulWidget {
   final List<Task> tasks;
-  final ValueChanged<String> onSelect;
+  final Future<void> Function(String) onSelect;
   final String title;
   final String emptyText;
 
@@ -20,17 +20,45 @@ class ExistingTaskPickerDialog extends StatefulWidget {
   });
 
   @override
-  State<ExistingTaskPickerDialog> createState() => _ExistingTaskPickerDialogState();
+  State<ExistingTaskPickerDialog> createState() =>
+      _ExistingTaskPickerDialogState();
 }
 
 class _ExistingTaskPickerDialogState extends State<ExistingTaskPickerDialog> {
   String _query = '';
+  bool _saving = false;
+  String? _error;
+
+  Future<void> _select(String id) async {
+    if (_saving) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onSelect(id);
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'Не удалось привязать задачу. Проверьте связь и повторите попытку.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   List<Task> get _filtered {
     final q = _query.trim().toLowerCase();
     if (q.isEmpty) return widget.tasks;
     return widget.tasks
-        .where((t) => t.title.toLowerCase().contains(q) || t.description.toLowerCase().contains(q))
+        .where(
+          (t) =>
+              t.title.toLowerCase().contains(q) ||
+              t.description.toLowerCase().contains(q),
+        )
         .toList();
   }
 
@@ -54,26 +82,38 @@ class _ExistingTaskPickerDialogState extends State<ExistingTaskPickerDialog> {
               ),
             ),
             const SizedBox(height: 12),
+            if (_error != null)
+              Text(_error!, style: const TextStyle(color: Colors.redAccent)),
             Expanded(
               child: _filtered.isEmpty
                   ? Center(
                       child: Text(
                         widget.emptyText,
-                        style: const TextStyle(color: AppColors.onSurfaceVariant),
+                        style: const TextStyle(
+                          color: AppColors.onSurfaceVariant,
+                        ),
                       ),
                     )
                   : ListView.separated(
                       itemCount: _filtered.length,
-                      separatorBuilder: (_, _) => Divider(height: 1, color: AppColors.borderGlass),
+                      separatorBuilder: (_, _) =>
+                          Divider(height: 1, color: AppColors.borderGlass),
                       itemBuilder: (context, index) {
                         final task = _filtered[index];
                         return ListTile(
-                          leading: Icon(task.status.icon, color: task.status.color, size: 22),
+                          leading: Icon(
+                            task.status.icon,
+                            color: task.status.color,
+                            size: 22,
+                          ),
                           title: Text(
                             task.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: AppColors.onSurface, fontSize: 14),
+                            style: const TextStyle(
+                              color: AppColors.onSurface,
+                              fontSize: 14,
+                            ),
                           ),
                           subtitle: task.description.isEmpty
                               ? null
@@ -84,10 +124,7 @@ class _ExistingTaskPickerDialogState extends State<ExistingTaskPickerDialog> {
                                   style: const TextStyle(fontSize: 11.5),
                                 ),
                           trailing: _StatusChip(status: task.status),
-                          onTap: () {
-                            widget.onSelect(task.id);
-                            Navigator.pop(context);
-                          },
+                          onTap: _saving ? null : () => _select(task.id),
                         );
                       },
                     ),
@@ -97,7 +134,7 @@ class _ExistingTaskPickerDialogState extends State<ExistingTaskPickerDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: _saving ? null : () => Navigator.pop(context),
           child: const Text('Отмена'),
         ),
       ],
@@ -120,7 +157,11 @@ class _StatusChip extends StatelessWidget {
       ),
       child: Text(
         _label(status),
-        style: TextStyle(color: status.color, fontSize: 10, fontWeight: FontWeight.w500),
+        style: TextStyle(
+          color: status.color,
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:graph_api/graph_api.dart';
 import 'package:life_os/features/tasks/presentation/task_status_visuals.dart';
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
@@ -18,7 +19,6 @@ import 'package:life_os/features/habits/presentation/habits_calendar_panel.dart'
 import 'package:life_os/features/habits/presentation/habits_sheet.dart';
 import 'package:life_os/features/habits/presentation/habits_view_model.dart';
 import 'package:life_os/features/habits/presentation/todays_habits_panel.dart';
-import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen_view_model.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/create_sphere_dialog.dart';
@@ -1248,7 +1248,7 @@ class _SphereNodeCount extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<GraphNode>>(
+    return StreamBuilder<List<GraphNodeData>>(
       stream: viewModel.graphBuilder.watchGraph(sphereId),
       builder: (context, snapshot) {
         final content = (snapshot.data?.length ?? 0) - 1;

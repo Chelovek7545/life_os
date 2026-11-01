@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:notes_api/notes_api.dart';
 import 'package:path/path.dart' as p;
 import 'package:life_os/app/dependency_container.dart';
-import 'package:life_os/features/lifegraph/data/drift_graph_deletion.dart';
 import 'package:life_os/features/lifegraph/domain/canvas_note.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
 import 'package:life_os/features/settings/settings_service.dart';
@@ -52,13 +51,12 @@ void main() {
   Future<LifeGraphViewModel> open(VaultNotesApi? vault) async {
     final vm = LifeGraphViewModel(
       spheresRepository: app.spheresRepository,
-      goalsRepository: app.goalsRepository,
-      projectsRepository: app.projectsRepository,
-      tasksRepository: app.tasksRepository,
       positionsRepository: app.graphPositionsRepository,
       notesRepository: app.graphNotesRepository,
       graphBuilder: app.graphBuilder,
-      deletion: DriftGraphDeletion(app.database),
+      nodePresentations: app.graphPresentations,
+      nodeEditors: app.graphEditors,
+      commands: app.graphCommands,
       obsidianRepository: vault,
     );
     await vm.switchSphere(sphere.id);

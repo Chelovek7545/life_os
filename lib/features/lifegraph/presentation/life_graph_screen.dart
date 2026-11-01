@@ -1,21 +1,17 @@
+import 'package:graph_ui/graph_ui.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
-import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/core/ui/graph/graph_view.dart' as graph;
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
-import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_card.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
-import 'package:life_os/features/lifegraph/presentation/widgets/node_edit_dialog.dart';
-import 'package:life_os/features/lifegraph/presentation/widgets/existing_task_picker_dialog.dart';
-import 'package:life_os/features/spheres/domain/sphere_model.dart';
+import 'package:spheres_api/spheres_api.dart';
 import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:notes_api/notes_api.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
 
 /// Экран графа жизни: сфера -> цель -> проект -> задача.
 ///
@@ -228,187 +224,52 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
 
   // ── Кастомный рендер ноды ─────────────────────────────────────────────────
 
-  Widget _nodeBuilder(BuildContext context, graph.NodeState state) {
-    final node = widget.viewModel.nodeById(state.node.id);
-    if (node == null) return const SizedBox.shrink();
-    return GraphNodeCard(
-      state: state,
-      node: node,
-      onTap: () => _showEditDialog(context, node),
-      onAddChild: () => _showAddChildDialog(node),
-      onDelete: () => _showDeleteDialog(node),
-    );
-  }
-
-  // ── Диалоги ────────────────────────────────────────────────────────────────
-
-  Future<void> _showAddChildDialog(GraphNode parent) async {
-    if (parent.isLeaf) return;
-
-    GraphNodeType? childType;
-    if (parent.type == GraphNodeType.project) {
-      final typeNew = await showDialog<int>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.surfaceContainer,
-          title: const Text('Добавить в проект'),
-          content: const Text('Что добавить?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 0),
-              child: const Text('Существующую задачу'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, 1),
-              child: const Text('Новую задачу'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, 2),
-              child: const Text('Новый подпроект'),
-            ),
-
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Отмена'),
-            ),
-          ],
-        ),
-      );
-      if (typeNew == null) return;
-      switch (typeNew) {
-        case 0:
-          await _showExistingTaskPicker(parent);
-          return;
-        case 1:
-          childType = GraphNodeType.task;
-        case 2:
-          childType = GraphNodeType.project;
-        default:
-      }
-    } else if (parent.type == GraphNodeType.task) {
-      final typeNew = await showDialog<int>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.surfaceContainer,
-          title: const Text('Добавить в задачу'),
-          content: const Text('Что добавить?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, 0),
-              child: const Text('Существующую задачу'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, 1),
-              child: const Text('Новую подзадачу'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Отмена'),
-            ),
-          ],
-        ),
-      );
-      if (typeNew == null) return;
-      switch (typeNew) {
-        case 0:
-          await _showExistingTaskForTaskPicker(parent);
-          return;
-        case 1:
-          childType = GraphNodeType.subTask;
-        default:
-      }
-    }
-
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AddChildDialog(
-        childNodeType: childType ?? GraphNodeType.values[parent.type.index + 1],
-        onSave:
-            ({
-              required title,
-              required description,
-              color,
-              dueDate,
-              startsAt,
-              endsAt,
-            }) {
-              return widget.viewModel.addChild(
-                childNodeType:
-                    childType ?? GraphNodeType.values[parent.type.index + 1],
-
-                parentId: parent.id,
-                title: title,
-                description: description,
-                color: color,
-                dueDate: dueDate,
-                startsAt: startsAt,
-                endsAt: endsAt,
-              );
-            },
-      ),
-    );
-  }
-
-  Future<void> _showExistingTaskPicker(GraphNode project) async {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StreamBuilder(
-        stream: widget.viewModel.tasksStream,
-        builder: (context, asyncSnapshot) {
-          final List<Task> candidates = asyncSnapshot.data != null
-              ? asyncSnapshot.data!.where((t) => t.projectId == null).toList()
-              : [];
-          return ExistingTaskPickerDialog(
-            tasks: candidates,
-            onSelect: (taskId) => widget.viewModel.attachExistingTaskToProject(
-              projectId: project.id,
-              taskId: taskId,
+  Widget _nodeBuilder(BuildContext context, graph.NodeState state) =>
+      ListenableBuilder(
+        listenable: widget.viewModel.nodeEditors,
+        builder: (context, _) {
+          final node = widget.viewModel.nodeById(state.node.id);
+          if (node == null) return const SizedBox.shrink();
+          final actions = widget.viewModel.actionsFor(node.id);
+          final dialogs = GraphNodeDialogs(
+            registry: widget.viewModel.nodeEditors,
+            commands: widget.viewModel.commands,
+          );
+          return GraphNodeView(
+            registry: widget.viewModel.nodePresentations,
+            node: node.toData(),
+            interaction: GraphNodeInteraction(
+              size: state.size,
+              selected: state.selected,
+              hasChildren: state.hasChildren,
+              collapsed: state.collapsed,
+              hiddenCount: state.hiddenCount,
+              accent: state.accent,
+              select: state.select,
+              toggleCollapse: state.toggleCollapse,
+              dragStart: state.dragStart,
+              dragUpdate: state.dragUpdate,
+              dragEnd: state.dragEnd,
+              edit: dialogs.canEdit(node.kind)
+                  ? () => dialogs.edit(context, actions)
+                  : null,
+              addChild: dialogs.canAddChild(node.kind)
+                  ? () => dialogs.addChild(context, actions)
+                  : null,
+              remove: widget.viewModel.commands.canDelete(node.kind)
+                  ? () => dialogs.remove(context, actions)
+                  : null,
+              createChild: actions.createChild,
+              updateNode: widget.viewModel.commands.canUpdate(node.kind)
+                  ? actions.updateNode
+                  : null,
+              deleteNode: widget.viewModel.commands.canDelete(node.kind)
+                  ? actions.deleteNode
+                  : null,
             ),
           );
         },
-      ),
-    );
-  }
-
-  Future<void> _showExistingTaskForTaskPicker(GraphNode parentTask) async {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => StreamBuilder(
-        stream: widget.viewModel.tasksStream,
-        builder: (context, asyncSnapshot) {
-          final List<Task> candidates = asyncSnapshot.data != null
-              ? asyncSnapshot.data!
-                    .where(
-                      (t) => t.id != parentTask.id && t.parentTaskId == null,
-                    )
-                    .toList()
-              : [];
-          return ExistingTaskPickerDialog(
-            title: 'Добавить существующую подзадачу',
-            emptyText: 'Нет доступных задач для подзадачи',
-            tasks: candidates,
-            onSelect: (taskId) => widget.viewModel.attachExistingTaskToTask(
-              parentTaskId: parentTask.id,
-              taskId: taskId,
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  void _showEditDialog(BuildContext context, GraphNode node) {
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => NodeEditDialog(
-        node: node,
-        onSave: (updated) => widget.viewModel.updateNode(updated),
-        onDelete: (keepChildren) =>
-            widget.viewModel.deleteNode(node.id, keepChildren: keepChildren),
-      ),
-    );
-  }
+      );
 
   Future<void> _showCreateNoteOptions(BuildContext context) async {
     final choice = await showDialog<int>(
@@ -509,37 +370,6 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         ],
       ),
     );
-  }
-
-  Future<void> _showDeleteDialog(GraphNode node) async {
-    final keepChildren = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceContainer,
-        title: const Text('Удалить ноду?'),
-        content: Text(
-          'Нода "${node.title}" будет удалена. '
-          'Что сделать с дочерними элементами?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Удалить всё поддерево'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Сохранить детей (скрыть)'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-        ],
-      ),
-    );
-    if (keepChildren != null) {
-      await widget.viewModel.deleteNode(node.id, keepChildren: keepChildren);
-    }
   }
 }
 

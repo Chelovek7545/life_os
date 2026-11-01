@@ -12,11 +12,19 @@ workspace:
   - packages/tasks_api
   - packages/plugin_runtime
   - packages/telegram_plugin
+  - packages/spheres_api
+  - packages/goals_api
+  - packages/graph_api
+  - packages/graph_ui
   - packages/notes_api
   - packages/obsidian_plugin
   - packages/plugin_ui
 
 dependencies:
+  spheres_api: ^0.1.0
+  goals_api: ^0.1.0
+  graph_api: ^0.1.0
+  graph_ui: ^0.1.0
   notes_api: ^0.1.0
   obsidian_plugin: ^0.1.0
   plugin_ui: ^0.1.0

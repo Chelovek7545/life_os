@@ -1,9 +1,9 @@
-import '../domain/graph_deletion.dart';
+import 'package:graph_ui/graph_ui.dart';
+import 'package:graph_api/graph_api.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:life_os/features/goals/data/goals_repository.dart';
-import 'package:life_os/features/goals/domain/goal_model.dart';
+import 'package:goals_api/goals_api.dart';
 import '../domain/canvas_note.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
@@ -11,22 +11,22 @@ import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.da
 import 'package:life_os/features/projects/domain/projects_api.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:notes_api/notes_api.dart';
-import 'package:life_os/features/spheres/data/spheres_repository.dart';
-import 'package:life_os/features/spheres/domain/sphere_model.dart';
-import 'package:tasks_api/tasks_api.dart' show TasksApi;
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:spheres_api/spheres_api.dart';
+import 'package:tasks_api/tasks_api.dart';
 import 'package:rxdart/rxdart.dart';
 
 class PulseScreenViewModel {
   final Set<LifeGraphViewModel> _graphs = {};
-  final SpheresRepository spheresRepository;
-  final GoalsRepository goalsRepository;
+  final SpheresApi spheresRepository;
+  final GoalsApi goalsRepository;
   final ProjectsApi projectsRepository;
   final TasksApi tasksRepository;
   final GraphPositionsRepository positionsRepository;
   final CanvasNotesStore notesRepository;
   final GraphBuilder graphBuilder;
-  final GraphDeletion deletion;
+  final GraphNodePresentationRegistry nodePresentations;
+  final GraphEditorRegistry nodeEditors;
+  final GraphCommandRegistry commands;
   final VaultNotesApi? obsidianRepository;
 
   PulseScreenViewModel({
@@ -37,7 +37,9 @@ class PulseScreenViewModel {
     required this.positionsRepository,
     required this.notesRepository,
     required this.graphBuilder,
-    required this.deletion,
+    required this.nodePresentations,
+    required this.nodeEditors,
+    required this.commands,
     required this.obsidianRepository,
   });
 
@@ -119,13 +121,12 @@ class PulseScreenViewModel {
     vm = LifeGraphViewModel(
       onDisposed: () => _graphs.remove(vm),
       spheresRepository: spheresRepository,
-      goalsRepository: goalsRepository,
-      projectsRepository: projectsRepository,
-      tasksRepository: tasksRepository,
       positionsRepository: positionsRepository,
       notesRepository: notesRepository,
       graphBuilder: graphBuilder,
-      deletion: deletion,
+      nodePresentations: nodePresentations,
+      nodeEditors: nodeEditors,
+      commands: commands,
       obsidianRepository: obsidianRepository,
     );
     _graphs.add(vm);

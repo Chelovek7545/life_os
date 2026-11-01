@@ -1,19 +1,9 @@
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:graph_api/graph_api.dart';
+import 'package:tasks_api/tasks_api.dart';
 
-/// Тип ноды графа жизни: сфера -> цель -> проект -> задача.
-enum GraphNodeType { sphere, goal, project, task, subTask }
+enum GraphNodeType { sphere, goal, project, task, subTask, external }
 
-/// Доменная нода графа. Описывает сущность из БД; позиция/рёбра — забота
-/// view-слоя ([GraphView] выводит их сам из [parentId] и layout).
 class GraphNode {
-  final String id;
-  final GraphNodeType type;
-  final String title;
-  final String subtitle;
-  final String color;
-  final String? parentId;
-  final TaskStatus? taskStatus;
-
   const GraphNode({
     required this.id,
     required this.type,
@@ -22,10 +12,52 @@ class GraphNode {
     required this.color,
     this.parentId,
     this.taskStatus,
-  });
+    String? kind,
+    this.attributes = const {},
+  }) : _kind = kind;
+  final String id;
+  final GraphNodeType type;
+  final String title;
+  final String subtitle;
+  final String color;
+  final String? parentId;
+  final TaskStatus? taskStatus;
+  final String? _kind;
+  final Map<String, Object?> attributes;
+  String get kind => _kind ?? type.name;
+  bool get isLeaf =>
+      type == GraphNodeType.subTask || type == GraphNodeType.external;
 
-  /// Задача — лист, детей не имеет.
-  bool get isLeaf => type == GraphNodeType.subTask;
+  factory GraphNode.fromData(GraphNodeData data) {
+    final status = data.attributes['taskStatus'];
+    return GraphNode(
+      id: data.id,
+      type: GraphNodeType.values.firstWhere(
+        (type) => type != GraphNodeType.external && type.name == data.kind,
+        orElse: () => GraphNodeType.external,
+      ),
+      kind: data.kind,
+      title: data.title,
+      subtitle: data.subtitle,
+      color: data.color,
+      parentId: data.parentId,
+      taskStatus: status is String ? taskStatusFromStorage(status) : null,
+      attributes: data.attributes,
+    );
+  }
+
+  GraphNodeData toData() => GraphNodeData(
+    id: id,
+    kind: kind,
+    title: title,
+    subtitle: subtitle,
+    color: color,
+    parentId: parentId,
+    attributes: {
+      ...attributes,
+      if (taskStatus != null) 'taskStatus': taskStatus!.name,
+    },
+  );
 
   GraphNode copyWith({
     String? id,
@@ -35,15 +67,15 @@ class GraphNode {
     String? color,
     String? parentId,
     TaskStatus? taskStatus,
-  }) {
-    return GraphNode(
-      id: id ?? this.id,
-      type: type ?? this.type,
-      title: title ?? this.title,
-      subtitle: subtitle ?? this.subtitle,
-      color: color ?? this.color,
-      parentId: parentId ?? this.parentId,
-      taskStatus: taskStatus ?? this.taskStatus,
-    );
-  }
+  }) => GraphNode(
+    id: id ?? this.id,
+    type: type ?? this.type,
+    kind: _kind,
+    attributes: attributes,
+    title: title ?? this.title,
+    subtitle: subtitle ?? this.subtitle,
+    color: color ?? this.color,
+    parentId: parentId ?? this.parentId,
+    taskStatus: taskStatus ?? this.taskStatus,
+  );
 }

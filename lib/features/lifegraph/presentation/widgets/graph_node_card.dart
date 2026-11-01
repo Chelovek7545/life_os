@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
-import 'package:life_os/core/ui/graph/graph_view.dart' as graph;
+import 'package:graph_ui/graph_ui.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 /// Карточка ноды в стиле приложения для кастомного nodeBuilder GraphView.
@@ -11,11 +11,11 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 /// полосой, иконкой типа, названием, описанием и статусом (для задач).
 /// Кнопка «+» открывает диалог создания следующего уровня иерархии.
 class GraphNodeCard extends StatefulWidget {
-  final graph.NodeState state;
+  final GraphNodeInteraction state;
   final GraphNode node;
-  final VoidCallback onTap;
-  final VoidCallback onAddChild;
-  final VoidCallback onDelete;
+  final VoidCallback? onTap;
+  final VoidCallback? onAddChild;
+  final VoidCallback? onDelete;
 
   const GraphNodeCard({
     super.key,
@@ -54,11 +54,15 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
         children: [
           GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onDoubleTap: (s.hasChildren || s.collapsed) ? s.toggleCollapse : null,
-            onLongPress: () {
-              widget.state.select();
-              widget.onTap();
-            },
+            onDoubleTap: (s.hasChildren || s.collapsed)
+                ? s.toggleCollapse
+                : null,
+            onLongPress: widget.onTap == null
+                ? null
+                : () {
+                    widget.state.select();
+                    widget.onTap?.call();
+                  },
             onPanStart: widget.state.dragStart,
             onPanUpdate: widget.state.dragUpdate,
             onPanEnd: widget.state.dragEnd,
@@ -72,10 +76,16 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                 width: size.width,
                 height: size.height,
                 decoration: BoxDecoration(
-                  color: _hovered ? AppColors.surfaceBright : AppColors.surfaceContainer,
-                  borderRadius: BorderRadius.circular(_isSphere ? size.width / 2 : 13),
+                  color: _hovered
+                      ? AppColors.surfaceBright
+                      : AppColors.surfaceContainer,
+                  borderRadius: BorderRadius.circular(
+                    _isSphere ? size.width / 2 : 13,
+                  ),
                   border: Border.all(
-                    color: widget.state.selected ? Colors.white : _accent.withValues(alpha: 0.55),
+                    color: widget.state.selected
+                        ? Colors.white
+                        : _accent.withValues(alpha: 0.55),
                     width: widget.state.selected ? 1.6 : 1.2,
                   ),
                   boxShadow: [
@@ -89,12 +99,14 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                     ),
                   ],
                 ),
-                child: _isSphere ? _buildSphereContent(n) : _buildRectContent(n),
+                child: _isSphere
+                    ? _buildSphereContent(n)
+                    : _buildRectContent(n),
               ),
             ),
           ),
 
-          if (_hovered)
+          if (_hovered && widget.onDelete != null)
             Positioned(
               top: -9,
               right: -9,
@@ -110,18 +122,22 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                       color: AppColors.surfaceBright,
                       border: Border.all(color: AppColors.borderGlass),
                     ),
-                    child: const Icon(Icons.close, size: 12, color: AppColors.onSurfaceVariant),
+                    child: const Icon(
+                      Icons.close,
+                      size: 12,
+                      color: AppColors.onSurfaceVariant,
+                    ),
                   ),
                 ),
               ),
             ),
 
-          if (!n.isLeaf)
+          if (widget.onAddChild != null)
             Positioned(
               right: -15,
               top: size.height / 2 - 16,
               child: Tooltip(
-                message: 'Добавить ${_childName(n.type)}',
+                message: 'Добавить элемент',
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   onEnter: (_) => setState(() => _plusHovered = true),
@@ -134,7 +150,7 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                     onTapCancel: () => setState(() => _plusPressed = false),
                     onTapUp: (_) {
                       setState(() => _plusPressed = false);
-                      widget.onAddChild();
+                      widget.onAddChild?.call();
                     },
                     child: AnimatedScale(
                       scale: _plusPressed ? 0.85 : (_plusHovered ? 1.14 : 1),
@@ -149,12 +165,23 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                           color: _plusHovered
                               ? Color.lerp(_accent, Colors.white, 0.18)!
                               : _accent,
-                          border: Border.all(color: AppColors.surfaceDim, width: 3),
+                          border: Border.all(
+                            color: AppColors.surfaceDim,
+                            width: 3,
+                          ),
                           boxShadow: const [
-                            BoxShadow(color: Color(0x66000000), blurRadius: 8, offset: Offset(0, 3)),
+                            BoxShadow(
+                              color: Color(0x66000000),
+                              blurRadius: 8,
+                              offset: Offset(0, 3),
+                            ),
                           ],
                         ),
-                        child: const Icon(Icons.add, size: 17, color: Color(0xFF08161B)),
+                        child: const Icon(
+                          Icons.add,
+                          size: 17,
+                          color: Color(0xFF08161B),
+                        ),
                       ),
                     ),
                   ),
@@ -179,16 +206,27 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                       height: 22,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: s.collapsed ? s.accent : AppColors.surfaceContainerHigh,
-                        border: Border.all(color: AppColors.surfaceContainer, width: 2.5),
+                        color: s.collapsed
+                            ? s.accent
+                            : AppColors.surfaceContainerHigh,
+                        border: Border.all(
+                          color: AppColors.surfaceContainer,
+                          width: 2.5,
+                        ),
                         boxShadow: [
-                          BoxShadow(color: Colors.black12, blurRadius: 6, offset: const Offset(0, 2)),
+                          BoxShadow(
+                            color: Colors.black12,
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
                         ],
                       ),
                       child: Icon(
                         s.collapsed ? Icons.chevron_right : Icons.expand_more,
                         size: 14,
-                        color: s.collapsed ? const Color(0xFF08161B) : AppColors.onSurface,
+                        color: s.collapsed
+                            ? const Color(0xFF08161B)
+                            : AppColors.onSurface,
                       ),
                     ),
                   ),
@@ -202,13 +240,20 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
               bottom: -9,
               child: IgnorePointer(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2.5,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.surface,
                     borderRadius: BorderRadius.circular(9),
                     border: Border.all(color: s.accent.withOpacity(0.55)),
                     boxShadow: [
-                      BoxShadow(color: Colors.black26, blurRadius: 6, offset: const Offset(0, 2)),
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
                     ],
                   ),
                   child: Text(
@@ -240,7 +285,10 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: _accent.withValues(alpha: 0.18),
-              border: Border.all(color: _accent.withValues(alpha: 0.6), width: 1.5),
+              border: Border.all(
+                color: _accent.withValues(alpha: 0.6),
+                width: 1.5,
+              ),
             ),
             child: Icon(_iconOf(n.type), color: _accent, size: 24),
           ),
@@ -320,10 +368,15 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                     n.subtitle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: AppColors.onSurfaceVariant, fontSize: 10.5),
+                    style: const TextStyle(
+                      color: AppColors.onSurfaceVariant,
+                      fontSize: 10.5,
+                    ),
                   ),
                 ],
-                if ((n.type == GraphNodeType.task || n.type == GraphNodeType.subTask)  && n.taskStatus != null) ...[
+                if ((n.type == GraphNodeType.task ||
+                        n.type == GraphNodeType.subTask) &&
+                    n.taskStatus != null) ...[
                   const SizedBox(height: 5),
                   _StatusChip(status: n.taskStatus!),
                 ],
@@ -335,23 +388,10 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
     );
   }
 
-  String _childName(GraphNodeType type) {
-    switch (type) {
-      case GraphNodeType.sphere:
-        return 'цель';
-      case GraphNodeType.goal:
-        return 'проект';
-      case GraphNodeType.project:
-        return 'задачу';
-      case GraphNodeType.task:
-        return 'подзадачу';
-      case GraphNodeType.subTask:
-        return '';
-    }
-  }
-
   String _typeLabel(GraphNodeType type) {
     switch (type) {
+      case GraphNodeType.external:
+        return 'УЗЕЛ';
       case GraphNodeType.sphere:
         return 'СФЕРА';
       case GraphNodeType.goal:
@@ -367,6 +407,8 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
 
   IconData _iconOf(GraphNodeType type) {
     switch (type) {
+      case GraphNodeType.external:
+        return Icons.extension_outlined;
       case GraphNodeType.sphere:
         return Icons.public_rounded;
       case GraphNodeType.goal:
@@ -396,7 +438,11 @@ class _StatusChip extends StatelessWidget {
       ),
       child: Text(
         _statusLabel(status),
-        style: TextStyle(color: _statusColor(status), fontSize: 10, fontWeight: FontWeight.w500),
+        style: TextStyle(
+          color: _statusColor(status),
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }

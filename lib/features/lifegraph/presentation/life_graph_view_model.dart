@@ -1,21 +1,14 @@
+import 'package:graph_ui/graph_ui.dart';
 import 'package:uuid/uuid.dart';
 import 'canvas_note_mapper.dart';
 import 'package:life_os/core/ui/hierarchy/build_note_hierarchy.dart';
 import 'package:life_os/core/storage/debounced_writer.dart';
-import '../domain/graph_deletion.dart';
+import 'package:graph_api/graph_api.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:life_os/core/utils/wrapped.dart';
 import '../domain/canvas_note.dart';
-import 'package:life_os/features/spheres/data/spheres_repository.dart';
-import 'package:life_os/features/spheres/domain/sphere_model.dart';
-import 'package:life_os/features/goals/data/goals_repository.dart';
-import 'package:life_os/features/goals/domain/goal_model.dart';
-import 'package:life_os/features/projects/domain/projects_api.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
-import 'package:tasks_api/tasks_api.dart' show TasksApi;
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:spheres_api/spheres_api.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
@@ -31,29 +24,28 @@ enum GraphSaveStatus { draft, saving, saved, failed }
 class LifeGraphViewModel {
   LifeGraphViewModel({
     required this.spheresRepository,
-    required this.goalsRepository,
-    required this.projectsRepository,
-    required this.tasksRepository,
     required this.positionsRepository,
     required this.notesRepository,
     required this.graphBuilder,
-    required this.deletion,
+    required this.nodePresentations,
+    required this.nodeEditors,
+    required this.commands,
     required this.obsidianRepository,
     this.onDisposed,
-    //required this._currentSphereId,
-  });
+  }) {
+    nodePresentations.addListener(_onPresentationsChanged);
+  }
 
   /// Координата центра мира: корень (сфера) размещается здесь, если нет сохранённой позиции.
   static const double worldCenter = 2000.0;
 
-  final SpheresRepository spheresRepository;
-  final GoalsRepository goalsRepository;
-  final ProjectsApi projectsRepository;
-  final TasksApi tasksRepository;
+  final SpheresQueries spheresRepository;
   final GraphPositionsRepository positionsRepository;
   final CanvasNotesStore notesRepository;
   final GraphBuilder graphBuilder;
-  final GraphDeletion deletion;
+  final GraphNodePresentationRegistry nodePresentations;
+  final GraphEditorRegistry nodeEditors;
+  final GraphCommandRegistry commands;
   final VaultNotesApi? obsidianRepository;
   final void Function()? onDisposed;
 
@@ -62,8 +54,6 @@ class LifeGraphViewModel {
 
   String? _currentSphereId;
   String? get currentSphereId => _currentSphereId;
-
-  Stream<List<Task>> get tasksStream => tasksRepository.watchTasks();
 
   Stream<List<Sphere>> get spheresStream => spheresRepository.watchAllSpheres();
 
@@ -103,7 +93,7 @@ class LifeGraphViewModel {
         onError: _onSaveError,
         onIdle: _onSaveIdle,
       );
-  Future<void> _switchQueue = Future.value();
+  Future<void> _operationQueue = Future.value();
   Future<void>? _closing;
   void _onSaveIdle() {
     if (!_disposed && _positionWriter.isIdle && _noteWriter.isIdle) {
@@ -116,17 +106,31 @@ class LifeGraphViewModel {
     debugPrint('Graph save failed: ' + error.toString());
   }
 
+  bool _accepting = true;
   bool _disposed = false;
   int _notesLoadGeneration = 0;
+  int _scopeGeneration = 0;
 
   /// Переключает текущую сферу (граф).
-  Future<void> switchSphere(String sphereId) {
-    final operation = _switchQueue.then((_) => _switchToSphere(sphereId));
-    _switchQueue = operation.then<void>(
+  Future<void> switchSphere(String sphereId) =>
+      _enqueue(() => _switchToSphere(sphereId));
+
+  Future<T> _enqueue<T>(
+    Future<T> Function() operation, {
+    bool Function()? isAvailable,
+  }) {
+    if (!_accepting) return Future.error(StateError('Graph is closing.'));
+    final result = _operationQueue.then((_) {
+      if (isAvailable != null && !isAvailable()) {
+        throw StateError('The graph form is no longer current.');
+      }
+      return operation();
+    });
+    _operationQueue = result.then<void>(
       (_) {},
-      onError: (Object _, StackTrace __) {},
+      onError: (Object _, StackTrace _) {},
     );
-    return operation;
+    return result;
   }
 
   Future<void> _loadPositions(String sphereId) async {
@@ -137,226 +141,90 @@ class LifeGraphViewModel {
     }
   }
 
-  // /// Создаёт новую сферу и переключается на неё.
-  // Future<void> createSphere({
-  //   required String name,
-  //   String color = '#FFB59C',
-  // }) async {
-  //   final sphere = Sphere.create(name: name, color: color);
-  //   await spheresRepository.addSphere(sphere);
-  //   await _switchToSphere(sphere.id);
-  // }
+  Future<String> createChild(
+    String parentId,
+    GraphNodeDraft draft, {
+    bool Function()? isAvailable,
+  }) => _enqueue(() async {
+    final scope = _scope();
+    final parent = _domainNode(parentId).toData();
+    final position = _childPosition(parentId, draft.kind);
+    final id = await commands.create(
+      GraphCreateRequest(scope: scope, parent: parent, draft: draft),
+    );
+    _positions[id] = position;
+    await _scheduleSavePositions();
+    return id;
+  }, isAvailable: isAvailable);
 
-  /// Добавляет дочернюю ноду к указанному родителю (по иерархии сферы).
-  Future<void> addChild({
+  Future<void> attachNode({
     required String parentId,
-    required String title,
-    required GraphNodeType childNodeType,
-    String description = '',
-    String? color,
-    DateTime? dueDate,
-    DateTime? startsAt,
-    DateTime? endsAt,
-  }) async {
+    required String kind,
+    required String id,
+    bool Function()? isAvailable,
+  }) => _enqueue(() async {
     if (_currentSphereId == null) return;
-    final parentView = graph.firstWhere(
-      (n) => n.id == parentId,
-      orElse: () => throw StateError('Parent not found'),
+    final parent = _domainNode(parentId).toData();
+    final position = _childPosition(parentId, kind);
+    final attached = await commands.attach(
+      GraphAttachRequest(scope: _scope(), parent: parent, kind: kind, id: id),
     );
-    // Свежайшая позиция родителя: во время драга не эмитим, поэтому берём из _positions.
+    if (attached == null) return;
+    _positions[attached] = position;
+    await _scheduleSavePositions();
+  }, isAvailable: isAvailable);
+
+  Future<void> updateNode(GraphNode updated) =>
+      updateGraphNode(updated.toData());
+
+  Future<void> updateGraphNode(
+    GraphNodeData updated, {
+    bool Function()? isAvailable,
+  }) => _enqueue(() async {
+    final current = _domainNode(updated.id).toData();
+    await commands.update(
+      GraphUpdateRequest(scope: _scope(), current: current, updated: updated),
+    );
+  }, isAvailable: isAvailable);
+
+  Offset _childPosition(String parentId, String kind) {
+    final parentView = graph.firstWhere((node) => node.id == parentId);
     final parentPos = _positions[parentId] ?? parentView.position;
-    final parentType = _domainNode(parentId).type;
-
-    final newPos = _clampPosition(
+    return _clampPosition(
       Offset(parentPos.dx + 280, parentPos.dy),
-      graphNodeSizeOf(_childTypeOf(parentType)),
+      nodePresentations.sizeFor(kind),
     );
-
-    switch (childNodeType) {
-      case GraphNodeType.goal:
-        final goal = Goal.create(
-          name: title,
-          sphereId: _currentSphereId!,
-          description: description,
-          color: color ?? '#FF5C00',
-        );
-        await goalsRepository.addGoal(goal);
-        _positions[goal.id] = newPos;
-        await _scheduleSavePositions();
-        break;
-
-      case GraphNodeType.project:
-        print(parentId);
-        final project = parentType == GraphNodeType.project
-            ? Project.create(
-                name: title,
-                description: description,
-                color: color ?? '#4A90D9',
-                parentProjectId: parentId,
-              )
-            : Project.create(
-                name: title,
-                description: description,
-                color: color ?? '#4A90D9',
-                goalId: parentId,
-              );
-        await projectsRepository.addProject(project);
-        _positions[project.id] = newPos;
-        await _scheduleSavePositions();
-        break;
-
-      case GraphNodeType.task:
-        final task = Task.blank().copyWith(
-          title: title,
-          description: description,
-          projectId: Wrapped(parentId),
-          status: TaskStatus.notStarted,
-          dueDate: Wrapped(dueDate),
-          startsAt: Wrapped(startsAt),
-          endsAt: Wrapped(endsAt),
-        );
-        await tasksRepository.addTask(task);
-        _positions[task.id] = newPos;
-        await _scheduleSavePositions();
-        break;
-
-      case GraphNodeType.subTask:
-        final task = Task.blank().copyWith(
-          title: title,
-          description: description,
-          parentTaskId: Wrapped(parentId),
-          status: TaskStatus.notStarted,
-          dueDate: Wrapped(dueDate),
-          startsAt: Wrapped(startsAt),
-          endsAt: Wrapped(endsAt),
-        );
-        await tasksRepository.addTask(task);
-        _positions[task.id] = newPos;
-        await _scheduleSavePositions();
-        break;
-      case GraphNodeType.sphere:
-        return;
-    }
   }
 
-  /// Привязывает уже существующую задачу (без проекта) к проекту в графе.
-  /// Задача появляется нодой под проектом после пересборки через стримы.
-  Future<void> attachExistingTaskToProject({
-    required String projectId,
-    required String taskId,
-  }) async {
-    if (_currentSphereId == null) return;
-    final existing = await tasksRepository.getById(taskId);
-    if (existing == null) return;
-    if (existing.projectId != null) return;
-
-    await tasksRepository.updateTask(
-      existing.copyWith(projectId: Wrapped(projectId)),
-    );
-
-    final parentView = graph.firstWhere(
-      (n) => n.id == projectId,
-      orElse: () => throw StateError('Parent not found'),
-    );
-    final parentPos = _positions[projectId] ?? parentView.position;
-    final newPos = _clampPosition(
-      Offset(parentPos.dx + 280, parentPos.dy),
-      graphNodeSizeOf(GraphNodeType.task),
-    );
-    _positions[taskId] = newPos;
-    await _scheduleSavePositions();
+  GraphScope _scope() {
+    final rootId = _currentSphereId;
+    if (rootId == null) throw StateError('No graph is open.');
+    return GraphScope(rootId: rootId, rootKind: graphBuilder.rootKind);
   }
 
-  /// Привязывает уже существующую задачу к другой задаче как подзадачу.
-  Future<void> attachExistingTaskToTask({
-    required String parentTaskId,
-    required String taskId,
-  }) async {
-    if (_currentSphereId == null) return;
-    final existing = await tasksRepository.getById(taskId);
-    if (existing == null || existing.id == parentTaskId) return;
-
-    await tasksRepository.updateTask(
-      existing.copyWith(parentTaskId: Wrapped(parentTaskId)),
+  GraphNodeActionContext actionsFor(String id) {
+    final scope = _scope();
+    final generation = _scopeGeneration;
+    return GraphNodeActionContext(
+      scope: scope,
+      node: _domainNode(id).toData(),
+      isAvailable: () =>
+          !_disposed &&
+          _scopeGeneration == generation &&
+          _currentSphereId == scope.rootId,
+      createChild: (draft, active) =>
+          createChild(id, draft, isAvailable: active),
+      updateNode: (updated, active) =>
+          updateGraphNode(updated, isAvailable: active),
+      deleteNode: (keepChildren, active) =>
+          deleteNode(id, keepChildren: keepChildren, isAvailable: active),
+      attachNode: (kind, entityId, active) => attachNode(
+        parentId: id,
+        kind: kind,
+        id: entityId,
+        isAvailable: active,
+      ),
     );
-
-    final parentView = graph.firstWhere(
-      (n) => n.id == parentTaskId,
-      orElse: () => throw StateError('Parent not found'),
-    );
-    final parentPos = _positions[parentTaskId] ?? parentView.position;
-    final newPos = _clampPosition(
-      Offset(parentPos.dx + 280, parentPos.dy),
-      graphNodeSizeOf(GraphNodeType.subTask),
-    );
-    _positions[taskId] = newPos;
-    await _scheduleSavePositions();
-  }
-
-  /// Обновляет ноду (переименование, описание, цвет, статус задачи).
-  Future<void> updateNode(GraphNode updated) async {
-    final current = _domainNode(updated.id);
-
-    switch (current.type) {
-      case GraphNodeType.sphere:
-        final sphere = Sphere(
-          id: updated.id,
-          name: updated.title,
-          color: updated.color,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        );
-        await spheresRepository.updateSphere(sphere);
-        break;
-
-      case GraphNodeType.goal:
-        final goal = Goal(
-          id: updated.id,
-          name: updated.title,
-          description: updated.subtitle,
-          color: updated.color,
-          sphereId: current.parentId!,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-        );
-        await goalsRepository.updateGoal(goal);
-        break;
-
-      case GraphNodeType.project:
-        final project = Project(
-          id: updated.id,
-          name: updated.title,
-          description: updated.subtitle,
-          color: updated.color,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          goalId: current.parentId,
-        );
-        await projectsRepository.updateProject(project);
-        break;
-
-      case GraphNodeType.task:
-        if (updated.taskStatus != null) {
-          final existing = await tasksRepository.getById(updated.id);
-          if (existing != null) {
-            await tasksRepository.updateTask(
-              existing.copyWith(status: updated.taskStatus!),
-            );
-          }
-        }
-        break;
-      case GraphNodeType.subTask:
-        if (updated.taskStatus != null) {
-          final existing = await tasksRepository.getById(updated.id);
-          if (existing != null) {
-            await tasksRepository.updateTask(
-              existing.copyWith(status: updated.taskStatus!),
-            );
-          }
-        }
-        break;
-    }
-    // Перестроение графа произойдёт автоматически через стримы
   }
 
   /// Live-курсор драга: обновляет позицию в памяти без эмиссии и записи —
@@ -394,16 +262,19 @@ class LifeGraphViewModel {
     );
   }
 
-  Future<void> deleteNode(String id, {required bool keepChildren}) async {
+  Future<void> deleteNode(
+    String id, {
+    required bool keepChildren,
+    bool Function()? isAvailable,
+  }) => _enqueue(() async {
     if (_currentSphereId == null) return;
-    final node = _domainNode(id);
+    final scope = _scope();
+    final node = _domainNode(id).toData();
     await flush();
-    final removed = await deletion.delete(
-      node.type,
-      id,
-      keepChildren: keepChildren,
+    final removed = await commands.delete(
+      GraphDeleteRequest(scope: scope, node: node, keepChildren: keepChildren),
     );
-    if (node.type == GraphNodeType.sphere) {
+    if (id == scope.rootId) {
       await _graphSubscription?.cancel();
       await positionsRepository.deletePositions(id);
       await notesRepository.deleteNotes(id);
@@ -413,12 +284,12 @@ class LifeGraphViewModel {
       _notesSubject.add(const []);
       _graphSubject.add(const []);
       final spheres = await spheresRepository.getAllSpheres();
-      if (spheres.isNotEmpty) await switchSphere(spheres.first.id);
+      if (spheres.isNotEmpty) await _switchToSphere(spheres.first.id);
     } else {
       _removePositions(removed);
       await flush();
     }
-  }
+  }, isAvailable: isAvailable);
 
   void _removePositions(Iterable<String> ids) {
     for (final id in ids) {
@@ -444,20 +315,8 @@ class LifeGraphViewModel {
     return null;
   }
 
-  /// Тип дочерней ноды следующего уровня иерархии (сфера → цель → проект → задача).
-  GraphNodeType _childTypeOf(GraphNodeType parent) {
-    switch (parent) {
-      case GraphNodeType.sphere:
-        return GraphNodeType.goal;
-      case GraphNodeType.goal:
-        return GraphNodeType.project;
-      case GraphNodeType.project:
-        return GraphNodeType.task;
-      case GraphNodeType.task:
-        return GraphNodeType.subTask;
-      case GraphNodeType.subTask:
-        return GraphNodeType.task;
-    }
+  void _onPresentationsChanged() {
+    if (!_disposed) _graphSubject.add(_toViewNodes(_domainNodes));
   }
 
   List<gv.GraphNode> _toViewNodes(List<GraphNode> nodes) {
@@ -474,10 +333,10 @@ class LifeGraphViewModel {
           index: i,
           depth: depth[n.id] ?? 0,
           parentId: n.parentId,
-          size: graphNodeSizeOf(n.type),
+          size: nodePresentations.sizeFor(n.kind),
           position: _clampPosition(
             positions[n.id] ?? Offset.zero,
-            graphNodeSizeOf(n.type),
+            nodePresentations.sizeFor(n.kind),
           ),
         ),
       );
@@ -566,17 +425,30 @@ class LifeGraphViewModel {
   Future<void> dispose() => _closing ??= _dispose();
 
   Future<void> _dispose() async {
+    _accepting = false;
+    (Object, StackTrace)? failure;
+    Future<void> release(FutureOr<void> Function() action) async {
+      try {
+        await action();
+      } catch (error, stack) {
+        failure ??= (error, stack);
+      }
+    }
+
+    // A source can fail during cancellation; pending writes still need flushing.
+    await release(() => _operationQueue);
     _disposed = true;
-    await _switchQueue;
-    await _graphSubscription?.cancel();
-    await _notesSubscription?.cancel();
-    try {
-      await Future.wait([_positionWriter.close(), _noteWriter.close()]);
-    } finally {
-      saveStatus.dispose();
-      await _graphSubject.close();
-      await _notesSubject.close();
-      onDisposed?.call();
+    nodePresentations.removeListener(_onPresentationsChanged);
+    await release(() async => _graphSubscription?.cancel());
+    await release(() async => _notesSubscription?.cancel());
+    await release(_positionWriter.close);
+    await release(_noteWriter.close);
+    await release(saveStatus.dispose);
+    await release(_graphSubject.close);
+    await release(_notesSubject.close);
+    await release(() => onDisposed?.call());
+    if (failure case final error?) {
+      Error.throwWithStackTrace(error.$1, error.$2);
     }
   }
 
@@ -792,6 +664,7 @@ class LifeGraphViewModel {
   /// Переключает текущую сферу (граф) и загружает её позиции и заметки.
   Future<void> _switchToSphere(String sphereId) async {
     if (_disposed) return;
+    _scopeGeneration++;
     await flush();
     await _graphSubscription?.cancel();
     if (_disposed) return;
@@ -808,10 +681,9 @@ class LifeGraphViewModel {
         : GraphSaveStatus.saving;
     _domainNodes = const [];
     _graphSubject.add(const []); // сбрасываем устаревшие данные прошлой сферы
-    _graphSubscription?.cancel();
     _graphSubscription = graphBuilder.watchGraph(sphereId).listen((nodes) {
-      _domainNodes = nodes;
-      _graphSubject.add(_toViewNodes(nodes));
+      _domainNodes = nodes.map(GraphNode.fromData).toList(growable: false);
+      _graphSubject.add(_toViewNodes(_domainNodes));
     }, onError: (e) => debugPrint('Graph stream error: $e'));
   }
 }
