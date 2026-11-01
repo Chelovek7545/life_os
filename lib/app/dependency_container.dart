@@ -1,12 +1,17 @@
 import 'package:graph_api/graph_api.dart';
 import 'package:graph_ui/graph_ui.dart';
-import 'plugins/life_graph_modules.dart';
+import 'plugins/spheres_plugin_adapter.dart';
+import 'plugins/goals_plugin_adapter.dart';
+import 'package:spheres_plugin/spheres_plugin.dart';
+import 'package:goals_plugin/goals_plugin.dart';
 import 'plugins/application_ui_modules.dart';
 import 'plugins/projects_plugin_adapter.dart';
 import 'plugins/habits_plugin_adapter.dart';
 import 'plugins/tasks_plugin_adapter.dart';
 import 'plugins/lifegraph_plugin_adapter.dart';
 import 'plugins/resources_plugin_adapter.dart';
+import 'plugins/today_plugin_adapter.dart';
+import 'package:today_plugin/today_plugin.dart';
 import 'package:lifegraph_plugin/lifegraph_plugin.dart';
 import 'package:resources_plugin/resources_plugin.dart';
 import 'package:tasks_plugin/tasks_plugin.dart';
@@ -76,6 +81,30 @@ class DependencyContainer {
     graphPresentations = GraphNodePresentationRegistry();
     graphEditors = GraphEditorRegistry();
     graphCommands = GraphCommandRegistry();
+    spheresPlugin = createSpheresPlugin(
+      spheres: spheresRepository,
+      contributors: graphContributors,
+      presentations: graphPresentations,
+      editors: graphEditors,
+      commands: graphCommands,
+      delete: (request) => DriftGraphDeletion(this.database).delete(
+        GraphNodeType.sphere,
+        request.node.id,
+        keepChildren: request.keepChildren,
+      ),
+    );
+    goalsPlugin = createGoalsPlugin(
+      goals: goalsRepository,
+      contributors: graphContributors,
+      presentations: graphPresentations,
+      editors: graphEditors,
+      commands: graphCommands,
+      delete: (request) => DriftGraphDeletion(this.database).delete(
+        GraphNodeType.goal,
+        request.node.id,
+        keepChildren: request.keepChildren,
+      ),
+    );
     lifeGraphPlugin = createLifeGraphPlugin(
       spheres: spheresRepository,
       goals: goalsRepository,
@@ -105,6 +134,12 @@ class DependencyContainer {
       vault: obsidianRepository,
       ui: ui,
       dependencies: {if (enableObsidian) 'obsidian'},
+    );
+    todayPlugin = createTodayPlugin(
+      ui: ui,
+      tasks: tasksRepository,
+      habits: habitsRepository,
+      projects: projectsRepository,
     );
     localBotService = enableTelegram
         ? LocalBotService(
@@ -144,14 +179,9 @@ class DependencyContainer {
       ),
     );
     plugins = PluginHost([
-      for (final module in [
-        ...lifeGraphModules(
-          spheres: spheresRepository,
-          goals: goalsRepository,
-          deletion: DriftGraphDeletion(this.database),
-        ),
-        ...extraGraphModules,
-      ])
+      ...spheresPlugin.plugins,
+      ...goalsPlugin.plugins,
+      for (final module in extraGraphModules)
         GraphModulePlugin(
           module: module,
           contributors: graphContributors,
@@ -167,6 +197,7 @@ class DependencyContainer {
       ...projectsPlugin.plugins,
       ...habitsPlugin.plugins,
       ...tasksPlugin.plugins,
+      ...todayPlugin.plugins,
       for (final module in uiModules) registerUiModule(module, ui),
       ...additionalPlugins,
     ]);
@@ -198,8 +229,11 @@ class DependencyContainer {
   late final GraphNodePresentationRegistry graphPresentations;
   late final GraphEditorRegistry graphEditors;
   late final GraphCommandRegistry graphCommands;
+  late final SpheresPlugin spheresPlugin;
+  late final GoalsPlugin goalsPlugin;
   late final LifeGraphPlugin lifeGraphPlugin;
   PulseScreenViewModel get pulseScreenViewModel => lifeGraphPlugin.viewModel;
+  late final TodayPlugin todayPlugin;
   late final TasksPlugin tasksPlugin;
   TasksViewModel get tasksViewModel => tasksPlugin.viewModel;
   late final ProjectsPlugin projectsPlugin;

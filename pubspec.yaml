@@ -9,6 +9,10 @@ environment:
 
 
 workspace:
+  - packages/graph_components
+  - packages/goals_plugin
+  - packages/spheres_plugin
+  - packages/today_plugin
   - packages/graph_canvas
   - packages/lifegraph_plugin
   - packages/resources_plugin
@@ -30,6 +34,10 @@ workspace:
   - packages/plugin_ui
 
 dependencies:
+  graph_components: ^0.1.0
+  goals_plugin: ^0.1.0
+  spheres_plugin: ^0.1.0
+  today_plugin: ^0.1.0
   graph_canvas: ^0.1.0
   lifegraph_plugin: ^0.1.0
   resources_plugin: ^0.1.0

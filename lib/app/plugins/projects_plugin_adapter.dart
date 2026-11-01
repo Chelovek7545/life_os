@@ -5,8 +5,8 @@ import 'package:graph_api/graph_api.dart';
 import 'package:graph_ui/graph_ui.dart';
 import 'package:plugin_ui/plugin_ui.dart';
 import 'package:life_os/features/projects/presentation/projects_screen.dart';
-import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNodeType;
-import 'package:life_os/features/lifegraph/presentation/widgets/builtin_graph_forms.dart';
+import 'package:graph_components/graph_components.dart';
+import 'package:life_os/features/projects/presentation/projects_graph_ui.dart';
 
 ProjectsPlugin createProjectsPlugin({
   required ProjectsApi projects,
@@ -18,8 +18,8 @@ ProjectsPlugin createProjectsPlugin({
   required PluginUiRegistry ui,
   required GraphDeleteHandler delete,
 }) {
-  final card = builtinGraphPresentation(GraphNodeType.project);
-  final editor = builtinGraphEditor(GraphNodeType.project);
+  final card = graphNodePresentation(projectGraphComponent);
+  final editor = graphNodeEditor(projectGraphComponent);
   return ProjectsPlugin(
     projects: projects,
     tasks: tasks,
@@ -35,7 +35,7 @@ ProjectsPlugin createProjectsPlugin({
       nodeSize: card.size,
       editor: editor.builder,
       createForm: (_, actions) =>
-          builtinGraphChildForm(GraphNodeType.project, actions),
+          graphChildForm(projectGraphComponent, actions),
     ),
   );
 }

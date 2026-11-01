@@ -1,12 +1,25 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:graph_components/graph_components.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'app_colors.dart';
 
 class AppTheme {
   static ThemeData get darkTheme {
     return ThemeData(
+      extensions: [
+        GraphComponentPalette(
+          surface: AppColors.surface,
+          surfaceBright: AppColors.surfaceBright,
+          surfaceDim: AppColors.surfaceDim,
+          surfaceContainer: AppColors.surfaceContainer,
+          surfaceContainerHigh: AppColors.surfaceContainerHigh,
+          onSurface: AppColors.onSurface,
+          onSurfaceVariant: AppColors.onSurfaceVariant,
+          borderGlass: AppColors.borderGlass,
+        ),
+      ],
       //Чтобы были одинаковые отступы и т.д
       visualDensity: VisualDensity.standard,
       brightness: Brightness.dark,

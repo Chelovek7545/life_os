@@ -1,7 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:graph_ui/graph_ui.dart';
 import 'package:tasks_api/tasks_api.dart';
-import '../../lifegraph/presentation/widgets/existing_task_picker_dialog.dart';
+import 'widgets/existing_task_picker_dialog.dart';
 
 GraphFormBuilder tasksGraphAttachForm(
   Stream<List<Task>> Function() watchTasks, {

@@ -93,6 +93,8 @@ class _TrackedContributor implements GraphContributor {
             rethrow;
           } finally {
             _leases.remove(cancel);
+            // Closing must not invoke the same failed cancellation again.
+            listener.onCancel = null;
             listener.close();
           }
         }();

@@ -32,9 +32,13 @@ Widget datePickButton(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(
-                date == null ? label : formatDate(date),
-                style: AppTypography.codeLabel.copyWith(color: Colors.white),
+              Flexible(
+                child: Text(
+                  date == null ? label : formatDate(date),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.codeLabel.copyWith(color: Colors.white),
+                ),
               ),
               const Icon(Icons.calendar_today, size: 16),
             ],

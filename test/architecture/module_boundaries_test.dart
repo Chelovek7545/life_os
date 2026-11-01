@@ -4,6 +4,37 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('pure packages and Telegram cannot depend on app internals', () {
     const forbidden = {
+      'graph_components': [
+        'dart:io',
+        'package:life_os/',
+        'package:drift/',
+        'package:tasks_api/',
+        'package:tasks_plugin/',
+        'package:projects_api/',
+        'package:projects_plugin/',
+        'package:goals_api/',
+        'package:goals_plugin/',
+        'package:spheres_api/',
+        'package:spheres_plugin/',
+        'package:lifegraph_plugin/',
+        'GraphNodeType',
+      ],
+      'goals_plugin': [
+        'dart:io',
+        'package:life_os/',
+        'package:drift/',
+        'package:spheres_plugin/',
+        'package:projects_plugin/',
+        'package:lifegraph_plugin/',
+      ],
+      'spheres_plugin': [
+        'dart:io',
+        'package:life_os/',
+        'package:drift/',
+        'package:goals_plugin/',
+        'package:projects_plugin/',
+        'package:lifegraph_plugin/',
+      ],
       'graph_canvas': [
         'dart:io',
         'package:life_os/',
@@ -31,6 +62,18 @@ void main() {
         'package:tasks_plugin/',
         'package:projects_plugin/',
         'package:graph_canvas/',
+      ],
+      'today_plugin': [
+        'dart:io',
+        'package:life_os/',
+        'package:drift/',
+        'package:tasks_api/',
+        'package:habits_api/',
+        'package:projects_api/',
+        'package:tasks_plugin/',
+        'package:habits_plugin/',
+        'package:projects_plugin/',
+        'package:lifegraph_plugin/',
       ],
       'core_contracts': [
         'dart:io',
@@ -77,6 +120,7 @@ void main() {
         'package:telegram_plugin/',
       ],
       'spheres_api': [
+        'package:spheres_plugin/',
         'dart:ui',
         'package:flutter/',
         'package:drift/',
@@ -84,6 +128,7 @@ void main() {
         'package:graph_ui/',
       ],
       'goals_api': [
+        'package:goals_plugin/',
         'dart:ui',
         'package:flutter/',
         'package:drift/',
@@ -102,6 +147,7 @@ void main() {
         'package:graph_ui/',
       ],
       'graph_ui': [
+        'package:graph_components/',
         'package:life_os/',
         'package:tasks_api/',
         'package:spheres_api/',
@@ -124,6 +170,9 @@ void main() {
         'package:plugin_ui/',
       ],
       'plugin_ui': [
+        'package:today_plugin/',
+        'package:projects_plugin/',
+        'package:projects_api/',
         'package:lifegraph_plugin/',
         'package:resources_plugin/',
         'package:tasks_plugin/',
@@ -330,6 +379,32 @@ void main() {
     }
     expect(pulse.contains('PluginPanelSlot'), isTrue);
   });
+  test('Today is assembled from public panels outside the generic shell', () {
+    final root = File('lib/app/dependency_container.dart').readAsStringSync();
+    expect(root.contains('...todayPlugin.plugins'), isTrue);
+    final shell = File('lib/main_screen.dart').readAsStringSync();
+    expect(shell.contains('TodayScreen'), isFalse);
+    final adapter = File(
+      'lib/app/plugins/today_plugin_adapter.dart',
+    ).readAsStringSync();
+    for (final name in ['tasks', 'habits', 'projects']) {
+      expect(
+        adapter.contains('package:${name}_plugin/${name}_panels.dart'),
+        isTrue,
+      );
+      final publicEntry = File(
+        'packages/${name}_plugin/lib/${name}_panels.dart',
+      );
+      expect(publicEntry.existsSync(), isTrue);
+      final panel = File(
+        'packages/${name}_plugin/lib/src/${name}_panel.dart',
+      ).readAsStringSync();
+      expect(panel.contains('package:life_os/'), isFalse);
+      expect(panel.contains('package:drift/'), isFalse);
+      expect(panel.contains('features/'), isFalse);
+    }
+    expect(adapter.contains('/src/'), isFalse);
+  });
   test(
     'tasks plugin owns state, work log lifetimes and graph registrations',
     () {
@@ -352,6 +427,7 @@ void main() {
         'packages/tasks_plugin/lib/src',
       ).listSync().whereType<File>()) {
         if (file.path.endsWith('tasks_plugin.dart') ||
+            file.path.endsWith('tasks_panel.dart') ||
             file.path.endsWith('work_logs_view_model.dart')) {
           continue;
         }
@@ -410,7 +486,10 @@ void main() {
       for (final file in Directory(
         'packages/projects_plugin/lib/src',
       ).listSync().whereType<File>()) {
-        if (file.path.endsWith('projects_plugin.dart')) continue;
+        if (file.path.endsWith('projects_plugin.dart') ||
+            file.path.endsWith('projects_panel.dart')) {
+          continue;
+        }
         expect(
           file.readAsStringSync().contains('package:flutter/'),
           isFalse,
@@ -474,6 +553,71 @@ void main() {
         'lib/app/plugins/application_ui_modules.dart',
       ).readAsStringSync();
       expect(uiComposition.contains('features/'), isFalse);
+    },
+  );
+  test(
+    'goals and spheres own graph registrations behind pure logic entries',
+    () {
+      final root = File('lib/app/dependency_container.dart').readAsStringSync();
+      expect(root.contains('lifeGraphModules('), isFalse);
+      for (final feature in ['goals', 'spheres']) {
+        expect(root.contains('...${feature}Plugin.plugins'), isTrue);
+        final registration = File(
+          'packages/${feature}_plugin/lib/src/${feature}_plugin.dart',
+        ).readAsStringSync();
+        expect(registration.contains("id: '$feature.graph'"), isTrue);
+        final entry = File(
+          'packages/${feature}_plugin/lib/${feature}_logic.dart',
+        ).readAsStringSync();
+        expect(entry.contains('package:flutter/'), isFalse);
+        expect(entry.contains("src/${feature}_plugin.dart"), isFalse);
+        for (final part in ['commands', 'contributor']) {
+          final logic = File(
+            'packages/${feature}_plugin/lib/src/${feature}_graph_$part.dart',
+          ).readAsStringSync();
+          for (final forbidden in [
+            'package:flutter/',
+            'package:graph_ui/',
+            'package:life_os/',
+            '/data/',
+          ]) {
+            expect(logic.contains(forbidden), isFalse);
+          }
+          final compatibility = File(
+            'lib/features/$feature/domain/${feature}_graph_$part.dart',
+          ).readAsStringSync();
+          expect(compatibility.trim().startsWith('export '), isTrue);
+        }
+        final adapter = File(
+          'lib/app/plugins/${feature}_plugin_adapter.dart',
+        ).readAsStringSync();
+        expect(adapter.contains('/src/'), isFalse);
+        expect(adapter.contains('/data/'), isFalse);
+      }
+    },
+  );
+  test(
+    'feature adapters use shared components without the legacy built-in forms',
+    () {
+      for (final feature in ['goals', 'spheres', 'projects', 'tasks']) {
+        final adapter = File(
+          'lib/app/plugins/${feature}_plugin_adapter.dart',
+        ).readAsStringSync();
+        expect(adapter.contains('package:graph_components/'), isTrue);
+        expect(adapter.contains('builtin_graph_forms.dart'), isFalse);
+        expect(adapter.contains('GraphNodeType'), isFalse);
+      }
+      final components = File(
+        'packages/graph_components/pubspec.yaml',
+      ).readAsStringSync();
+      for (final dependency in [
+        'tasks_api:',
+        'lifegraph_plugin:',
+        'drift:',
+        'life_os:',
+      ]) {
+        expect(components.contains(dependency), isFalse);
+      }
     },
   );
 }

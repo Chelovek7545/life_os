@@ -474,6 +474,7 @@ void main() {
 
       test('toggleTask toggles status and calls updateTask', () async {
         final task = createMockTask(status: TaskStatus.open);
+        when(mockRepository.getById(task.id)).thenAnswer((_) async => task);
         when(mockRepository.updateTask(any)).thenAnswer((_) async => {});
 
         await viewModel.toggleTask(task);

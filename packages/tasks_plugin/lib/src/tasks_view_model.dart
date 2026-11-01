@@ -224,12 +224,16 @@ class TasksViewModel {
   );
   Future<void> updateTask(Task task) =>
       _enqueue(() => _repository.updateTask(task));
-  Future<void> toggleTask(Task task) => updateTask(
-    task.copyWith(
-      status: task.isCompleted ? TaskStatus.inProgress : TaskStatus.done,
-      updatedAt: DateTime.now(),
-    ),
-  );
+  Future<void> toggleTask(Task task) => _enqueue(() async {
+    final current = await _repository.getById(task.id);
+    if (current == null) return;
+    await _repository.updateTask(
+      current.copyWith(
+        status: task.isCompleted ? TaskStatus.inProgress : TaskStatus.done,
+        updatedAt: DateTime.now(),
+      ),
+    );
+  });
   Future<void> deleteTask(String id) =>
       _enqueue(() => _repository.deleteTask(id));
   Future<void> deleteSelectedTask() {

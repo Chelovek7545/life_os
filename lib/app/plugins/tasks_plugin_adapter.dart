@@ -6,8 +6,8 @@ import 'package:graph_api/graph_api.dart';
 import 'package:graph_ui/graph_ui.dart';
 import 'package:life_os/features/tasks/presentation/tasks_screen.dart';
 import 'package:life_os/features/tasks/presentation/tasks_graph_ui.dart';
-import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNodeType;
-import 'package:life_os/features/lifegraph/presentation/widgets/builtin_graph_forms.dart';
+import 'package:graph_components/graph_components.dart';
+import 'package:life_os/features/tasks/presentation/tasks_graph_components.dart';
 
 TasksPlugin createTasksPlugin({
   required TasksApi tasks,
@@ -20,17 +20,16 @@ TasksPlugin createTasksPlugin({
   required GraphCommandRegistry commands,
   required GraphDeleteHandler delete,
 }) {
-  TasksNodeUi node(GraphNodeType type) {
-    final card = builtinGraphPresentation(type);
+  TasksNodeUi node({bool subtask = false}) {
+    final spec = taskGraphComponent(subtask: subtask);
+    final card = graphNodePresentation(spec);
     return TasksNodeUi(
       size: card.size,
       card: card.builder,
-      editor: builtinGraphEditor(type).builder,
-      create: (_, actions) => builtinGraphChildForm(type, actions),
-      attach: (watchTasks) => tasksGraphAttachForm(
-        watchTasks,
-        subtask: type == GraphNodeType.subTask,
-      ),
+      editor: graphNodeEditor(spec).builder,
+      create: (_, actions) => graphChildForm(spec, actions),
+      attach: (watchTasks) =>
+          tasksGraphAttachForm(watchTasks, subtask: subtask),
     );
   }
 
@@ -50,8 +49,8 @@ TasksPlugin createTasksPlugin({
         workLogs: logs,
         onFormVisibilityChanged: setInset,
       ),
-      task: node(GraphNodeType.task),
-      subtask: node(GraphNodeType.subTask),
+      task: node(),
+      subtask: node(subtask: true),
     ),
   );
 }

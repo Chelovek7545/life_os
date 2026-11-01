@@ -5,6 +5,7 @@ A personal life management app built with Flutter. Life OS brings your tasks, pr
 ## Features
 
 - **Pulse** — a life graph dashboard that visualizes your current state across life spheres
+- **Today** — a date-based dashboard composed of independent task, habit, and project panels
 - **Tasks** — fast task management with quick completion from anywhere in the app
 - **Projects** — group related work into projects and track their progress
 - **Resources** — a personal library of notes, links, and reference material
@@ -29,7 +30,7 @@ Features
 
 ## Architecture
 
-The modular migration introduces a Pub workspace with shared contracts, pure Dart task/note/sphere/goal/project/habits APIs, projects, habits, tasks, LifeGraph/Pulse and resources plugins with explicit storage and UI adapters, a reusable graph canvas, optional Telegram/Obsidian plugins, registered screens/panels/actions/settings, and extensible graph contributions. See [the migration guide](docs/modular-architecture.md) for current boundaries, validation, and remaining steps.
+The modular migration introduces a Pub workspace with shared contracts, pure Dart task/note/sphere/goal/project/habits APIs, spheres, goals, projects, habits, tasks, LifeGraph/Pulse and resources plugins with explicit storage and UI adapters, a reusable graph canvas and generic graph cards/forms, public task/habit/project panels and a composed Today plugin, optional Telegram/Obsidian plugins, registered screens/panels/actions/settings, and extensible graph contributions. See [the migration guide](docs/modular-architecture.md) for current boundaries, validation, and remaining steps.
 
 ### Existing feature layout
 

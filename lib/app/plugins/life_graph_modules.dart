@@ -1,44 +1,29 @@
 import 'package:graph_ui/graph_ui.dart';
 import 'package:graph_api/graph_api.dart';
-import 'package:life_os/features/spheres/presentation/spheres_graph_ui.dart';
-import 'package:life_os/features/goals/presentation/goals_graph_ui.dart';
+import 'package:goals_plugin/goals_plugin.dart';
+import 'package:spheres_plugin/spheres_plugin.dart';
 import 'package:life_os/features/lifegraph/domain/graph_deletion.dart';
-import 'package:life_os/features/spheres/domain/spheres_graph_commands.dart';
-import 'package:life_os/features/goals/domain/goals_graph_commands.dart';
 import 'package:spheres_api/spheres_api.dart';
 import 'package:goals_api/goals_api.dart';
-import 'package:life_os/features/spheres/domain/spheres_graph_contributor.dart';
-import 'package:life_os/features/goals/domain/goals_graph_contributor.dart';
 import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNodeType;
-import 'package:life_os/features/lifegraph/presentation/widgets/builtin_graph_forms.dart';
+import 'goals_plugin_adapter.dart';
+import 'spheres_plugin_adapter.dart';
 
+// Compatibility composition for callers that still supply GraphModule lists.
 List<GraphModule> lifeGraphModules({
   required SpheresApi spheres,
   required GoalsApi goals,
   required GraphDeletion deletion,
 }) => [
-  GraphModule(
-    id: 'spheres.graph',
-    contributors: [SpheresGraphContributor(spheres)],
-    presentations: [builtinGraphPresentation(GraphNodeType.sphere)],
-    editors: [spheresGraphEditor()],
-    commands: [
-      spheresGraphCommands(
-        spheres,
-        delete: _delete(deletion, GraphNodeType.sphere),
-      ),
-    ],
+  spheresGraphModule(
+    spheres: spheres,
+    visuals: spheresUiBindings(),
+    delete: _delete(deletion, GraphNodeType.sphere),
   ),
-  GraphModule(
-    id: 'goals.graph',
-    dependencies: {'spheres.graph'},
-    contributors: [GoalsGraphContributor(goals)],
-    presentations: [builtinGraphPresentation(GraphNodeType.goal)],
-    editors: [goalsGraphEditor()],
-    childActions: [goalsGraphChildAction()],
-    commands: [
-      goalsGraphCommands(goals, delete: _delete(deletion, GraphNodeType.goal)),
-    ],
+  goalsGraphModule(
+    goals: goals,
+    visuals: goalsUiBindings(),
+    delete: _delete(deletion, GraphNodeType.goal),
   ),
 ];
 
