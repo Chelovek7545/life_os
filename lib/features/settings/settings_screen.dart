@@ -1,3 +1,4 @@
+import 'package:plugin_ui/plugin_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:life_os/features/settings/settings_service.dart';
 
@@ -72,61 +73,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const Divider(),
 
-          _buildSectionHeader(context, 'Obsidian Integration'),
-
-          ValueListenableBuilder<String>(
-            valueListenable: SettingsService.obsidianVaultPath,
-            builder: (context, vaultPath, child) {
-              return ListTile(
-                leading: const Icon(Icons.folder_open_outlined),
-                title: const Text('Путь к хранилищу Obsidian (Vault)'),
-                subtitle: Text(
-                  vaultPath.isEmpty ? 'Не указан' : vaultPath,
-                  style: TextStyle(
-                    color: vaultPath.isEmpty
-                        ? Colors.orange
-                        : Colors.grey.shade600,
-                    fontSize: 13,
-                  ),
-                ),
-                trailing: const Icon(Icons.edit_outlined),
-                onTap: () => _showVaultPathDialog(context, vaultPath),
-              );
-            },
-          ),
-
-          ValueListenableBuilder<String>(
-            valueListenable: SettingsService.tgToken,
-            builder: (context, token, child) {
-              return ListTile(
-                leading: const Icon(Icons.key_outlined),
-                title: const Text('Ключ Telegram-бота'),
-                subtitle: Text(
-                  token.isEmpty ? 'Не указан' : 'Указан',
-                  style: TextStyle(
-                    color: token.isEmpty ? Colors.orange : Colors.grey.shade600,
-                    fontSize: 13,
-                  ),
-                ),
-                trailing: const Icon(Icons.edit_outlined),
-                onTap: () => _showTelegramTokenDialog(context, token),
-              );
-            },
-          ),
-
-          ValueListenableBuilder<String>(
-            valueListenable: SettingsService.tgAllowedUsers,
-            builder: (context, ids, child) => ListTile(
-              leading: const Icon(Icons.lock_outline),
-              title: const Text('Разрешённые Telegram User ID'),
-              subtitle: Text(
-                ids.isEmpty ? 'Не указаны — бот не запустится' : ids,
-              ),
-              trailing: const Icon(Icons.edit_outlined),
-              onTap: () => _showTelegramUsersDialog(context, ids),
+          for (final contribution
+              in PluginUiScope.maybeOf(context)?.settings ??
+                  <PluginSettingsContribution>[]) ...[
+            _buildSectionHeader(context, contribution.title),
+            KeyedSubtree(
+              key: ValueKey(contribution.id),
+              child: contribution.builder(context),
             ),
-          ),
-
+          ],
           const Divider(),
 
           ValueListenableBuilder<bool>(
@@ -162,108 +117,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 applicationLegalese: '© 2026 Developer',
               );
             },
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showVaultPathDialog(BuildContext context, String currentPath) {
-    final controller = TextEditingController(text: currentPath);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Путь к Obsidian Vault'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Например: C:\\Users\\Name\\Documents\\MyVault',
-            helperText: 'Укажите абсолютный путь к папке с заметками',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () {
-              SettingsService.setObsidianVaultPath(controller.text.trim());
-              Navigator.pop(ctx);
-            },
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showTelegramTokenDialog(BuildContext context, String currentToken) {
-    final controller = TextEditingController(text: currentToken);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Ключ Telegram-бота'),
-        content: TextField(
-          controller: controller,
-          obscureText: true,
-          decoration: const InputDecoration(hintText: 'Введите токен бота'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () {
-              SettingsService.setTgToken(controller.text.trim());
-              Navigator.pop(ctx);
-            },
-            child: const Text('Сохранить'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showTelegramUsersDialog(BuildContext context, String currentIds) {
-    final controller = TextEditingController(text: currentIds);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Разрешённые Telegram User ID'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: '123456789, 987654321',
-            helperText:
-                'Числовые ID через запятую. Пустой список закрывает доступ.',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-          FilledButton(
-            onPressed: () {
-              final ids = controller.text.trim();
-              if (ids.isNotEmpty &&
-                  (!RegExp(r'^\d+(?:[,;\s]+\d+)*$').hasMatch(ids) ||
-                      ids
-                          .split(RegExp(r'[,;\s]+'))
-                          .any((value) => (int.tryParse(value) ?? 0) <= 0))) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Введите числовые User ID через запятую.'),
-                  ),
-                );
-                return;
-              }
-              SettingsService.setTgAllowedUsers(ids);
-              Navigator.pop(ctx);
-            },
-            child: const Text('Сохранить'),
           ),
         ],
       ),

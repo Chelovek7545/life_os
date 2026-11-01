@@ -14,7 +14,7 @@ import 'package:life_os/features/lifegraph/presentation/widgets/node_edit_dialog
 import 'package:life_os/features/lifegraph/presentation/widgets/existing_task_picker_dialog.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
 import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
-import 'package:life_os/features/resources/data/obsidian_repository.dart';
+import 'package:notes_api/notes_api.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 /// Экран графа жизни: сфера -> цель -> проект -> задача.
@@ -440,11 +440,11 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     if (choice == 0) {
       widget.viewModel.createNote();
     } else if (choice == 1) {
-      _showObsidianNotePicker(context);
+      _showVaultNotePicker(context);
     }
   }
 
-  Future<void> _showObsidianNotePicker(BuildContext context) async {
+  Future<void> _showVaultNotePicker(BuildContext context) async {
     final treeNodes = widget.viewModel.getObsidianHierarchy();
     if (treeNodes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -468,23 +468,34 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
               height: 1000,
               nodes: treeNodes,
               emptyText: 'Заметки не найдены',
-              onNodeTap: (node) {
-                if (node.type == NodeType.note && node.data is ObsidianNote) {
-                  final note = node.data as ObsidianNote;
-                  Navigator.pop(ctx);
-
-                  widget.viewModel.createNoteWithText(
+              onNodeTap: (node) async {
+                if (node.type != NodeType.note || node.data is! VaultNote)
+                  return;
+                final note = node.data as VaultNote;
+                Navigator.pop(ctx);
+                try {
+                  await widget.viewModel.createNoteWithText(
                     title: note.title,
                     text: note.content,
                     obsidianPath: note.absolutePath,
                   );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Заметка "${note.title}" добавлена на граф!',
+                  if (context.mounted)
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Заметка «' + note.title + '» добавлена на граф!',
+                        ),
                       ),
-                    ),
-                  );
+                    );
+                } catch (error) {
+                  if (context.mounted)
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Не удалось добавить заметку: ' + error.toString(),
+                        ),
+                      ),
+                    );
                 }
               },
             ),

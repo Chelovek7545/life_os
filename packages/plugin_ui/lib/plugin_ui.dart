@@ -1,0 +1,280 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:plugin_runtime/plugin_runtime.dart';
+
+enum PluginActionLocation { appBar, navigationRail }
+
+class PluginActionContribution {
+  PluginActionContribution({
+    required this.id,
+    required Set<PluginActionLocation> locations,
+    required this.builder,
+  }) : locations = Set.unmodifiable(locations);
+  final String id;
+  final Set<PluginActionLocation> locations;
+  final Widget Function(BuildContext context, bool compact) builder;
+}
+
+class PluginSettingsContribution {
+  const PluginSettingsContribution({
+    required this.id,
+    required this.title,
+    required this.builder,
+  });
+  final String id;
+  final String title;
+  final WidgetBuilder builder;
+}
+
+class PluginNotice {
+  const PluginNotice(this.message, {this.isError = false});
+  final String message;
+  final bool isError;
+}
+
+class PluginUiRegistry extends ChangeNotifier {
+  final Map<String, List<PluginActionContribution>> _actions = {};
+  final Map<String, List<PluginSettingsContribution>> _settings = {};
+  final _notices = StreamController<PluginNotice>.broadcast();
+  bool _disposed = false;
+  Stream<PluginNotice> get notices => _notices.stream;
+  List<PluginSettingsContribution> get settings =>
+      List.unmodifiable(_settings.values.expand((items) => items));
+  List<PluginActionContribution> actionsFor(PluginActionLocation location) =>
+      List.unmodifiable(
+        _actions.values
+            .expand((items) => items)
+            .where((action) => action.locations.contains(location)),
+      );
+
+  void register(
+    String owner, {
+    List<PluginActionContribution> actions = const [],
+    List<PluginSettingsContribution> settings = const [],
+  }) {
+    if (_disposed) throw StateError('UI registry is disposed.');
+    if (_actions.containsKey(owner))
+      throw ArgumentError('Plugin UI is already registered: $owner');
+    final ids = <String>{
+      ..._actions.values.expand((items) => items).map((item) => item.id),
+      ..._settings.values.expand((items) => items).map((item) => item.id),
+    };
+    for (final id in [
+      ...actions.map((item) => item.id),
+      ...settings.map((item) => item.id),
+    ]) {
+      if (!ids.add(id)) throw ArgumentError('Duplicate UI contribution: $id');
+    }
+    _actions[owner] = List.unmodifiable(actions);
+    _settings[owner] = List.unmodifiable(settings);
+    notifyListeners();
+  }
+
+  void unregister(String owner) {
+    final existed = _actions.remove(owner) != null;
+    _settings.remove(owner);
+    if (existed && !_disposed) notifyListeners();
+  }
+
+  void notify(PluginNotice notice) {
+    if (!_disposed) _notices.add(notice);
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    unawaited(_notices.close());
+    super.dispose();
+  }
+}
+
+class UiPluginRegistration implements AppPlugin {
+  UiPluginRegistration({
+    required this.plugin,
+    required this.registry,
+    List<PluginActionContribution> actions = const [],
+    List<PluginSettingsContribution> settings = const [],
+  }) : actions = List.unmodifiable(actions),
+       settings = List.unmodifiable(settings);
+  final AppPlugin plugin;
+  final PluginUiRegistry registry;
+  final List<PluginActionContribution> actions;
+  final List<PluginSettingsContribution> settings;
+  @override
+  String get id => plugin.id;
+  @override
+  Set<String> get dependencies => plugin.dependencies;
+  @override
+  Future<void> start() async {
+    await plugin.start();
+    registry.register(id, actions: actions, settings: settings);
+  }
+
+  @override
+  Future<void> stop() async {
+    try {
+      await plugin.stop();
+    } finally {
+      registry.unregister(id);
+    }
+  }
+}
+
+class PluginUiScope extends InheritedNotifier<PluginUiRegistry> {
+  const PluginUiScope({
+    super.key,
+    required PluginUiRegistry registry,
+    required super.child,
+  }) : super(notifier: registry);
+  static PluginUiRegistry? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<PluginUiScope>()?.notifier;
+}
+
+class PluginActions extends StatelessWidget {
+  const PluginActions({
+    super.key,
+    required this.registry,
+    required this.location,
+    this.compact = false,
+  });
+  final PluginUiRegistry registry;
+  final PluginActionLocation location;
+  final bool compact;
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: registry,
+    builder: (context, _) {
+      final actions = registry.actionsFor(location);
+      if (actions.isEmpty) return const SizedBox.shrink();
+      final children = [
+        for (final action in actions)
+          KeyedSubtree(
+            key: ValueKey(action.id),
+            child: action.builder(context, compact),
+          ),
+      ];
+      return location == PluginActionLocation.navigationRail
+          ? Column(mainAxisSize: MainAxisSize.min, children: children)
+          : Row(mainAxisSize: MainAxisSize.min, children: children);
+    },
+  );
+}
+
+class PluginTextSetting extends StatelessWidget {
+  const PluginTextSetting({
+    super.key,
+    required this.value,
+    required this.title,
+    required this.icon,
+    required this.save,
+    this.emptyLabel = 'Не указан',
+    this.obscure = false,
+    this.validate,
+  });
+  final ValueListenable<String> value;
+  final String title;
+  final IconData icon;
+  final Future<void> Function(String text) save;
+  final String emptyLabel;
+  final bool obscure;
+  final String? Function(String text)? validate;
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<String>(
+    valueListenable: value,
+    builder: (context, current, _) => ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Text(
+        current.isEmpty
+            ? emptyLabel
+            : obscure
+            ? 'Указан'
+            : current,
+      ),
+      trailing: const Icon(Icons.edit_outlined),
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (_) => _SettingEditor(
+          title: title,
+          value: current,
+          save: save,
+          obscure: obscure,
+          validate: validate,
+        ),
+      ),
+    ),
+  );
+}
+
+class _SettingEditor extends StatefulWidget {
+  const _SettingEditor({
+    required this.title,
+    required this.value,
+    required this.save,
+    required this.obscure,
+    this.validate,
+  });
+  final String title;
+  final String value;
+  final Future<void> Function(String) save;
+  final bool obscure;
+  final String? Function(String)? validate;
+  @override
+  State<_SettingEditor> createState() => _SettingEditorState();
+}
+
+class _SettingEditorState extends State<_SettingEditor> {
+  late final _controller = TextEditingController(text: widget.value);
+  bool _saving = false;
+  String? _error;
+  Future<void> _save() async {
+    final value = _controller.text.trim();
+    final validation = widget.validate?.call(value);
+    if (validation != null) {
+      setState(() => _error = validation);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.save(value);
+      if (mounted) Navigator.of(context).pop();
+    } catch (error) {
+      if (mounted)
+        setState(() {
+          _saving = false;
+          _error = error.toString();
+        });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.title),
+    content: TextField(
+      controller: _controller,
+      obscureText: widget.obscure,
+      enabled: !_saving,
+      decoration: InputDecoration(errorText: _error),
+    ),
+    actions: [
+      TextButton(
+        onPressed: _saving ? null : () => Navigator.of(context).pop(),
+        child: const Text('Отмена'),
+      ),
+      FilledButton(
+        onPressed: _saving ? null : _save,
+        child: const Text('Сохранить'),
+      ),
+    ],
+  );
+}

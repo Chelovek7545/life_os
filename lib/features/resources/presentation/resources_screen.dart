@@ -1,17 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
-import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
-import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
-import 'package:life_os/features/resources/data/obsidian_repository.dart';
+import 'package:notes_api/notes_api.dart';
 import 'package:life_os/features/resources/presentation/resources_view_model.dart';
-import 'package:life_os/features/settings/settings_service.dart';
 
 class ResourcesScreen extends StatelessWidget {
-  const ResourcesScreen({
-    super.key,
-    required this.viewModel,
-  });
-
+  const ResourcesScreen({super.key, required this.viewModel});
 
   final ResourcesViewModel viewModel;
 
@@ -20,141 +13,151 @@ class ResourcesScreen extends StatelessWidget {
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
-    return Padding(
-      padding: EdgeInsets.all(isLandscape ? 24.0 : 16.0),
-      // Оптимизация: Скролл через Slivers для виртуализации памяти
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Ресурсы и Заметки',
-                      style:
-                          TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.refresh),
-                      tooltip: 'Обновить Obsidian Vault',
-                      onPressed: () {
-                        viewModel.scanVault(
-                          SettingsService.obsidianVaultPath.value,
-                        );
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Сканирование Obsidian хранилища...'),
-                          ),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Иерархия хранилища Obsidian и локальные стикеры графа.',
-                  style: TextStyle(color: Colors.white70),
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Структура Obsidian Vault',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-
-          // --- ОБСИДИАН СЕКЦИЯ (ИЕРАРХИЯ) ---
-          SliverToBoxAdapter(
-            child: _ObsidianHierarchySection(
-              viewModel: viewModel,
-            ),
-          ),
-
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
-
-          // --- ЛОКАЛЬНЫЕ ЗАМЕТКИ ГРАФА ---
-          const SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Стикеры графа (Все сферы)',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 12),
-              ],
-            ),
-          ),
-
-          // Ленивая сетка карточек графа без shrinkWrap
-          ListenableBuilder(
-            listenable: viewModel,
-            builder: (context, _) {
-              final notes = viewModel.getAllNotes();
-              
-              if (notes.isEmpty) {
-                return const SliverToBoxAdapter(
-                  child: Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('Нет локальных стикеров на графах.'),
-                    ),
+    return ListenableBuilder(
+      listenable: viewModel,
+      builder: (context, _) => Padding(
+        padding: EdgeInsets.all(isLandscape ? 24.0 : 16.0),
+        // Оптимизация: Скролл через Slivers для виртуализации памяти
+        child: CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Ресурсы и Заметки',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        tooltip: 'Обновить Obsidian Vault',
+                        onPressed: !viewModel.hasVault
+                            ? null
+                            : () {
+                                viewModel.refreshVault();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Сканирование Obsidian хранилища...',
+                                    ),
+                                  ),
+                                );
+                              },
+                      ),
+                    ],
                   ),
-                );
-              }
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Иерархия хранилища Obsidian и локальные стикеры графа.',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Структура Obsidian Vault',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
 
-              return SliverGrid.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 1.35,
-                ),
-                itemCount: notes.length,
-                itemBuilder: (context, index) {
-                  return Card(
-                    margin: EdgeInsets.zero,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(14),
-                      child: Text(
-                        notes[index].text,
-                        maxLines: 5,
-                        overflow: TextOverflow.ellipsis,
+            // --- ОБСИДИАН СЕКЦИЯ (ИЕРАРХИЯ) ---
+            SliverToBoxAdapter(
+              child: _ObsidianHierarchySection(viewModel: viewModel),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+
+            // --- ЛОКАЛЬНЫЕ ЗАМЕТКИ ГРАФА ---
+            const SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Стикеры графа (Все сферы)',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 12),
+                ],
+              ),
+            ),
+
+            // Ленивая сетка карточек графа без shrinkWrap
+            ListenableBuilder(
+              listenable: viewModel,
+              builder: (context, _) {
+                final notes = viewModel.getAllNotes();
+
+                if (notes.isEmpty) {
+                  return const SliverToBoxAdapter(
+                    child: Card(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text('Нет локальных стикеров на графах.'),
                       ),
                     ),
                   );
-                },
-              );
-            },
-          ),
-        ],
+                }
+
+                return SliverGrid.builder(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.35,
+                  ),
+                  itemCount: notes.length,
+                  itemBuilder: (context, index) {
+                    return Card(
+                      margin: EdgeInsets.zero,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Text(
+                          notes[index].text,
+                          maxLines: 5,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class _ObsidianHierarchySection extends StatelessWidget {
-  const _ObsidianHierarchySection({
-    required this.viewModel,
-  });
+  const _ObsidianHierarchySection({required this.viewModel});
 
-  
   final ResourcesViewModel viewModel;
 
   @override
   Widget build(BuildContext context) {
-
-    return ValueListenableBuilder<String>(
-      valueListenable: SettingsService.obsidianVaultPath,
-      builder: (context, vaultPath, _) {
+    return ListenableBuilder(
+      listenable: viewModel,
+      builder: (context, _) {
+        if (!viewModel.hasVault) {
+          return const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Интеграция с хранилищем отключена.'),
+            ),
+          );
+        }
+        final vaultPath = viewModel.vaultPath;
         if (vaultPath.isEmpty) {
           return Card(
             color: Colors.orange.withValues(alpha: 0.15),
@@ -180,7 +183,7 @@ class _ObsidianHierarchySection extends StatelessWidget {
             ),
           );
         }
-        
+
         return ListenableBuilder(
           listenable: viewModel,
           builder: (context, _) {
@@ -205,7 +208,7 @@ class _ObsidianHierarchySection extends StatelessWidget {
                 ),
               );
             }
-            
+
             final treeNodes = viewModel.getHierarchyTree();
             if (treeNodes.isEmpty) {
               return const Card(
@@ -226,9 +229,24 @@ class _ObsidianHierarchySection extends StatelessWidget {
                 nodes: treeNodes,
                 emptyText: 'Хранилище пусто',
                 onNodeTap: (node) async {
-                  if (node.type == NodeType.note && node.data is ObsidianNote) {
-                    final note = node.data as ObsidianNote;
-                    final content = await note.readContent();
+                  if (node.type == NodeType.note && node.data is VaultNote) {
+                    final note = node.data as VaultNote;
+                    String content;
+                    try {
+                      content = await viewModel.readNoteContent(
+                        note.absolutePath,
+                      );
+                    } catch (error) {
+                      if (context.mounted)
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Не удалось открыть заметку: ' + error.toString(),
+                            ),
+                          ),
+                        );
+                      return;
+                    }
 
                     if (context.mounted) {
                       _openNoteEditorDialog(context, note, content);
@@ -236,8 +254,8 @@ class _ObsidianHierarchySection extends StatelessWidget {
                   }
                 },
                 trailingBuilder: (node) {
-                  if (node.type == NodeType.note && node.data is ObsidianNote) {
-                    final note = node.data as ObsidianNote;
+                  if (node.type == NodeType.note && node.data is VaultNote) {
+                    final note = node.data as VaultNote;
                     return IconButton(
                       visualDensity: VisualDensity.compact,
                       icon: const Icon(
@@ -257,7 +275,7 @@ class _ObsidianHierarchySection extends StatelessWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                'Will be made later'
+                                'Will be made later',
                                 //'Заметка "${note.title}" перенесена на граф!',
                               ),
                               duration: const Duration(seconds: 2),
@@ -279,7 +297,7 @@ class _ObsidianHierarchySection extends StatelessWidget {
 
   void _openNoteEditorDialog(
     BuildContext context,
-    ObsidianNote note,
+    VaultNote note,
     String initialContent,
   ) {
     showDialog(
@@ -295,7 +313,7 @@ class _ObsidianHierarchySection extends StatelessWidget {
 
 /// Изолированный диалог для предотвращения утечек памяти TextEditingController
 class _NoteEditorDialog extends StatefulWidget {
-  final ObsidianNote note;
+  final VaultNote note;
   final String initialContent;
   final ResourcesViewModel viewModel;
 
@@ -311,6 +329,8 @@ class _NoteEditorDialog extends StatefulWidget {
 
 class _NoteEditorDialogState extends State<_NoteEditorDialog> {
   late final TextEditingController _controller;
+  bool _saving = false;
+  String? _error;
 
   @override
   void initState() {
@@ -333,11 +353,13 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
         height: 400,
         child: TextField(
           controller: _controller,
+          enabled: !_saving,
           maxLines: null,
           expands: true,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             border: OutlineInputBorder(),
             hintText: 'Содержимое заметки (.md)',
+            errorText: _error,
           ),
         ),
       ),
@@ -347,13 +369,27 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
           child: const Text('Закрыть'),
         ),
         FilledButton(
-          onPressed: () async {
-            await widget.viewModel.updateNoteContent(
-              widget.note.absolutePath,
-              _controller.text,
-            );
-            if (context.mounted) Navigator.pop(context);
-          },
+          onPressed: _saving
+              ? null
+              : () async {
+                  setState(() {
+                    _saving = true;
+                    _error = null;
+                  });
+                  try {
+                    await widget.viewModel.updateNoteContent(
+                      widget.note.absolutePath,
+                      _controller.text,
+                    );
+                    if (context.mounted) Navigator.pop(context);
+                  } catch (error) {
+                    if (mounted)
+                      setState(() {
+                        _saving = false;
+                        _error = error.toString();
+                      });
+                  }
+                },
           child: const Text('Сохранить'),
         ),
       ],

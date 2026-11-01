@@ -1,3 +1,4 @@
+import 'package:plugin_ui/plugin_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:life_os/app/dependency_container.dart';
 import 'package:life_os/core/theme/app_theme.dart';
@@ -28,6 +29,8 @@ class MyApp extends StatelessWidget {
       //   scaffoldBackgroundColor: Colors.black,
       //   colorScheme: const ColorScheme.dark(primary: Colors.indigo),
       // ),
+      builder: (context, child) =>
+          PluginUiScope(registry: diContainer.ui, child: child!),
       home: MainScreen(diContainer: diContainer),
     );
   }

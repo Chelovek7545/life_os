@@ -1,65 +1,69 @@
+import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:notes_api/notes_api.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
-import 'package:life_os/features/resources/data/obsidian_repository.dart';
 import 'package:life_os/features/resources/presentation/resources_view_model.dart';
 
-class FakeVault extends ObsidianRepository {
+class FakeVault extends Fake implements VaultNotesApi {
   int listeners = 0;
   bool fail = false;
+  final _changes = StreamController<VaultState>.broadcast();
   @override
-  void addListener(void Function() listener) {
+  VaultState state = VaultState(
+    notes: [
+      VaultNote(
+        absolutePath: '/note.md',
+        relativePath: 'note.md',
+        title: 'Note',
+        modifiedAt: DateTime(2026, 11, 1),
+      ),
+    ],
+  );
+  @override
+  Stream<VaultState> watch() => Stream.multi((listener) {
     listeners++;
-    super.addListener(listener);
+    listener.add(state);
+    final subscription = _changes.stream.listen(listener.add);
+    listener.onCancel = () async {
+      listeners--;
+      await subscription.cancel();
+    };
+  }, isBroadcast: true);
+  @override
+  Future<void> refresh() async {
+    state = VaultState(
+      notes: state.notes,
+      error: fail ? 'missing vault' : null,
+    );
+    _changes.add(state);
   }
 
-  @override
-  void removeListener(void Function() listener) {
-    listeners--;
-    super.removeListener(listener);
-  }
-
-  @override
-  List<ObsidianNote> get notes => [
-    ObsidianNote(
-      absolutePath: '/note.md',
-      relativePath: 'note.md',
-      title: 'Note',
-      content: '',
-      modifiedAt: DateTime(2026, 10, 31),
-    ),
-  ];
-  @override
-  Future<void> scanVault(
-    String path,
-    Function() onLoading,
-    Function(String) onError,
-  ) async {
-    if (fail) onError('missing vault');
-    notifyListeners();
-  }
+  Future<void> close() => _changes.close();
 }
 
 void main() {
   test(
-    'publishes initial notes, subscribes once and removes the listener',
+    'subscribes once, publishes source state, and cancels its subscriptions',
     () async {
+      SharedPreferences.setMockInitialValues({});
       final vault = FakeVault();
-      final notes = GraphNotesRepository(obsidianRepository: vault);
-      final vm = ResourcesViewModel(graphNotesRepo: notes, obsidianRepo: vault);
-      expect(vm.obsidianNotes.single.title, 'Note');
-      await vm.scanVault('/vault');
-      await vm.scanVault('/vault');
+      final notes = GraphNotesRepository();
+      await notes.init();
+      final vm = ResourcesViewModel(notes: notes, vault: vault);
+      expect(vm.vaultNotes.single.title, 'Note');
+      await vm.refreshVault();
+      await vm.refreshVault();
       expect(vault.listeners, 1);
-      expect(vm.obsidianNotes.single.title, 'Note');
       vault.fail = true;
-      await vm.scanVault('/missing');
+      await vm.refreshVault();
       expect(vm.error, 'missing vault');
       expect(vm.isLoading, isFalse);
       vm.dispose();
+      await Future<void>.delayed(Duration.zero);
       expect(vault.listeners, 0);
-      vault.notifyListeners();
-      notes.dispose();
-      vault.dispose();
+      await notes.dispose();
+      await vault.close();
     },
   );
 }

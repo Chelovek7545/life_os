@@ -6,6 +6,8 @@
 /// differences and reports gestures. Requires Dart 3 (sealed classes).
 library;
 
+import 'package:notes_api/notes_api.dart' show NoteReference;
+
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -158,7 +160,8 @@ class GraphNote {
   Size size; // mutable, чтобы поддерживать локальный ресайз
   String text; // содержимое; меняется только через NoteTextChangedAction
   Offset position; // top-left, мировые координаты
-  String? obsidianPath; // путь к файлу Obsidian .md (если привязано)
+  NoteReference? source;
+  final bool isReadOnly;
 
   GraphNote({
     required this.id,
@@ -166,7 +169,8 @@ class GraphNote {
     this.size = const Size(212, 150),
     this.text = '',
     required this.position,
-    this.obsidianPath,
+    this.source,
+    this.isReadOnly = false,
   });
 
   GraphNote clone() => GraphNote(
@@ -175,7 +179,8 @@ class GraphNote {
     size: size,
     text: text,
     position: position,
-    obsidianPath: obsidianPath,
+    source: source,
+    isReadOnly: isReadOnly,
   );
 }
 
@@ -1097,6 +1102,7 @@ class _GraphViewState extends State<GraphView>
   }
 
   void _beginNoteEdit(GraphNote n) {
+    if (n.isReadOnly) return;
     if (_editingNoteId == n.id) return;
     _commitNoteEdit();
     _editingNoteId = n.id;

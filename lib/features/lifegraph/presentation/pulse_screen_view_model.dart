@@ -4,13 +4,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:life_os/features/goals/data/goals_repository.dart';
 import 'package:life_os/features/goals/domain/goal_model.dart';
-import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
+import '../domain/canvas_note.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
 import 'package:life_os/features/projects/domain/projects_api.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
-import 'package:life_os/features/resources/data/obsidian_repository.dart';
+import 'package:notes_api/notes_api.dart';
 import 'package:life_os/features/spheres/data/spheres_repository.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
 import 'package:tasks_api/tasks_api.dart' show TasksApi;
@@ -18,15 +18,16 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:rxdart/rxdart.dart';
 
 class PulseScreenViewModel {
+  final Set<LifeGraphViewModel> _graphs = {};
   final SpheresRepository spheresRepository;
   final GoalsRepository goalsRepository;
   final ProjectsApi projectsRepository;
   final TasksApi tasksRepository;
   final GraphPositionsRepository positionsRepository;
-  final GraphNotesRepository notesRepository;
+  final CanvasNotesStore notesRepository;
   final GraphBuilder graphBuilder;
   final GraphDeletion deletion;
-  final ObsidianRepository obsidianRepository;
+  final VaultNotesApi? obsidianRepository;
 
   PulseScreenViewModel({
     required this.spheresRepository,
@@ -114,7 +115,9 @@ class PulseScreenViewModel {
   }
 
   Future<LifeGraphViewModel> openGraph(String sphereId) async {
-    final vm = LifeGraphViewModel(
+    late final LifeGraphViewModel vm;
+    vm = LifeGraphViewModel(
+      onDisposed: () => _graphs.remove(vm),
       spheresRepository: spheresRepository,
       goalsRepository: goalsRepository,
       projectsRepository: projectsRepository,
@@ -125,11 +128,16 @@ class PulseScreenViewModel {
       deletion: deletion,
       obsidianRepository: obsidianRepository,
     );
+    _graphs.add(vm);
     await vm.switchSphere(sphereId);
     return vm;
   }
 
+  Future<void> closeGraphs() =>
+      Future.wait(_graphs.toList().map((graph) => graph.dispose()));
+
   Future<void> dispose() async {
+    await closeGraphs();
     await _spheresSubscription?.cancel();
     await _goalsSubscription?.cancel();
     await _tasksSubscription?.cancel();

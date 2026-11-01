@@ -5,11 +5,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/app/dependency_container.dart';
 
-Future<DependencyContainer> createTestApp({bool enableTelegram = false}) async {
+Future<DependencyContainer> createTestApp({
+  bool enableTelegram = false,
+  bool enableObsidian = true,
+}) async {
   SharedPreferences.setMockInitialValues({});
   final container = DependencyContainer(
     database: AppDatabase(NativeDatabase.memory()),
     enableTelegram: enableTelegram,
+    enableObsidian: enableObsidian,
   );
   await container.init();
   return container;

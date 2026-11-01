@@ -1,13 +1,12 @@
+import 'package:plugin_ui/plugin_ui.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:life_os/animated_indexed_stack.dart';
 import 'package:life_os/app/dependency_container.dart';
-import 'package:life_os/core/local_bot_service.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/app_notifiacations.dart';
-import 'package:life_os/core/ui/telegram_bot_toggle_button.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
 import 'package:life_os/features/projects/presentation/projects_screen.dart';
 import 'package:life_os/features/resources/presentation/resources_screen.dart';
@@ -25,7 +24,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
   bool _resizeToAvoidBottomInset = true;
-  bool _botIsSwitching = false;
+  StreamSubscription<PluginNotice>? _notices;
 
   // 1. Фиксируем список страниц в памяти ОДИН раз!
   late final List<Widget> _pages;
@@ -38,9 +37,9 @@ class _MainScreenState extends State<MainScreen> {
       PulseScreen(
         viewModel: widget.diContainer.pulseScreenViewModel,
         habitsViewModel: widget.diContainer.habitsViewModel,
-        portraitAppBarAction: widget.diContainer.localBotService == null ? null : TelegramBotToggleButton(
-          isRunning: widget.diContainer.localBotService!.isRunning,
-          onPressed: _toggleBot,
+        portraitAppBarAction: PluginActions(
+          registry: widget.diContainer.ui,
+          location: PluginActionLocation.appBar,
           compact: true,
         ),
         onOpenTask: _openTaskFromPulse,
@@ -61,67 +60,27 @@ class _MainScreenState extends State<MainScreen> {
       ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
       ResourcesScreen(viewModel: widget.diContainer.resourcesViewModel),
     ];
-    _configureBotCallbacks();
-  }
-
-  void _configureBotCallbacks() {
-    final bot = widget.diContainer.localBotService;
-    if (bot == null) return;
-    bot.onTokenRequested = () async {
-      if (mounted) {
-        AppNotification.show(
-          context,
-          message: 'Добавьте токен в настройках',
-          alignment: Alignment.bottomCenter,
-        );
-      }
-      return null;
-    };
-    bot.onInvalidToken = (message) async {
-      if (mounted) {
-        AppNotification.show(
-          context,
-          message: message,
-          type: ToastType.error,
-          alignment: Alignment.bottomCenter,
-        );
-      }
-    };
-    bot.onPollingError = (message) async {
-      if (mounted) {
-        AppNotification.show(
-          context,
-          message: message,
-          type: ToastType.error,
-          alignment: Alignment.bottomCenter,
-        );
-      }
-    };
-  }
-
-  Future<void> _toggleBot() async {
-    if (_botIsSwitching) return;
-    _botIsSwitching = true;
-    final bot = widget.diContainer.localBotService;
-    if (bot == null) return;
-    try {
-      if (bot.isRunning.value) {
-        await bot.stopBot();
-      } else {
-        await bot.startBot();
-      }
-    } on Exception catch (error) {
-      debugPrint('Ошибка переключения Telegram-бота: $error');
-    } finally {
-      _botIsSwitching = false;
-    }
+    _notices = widget.diContainer.ui.notices.listen((notice) {
+      if (!mounted) return;
+      AppNotification.show(
+        context,
+        message: notice.message,
+        type: notice.isError ? ToastType.error : ToastType.info,
+        alignment: Alignment.bottomCenter,
+      );
+    });
   }
 
   @override
   void dispose() {
-    unawaited(widget.diContainer.dispose().catchError((Object error, StackTrace stack) {
-      FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack));
-    }));
+    unawaited(_notices?.cancel());
+    unawaited(
+      widget.diContainer.dispose().catchError((Object error, StackTrace stack) {
+        FlutterError.reportError(
+          FlutterErrorDetails(exception: error, stack: stack),
+        );
+      }),
+    );
     super.dispose();
   }
 
@@ -159,11 +118,11 @@ class _MainScreenState extends State<MainScreen> {
                   style: AppTypography.codeLabel,
                 ),
                 actions: [
-                  if (widget.diContainer.localBotService != null) Padding(
+                  Padding(
                     padding: const EdgeInsets.only(right: 12),
-                    child: TelegramBotToggleButton(
-                      isRunning: widget.diContainer.localBotService!.isRunning,
-                      onPressed: _toggleBot,
+                    child: PluginActions(
+                      registry: widget.diContainer.ui,
+                      location: PluginActionLocation.appBar,
                       compact: true,
                     ),
                   ),
@@ -187,8 +146,10 @@ class _MainScreenState extends State<MainScreen> {
               _LandscapeNavRail(
                 selectedIndex: _selectedIndex,
                 onTap: _onItemTapped,
-                botService: widget.diContainer.localBotService,
-                onToggleBot: _toggleBot,
+                pluginActions: PluginActions(
+                  registry: widget.diContainer.ui,
+                  location: PluginActionLocation.navigationRail,
+                ),
               ),
             Expanded(child: mainArea),
           ],
@@ -201,14 +162,12 @@ class _MainScreenState extends State<MainScreen> {
 class _LandscapeNavRail extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
-  final LocalBotService? botService;
-  final VoidCallback? onToggleBot;
+  final Widget pluginActions;
 
   const _LandscapeNavRail({
     required this.selectedIndex,
     required this.onTap,
-    required this.botService,
-    required this.onToggleBot,
+    required this.pluginActions,
   });
 
   static const itemCount = 4;
@@ -236,13 +195,7 @@ class _LandscapeNavRail extends StatelessWidget {
       child: Stack(
         alignment: AlignmentGeometry.center,
         children: [
-          if (botService != null) Align(
-            alignment: Alignment.bottomCenter,
-            child: TelegramBotToggleButton(
-              isRunning: botService!.isRunning,
-              onPressed: onToggleBot,
-            ),
-          ),
+          Align(alignment: Alignment.bottomCenter, child: pluginActions),
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,

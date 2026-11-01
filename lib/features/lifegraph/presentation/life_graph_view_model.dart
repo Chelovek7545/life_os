@@ -1,11 +1,13 @@
+import 'package:uuid/uuid.dart';
+import 'canvas_note_mapper.dart';
+import 'package:life_os/core/ui/hierarchy/build_note_hierarchy.dart';
 import 'package:life_os/core/storage/debounced_writer.dart';
 import '../domain/graph_deletion.dart';
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:life_os/core/utils/wrapped.dart';
-import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
+import '../domain/canvas_note.dart';
 import 'package:life_os/features/spheres/data/spheres_repository.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
 import 'package:life_os/features/goals/data/goals_repository.dart';
@@ -17,7 +19,7 @@ import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
-import 'package:life_os/features/resources/data/obsidian_repository.dart';
+import 'package:notes_api/notes_api.dart';
 import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:life_os/core/ui/graph/graph_view.dart' as gv;
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
@@ -37,6 +39,7 @@ class LifeGraphViewModel {
     required this.graphBuilder,
     required this.deletion,
     required this.obsidianRepository,
+    this.onDisposed,
     //required this._currentSphereId,
   });
 
@@ -48,13 +51,14 @@ class LifeGraphViewModel {
   final ProjectsApi projectsRepository;
   final TasksApi tasksRepository;
   final GraphPositionsRepository positionsRepository;
-  final GraphNotesRepository notesRepository;
+  final CanvasNotesStore notesRepository;
   final GraphBuilder graphBuilder;
   final GraphDeletion deletion;
-  final ObsidianRepository obsidianRepository;
+  final VaultNotesApi? obsidianRepository;
+  final void Function()? onDisposed;
 
   List<HierarchyNode> getObsidianHierarchy() =>
-      obsidianRepository.getHierarchyTree();
+      buildVaultHierarchy(obsidianRepository?.state.notes ?? const []);
 
   String? _currentSphereId;
   String? get currentSphereId => _currentSphereId;
@@ -93,11 +97,12 @@ class LifeGraphViewModel {
     onError: _onSaveError,
     onIdle: _onSaveIdle,
   );
-  late final _noteWriter = DebouncedWriter<(String, List<gv.GraphNote>)>(
-    (snapshot) => notesRepository.saveNotes(snapshot.$1, snapshot.$2),
-    onError: _onSaveError,
-    onIdle: _onSaveIdle,
-  );
+  late final _noteWriter =
+      DebouncedWriter<(String, List<gv.GraphNote>, Map<String, String>)>(
+        _persistNotes,
+        onError: _onSaveError,
+        onIdle: _onSaveIdle,
+      );
   Future<void> _switchQueue = Future.value();
   Future<void>? _closing;
   void _onSaveIdle() {
@@ -571,6 +576,7 @@ class LifeGraphViewModel {
       saveStatus.dispose();
       await _graphSubject.close();
       await _notesSubject.close();
+      onDisposed?.call();
     }
   }
 
@@ -581,7 +587,7 @@ class LifeGraphViewModel {
     if (_currentSphereId == null) return;
     final center = Offset(worldCenter, worldCenter);
     final note = gv.GraphNote(
-      id: 'note_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'note_' + const Uuid().v4(),
       index: notes.length,
       size: const Size(212, 150),
       text: '',
@@ -597,18 +603,24 @@ class LifeGraphViewModel {
     required String text,
     String? obsidianPath,
   }) async {
-    if (_currentSphereId == null) return;
+    final sphereId = _currentSphereId;
+    if (sphereId == null || _disposed) return;
+    if (obsidianPath != null && obsidianRepository == null)
+      throw StateError('Плагин заметок отключён.');
     final center = Offset(worldCenter, worldCenter);
     final noteText = obsidianPath != null
-        ? await obsidianRepository.getNoteContent(obsidianPath)
+        ? await obsidianRepository!.readContent(obsidianPath)
         : (title.isNotEmpty ? '$title\n\n$text' : text);
+    if (_disposed || _currentSphereId != sphereId) return;
     final note = gv.GraphNote(
-      id: 'note_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'note_' + const Uuid().v4(),
       index: notes.length,
       size: const Size(250, 180),
       text: noteText,
       position: _clampPosition(center, const Size(250, 180)),
-      obsidianPath: obsidianPath,
+      source: obsidianPath == null
+          ? null
+          : NoteReference(sourceId: 'obsidian', path: obsidianPath),
     );
     _notesSubject.add([...notes, note]);
     await _scheduleSaveNotes();
@@ -616,21 +628,26 @@ class LifeGraphViewModel {
 
   /// Обновляет текст заметки.
   Future<void> updateNoteText(String id, String text) async {
+    final original = notes.where((note) => note.id == id).firstOrNull;
+    if (original == null) return;
+    if (original.source != null &&
+        (original.source!.sourceId != 'obsidian' ||
+            obsidianRepository == null)) {
+      throw StateError(
+        'Плагин заметок отключён: внешняя заметка доступна только для чтения.',
+      );
+    }
     String? path;
     final updatedNotes = notes.map((n) {
       if (n.id != id) return n;
       final cloned = n.clone();
       cloned.text = text;
-      path = cloned.obsidianPath;
+      path = cloned.source?.path;
       return cloned;
     }).toList();
     _notesSubject.add(updatedNotes);
+    if (path != null) _externalWrites[path!] = text;
     await _scheduleSaveNotes();
-
-    // Двусторонняя связь: обновить файл Obsidian если заметка привязана к нему
-    if (path != null && path!.isNotEmpty) {
-      await obsidianRepository.updateNoteContent(path!, text);
-    }
   }
 
   /// Live-курсор драга заметки: обновляет позицию в памяти без эмиссии.
@@ -702,63 +719,64 @@ class LifeGraphViewModel {
   /// заметок, привязанных к Obsidian, подтягивается заново из файла по пути.
   Future<void> _loadNotes(String sphereId) async {
     final generation = ++_notesLoadGeneration;
-    final loaded = await notesRepository.loadNotes(sphereId);
-    if (_disposed || generation != _notesLoadGeneration) return;
-    if (loaded != null) {
-      final refreshed = <gv.GraphNote>[];
-      for (final note in loaded) {
-        final path = note.obsidianPath;
-        if (path != null && path.isNotEmpty) {
+    final loaded =
+        await notesRepository.loadNotes(sphereId) ?? const <CanvasNote>[];
+    final refreshed = <gv.GraphNote>[];
+    var cacheChanged = false;
+    for (final note in loaded) {
+      var text = note.text;
+      if (note.document.source case final source?) {
+        final vault = obsidianRepository;
+        if (vault != null && source.sourceId == 'obsidian') {
           try {
-            final file = File(path);
-            if (await file.exists()) {
-              final cloned = note.clone();
-              cloned.text = await file.readAsString();
-              refreshed.add(cloned);
-              continue;
-            }
-          } catch (e) {
-            debugPrint('Error syncing obsidian note from file: $e');
+            text = await vault.readContent(source.path);
+            cacheChanged = cacheChanged || text != note.text;
+          } catch (error) {
+            debugPrint('Could not refresh external note: ' + error.toString());
           }
         }
-        refreshed.add(note);
       }
-      if (!_disposed && generation == _notesLoadGeneration)
-        _notesSubject.add(refreshed);
-    } else {
-      _notesSubject.add(const <gv.GraphNote>[]);
+      refreshed.add(
+        note.toView(
+          text: text,
+          readOnly:
+              note.document.source != null &&
+              (note.document.source!.sourceId != 'obsidian' ||
+                  obsidianRepository == null),
+        ),
+      );
+    }
+    if (!_disposed && generation == _notesLoadGeneration) {
+      _notesSubject.add(refreshed);
+      if (cacheChanged) {
+        saveStatus.value = GraphSaveStatus.saving;
+        _noteWriter.schedule((
+          sphereId,
+          refreshed.map((note) => note.clone()).toList(),
+          {},
+        ));
+      }
     }
   }
 
-  // void _onObsidianChanged() {
-  //   if (_currentSphereId == null || notes.isEmpty) return;
-  //   var changed = false;
-  //   final updated = notes.map((n) {
-  //     if (n.obsidianPath != null) {
-  //       final obsNote = obsidianRepository.notes.firstWhere(
-  //         (on) => on.absolutePath == n.obsidianPath,
-  //         orElse: () => ObsidianNote(
-  //           absolutePath: '',
-  //           relativePath: '',
-  //           title: '',
-  //           content: '',
-  //           modifiedAt: DateTime.now(),
-  //         ),
-  //       );
-  //       // if (obsNote.absolutePath.isNotEmpty && obsNote.content != n.text) {
-  //       //   changed = true;
-  //       //   final cloned = n.clone();
-  //       //   cloned.text = obsNote.content;
-  //       //   return cloned;
-  //       // }
-  //     }
-  //     return n;
-  //   }).toList();
-
-  //   if (changed) {
-  //     _notesSubject.add(updated);
-  //   }
-  // }
+  final Map<String, String> _externalWrites = {};
+  Future<void> _persistNotes(
+    (String, List<gv.GraphNote>, Map<String, String>) snapshot,
+  ) async {
+    if (snapshot.$3.isNotEmpty) {
+      final vault = obsidianRepository;
+      if (vault == null) throw StateError('Плагин заметок отключён.');
+      for (final entry in snapshot.$3.entries) {
+        await vault.writeContent(entry.key, entry.value);
+        if (_externalWrites[entry.key] == entry.value)
+          _externalWrites.remove(entry.key);
+      }
+    }
+    await notesRepository.saveNotes(
+      snapshot.$1,
+      snapshot.$2.map((note) => note.toRecord()).toList(),
+    );
+  }
 
   Future<void> _scheduleSaveNotes() async {
     final sphereId = _currentSphereId;
@@ -767,6 +785,7 @@ class LifeGraphViewModel {
     _noteWriter.schedule((
       sphereId,
       notes.map((note) => note.clone()).toList(),
+      Map.of(_externalWrites),
     ));
   }
 
@@ -784,7 +803,9 @@ class LifeGraphViewModel {
     await _loadNotes(sphereId);
     if (_disposed) return;
     _currentSphereId = sphereId;
-    saveStatus.value = GraphSaveStatus.saved;
+    saveStatus.value = _positionWriter.isIdle && _noteWriter.isIdle
+        ? GraphSaveStatus.saved
+        : GraphSaveStatus.saving;
     _domainNodes = const [];
     _graphSubject.add(const []); // сбрасываем устаревшие данные прошлой сферы
     _graphSubscription?.cancel();

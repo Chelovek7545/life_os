@@ -1,17 +1,19 @@
+import 'package:obsidian_plugin/obsidian_plugin.dart';
+import 'package:plugin_ui/plugin_ui.dart';
+import 'plugins/telegram_ui.dart';
+import 'plugins/obsidian_ui.dart';
+import 'package:life_os/features/settings/vault_settings_adapter.dart';
 import 'package:life_os/features/lifegraph/data/drift_graph_deletion.dart';
 import 'dart:async';
 import 'package:plugin_runtime/plugin_runtime.dart';
-import 'package:telegram_plugin/telegram_plugin.dart'
-    show TelegramPlugin, LocalBotService;
+import 'package:telegram_plugin/telegram_plugin.dart' show LocalBotService;
 import 'package:life_os/features/settings/telegram_settings_adapter.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/telegram_task_queries.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen_view_model.dart';
-import 'package:life_os/features/resources/data/obsidian_repository.dart';
 import 'package:life_os/features/resources/presentation/resources_view_model.dart';
-import 'package:life_os/features/settings/settings_service.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
@@ -37,6 +39,10 @@ class DependencyContainer {
       'ENABLE_TELEGRAM',
       defaultValue: true,
     ),
+    this.enableObsidian = const bool.fromEnvironment(
+      'ENABLE_OBSIDIAN',
+      defaultValue: true,
+    ),
     Iterable<AppPlugin> additionalPlugins = const [],
   }) : database = database ?? AppDatabase() {
     tasksDAO = TasksDao(this.database);
@@ -51,11 +57,10 @@ class DependencyContainer {
     goalsRepository = GoalsRepository(goalsDao);
     habitsRepository = HabitsRepository(habitsDao);
     workLogsRepository = WorkLogsRepository(workLogsDao);
-    obsidianRepository = ObsidianRepository();
+    obsidianRepository = enableObsidian ? ObsidianVault() : null;
+    ui = PluginUiRegistry();
     graphPositionsRepository = GraphPositionsRepository();
-    graphNotesRepository = GraphNotesRepository(
-      obsidianRepository: obsidianRepository,
-    );
+    graphNotesRepository = GraphNotesRepository();
     graphBuilder = GraphBuilder(
       spheresRepository: spheresRepository,
       goalsRepository: goalsRepository,
@@ -88,8 +93,8 @@ class DependencyContainer {
     );
     habitsViewModel = HabitsViewModel(habitsRepository);
     resourcesViewModel = ResourcesViewModel(
-      graphNotesRepo: graphNotesRepository,
-      obsidianRepo: obsidianRepository,
+      notes: graphNotesRepository,
+      vault: obsidianRepository,
     );
     localBotService = enableTelegram
         ? LocalBotService(
@@ -100,13 +105,17 @@ class DependencyContainer {
           )
         : null;
     plugins = PluginHost([
-      if (localBotService != null) TelegramPlugin(localBotService!),
+      if (obsidianRepository != null)
+        registerObsidianUi(obsidianRepository!, AppVaultSettings(), ui),
+      if (localBotService != null) registerTelegramUi(localBotService!, ui),
       ...additionalPlugins,
     ]);
   }
 
   final AppDatabase database;
   final bool enableTelegram;
+  final bool enableObsidian;
+  late final PluginUiRegistry ui;
   late final PluginHost plugins;
   late final TasksDao tasksDAO;
   late final ProjectsDao projectsDao;
@@ -122,7 +131,7 @@ class DependencyContainer {
   late final WorkLogsRepository workLogsRepository;
   late final GraphPositionsRepository graphPositionsRepository;
   late final GraphNotesRepository graphNotesRepository;
-  late final ObsidianRepository obsidianRepository;
+  late final ObsidianVault? obsidianRepository;
   late final GraphBuilder graphBuilder;
   late final PulseScreenViewModel pulseScreenViewModel;
   late final TasksViewModel tasksViewModel;
@@ -133,7 +142,6 @@ class DependencyContainer {
   late final LocalBotService? localBotService;
   Future<void>? _initialization;
   Future<void>? _disposal;
-  bool _listeningForSettings = false;
 
   Future<void> init() {
     if (_disposal != null) {
@@ -149,15 +157,6 @@ class DependencyContainer {
     tasksViewModel.initialize();
     projectViewModel.initialize();
     habitsViewModel.initialize();
-    SettingsService.obsidianVaultPath.addListener(_onVaultPathChanged);
-    _listeningForSettings = true;
-    _onVaultPathChanged();
-  }
-
-  void _onVaultPathChanged() {
-    unawaited(
-      resourcesViewModel.scanVault(SettingsService.obsidianVaultPath.value),
-    );
   }
 
   Future<void> dispose() => _disposal ??= _dispose();
@@ -167,10 +166,6 @@ class DependencyContainer {
     try {
       await _initialization;
     } catch (_) {}
-    if (_listeningForSettings) {
-      SettingsService.obsidianVaultPath.removeListener(_onVaultPathChanged);
-      _listeningForSettings = false;
-    }
     final failures = <String, Object>{};
     Future<void> close(String name, FutureOr<void> Function() action) async {
       try {
@@ -180,6 +175,7 @@ class DependencyContainer {
       }
     }
 
+    await close('graphs', pulseScreenViewModel.closeGraphs);
     await close('plugins', plugins.stop);
     await close('tasks', tasksViewModel.dispose);
     await close('projects', projectViewModel.dispose);
@@ -187,10 +183,11 @@ class DependencyContainer {
     await close('pulse', pulseScreenViewModel.dispose);
     await close('resources', () async {
       resourcesViewModel.dispose();
-      await resourcesViewModel.pendingScan;
     });
     await close('graphNotes', graphNotesRepository.dispose);
-    await close('obsidian', obsidianRepository.dispose);
+    if (obsidianRepository != null)
+      await close('obsidian', obsidianRepository!.dispose);
+    await close('pluginUi', ui.dispose);
     await close('database', database.close);
     if (failures.isNotEmpty) throw PluginLifecycleException(failures);
   }

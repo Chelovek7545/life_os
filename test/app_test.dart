@@ -10,23 +10,40 @@ import 'support/test_app.dart';
 
 void main() {
   for (final telegram in [false, true]) {
-    testWidgets(
-      'application runs with Telegram enabled: ' + telegram.toString(),
-      (tester) async {
-        final container = (await tester.runAsync(
-          () => createTestApp(enableTelegram: telegram),
-        ))!;
-        await tester.pumpWidget(MyApp(diContainer: container));
-        await tester.pump();
-        expect(find.byType(MaterialApp), findsOneWidget);
-        expect(
-          find.byType(TelegramBotToggleButton),
-          telegram ? findsWidgets : findsNothing,
-        );
-        expect(container.plugins.states.containsKey('telegram'), telegram);
-        await disposeTestApp(tester, container);
-      },
-    );
+    for (final obsidian in [false, true]) {
+      testWidgets(
+        'application modules Telegram=' +
+            telegram.toString() +
+            ', Obsidian=' +
+            obsidian.toString(),
+        (tester) async {
+          final container = (await tester.runAsync(
+            () => createTestApp(
+              enableTelegram: telegram,
+              enableObsidian: obsidian,
+            ),
+          ))!;
+          await tester.pumpWidget(MyApp(diContainer: container));
+          await tester.pump();
+          expect(find.byType(MaterialApp), findsOneWidget);
+          expect(
+            find.byType(TelegramBotToggleButton),
+            telegram ? findsWidgets : findsNothing,
+          );
+          expect(container.plugins.states.containsKey('telegram'), telegram);
+          expect(container.plugins.states.containsKey('obsidian'), obsidian);
+          expect(
+            container.ui.settings.any((item) => item.id == 'obsidian.settings'),
+            obsidian,
+          );
+          expect(
+            container.ui.settings.any((item) => item.id == 'telegram.settings'),
+            telegram,
+          );
+          await disposeTestApp(tester, container);
+        },
+      );
+    }
   }
   test(
     'failed initialization still allows complete resource cleanup',

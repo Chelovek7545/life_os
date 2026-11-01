@@ -1,0 +1,10 @@
+name: plugin_ui
+publish_to: none
+version: 0.1.0
+environment:
+  sdk: ^3.12.0
+resolution: workspace
+dependencies:
+  flutter:
+    sdk: flutter
+  plugin_runtime: ^0.1.0
