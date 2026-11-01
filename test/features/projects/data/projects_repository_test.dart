@@ -137,11 +137,11 @@ void main() {
         verify(mockDao.deleteProject('proj-1')).called(1);
       });
 
-      test('swallows dao error silently', () async {
+      test('reports a failed delete', () async {
         when(mockDao.deleteProject(any))
             .thenAnswer((_) => Future.error(Exception('db error')));
 
-        await repository.deleteProject('proj-1');
+        await expectLater(repository.deleteProject('proj-1'), throwsA(isA<StorageException>()));
 
         verify(mockDao.deleteProject(any)).called(1);
       });

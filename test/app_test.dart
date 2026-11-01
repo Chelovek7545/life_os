@@ -1,100 +1,104 @@
+import 'package:plugin_runtime/plugin_runtime.dart';
 import 'package:drift/native.dart';
+import 'package:life_os/core/database/database.dart';
+import 'package:life_os/app/dependency_container.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/app.dart';
-import 'package:life_os/core/database/database.dart';
-import 'package:life_os/core/di.dart';
-import 'package:life_os/features/habits/data/habits_dao.dart';
-import 'package:life_os/features/habits/data/habits_repository.dart';
-import 'package:life_os/features/habits/presentation/habits_view_model.dart';
-import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
-import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
-import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
-import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
-import 'package:life_os/features/resources/data/obsidian_repository.dart';
-import 'package:life_os/features/projects/data/projects_dao.dart';
-import 'package:life_os/features/projects/data/projects_repository.dart';
-import 'package:life_os/features/projects/presentation/projects_view_model.dart';
-import 'package:life_os/features/spheres/data/spheres_dao.dart';
-import 'package:life_os/features/spheres/data/spheres_repository.dart';
-import 'package:life_os/features/goals/data/goals_dao.dart';
-import 'package:life_os/features/goals/data/goals_repository.dart';
-import 'package:life_os/features/tasks/data/tasks_dao.dart';
-import 'package:life_os/features/tasks/data/tasks_repository.dart';
-import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
-import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
+import 'package:life_os/core/ui/telegram_bot_toggle_button.dart';
+import 'support/test_app.dart';
 
 void main() {
-  group('MyApp', () {
-    testWidgets('renders MaterialApp with dark theme', (tester) async {
-      final db = AppDatabase(NativeDatabase.memory());
-      final tasksDao = TasksDao(db);
-      final projectsDao = ProjectsDao(db);
-      final spheresDao = SpheresDao(db);
-      final goalsDao = GoalsDao(db);
-      final habitsDao = HabitsDao(db);
-      final tasksRepo = TasksRepository(tasksDao);
-      final projectsRepo = ProjectsRepository(projectsDao);
-      final spheresRepo = SpheresRepository(spheresDao);
-      final goalsRepo = GoalsRepository(goalsDao);
-      final habitsRepo = HabitsRepository(habitsDao);
-      final positionsRepo = GraphPositionsRepository();
-      final useCase = GetTasksWithProjectsUseCase(tasksRepo, projectsRepo);
-
-      final graphBuilder = GraphBuilder(
-        spheresRepository: spheresRepo,
-        goalsRepository: goalsRepo,
-        projectsRepository: projectsRepo,
-        tasksRepository: tasksRepo,
+  for (final telegram in [false, true]) {
+    testWidgets(
+      'application runs with Telegram enabled: ' + telegram.toString(),
+      (tester) async {
+        final container = (await tester.runAsync(
+          () => createTestApp(enableTelegram: telegram),
+        ))!;
+        await tester.pumpWidget(MyApp(diContainer: container));
+        await tester.pump();
+        expect(find.byType(MaterialApp), findsOneWidget);
+        expect(
+          find.byType(TelegramBotToggleButton),
+          telegram ? findsWidgets : findsNothing,
+        );
+        expect(container.plugins.states.containsKey('telegram'), telegram);
+        await disposeTestApp(tester, container);
+      },
+    );
+  }
+  test(
+    'failed initialization still allows complete resource cleanup',
+    () async {
+      final db = _TrackingDatabase();
+      final container = DependencyContainer(
+        database: db,
+        enableTelegram: false,
+        additionalPlugins: [_FailingPlugin(failStart: true)],
       );
-
-      final dc = DependencyContainer();
-      dc.database = db;
-      dc.tasksDAO = tasksDao;
-      dc.projectsDao = projectsDao;
-      dc.spheresDao = spheresDao;
-      dc.goalsDao = goalsDao;
-      dc.habitsDao = habitsDao;
-      dc.tasksRepository = tasksRepo;
-      dc.projectsRepository = projectsRepo;
-      dc.spheresRepository = spheresRepo;
-      dc.goalsRepository = goalsRepo;
-      dc.habitsRepository = habitsRepo;
-      dc.graphPositionsRepository = positionsRepo;
-      dc.graphNotesRepository = GraphNotesRepository();
-      dc.graphBuilder = graphBuilder;
-      dc.obsidianRepository = ObsidianRepository();
-      dc.lifeGraphViewModel = LifeGraphViewModel(
-        spheresRepository: spheresRepo,
-        goalsRepository: goalsRepo,
-        projectsRepository: projectsRepo,
-        tasksRepository: tasksRepo,
-        positionsRepository: positionsRepo,
-        notesRepository: dc.graphNotesRepository,
-        graphBuilder: graphBuilder,
-        obsidianRepository: dc.obsidianRepository,
+      await expectLater(
+        container.init(),
+        throwsA(isA<PluginLifecycleException>()),
       );
-      dc.lifeGraphViewModel.initialize();
-
-      dc.taskWithPrjct = useCase;
-      dc.tasksViewModel = TasksViewModel(tasksRepo, useCase, projectsRepo);
-      dc.projectViewModel = ProjectsViewModel(
-        repository: projectsRepo,
-        taskRepo: tasksRepo,
-      );
-      dc.habitsViewModel = HabitsViewModel(habitsRepo);
-      dc.habitsViewModel.initialize();
-
-      await tester.pumpWidget(MyApp(diContainer: dc));
-      await tester.pump();
-
-      expect(find.byType(MyApp), findsOneWidget);
-
-      dc.habitsViewModel.dispose();
-      // Drift schedules a zero-duration timer when the last stream listener
-      // unsubscribes. Under FakeAsync that timer only fires when time advances,
-      // so pump once before closing the database.
-      await tester.pump(const Duration(milliseconds: 10));
-      await db.close();
-    });
+      await container.dispose();
+      expect(db.wasClosed, isTrue);
+      expect(container.init, throwsStateError);
+    },
+  );
+  test('a failed plugin shutdown still closes the database', () async {
+    final db = _TrackingDatabase();
+    final container = DependencyContainer(
+      database: db,
+      enableTelegram: false,
+      additionalPlugins: [_FailingPlugin(failStart: false)],
+    );
+    await container.init();
+    await expectLater(
+      container.dispose(),
+      throwsA(isA<PluginLifecycleException>()),
+    );
+    expect(db.wasClosed, isTrue);
   });
+  test(
+    'containers have independent dependencies and idempotent shutdown',
+    () async {
+      final first = await createTestApp();
+      final second = await createTestApp();
+      expect(identical(first, second), isFalse);
+      expect(identical(first.tasksRepository, second.tasksRepository), isFalse);
+      await first.dispose();
+      await first.dispose();
+      expect(await second.tasksRepository.getAllTasks(), isEmpty);
+      await second.dispose();
+    },
+  );
+}
+
+class _FailingPlugin implements AppPlugin {
+  _FailingPlugin({required this.failStart});
+  final bool failStart;
+  @override
+  String get id => 'failure-test';
+  @override
+  Set<String> get dependencies => const {};
+  @override
+  Future<void> start() async {
+    if (failStart) throw StateError('startup failed');
+  }
+
+  @override
+  Future<void> stop() async {
+    if (!failStart) throw StateError('shutdown failed');
+  }
+}
+
+class _TrackingDatabase extends AppDatabase {
+  _TrackingDatabase() : super(NativeDatabase.memory());
+  bool wasClosed = false;
+  @override
+  Future<void> close() async {
+    wasClosed = true;
+    await super.close();
+  }
 }

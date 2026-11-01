@@ -311,6 +311,22 @@ class MockTasksDao extends _i1.Mock implements _i5.TasksDao {
           as _i6.Future<_i2.TaskModel?>);
 
   @override
+  _i6.Future<_i8.Task?> getTaskWithTags(String? id) =>
+      (super.noSuchMethod(
+            Invocation.method(#getTaskWithTags, [id]),
+            returnValue: _i6.Future<_i8.Task?>.value(),
+          )
+          as _i6.Future<_i8.Task?>);
+
+  @override
+  _i6.Future<List<_i2.TagModel>> getTagsForTask(String? id) =>
+      (super.noSuchMethod(
+            Invocation.method(#getTagsForTask, [id]),
+            returnValue: _i6.Future<List<_i2.TagModel>>.value(<_i2.TagModel>[]),
+          )
+          as _i6.Future<List<_i2.TagModel>>);
+
+  @override
   _i6.Stream<List<_i2.TaskModel>> watchAllTasks() =>
       (super.noSuchMethod(
             Invocation.method(#watchAllTasks, []),

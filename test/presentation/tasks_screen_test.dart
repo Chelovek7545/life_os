@@ -150,7 +150,7 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
   void initialize() {}
 
   @override
-  void dispose() {
+  Future<void> dispose() async {
     _stateController.close();
     _uiFlagsController.close();
     _filterController.close();

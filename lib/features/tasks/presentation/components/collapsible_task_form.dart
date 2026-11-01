@@ -1,3 +1,4 @@
+import 'package:tasks_api/tasks_api.dart' show WorkLogsApi;
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
@@ -28,6 +29,7 @@ class CollapsibleTaskForm extends StatefulWidget {
     required this.onFormVisibilityChanged,
     required this.onChanged,
     this.forceExpanded = false,
+    this.workLogs,
   });
 
   final OnTaskSubmit onSubmit;
@@ -35,6 +37,7 @@ class CollapsibleTaskForm extends StatefulWidget {
   final OnCancel onCancel;
   final Stream<List<Project>> projects;
   final Task task;
+  final WorkLogsApi? workLogs;
   final bool isEditMode;
   final double height;
   final ValueChanged<bool>? onFormVisibilityChanged;
@@ -73,6 +76,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
               onSave: _save,
             ),
       bodyBuilder: (progress, snapIndex) => TaskFormContent(
+        workLogs: widget.workLogs,
         key: _formKey,
         task: widget.task,
         projects: widget.projects,

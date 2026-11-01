@@ -1,12 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:life_os/animated_indexed_stack.dart';
-import 'package:life_os/core/di.dart';
+import 'package:life_os/app/dependency_container.dart';
 import 'package:life_os/core/local_bot_service.dart';
-import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/app_notifiacations.dart';
+import 'package:life_os/core/ui/telegram_bot_toggle_button.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
 import 'package:life_os/features/projects/presentation/projects_screen.dart';
 import 'package:life_os/features/resources/presentation/resources_screen.dart';
@@ -24,6 +25,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
   bool _resizeToAvoidBottomInset = true;
+  bool _botIsSwitching = false;
 
   // 1. Фиксируем список страниц в памяти ОДИН раз!
   late final List<Widget> _pages;
@@ -36,11 +38,17 @@ class _MainScreenState extends State<MainScreen> {
       PulseScreen(
         viewModel: widget.diContainer.pulseScreenViewModel,
         habitsViewModel: widget.diContainer.habitsViewModel,
+        portraitAppBarAction: widget.diContainer.localBotService == null ? null : TelegramBotToggleButton(
+          isRunning: widget.diContainer.localBotService!.isRunning,
+          onPressed: _toggleBot,
+          compact: true,
+        ),
         onOpenTask: _openTaskFromPulse,
         onCompleteTask: (task) =>
             widget.diContainer.tasksViewModel.toggleTask(task),
       ),
       TasksScreen(
+        workLogs: widget.diContainer.workLogsRepository,
         viewModel: widget.diContainer.tasksViewModel,
         onFormVisibilityChanged: (visible) {
           if (_resizeToAvoidBottomInset != visible) {
@@ -53,11 +61,67 @@ class _MainScreenState extends State<MainScreen> {
       ProjectsScreen(viewModel: widget.diContainer.projectViewModel),
       ResourcesScreen(viewModel: widget.diContainer.resourcesViewModel),
     ];
+    _configureBotCallbacks();
+  }
+
+  void _configureBotCallbacks() {
+    final bot = widget.diContainer.localBotService;
+    if (bot == null) return;
+    bot.onTokenRequested = () async {
+      if (mounted) {
+        AppNotification.show(
+          context,
+          message: 'Добавьте токен в настройках',
+          alignment: Alignment.bottomCenter,
+        );
+      }
+      return null;
+    };
+    bot.onInvalidToken = (message) async {
+      if (mounted) {
+        AppNotification.show(
+          context,
+          message: message,
+          type: ToastType.error,
+          alignment: Alignment.bottomCenter,
+        );
+      }
+    };
+    bot.onPollingError = (message) async {
+      if (mounted) {
+        AppNotification.show(
+          context,
+          message: message,
+          type: ToastType.error,
+          alignment: Alignment.bottomCenter,
+        );
+      }
+    };
+  }
+
+  Future<void> _toggleBot() async {
+    if (_botIsSwitching) return;
+    _botIsSwitching = true;
+    final bot = widget.diContainer.localBotService;
+    if (bot == null) return;
+    try {
+      if (bot.isRunning.value) {
+        await bot.stopBot();
+      } else {
+        await bot.startBot();
+      }
+    } on Exception catch (error) {
+      debugPrint('Ошибка переключения Telegram-бота: $error');
+    } finally {
+      _botIsSwitching = false;
+    }
   }
 
   @override
   void dispose() {
-    widget.diContainer.dispose();
+    unawaited(widget.diContainer.dispose().catchError((Object error, StackTrace stack) {
+      FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack));
+    }));
     super.dispose();
   }
 
@@ -85,6 +149,26 @@ class _MainScreenState extends State<MainScreen> {
 
     return SafeArea(
       child: Scaffold(
+        appBar: isLandscape || _selectedIndex == 0
+            ? null
+            : AppBar(
+                toolbarHeight: 56,
+                backgroundColor: AppColors.surfaceDim,
+                title: Text(
+                  _LandscapeNavRail.items[_selectedIndex].$2,
+                  style: AppTypography.codeLabel,
+                ),
+                actions: [
+                  if (widget.diContainer.localBotService != null) Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: TelegramBotToggleButton(
+                      isRunning: widget.diContainer.localBotService!.isRunning,
+                      onPressed: _toggleBot,
+                      compact: true,
+                    ),
+                  ),
+                ],
+              ),
         bottomNavigationBar: isLandscape
             ? null
             : SlidingNavBar(
@@ -104,6 +188,7 @@ class _MainScreenState extends State<MainScreen> {
                 selectedIndex: _selectedIndex,
                 onTap: _onItemTapped,
                 botService: widget.diContainer.localBotService,
+                onToggleBot: _toggleBot,
               ),
             Expanded(child: mainArea),
           ],
@@ -116,12 +201,14 @@ class _MainScreenState extends State<MainScreen> {
 class _LandscapeNavRail extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
-  final LocalBotService _botService;
+  final LocalBotService? botService;
+  final VoidCallback? onToggleBot;
 
-  _LandscapeNavRail({
+  const _LandscapeNavRail({
     required this.selectedIndex,
     required this.onTap,
-    required this._botService,
+    required this.botService,
+    required this.onToggleBot,
   });
 
   static const itemCount = 4;
@@ -136,76 +223,8 @@ class _LandscapeNavRail extends StatelessWidget {
   static const itemHeight = 74.5;
   static const double navBarWidth = 80.0;
 
-  void _toggleBot() async {
-    try {
-      if (_botService.isRunning.value) {
-        await _botService.stopBot();
-      } else {
-        await _botService.startBot();
-      }
-    } on Exception catch (e) {
-      debugPrint('Ошибка переключения Telegram-бота: $e');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Высота навигационной панели
-    //     _botService.onTokenRequested = () async {
-    //   final controller = TextEditingController();
-    //   return showDialog<String>(
-    //     context: context,
-    //     builder: (context) => AlertDialog(
-    //       title: const Text('Введите Token Telegram бота'),
-    //       content: TextField(
-    //         controller: controller,
-    //         decoration: const InputDecoration(hintText: '123456789:ABC...'),
-    //       ),
-    //       actions: [
-    //         TextButton(
-    //           onPressed: () => Navigator.pop(context, null),
-    //           child: const Text('Отмена'),
-    //         ),
-    //         ElevatedButton(
-    //           onPressed: () => Navigator.pop(context, controller.text),
-    //           child: const Text('Сохранить'),
-    //         ),
-    //       ],
-    //     ),
-    //   );
-    // };
-
-    _botService.onTokenRequested = () async {
-      if (context.mounted) {
-        AppNotification.show(
-          context,
-          message: "Добавье токен в настройках",
-          alignment: Alignment.bottomCenter,
-        );
-      }
-      return null;
-    };
-    _botService.onInvalidToken = (errorMessage) async {
-      if (context.mounted) {
-        AppNotification.show(
-          context,
-          message: errorMessage,
-          type: ToastType.error,
-          alignment: Alignment.bottomCenter,
-        );
-      }
-    };
-    _botService.onPollingError = (errorMessage) async {
-      if (context.mounted) {
-        AppNotification.show(
-          context,
-          message: errorMessage,
-          type: ToastType.error,
-          alignment: Alignment.bottomCenter,
-        );
-      }
-    };
-
     return Container(
       width: navBarWidth,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
@@ -217,23 +236,11 @@ class _LandscapeNavRail extends StatelessWidget {
       child: Stack(
         alignment: AlignmentGeometry.center,
         children: [
-          Align(
+          if (botService != null) Align(
             alignment: Alignment.bottomCenter,
-            child: ValueListenableBuilder(
-              valueListenable: _botService.isRunning,
-              builder: (context, value, child) {
-                return TextButton(
-                  style: _botService.isRunning.value
-                      ? AppButtonStyles.activeButtonStyle.copyWith(
-                          padding: WidgetStatePropertyAll(EdgeInsets.all(20)),
-                        )
-                      : AppButtonStyles.baseButtonStyle.copyWith(
-                          padding: WidgetStatePropertyAll(EdgeInsets.all(20)),
-                        ),
-                  onPressed: _toggleBot,
-                  child: Text("TG", style: AppTypography.codeLabel),
-                );
-              },
+            child: TelegramBotToggleButton(
+              isRunning: botService!.isRunning,
+              onPressed: onToggleBot,
             ),
           ),
           AnimatedPositioned(

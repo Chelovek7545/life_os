@@ -1,14 +1,9 @@
+import 'package:life_os/core/storage/storage_exception.dart';
+export 'package:life_os/core/storage/storage_exception.dart';
 import 'package:life_os/features/goals/data/goals_dao.dart';
 import 'package:life_os/features/goals/domain/goal_model.dart';
 import 'package:life_os/features/goals/data/goal_model_extension.dart';
 
-class StorageException implements Exception {
-  StorageException(this.message, [this.cause]);
-  final String message;
-  final Object? cause;
-  @override
-  String toString() => message;
-}
 
 class GoalsRepository {
   GoalsRepository(this._dao);

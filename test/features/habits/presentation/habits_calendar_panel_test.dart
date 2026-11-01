@@ -40,7 +40,7 @@ class FakeHabitsViewModel extends Fake implements HabitsViewModel {
   void initialize() {}
 
   @override
-  void dispose() {
+  Future<void> dispose() async {
     _stateController.close();
   }
 }

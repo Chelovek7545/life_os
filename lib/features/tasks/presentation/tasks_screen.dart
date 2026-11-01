@@ -1,3 +1,4 @@
+import 'package:tasks_api/tasks_api.dart' show WorkLogsApi;
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
@@ -43,9 +44,11 @@ class TasksScreen extends StatefulWidget {
     super.key,
     required this.viewModel,
     this.onFormVisibilityChanged,
+    this.workLogs,
   });
 
   final TasksViewModel viewModel;
+  final WorkLogsApi? workLogs;
   final ValueChanged<bool>? onFormVisibilityChanged;
 
   @override
@@ -974,6 +977,7 @@ class TasksScreenState extends State<TasksScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         return CollapsibleTaskForm(
+          workLogs: widget.workLogs,
           onChanged: (draft) {
             widget.viewModel.draftTask = draft;
           },

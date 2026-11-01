@@ -1,3 +1,5 @@
+import 'package:life_os/core/storage/debounced_writer.dart';
+import '../domain/graph_deletion.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -8,9 +10,9 @@ import 'package:life_os/features/spheres/data/spheres_repository.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
 import 'package:life_os/features/goals/data/goals_repository.dart';
 import 'package:life_os/features/goals/domain/goal_model.dart';
-import 'package:life_os/features/projects/data/projects_repository.dart';
+import 'package:life_os/features/projects/domain/projects_api.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
-import 'package:life_os/features/tasks/data/tasks_repository.dart';
+import 'package:tasks_api/tasks_api.dart' show TasksApi;
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
@@ -22,7 +24,7 @@ import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes
 import 'package:rxdart/rxdart.dart';
 
 /// Состояние автосохранения позиций графа.
-enum GraphSaveStatus { draft, saving, saved }
+enum GraphSaveStatus { draft, saving, saved, failed }
 
 class LifeGraphViewModel {
   LifeGraphViewModel({
@@ -33,6 +35,7 @@ class LifeGraphViewModel {
     required this.positionsRepository,
     required this.notesRepository,
     required this.graphBuilder,
+    required this.deletion,
     required this.obsidianRepository,
     //required this._currentSphereId,
   });
@@ -40,14 +43,14 @@ class LifeGraphViewModel {
   /// Координата центра мира: корень (сфера) размещается здесь, если нет сохранённой позиции.
   static const double worldCenter = 2000.0;
 
-
   final SpheresRepository spheresRepository;
   final GoalsRepository goalsRepository;
-  final ProjectsRepository projectsRepository;
-  final TasksRepository tasksRepository;
+  final ProjectsApi projectsRepository;
+  final TasksApi tasksRepository;
   final GraphPositionsRepository positionsRepository;
   final GraphNotesRepository notesRepository;
   final GraphBuilder graphBuilder;
+  final GraphDeletion deletion;
   final ObsidianRepository obsidianRepository;
 
   List<HierarchyNode> getObsidianHierarchy() =>
@@ -56,16 +59,9 @@ class LifeGraphViewModel {
   String? _currentSphereId;
   String? get currentSphereId => _currentSphereId;
 
-
   Stream<List<Task>> get tasksStream => tasksRepository.watchTasks();
 
-
-
   Stream<List<Sphere>> get spheresStream => spheresRepository.watchAllSpheres();
-
-
-  
-
 
   /// Статус автосохранения позиций (для бейджа draft / saving… / saved).
   final ValueNotifier<GraphSaveStatus> saveStatus = ValueNotifier(
@@ -92,13 +88,40 @@ class LifeGraphViewModel {
 
   final Map<String, Offset> _positions = {};
 
-  Timer? _savePositionsTimer;
+  late final _positionWriter = DebouncedWriter<(String, Map<String, Offset>)>(
+    (snapshot) => positionsRepository.savePositions(snapshot.$1, snapshot.$2),
+    onError: _onSaveError,
+    onIdle: _onSaveIdle,
+  );
+  late final _noteWriter = DebouncedWriter<(String, List<gv.GraphNote>)>(
+    (snapshot) => notesRepository.saveNotes(snapshot.$1, snapshot.$2),
+    onError: _onSaveError,
+    onIdle: _onSaveIdle,
+  );
+  Future<void> _switchQueue = Future.value();
+  Future<void>? _closing;
+  void _onSaveIdle() {
+    if (!_disposed && _positionWriter.isIdle && _noteWriter.isIdle) {
+      saveStatus.value = GraphSaveStatus.saved;
+    }
+  }
+
+  void _onSaveError(Object error, StackTrace stack) {
+    if (!_disposed) saveStatus.value = GraphSaveStatus.failed;
+    debugPrint('Graph save failed: ' + error.toString());
+  }
 
   bool _disposed = false;
+  int _notesLoadGeneration = 0;
 
   /// Переключает текущую сферу (граф).
-  Future<void> switchSphere(String sphereId) async {
-    await _switchToSphere(sphereId);
+  Future<void> switchSphere(String sphereId) {
+    final operation = _switchQueue.then((_) => _switchToSphere(sphereId));
+    _switchQueue = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {},
+    );
+    return operation;
   }
 
   Future<void> _loadPositions(String sphereId) async {
@@ -366,131 +389,30 @@ class LifeGraphViewModel {
     );
   }
 
-  /// Удаляет ноду с выбором: каскадно (поддерево) или только ноду (дети становятся осиротевшими).
   Future<void> deleteNode(String id, {required bool keepChildren}) async {
     if (_currentSphereId == null) return;
-
-    if (!keepChildren) {
-      await _deleteSubtree(id);
+    final node = _domainNode(id);
+    await flush();
+    final removed = await deletion.delete(
+      node.type,
+      id,
+      keepChildren: keepChildren,
+    );
+    if (node.type == GraphNodeType.sphere) {
+      await _graphSubscription?.cancel();
+      await positionsRepository.deletePositions(id);
+      await notesRepository.deleteNotes(id);
+      _currentSphereId = null;
+      _positions.clear();
+      _domainNodes = const [];
+      _notesSubject.add(const []);
+      _graphSubject.add(const []);
+      final spheres = await spheresRepository.getAllSpheres();
+      if (spheres.isNotEmpty) await switchSphere(spheres.first.id);
     } else {
-      await _deleteNodeOnly(id);
+      _removePositions(removed);
+      await flush();
     }
-  }
-
-  Future<void> _deleteSubtree(String id) async {
-    final node = _domainNode(id);
-    final descendantIds = _getDescendantIds(id);
-
-    switch (node.type) {
-      case GraphNodeType.sphere:
-        await goalsRepository.deleteGoalsBySphere(id);
-        await spheresRepository.deleteSphere(id);
-        await positionsRepository.deletePositions(id);
-        _currentSphereId = null;
-        _cancelPendingSave();
-        _positions.clear();
-        _domainNodes = const [];
-        final spheres = await spheresRepository.getAllSpheres();
-        if (spheres.isNotEmpty) {
-          await _switchToSphere(spheres.first.id);
-        } else {
-          _graphSubject.add(const []);
-        }
-        break;
-
-      case GraphNodeType.goal:
-        final goalProjects = _domainNodes
-            .where((n) => n.type == GraphNodeType.project && n.parentId == id)
-            .map((p) => p.id)
-            .toList();
-        for (final pid in goalProjects) {
-          await projectsRepository.deleteProject(pid);
-        }
-        await goalsRepository.deleteGoal(id);
-        _removePositions(descendantIds);
-        break;
-
-      case GraphNodeType.project:
-        final projectTasks = _domainNodes
-            .where((n) => n.type == GraphNodeType.task && n.parentId == id)
-            .map((t) => t.id)
-            .toList();
-        for (final tid in projectTasks) {
-          await tasksRepository.deleteTask(tid);
-        }
-        await projectsRepository.deleteProject(id);
-        _removePositions(descendantIds);
-        break;
-
-      case GraphNodeType.task:
-        await tasksRepository.deleteTask(id);
-        _positions.remove(id);
-        _removePositions(descendantIds);
-        break;
-      case GraphNodeType.subTask:
-        await tasksRepository.deleteTask(id);
-        _positions.remove(id);
-        await _scheduleSavePositions();
-        break;
-    }
-  }
-
-  Future<void> _deleteNodeOnly(String id) async {
-    final node = _domainNode(id);
-
-    switch (node.type) {
-      case GraphNodeType.sphere:
-        await spheresRepository.deleteSphere(id);
-        await positionsRepository.deletePositions(id);
-        _currentSphereId = null;
-        _cancelPendingSave();
-        _positions.clear();
-        _domainNodes = const [];
-        final spheres = await spheresRepository.getAllSpheres();
-        if (spheres.isNotEmpty) {
-          await _switchToSphere(spheres.first.id);
-        } else {
-          _graphSubject.add(const []);
-        }
-        break;
-
-      case GraphNodeType.goal:
-        await goalsRepository.deleteGoal(id);
-        _removePositions([id]);
-        break;
-
-      case GraphNodeType.project:
-        await projectsRepository.deleteProject(id);
-        _removePositions([id]);
-        break;
-
-      case GraphNodeType.task:
-        await tasksRepository.deleteTask(id);
-        _removePositions([id]);
-
-        break;
-      case GraphNodeType.subTask:
-        await tasksRepository.deleteTask(id);
-        _positions.remove(id);
-        await _scheduleSavePositions();
-        break;
-    }
-  }
-
-  List<String> _getDescendantIds(String id) {
-    final result = <String>[];
-    void collect(String parentId) {
-      final children = _domainNodes
-          .where((n) => n.parentId == parentId)
-          .toList();
-      for (final child in children) {
-        result.add(child.id);
-        collect(child.id);
-      }
-    }
-
-    collect(id);
-    return result;
   }
 
   void _removePositions(Iterable<String> ids) {
@@ -619,35 +541,37 @@ class LifeGraphViewModel {
 
   // ── Персистентность позиций (с debounce) ──────────────────────────────────
 
-  void _cancelPendingSave() {
-    _savePositionsTimer?.cancel();
-    _savePositionsTimer = null;
-  }
-
-  /// Откладывает сохранение позиций на ~400 мс, чтобы не писать в
-  /// хранилище каждый кадр перетаскивания. Бейдж: saving… → saved.
   Future<void> _scheduleSavePositions() async {
-    _cancelPendingSave();
+    final sphereId = _currentSphereId;
+    if (sphereId == null || _disposed) return;
     saveStatus.value = GraphSaveStatus.saving;
-    _savePositionsTimer = Timer(const Duration(milliseconds: 400), () async {
-      final sphereId = _currentSphereId;
-      if (sphereId == null) return;
-      await positionsRepository.savePositions(sphereId, Map.of(_positions));
-      if (!_disposed) saveStatus.value = GraphSaveStatus.saved;
-    });
+    _positionWriter.schedule((sphereId, Map.of(_positions)));
   }
 
-  void dispose() {
-    _disposed = true;
-    //obsidianRepository.removeListener(_onObsidianChanged);
-    _cancelPendingSave();
-    _cancelPendingNotesSave();
-    _graphSubscription?.cancel();
+  Future<void> flush() async {
+    try {
+      await Future.wait([_positionWriter.flush(), _noteWriter.flush()]);
+      if (!_disposed) saveStatus.value = GraphSaveStatus.saved;
+    } catch (error, stack) {
+      _onSaveError(error, stack);
+      rethrow;
+    }
+  }
 
-    _notesSubscription?.cancel();
-    saveStatus.dispose();
-    _graphSubject.close();
-    _notesSubject.close();
+  Future<void> dispose() => _closing ??= _dispose();
+
+  Future<void> _dispose() async {
+    _disposed = true;
+    await _switchQueue;
+    await _graphSubscription?.cancel();
+    await _notesSubscription?.cancel();
+    try {
+      await Future.wait([_positionWriter.close(), _noteWriter.close()]);
+    } finally {
+      saveStatus.dispose();
+      await _graphSubject.close();
+      await _notesSubject.close();
+    }
   }
 
   // ── Notes (стикеры) ────────────────────────────────────────────────────────────
@@ -770,13 +694,16 @@ class LifeGraphViewModel {
   Future<void> refreshNotes() async {
     final sphereId = _currentSphereId;
     if (sphereId == null) return;
-    await _loadNotes(sphereId);
+    await flush();
+    if (!_disposed && _currentSphereId == sphereId) await _loadNotes(sphereId);
   }
 
   /// Загружает заметки для текущей сферы. При каждом заходе в граф текст
   /// заметок, привязанных к Obsidian, подтягивается заново из файла по пути.
   Future<void> _loadNotes(String sphereId) async {
+    final generation = ++_notesLoadGeneration;
     final loaded = await notesRepository.loadNotes(sphereId);
+    if (_disposed || generation != _notesLoadGeneration) return;
     if (loaded != null) {
       final refreshed = <gv.GraphNote>[];
       for (final note in loaded) {
@@ -796,7 +723,8 @@ class LifeGraphViewModel {
         }
         refreshed.add(note);
       }
-      _notesSubject.add(refreshed);
+      if (!_disposed && generation == _notesLoadGeneration)
+        _notesSubject.add(refreshed);
     } else {
       _notesSubject.add(const <gv.GraphNote>[]);
     }
@@ -832,30 +760,30 @@ class LifeGraphViewModel {
   //   }
   // }
 
-  Timer? _saveNotesTimer;
-
-  void _cancelPendingNotesSave() {
-    _saveNotesTimer?.cancel();
-    _saveNotesTimer = null;
-  }
-
   Future<void> _scheduleSaveNotes() async {
-    _cancelPendingNotesSave();
-    _saveNotesTimer = Timer(const Duration(milliseconds: 400), () async {
-      final sphereId = _currentSphereId;
-      if (sphereId == null) return;
-      await notesRepository.saveNotes(sphereId, List.of(notes));
-    });
+    final sphereId = _currentSphereId;
+    if (sphereId == null || _disposed) return;
+    saveStatus.value = GraphSaveStatus.saving;
+    _noteWriter.schedule((
+      sphereId,
+      notes.map((note) => note.clone()).toList(),
+    ));
   }
 
   /// Переключает текущую сферу (граф) и загружает её позиции и заметки.
   Future<void> _switchToSphere(String sphereId) async {
-    _currentSphereId = sphereId;
-    _cancelPendingSave();
-    _cancelPendingNotesSave();
+    if (_disposed) return;
+    await flush();
+    await _graphSubscription?.cancel();
+    if (_disposed) return;
+    _currentSphereId = null;
+    _graphSubject.add(const []);
+    _notesSubject.add(const []);
     await positionsRepository.saveLastSphereId(sphereId);
     await _loadPositions(sphereId);
     await _loadNotes(sphereId);
+    if (_disposed) return;
+    _currentSphereId = sphereId;
     saveStatus.value = GraphSaveStatus.saved;
     _domainNodes = const [];
     _graphSubject.add(const []); // сбрасываем устаревшие данные прошлой сферы

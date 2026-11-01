@@ -10,8 +10,8 @@ import 'package:life_os/features/projects/presentation/projects_state.dart'
     as _i4;
 import 'package:life_os/features/projects/presentation/projects_view_model.dart'
     as _i2;
-import 'package:life_os/features/tasks/domain/task_model.dart' as _i6;
 import 'package:mockito/mockito.dart' as _i1;
+import 'package:tasks_api/tasks_api.dart' as _i6;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -111,8 +111,11 @@ class MockProjectsViewModel extends _i1.Mock implements _i2.ProjectsViewModel {
           as _i3.Future<void>);
 
   @override
-  void dispose() => super.noSuchMethod(
-    Invocation.method(#dispose, []),
-    returnValueForMissingStub: null,
-  );
+  _i3.Future<void> dispose() =>
+      (super.noSuchMethod(
+            Invocation.method(#dispose, []),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
 }

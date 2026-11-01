@@ -178,12 +178,12 @@ void main() {
     });
 
     group('TaskStatus', () {
-      test('has expected values', () {
+      test('preserves persisted enum order', () {
         expect(TaskStatus.values, [
+          TaskStatus.open,
           TaskStatus.notStarted,
           TaskStatus.inProgress,
           TaskStatus.done,
-          TaskStatus.open,
         ]);
       });
     });

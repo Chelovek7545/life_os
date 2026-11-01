@@ -1,14 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/core/bot/bot_task_list_formatter.dart';
 import 'package:life_os/core/bot/bot_task_store.dart';
-import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 void main() {
   BotTaskRow row(String title, {int priority = 0}) {
     final now = DateTime(2026, 10, 30);
     return BotTaskRow(
-      TaskModel(
+      Task(
+        tags: const [],
         id: title,
         title: title,
         description: '',

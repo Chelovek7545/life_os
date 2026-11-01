@@ -29,6 +29,10 @@ Features
 
 ## Architecture
 
+The first modular migration introduces a Pub workspace with pure Dart task contracts, a plugin lifecycle host, and an optional Telegram plugin. See [the migration guide](docs/modular-architecture.md) for current boundaries, validation, and remaining steps.
+
+### Existing feature layout
+
 The project follows a **feature-first** structure with clear layer separation (`data` → `domain` → `presentation`) and a lightweight manual DI container.
 
 ```

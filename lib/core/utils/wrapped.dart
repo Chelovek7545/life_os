@@ -1,4 +1,1 @@
-class Wrapped<T> {
-  final T value;
-  const Wrapped(this.value);
-}
+export 'package:tasks_api/tasks_api.dart' show Wrapped;

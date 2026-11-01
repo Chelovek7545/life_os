@@ -1,0 +1,13 @@
+name: telegram_plugin
+publish_to: none
+version: 0.1.0
+environment:
+  sdk: ^3.12.0
+resolution: workspace
+dependencies:
+  flutter:
+    sdk: flutter
+  tasks_api: ^0.1.0
+  plugin_runtime: ^0.1.0
+  teledart: ^0.6.1
+  uuid: ^4.5.3

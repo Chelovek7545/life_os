@@ -1,14 +1,9 @@
+import 'package:life_os/core/storage/storage_exception.dart';
+export 'package:life_os/core/storage/storage_exception.dart';
 import 'package:life_os/features/spheres/data/spheres_dao.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
 import 'package:life_os/features/spheres/data/sphere_model_extension.dart';
 
-class StorageException implements Exception {
-  StorageException(this.message, [this.cause]);
-  final String message;
-  final Object? cause;
-  @override
-  String toString() => message;
-}
 
 class SpheresRepository {
   SpheresRepository(this._dao);

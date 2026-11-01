@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:life_os/features/tasks/data/work_logs_repository.dart';
+import 'package:tasks_api/tasks_api.dart' show WorkLogsApi;
 import 'package:life_os/features/tasks/domain/work_log_model.dart';
 
 class WorkLogsViewModel extends ChangeNotifier {
@@ -7,7 +7,7 @@ class WorkLogsViewModel extends ChangeNotifier {
     _load();
   }
 
-  final WorkLogsRepository _repository;
+  final WorkLogsApi _repository;
   final String taskId;
 
   List<WorkLog> _workLogs = [];

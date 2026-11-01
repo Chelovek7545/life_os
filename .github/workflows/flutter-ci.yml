@@ -31,6 +31,9 @@ jobs:
       - name: Generate code (build_runner)
         run: flutter pub run build_runner build
 
+      - name: Check module boundaries and lifecycle
+        run: flutter test test/architecture test/core/plugins test/core/storage
+
       - name: Analyze
         run: flutter analyze --fatal-warnings
 

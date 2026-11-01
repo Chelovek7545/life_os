@@ -1,32 +1,28 @@
+import 'package:life_os/core/storage/storage_exception.dart';
+export 'package:life_os/core/storage/storage_exception.dart';
+import 'package:tasks_api/tasks_api.dart' show TasksApi;
 import 'package:life_os/features/tasks/data/extensions/tag_model_extension.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 
 import '../domain/task_model.dart';
 
-class StorageException implements Exception {
-  StorageException(this.message, [this.cause]);
-
-  final String message;
-  final Object? cause;
-
-  @override
-  String toString() => message;
-}
-
-class TasksRepository {
+class TasksRepository implements TasksApi {
   TasksRepository(this._dao);
 
   final TasksDao _dao;
 
+  @override
   Stream<List<Task>> watchTasks() => _dao.watchAllTasksWithTags();
 
+  @override
   Stream<List<Task>> watchTasksForProject(String projectId) =>
       _dao.watchTasksForProject(projectId);
 
-  Future<Task?> getById(String id) =>
-      _dao.getById(id).then((v) => v?.toDomain());
+  @override
+  Future<Task?> getById(String id) => _dao.getTaskWithTags(id);
 
+  @override
   Future<List<Task>> getAllTasks() async {
     final tasksWithTags = await _dao.getAllTasksWithTags();
     return tasksWithTags.entries.map((entry) {
@@ -36,6 +32,7 @@ class TasksRepository {
     }).toList();
   }
 
+  @override
   Future<void> addTask(Task task) async {
     try {
       await _dao.insertTaskWithTags(
@@ -47,6 +44,7 @@ class TasksRepository {
     }
   }
 
+  @override
   Future<void> updateTask(Task task) async {
     try {
       final companion = task.toDrift();
@@ -61,6 +59,7 @@ class TasksRepository {
     }
   }
 
+  @override
   Future<void> deleteTask(String id) async {
     try {
       await _dao.deleteTask(id);

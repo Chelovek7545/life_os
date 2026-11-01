@@ -2,7 +2,7 @@ import 'package:life_os/features/habits/data/habit_model_extension.dart';
 import 'package:life_os/features/habits/data/habits_dao.dart';
 import 'package:life_os/features/habits/domain/habit_entry_model.dart';
 import 'package:life_os/features/habits/domain/habit_model.dart';
-import 'package:life_os/features/tasks/data/tasks_repository.dart';
+import 'package:life_os/core/storage/storage_exception.dart';
 
 class HabitsRepository {
   HabitsRepository(this._dao);

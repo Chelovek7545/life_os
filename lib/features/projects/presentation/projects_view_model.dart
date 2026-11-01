@@ -1,14 +1,14 @@
 import 'dart:async';
-import 'package:life_os/features/projects/data/projects_repository.dart';
+import 'package:life_os/features/projects/domain/projects_api.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
 import 'package:life_os/features/projects/presentation/projects_state.dart';
-import 'package:life_os/features/tasks/data/tasks_repository.dart';
+import 'package:tasks_api/tasks_api.dart' show TasksApi;
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:rxdart/rxdart.dart';
 
 class ProjectsViewModel {
-  final ProjectsRepository _repository;
-  final TasksRepository _taskRepo;
+  final ProjectsApi _repository;
+  final TasksApi _taskRepo;
 
   ProjectsViewModel({required this._repository, required this._taskRepo});
 
@@ -38,10 +38,9 @@ class ProjectsViewModel {
     return _taskRepo.watchTasksForProject(projectId);
   }
 
-  Stream<List<Task>> watchAllTasks(){
+  Stream<List<Task>> watchAllTasks() {
     return _taskRepo.watchTasks();
-  } 
-
+  }
 
   Future<void> updateTask(Task task) async {
     await _taskRepo.updateTask(task);
@@ -81,8 +80,8 @@ class ProjectsViewModel {
     );
   }
 
-  void dispose() {
-    _projectsSubscription?.cancel();
-    _uiStateController.close();
+  Future<void> dispose() async {
+    await _projectsSubscription?.cancel();
+    await Future.wait([_uiStateController.close()]);
   }
 }

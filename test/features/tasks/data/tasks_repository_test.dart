@@ -1,3 +1,4 @@
+import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 import 'dart:async';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
@@ -48,12 +49,12 @@ void main() {
 
     group('getById', () {
       test('returns null when task not found', () async {
-        when(mockDao.getById('task-1')).thenAnswer((_) async => null);
+        when(mockDao.getTaskWithTags('task-1')).thenAnswer((_) async => null);
 
         final result = await repository.getById('task-1');
 
         expect(result, isNull);
-        verify(mockDao.getById('task-1')).called(1);
+        verify(mockDao.getTaskWithTags('task-1')).called(1);
       });
 
       test('returns task when found and converts via toDomain', () async {
@@ -71,8 +72,8 @@ void main() {
           priority: 0,
           effortWeight: 1.5,
         );
-        when(mockDao.getById('task-1'))
-            .thenAnswer((_) async => daoModel);
+        when(mockDao.getTaskWithTags('task-1'))
+            .thenAnswer((_) async => daoModel.toDomain());
 
         final result = await repository.getById('task-1');
 
@@ -81,7 +82,7 @@ void main() {
         expect(result.title, 'Found Task');
         expect(result.status, TaskStatus.inProgress);
         expect(result.startsAt, now);
-        verify(mockDao.getById('task-1')).called(1);
+        verify(mockDao.getTaskWithTags('task-1')).called(1);
       });
     });
 

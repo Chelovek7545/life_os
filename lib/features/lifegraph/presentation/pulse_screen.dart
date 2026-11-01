@@ -1,3 +1,4 @@
+import 'package:life_os/features/tasks/presentation/task_status_visuals.dart';
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/theme/app_colors.dart';
@@ -55,6 +56,7 @@ class PulseScreen extends StatefulWidget {
   final HabitsViewModel habitsViewModel;
   final ValueChanged<Task>? onOpenTask;
   final ValueChanged<Task>? onCompleteTask;
+  final Widget? portraitAppBarAction;
 
   const PulseScreen({
     super.key,
@@ -62,6 +64,7 @@ class PulseScreen extends StatefulWidget {
     required this.habitsViewModel,
     this.onOpenTask,
     this.onCompleteTask,
+    this.portraitAppBarAction,
   });
 
   @override
@@ -94,6 +97,12 @@ class _PulseScreenState extends State<PulseScreen> {
             ),
             icon: const Icon(Icons.repeat_rounded),
           ),
+          if (MediaQuery.orientationOf(context) == Orientation.portrait &&
+              widget.portraitAppBarAction != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: widget.portraitAppBarAction!,
+            ),
         ],
       ),
       body: LayoutBuilder(
@@ -244,7 +253,10 @@ class HierarchyPanel extends StatelessWidget {
 
             final nodes = buildHierarchyTree(projects, tasks);
 
-            return HierarchyColumn(nodes: nodes, height: MediaQuery.sizeOf(context).height - 100,);
+            return HierarchyColumn(
+              nodes: nodes,
+              height: MediaQuery.sizeOf(context).height - 100,
+            );
           },
         );
       },
@@ -272,9 +284,6 @@ class HierarchyPanel extends StatelessWidget {
       ],
     );
   }
-
-
-
 }
 
 /// Строка списка целей: цвет-индикатор, название, имя сферы.

@@ -51,7 +51,9 @@ class HabitsViewModel {
           (_) {},
           onError: (Object error) {
             if (_uiStateController.isClosed) return;
-            _uiStateController.add(HabitsError('Failed to load habits: $error'));
+            _uiStateController.add(
+              HabitsError('Failed to load habits: $error'),
+            );
           },
         );
   }
@@ -141,8 +143,10 @@ class HabitsViewModel {
     String dateKey,
     HabitEntryStatus status,
   ) {
-    debugPrint('DBG apply: closed=${_uiStateController.isClosed} '
-        'entries=${_entries.length}');
+    debugPrint(
+      'DBG apply: closed=${_uiStateController.isClosed} '
+      'entries=${_entries.length}',
+    );
     if (_uiStateController.isClosed) return;
     final existing = _findEntryByKey(habitId, dateKey);
     if (existing != null) {
@@ -184,8 +188,10 @@ class HabitsViewModel {
 
   void _emit() {
     if (_uiStateController.isClosed) return;
-    debugPrint('DBG emit: closed=${_uiStateController.isClosed} '
-        'listeners=${_uiStateController.hasListener}');
+    debugPrint(
+      'DBG emit: closed=${_uiStateController.isClosed} '
+      'listeners=${_uiStateController.hasListener}',
+    );
     final date = _selectedDateController.value;
 
     try {
@@ -198,10 +204,7 @@ class HabitsViewModel {
         return HabitWithEntry(
           habit: habit,
           entry: _findEntry(habit.id, date),
-          streak: _streakCalculator.calculate(
-            habit: habit,
-            entries: _entries,
-          ),
+          streak: _streakCalculator.calculate(habit: habit, entries: _entries),
           isScheduled: isScheduled,
           isExpired: isExpired,
         );
@@ -214,10 +217,12 @@ class HabitsViewModel {
     }
   }
 
-  void dispose() {
-    _subscription?.cancel();
-    _uiStateController.close();
-    _selectedDateController.close();
-    _isFormVisibleController.close();
+  Future<void> dispose() async {
+    await _subscription?.cancel();
+    await Future.wait([
+      _uiStateController.close(),
+      _selectedDateController.close(),
+      _isFormVisibleController.close(),
+    ]);
   }
 }

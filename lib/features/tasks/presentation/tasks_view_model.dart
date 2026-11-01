@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:life_os/core/utils/datetime_utils.dart';
-import 'package:life_os/features/projects/data/projects_repository.dart';
+import 'package:life_os/features/projects/domain/projects_api.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
-import 'package:life_os/features/tasks/data/tasks_repository.dart';
+import 'package:tasks_api/tasks_api.dart' show TasksApi;
 import 'package:life_os/features/tasks/domain/task_filter_config.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
@@ -41,15 +41,9 @@ class TasksUiFlags {
   final bool isFormVisible;
   final bool isEventMode;
 
-  const TasksUiFlags({
-    this.isFormVisible = false,
-    this.isEventMode = false,
-  });
+  const TasksUiFlags({this.isFormVisible = false, this.isEventMode = false});
 
-  TasksUiFlags copyWith({
-    bool? isFormVisible,
-    bool? isEventMode,
-  }) {
+  TasksUiFlags copyWith({bool? isFormVisible, bool? isEventMode}) {
     return TasksUiFlags(
       isFormVisible: isFormVisible ?? this.isFormVisible,
       isEventMode: isEventMode ?? this.isEventMode,
@@ -58,9 +52,9 @@ class TasksUiFlags {
 }
 
 class TasksViewModel {
-  final TasksRepository _repository;
+  final TasksApi _repository;
   final GetTasksWithProjectsUseCase _taskWithProjectUseCase;
-  final ProjectsRepository _projectsRepository;
+  final ProjectsApi _projectsRepository;
 
   TasksViewModel(
     this._repository,
@@ -78,8 +72,6 @@ class TasksViewModel {
       BehaviorSubject<TasksUiFlags>.seeded(TasksUiFlags());
   Stream<TasksUiFlags> get uiFlags => _uiFlagsController.stream;
   TasksUiFlags get currentUiFlags => _uiFlagsController.value;
-
-
 
   TaskWithProject? activeTaskWithProject;
   Task draftTask = Task.blank();
@@ -117,15 +109,16 @@ class TasksViewModel {
   // 4. Выбранные задачи
   final List<Task> selectedTasks = [];
 
-  
-
   // Метод для UI: обновить только часть фильтра
   bool isEventMode = false;
   // Хелперы для управления флагами
   void toggleEventMode() {
     if (_uiFlagsController.isClosed) return;
-    _uiFlagsController.add(currentUiFlags.copyWith(isEventMode: !currentUiFlags.isEventMode));
+    _uiFlagsController.add(
+      currentUiFlags.copyWith(isEventMode: !currentUiFlags.isEventMode),
+    );
   }
+
   void updateFilter(
     TaskFilterConfig Function(TaskFilterConfig oldConfig) updater,
   ) {
@@ -186,7 +179,6 @@ class TasksViewModel {
           filter.anchorDate.day,
         );
 
-
         print(anchorDay);
         final bool dateMatches = switch (filter.period) {
           DatePeriod.day => taskDay.isAtSameMomentAs(anchorDay),
@@ -198,8 +190,7 @@ class TasksViewModel {
         };
 
         if (!dateMatches) continue;
-      } else {
-      }
+      } else {}
 
       // 2. Фильтр по ПРОЕКТАМ (Если список не пустой, проверяем совпадение)
       if (filter.projectIds.isNotEmpty &&
@@ -293,10 +284,11 @@ class TasksViewModel {
   }
 
   // ---UI ЛОГИКА ---
-void startEditingTask(TaskWithProject item) {
+  void startEditingTask(TaskWithProject item) {
     activeTaskWithProject = item;
-    draftTask = item.task;  // ← копируем задачу в draft при начале редактирования
-}
+    draftTask =
+        item.task; // ← копируем задачу в draft при начале редактирования
+  }
 
   // Открывает экран задач и сразу показывает задачу в форме редактирования.
   // Вызывается из Pulse при тапе на активную задачу.
@@ -360,10 +352,12 @@ void startEditingTask(TaskWithProject item) {
     }
   }
 
-  void dispose() {
-    _combineSubscription?.cancel();
-    _uiStateController.close();
-    _uiFlagsController.close();
-    _filterController.close();
+  Future<void> dispose() async {
+    await _combineSubscription?.cancel();
+    await Future.wait([
+      _uiStateController.close(),
+      _uiFlagsController.close(),
+      _filterController.close(),
+    ]);
   }
 }

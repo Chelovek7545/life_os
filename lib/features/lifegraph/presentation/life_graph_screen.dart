@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -34,13 +35,15 @@ class LifeGraphScreen extends StatefulWidget {
 class _LifeGraphScreenState extends State<LifeGraphScreen> {
   final graph.GraphViewCamera _camera = graph.GraphViewCamera();
   String? _syncedSphereId;
+  bool _allowPop = false;
+  bool _closing = false;
 
   @override
   void initState() {
     super.initState();
     // При каждом заходе в граф подтягиваем заметки из хранилища и Obsidian.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.viewModel.refreshNotes();
+      if (mounted) unawaited(widget.viewModel.refreshNotes());
     });
   }
 
@@ -48,28 +51,58 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   @override
   void dispose() {
     super.dispose();
-    widget.viewModel.dispose();
+    unawaited(
+      widget.viewModel.dispose().catchError((Object error, StackTrace stack) {
+        FlutterError.reportError(
+          FlutterErrorDetails(exception: error, stack: stack),
+        );
+      }),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.surfaceDim,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Positioned.fill(child: _buildContent(context)),
-            Positioned(
-              top: 16,
-              left: 16,
-              child: graph.ControlButton(
-                theme: AppGraphThemes.dark,
-                icon: Icons.arrow_back_rounded,
-                tooltip: 'Назад',
-                onTap: () => Navigator.maybePop(context),
+    return PopScope(
+      canPop: _allowPop,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop || _closing) return;
+        _closing = true;
+        try {
+          await widget.viewModel.flush();
+          if (!mounted) return;
+          setState(() => _allowPop = true);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) Navigator.of(context).pop(result);
+          });
+        } catch (_) {
+          if (mounted)
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Не удалось сохранить граф. Повторите выход.'),
               ),
-            ),
-          ],
+            );
+        } finally {
+          _closing = false;
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.surfaceDim,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Positioned.fill(child: _buildContent(context)),
+              Positioned(
+                top: 16,
+                left: 16,
+                child: graph.ControlButton(
+                  theme: AppGraphThemes.dark,
+                  icon: Icons.arrow_back_rounded,
+                  tooltip: 'Назад',
+                  onTap: () => Navigator.maybePop(context),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -346,8 +379,10 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         builder: (context, asyncSnapshot) {
           final List<Task> candidates = asyncSnapshot.data != null
               ? asyncSnapshot.data!
-                  .where((t) => t.id != parentTask.id && t.parentTaskId == null)
-                  .toList()
+                    .where(
+                      (t) => t.id != parentTask.id && t.parentTaskId == null,
+                    )
+                    .toList()
               : [];
           return ExistingTaskPickerDialog(
             title: 'Добавить существующую подзадачу',
@@ -725,11 +760,13 @@ class _SaveBadge extends StatelessWidget {
       valueListenable: viewModel.saveStatus,
       builder: (context, status, _) {
         final color = switch (status) {
+          GraphSaveStatus.failed => Colors.redAccent,
           GraphSaveStatus.draft => AppColors.onSurfaceVariant,
           GraphSaveStatus.saving => AppColors.primary,
           GraphSaveStatus.saved => const Color(0xFF4CAF50),
         };
         final label = switch (status) {
+          GraphSaveStatus.failed => 'ошибка сохранения',
           GraphSaveStatus.draft => 'черновик',
           GraphSaveStatus.saving => 'сохраняем…',
           GraphSaveStatus.saved => 'сохранено',

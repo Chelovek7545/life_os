@@ -1,14 +1,12 @@
 import 'package:collection/collection.dart';
-import 'package:life_os/core/theme/app_colors.dart';
-import 'package:life_os/core/utils/color_format.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:life_os/features/spheres/data/spheres_repository.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';
 import 'package:life_os/features/goals/data/goals_repository.dart';
 import 'package:life_os/features/goals/domain/goal_model.dart';
-import 'package:life_os/features/projects/data/projects_repository.dart';
+import 'package:life_os/features/projects/domain/projects_api.dart';
 import 'package:life_os/features/projects/domain/project_model.dart';
-import 'package:life_os/features/tasks/data/tasks_repository.dart';
+import 'package:tasks_api/tasks_api.dart' show TasksApi;
 import 'package:life_os/features/tasks/domain/task_model.dart';
 import 'package:life_os/features/lifegraph/domain/graph_node.dart';
 
@@ -24,41 +22,44 @@ class GraphBuilder {
 
   final SpheresRepository spheresRepository;
   final GoalsRepository goalsRepository;
-  final ProjectsRepository projectsRepository;
-  final TasksRepository tasksRepository;
+  final ProjectsApi projectsRepository;
+  final TasksApi tasksRepository;
 
   /// Возвращает стрим полного списка нод (сфера — корень) для сферы.
   Stream<List<GraphNode>> watchGraph(String sphereId) {
     return Rx.combineLatest4<
-      Sphere,
+      Sphere?,
       List<Goal>,
       List<Project>,
       List<Task>,
       List<GraphNode>
     >(
       spheresRepository.watchAllSpheres().map(
-        (list) => list.firstWhere((s) => s.id == sphereId),
+        (list) => list.firstWhereOrNull((s) => s.id == sphereId),
       ),
       goalsRepository.watchGoalsBySphere(sphereId),
       projectsRepository.watchAllProjects(),
       tasksRepository.watchTasks(),
       (sphere, goals, allProjects, allTasks) {
+        if (sphere == null) return <GraphNode>[];
         // Фильтруем проекты и задачи, принадлежащие этому поддереву.
         final goalIds = goals.map((g) => g.id).toSet();
         final projects = allProjects.where((p) {
           //print(p);
           return p.goalId != null && goalIds.contains(p.goalId);
         }).toList();
-        //print(allProjects);
-        allProjects.map((t) {
-          //print(t.parentProejectId);
-          if (t.parentProejectId != null &&
-              projects.firstWhereOrNull(
-                    (element) => element.id == t.parentProejectId,
-                  ) !=
-                  null){projects.add(t);}
-          
-        }).toList();
+        final included = projects.map((p) => p.id).toSet();
+        var changed = true;
+        while (changed) {
+          changed = false;
+          for (final project in allProjects) {
+            if (included.contains(project.parentProejectId) &&
+                included.add(project.id)) {
+              projects.add(project);
+              changed = true;
+            }
+          }
+        }
         final projectIds = projects.map((p) => p.id).toSet();
 
         final tasks = allTasks
@@ -147,7 +148,7 @@ class GraphBuilder {
               subtitle: task.description.isEmpty
                   ? 'Нет описания'
                   : task.description,
-              color: AppColors.secondary.toHex(),
+              color: '#CCC2DC',
               parentId: task.parentTaskId,
               taskStatus: task.status,
             ),
@@ -157,19 +158,5 @@ class GraphBuilder {
         return nodes;
       },
     );
-  }
-
-  String _taskColor(TaskStatus status) {
-    return status.color.toHex();
-    // switch (status) {
-    //   case TaskStatus.done:
-    //     return '#4CAF50';
-    //   case TaskStatus.inProgress:
-    //     return '#2196F3';
-    //   case TaskStatus.notStarted:
-    //     return '#FF9800';
-    //   case TaskStatus.open:
-    //     return '#9E9E9E';
-    // }
   }
 }

@@ -29,7 +29,10 @@ class FakeProjectsViewModel extends Fake implements ProjectsViewModel {
   void initialize() {}
 
   @override
-  void dispose() {
+  Stream<List<Task>> watchAllTasks() => Stream.value([]);
+
+  @override
+  Future<void> dispose() async {
     _stateController.close();
   }
 
@@ -74,17 +77,21 @@ void main() {
             onSurface: Colors.white,
           ),
         ),
-        home: ProjectsScreen(viewModel: viewModel),
+        home: Scaffold(body: ProjectsScreen(viewModel: viewModel)),
       );
     }
 
     testWidgets('shows loading indicator initially', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(createWidget());
 
       expect(find.byType(CircularProgressIndicator), findsOneWidget);
     });
 
     testWidgets('shows error message when state is error', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       viewModel._stateController.add(const ProjectsError('Failed'));
       await tester.pumpWidget(createWidget());
       await tester.pump();
@@ -93,6 +100,8 @@ void main() {
     });
 
     testWidgets('shows empty state when no projects', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       viewModel._stateController.add(
         ProjectsLoaded(projects: [], curProject: null),
       );
@@ -103,6 +112,8 @@ void main() {
     });
 
     testWidgets('renders project cards when projects exist', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       viewModel._stateController.add(
         ProjectsLoaded(
           projects: [
@@ -124,6 +135,8 @@ void main() {
     });
 
     testWidgets('shows new project button', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       viewModel._stateController.add(
         ProjectsLoaded(projects: [], curProject: null),
       );
@@ -134,6 +147,8 @@ void main() {
     });
 
     testWidgets('tapping new project button shows edit form', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       viewModel._stateController.add(
         ProjectsLoaded(projects: [], curProject: null),
       );
@@ -148,6 +163,8 @@ void main() {
     });
 
     testWidgets('renders ProjectsScreen with title', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1600));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(createWidget());
 
       expect(find.text('Projects'), findsOneWidget);

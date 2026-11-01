@@ -1,3 +1,5 @@
+import 'package:life_os/features/tasks/presentation/task_status_visuals.dart';
+import 'package:tasks_api/tasks_api.dart' show WorkLogsApi;
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
@@ -29,9 +31,11 @@ class TaskFormContent extends StatefulWidget {
     required this.onChanged,
     required this.midProgress,
     required this.maxProgress,
+    this.workLogs,
   });
 
   final Task task;
+  final WorkLogsApi? workLogs;
   final Stream<List<Project>> projects;
   final bool isEditMode;
   final OnTaskSubmit onSubmit;
@@ -607,7 +611,8 @@ class TaskFormContentState extends State<TaskFormContent> {
                 ),
                 if (widget.task.id.isNotEmpty && widget.isEditMode) ...[
                   const SizedBox(height: 16),
-                  WorkLogsSection(taskId: widget.task.id),
+                  if (widget.workLogs != null)
+                    WorkLogsSection(taskId: widget.task.id, repository: widget.workLogs!),
                 ],
                 if (isEditMode)
                   ElevatedButton(

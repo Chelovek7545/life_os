@@ -1,25 +1,40 @@
 import 'package:flutter/material.dart';
-import 'package:life_os/core/di.dart';
+import 'package:tasks_api/tasks_api.dart' show WorkLogsApi;
 import 'package:life_os/features/tasks/domain/work_log_model.dart';
 import 'package:life_os/features/tasks/presentation/work_logs_view_model.dart';
 
 class WorkLogsSection extends StatefulWidget {
-  const WorkLogsSection({super.key, required this.taskId});
+  const WorkLogsSection({
+    super.key,
+    required this.taskId,
+    required this.repository,
+  });
 
   final String taskId;
+  final WorkLogsApi repository;
 
   @override
   State<WorkLogsSection> createState() => _WorkLogsSectionState();
 }
 
 class _WorkLogsSectionState extends State<WorkLogsSection> {
-  late final WorkLogsViewModel _viewModel;
+  late WorkLogsViewModel _viewModel;
   final TextEditingController _descController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _viewModel = WorkLogsViewModel(DependencyContainer().workLogsRepository, widget.taskId);
+    _viewModel = WorkLogsViewModel(widget.repository, widget.taskId);
+  }
+
+  @override
+  void didUpdateWidget(covariant WorkLogsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.taskId != widget.taskId ||
+        oldWidget.repository != widget.repository) {
+      _viewModel.dispose();
+      _viewModel = WorkLogsViewModel(widget.repository, widget.taskId);
+    }
   }
 
   @override
@@ -40,7 +55,9 @@ class _WorkLogsSectionState extends State<WorkLogsSection> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: Text(existing == null ? 'Добавить ворклог' : 'Редактировать ворклог'),
+          title: Text(
+            existing == null ? 'Добавить ворклог' : 'Редактировать ворклог',
+          ),
           content: TextField(
             controller: _descController,
             decoration: const InputDecoration(
@@ -61,7 +78,9 @@ class _WorkLogsSectionState extends State<WorkLogsSection> {
                   if (existing == null) {
                     await _viewModel.addWorkLog(description: text);
                   } else {
-                    await _viewModel.updateWorkLog(existing.copyWith(description: text));
+                    await _viewModel.updateWorkLog(
+                      existing.copyWith(description: text),
+                    );
                   }
                 }
                 if (mounted) Navigator.pop(context);
@@ -102,7 +121,10 @@ class _WorkLogsSectionState extends State<WorkLogsSection> {
             else if (_viewModel.workLogs.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8.0),
-                child: Text('Нет ворклогов для этой задачи', style: TextStyle(color: Colors.grey)),
+                child: Text(
+                  'Нет ворклогов для этой задачи',
+                  style: TextStyle(color: Colors.grey),
+                ),
               )
             else
               ListView.builder(
@@ -135,7 +157,11 @@ class _WorkLogsSectionState extends State<WorkLogsSection> {
                             onPressed: () => _showAddDialog(existing: log),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete, size: 18, color: Colors.red),
+                            icon: const Icon(
+                              Icons.delete,
+                              size: 18,
+                              color: Colors.red,
+                            ),
                             onPressed: () => _viewModel.deleteWorkLog(log.id),
                           ),
                         ],

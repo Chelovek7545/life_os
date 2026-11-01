@@ -22,7 +22,7 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
     List<String> tagNames,
   ) async {
     await transaction(() async {
-      await into(tasks).insert(taskCompanion, mode: InsertMode.insertOrReplace);
+      await into(tasks).insertOnConflictUpdate(taskCompanion);
 
       // Вызываем общий метод, передавая имена тегов
       await _syncTaskTags(taskCompanion.id.value, tagNames);
@@ -37,7 +37,7 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
 
     final List<int> finalTagIds = [];
 
-    for (final name in tagNames) {
+    for (final name in tagNames.toSet()) {
       final existingTag = await (select(
         tags,
       )..where((t) => t.name.equals(name))).getSingleOrNull();
@@ -96,6 +96,20 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
 
   Future<TaskModel?> getById(String id) async {
     return (select(tasks)..where((t) => t.id.equals(id))).getSingleOrNull();
+  }
+
+  Future<Task?> getTaskWithTags(String id) => transaction(() async {
+    final row = await getById(id);
+    if (row == null) return null;
+    final taskTags = await getTagsForTask(id);
+    return row.toDomain(tags: taskTags.map((tag) => tag.toDomain()).toList());
+  });
+
+  Future<List<TagModel>> getTagsForTask(String id) async {
+    final query = select(tags).join([
+      innerJoin(taskTagEntries, taskTagEntries.tagId.equalsExp(tags.id)),
+    ])..where(taskTagEntries.taskId.equals(id));
+    return (await query.get()).map((row) => row.readTable(tags)).toList();
   }
 
   Stream<List<TaskModel>> watchAllTasks() {
