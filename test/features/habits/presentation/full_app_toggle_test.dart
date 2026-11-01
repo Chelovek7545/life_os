@@ -1,10 +1,8 @@
-import 'package:life_os/features/habits/presentation/habits_state.dart';
+import 'package:habits_plugin/habits_logic.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/app.dart';
-import 'package:life_os/features/habits/domain/habit_model.dart';
-import 'package:life_os/features/habits/domain/habit_schedule.dart';
-import 'package:life_os/features/habits/domain/habit_type.dart';
+import 'package:habits_api/habits_api.dart';
 import '../../../support/test_app.dart';
 
 void main() {

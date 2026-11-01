@@ -1,5 +1,5 @@
-import 'package:life_os/core/utils/wrapped.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:core_contracts/core_contracts.dart' show Wrapped;
+import 'package:projects_api/projects_api.dart' show Project;
 import 'package:test/test.dart';
 
 void main() {

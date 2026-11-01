@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
-import 'package:life_os/features/goals/domain/goal_model.dart';
+import 'package:goals_api/goals_api.dart' show Goal;
 
 extension GoalDataToDomain on GoalModel {
   Goal toDomain() {

@@ -1,4 +1,5 @@
-import 'package:life_os/features/projects/presentation/projects_state.dart';
+import 'package:projects_plugin/projects_logic.dart'
+    show ProjectsLoading, ProjectsLoaded, ProjectsError;
 import 'package:test/test.dart';
 
 import '../../../test_helpers.dart';

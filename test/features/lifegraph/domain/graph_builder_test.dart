@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:graph_api/graph_api.dart';
 import 'package:test/test.dart';
-import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
+import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphBuilder;
 
 class MutableContributor implements GraphContributor {
   MutableContributor(this.id, this.snapshot);

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_os/core/bot/bot_task_list_formatter.dart';
-import 'package:life_os/core/bot/bot_task_store.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:telegram_plugin/telegram_plugin.dart'
+    show BotTaskListFormatter, BotTaskRow;
+import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus;
 
 void main() {
   BotTaskRow row(String title, {int priority = 0}) {

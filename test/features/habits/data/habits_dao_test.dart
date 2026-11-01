@@ -1,12 +1,9 @@
+import 'package:habits_api/habits_api.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/habits/data/habit_model_extension.dart';
 import 'package:life_os/features/habits/data/habits_dao.dart';
-import 'package:life_os/features/habits/domain/habit_entry_model.dart';
-import 'package:life_os/features/habits/domain/habit_model.dart';
-import 'package:life_os/features/habits/domain/habit_schedule.dart';
-import 'package:life_os/features/habits/domain/habit_type.dart';
 
 void main() {
   late AppDatabase db;

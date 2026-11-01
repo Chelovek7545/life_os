@@ -1,11 +1,8 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/features/habits/data/habits_repository.dart';
-import 'package:life_os/features/habits/domain/habit_entry_model.dart';
-import 'package:life_os/features/habits/domain/habit_model.dart';
-import 'package:life_os/features/habits/domain/habit_type.dart';
-import 'package:life_os/features/habits/presentation/habits_state.dart';
-import 'package:life_os/features/habits/presentation/habits_view_model.dart';
+import 'package:habits_api/habits_api.dart';
+import 'package:habits_plugin/habits_logic.dart';
 
 class PendingHabitsRepository extends Fake implements HabitsRepository {
   PendingHabitsRepository(this.habit);

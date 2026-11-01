@@ -4,8 +4,8 @@ import 'package:graph_api/graph_api.dart';
 import 'package:goals_api/goals_api.dart';
 import 'package:spheres_api/spheres_api.dart';
 import 'package:tasks_api/tasks_api.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
-import 'package:life_os/features/lifegraph/domain/graph_node.dart';
+import 'package:projects_api/projects_api.dart' show Project;
+import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNode;
 import '../../../support/test_app.dart';
 
 void main() {

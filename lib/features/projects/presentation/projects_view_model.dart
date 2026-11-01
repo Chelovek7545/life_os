@@ -1,1 +1,0 @@
-export 'package:projects_plugin/projects_logic.dart' show ProjectsViewModel;

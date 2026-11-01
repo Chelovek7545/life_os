@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/core/theme/app_colors.dart';
-import 'package:life_os/features/tasks/domain/tag_model.dart';
+import 'package:tasks_api/tasks_api.dart' show Tag;
 import 'package:life_os/core/ui/old/old_task_card.dart';
 
 Widget createTaskCard({

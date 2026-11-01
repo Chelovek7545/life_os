@@ -1,6 +1,6 @@
-import 'package:life_os/core/utils/wrapped.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
-import 'package:life_os/features/tasks/domain/tag_model.dart';
+import 'package:core_contracts/core_contracts.dart' show Wrapped;
+import 'package:tasks_api/tasks_api.dart'
+    show Task, TaskStatus, taskStatusFromStorage, Tag;
 import 'package:test/test.dart';
 
 void main() {

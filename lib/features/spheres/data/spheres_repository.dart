@@ -1,8 +1,6 @@
-import 'package:spheres_api/spheres_api.dart' show SpheresApi;
-import 'package:life_os/core/storage/storage_exception.dart';
-export 'package:life_os/core/storage/storage_exception.dart';
+import 'package:spheres_api/spheres_api.dart' show SpheresApi, Sphere;
+import 'package:core_contracts/core_contracts.dart' show StorageException;
 import 'package:life_os/features/spheres/data/spheres_dao.dart';
-import 'package:life_os/features/spheres/domain/sphere_model.dart';
 import 'package:life_os/features/spheres/data/sphere_model_extension.dart';
 
 class SpheresRepository implements SpheresApi {

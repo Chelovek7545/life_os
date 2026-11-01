@@ -1,10 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNodeType;
 import 'package:graph_canvas/graph_canvas.dart';
-import 'legacy_graph_component_spec.dart';
-
-/// Размер ноды в зависимости от её типа.
-Size graphNodeSizeOf(GraphNodeType type) => legacyGraphComponentSpec(type).size;
 
 /// Размер по умолчанию — для ghost'ов GraphView и клампинга без известного типа.
 const Size graphNodeSize = Size(176, 68);

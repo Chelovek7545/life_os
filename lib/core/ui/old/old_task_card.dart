@@ -3,7 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/widget_previews.dart';
 import 'package:life_os/core/utils/date_format.dart';
-import 'package:life_os/features/tasks/domain/tag_model.dart';
+import 'package:tasks_api/tasks_api.dart' show Tag;
 
 @Preview()
 Widget newPreview() => MaterialApp(

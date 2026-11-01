@@ -1,11 +1,9 @@
-import 'package:life_os/core/storage/storage_exception.dart';
-export 'package:life_os/core/storage/storage_exception.dart';
-import 'package:tasks_api/tasks_api.dart' show TasksApi;
+import 'package:core_contracts/core_contracts.dart' show StorageException;
+import 'package:tasks_api/tasks_api.dart' show TasksApi, Task;
 import 'package:life_os/features/tasks/data/extensions/tag_model_extension.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 
-import '../domain/task_model.dart';
 
 class TasksRepository implements TasksApi {
   TasksRepository(this._dao);

@@ -1,7 +1,7 @@
+import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/features/tasks/presentation/task_status_visuals.dart';
 import 'package:flutter/material.dart';
-import 'package:life_os/core/theme/app_colors.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus;
 
 /// Диалог выбора уже существующей задачи (без проекта) для привязки к проекту
 /// в графе. По тапу по задаче вызывает [onSelect] с её id.

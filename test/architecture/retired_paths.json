@@ -1,0 +1,198 @@
+{
+  "lib/core/bot/bot_keyboard.dart": [
+    "package:telegram_plugin/telegram_plugin.dart"
+  ],
+  "lib/core/bot/bot_polling_fetcher.dart": [
+    "package:telegram_plugin/telegram_plugin.dart"
+  ],
+  "lib/core/bot/bot_task_edit.dart": [
+    "package:telegram_plugin/telegram_plugin.dart"
+  ],
+  "lib/core/bot/bot_task_list_formatter.dart": [
+    "package:telegram_plugin/telegram_plugin.dart"
+  ],
+  "lib/core/bot/bot_task_store.dart": [
+    "package:telegram_plugin/telegram_plugin.dart",
+    "package:life_os/features/tasks/data/telegram_task_queries.dart"
+  ],
+  "lib/core/bot/task_message_parser.dart": [
+    "package:telegram_plugin/telegram_plugin.dart"
+  ],
+  "lib/core/di.dart": [
+    "package:life_os/app/dependency_container.dart"
+  ],
+  "lib/core/local_bot_service.dart": [
+    "package:telegram_plugin/telegram_plugin.dart"
+  ],
+  "lib/core/storage/debounced_writer.dart": [
+    "package:plugin_runtime/debounced_writer.dart"
+  ],
+  "lib/core/storage/storage_exception.dart": [
+    "package:core_contracts/core_contracts.dart"
+  ],
+  "lib/core/ui/graph/graph_view.dart": [
+    "package:graph_canvas/graph_canvas.dart"
+  ],
+  "lib/core/utils/wrapped.dart": [
+    "package:core_contracts/core_contracts.dart"
+  ],
+  "lib/features/goals/data/extensions/goal_model_extension.dart": [
+    "package:life_os/features/goals/data/goal_model_extension.dart"
+  ],
+  "lib/features/goals/domain/goals_graph_commands.dart": [
+    "package:goals_plugin/goals_logic.dart"
+  ],
+  "lib/features/goals/domain/goals_graph_contributor.dart": [
+    "package:goals_plugin/goals_logic.dart"
+  ],
+  "lib/features/goals/domain/goal_model.dart": [
+    "package:goals_api/goals_api.dart"
+  ],
+  "lib/features/habits/domain/habit_entry_model.dart": [
+    "package:habits_api/habits_api.dart"
+  ],
+  "lib/features/habits/domain/habit_model.dart": [
+    "package:habits_api/habits_api.dart"
+  ],
+  "lib/features/habits/domain/habit_schedule.dart": [
+    "package:habits_api/habits_api.dart"
+  ],
+  "lib/features/habits/domain/habit_streak.dart": [
+    "package:habits_api/habits_api.dart"
+  ],
+  "lib/features/habits/domain/habit_type.dart": [
+    "package:habits_api/habits_api.dart",
+    "package:habits_plugin/habits_panels.dart"
+  ],
+  "lib/features/habits/domain/habit_visuals.dart": [
+    "package:habits_plugin/habits_panels.dart"
+  ],
+  "lib/features/habits/presentation/habits_state.dart": [
+    "package:habits_plugin/habits_logic.dart"
+  ],
+  "lib/features/habits/presentation/habits_ui_module.dart": [
+    "package:habits_plugin/habits_plugin.dart"
+  ],
+  "lib/features/habits/presentation/habits_view_model.dart": [
+    "package:habits_plugin/habits_logic.dart"
+  ],
+  "lib/features/habits/presentation/habit_type_presentation.dart": [
+    "package:habits_plugin/habits_panels.dart"
+  ],
+  "lib/features/habits/presentation/habit_visuals.dart": [
+    "package:habits_plugin/habits_panels.dart"
+  ],
+  "lib/features/lifegraph/domain/canvas_note.dart": [
+    "package:notes_api/notes_api.dart"
+  ],
+  "lib/features/lifegraph/domain/graph_builder.dart": [
+    "package:lifegraph_plugin/lifegraph_logic.dart"
+  ],
+  "lib/features/lifegraph/domain/graph_node.dart": [
+    "package:lifegraph_plugin/lifegraph_logic.dart"
+  ],
+  "lib/features/lifegraph/presentation/canvas_note_mapper.dart": [
+    "package:lifegraph_plugin/canvas_note_mapper.dart"
+  ],
+  "lib/features/lifegraph/presentation/life_graph_view_model.dart": [
+    "package:lifegraph_plugin/lifegraph_plugin.dart"
+  ],
+  "lib/features/lifegraph/presentation/pulse_panel_slots.dart": [
+    "package:lifegraph_plugin/lifegraph_plugin.dart"
+  ],
+  "lib/features/lifegraph/presentation/pulse_screen_view_model.dart": [
+    "package:lifegraph_plugin/lifegraph_plugin.dart"
+  ],
+  "lib/features/lifegraph/presentation/widgets/existing_task_picker_dialog.dart": [
+    "package:life_os/features/tasks/presentation/widgets/existing_task_picker_dialog.dart"
+  ],
+  "lib/features/projects/domain/projects_api.dart": [
+    "package:projects_api/projects_api.dart"
+  ],
+  "lib/features/projects/domain/projects_graph_commands.dart": [
+    "package:projects_plugin/projects_logic.dart"
+  ],
+  "lib/features/projects/domain/projects_graph_contributor.dart": [
+    "package:projects_plugin/projects_logic.dart"
+  ],
+  "lib/features/projects/domain/project_model.dart": [
+    "package:projects_api/projects_api.dart"
+  ],
+  "lib/features/projects/presentation/projects_state.dart": [
+    "package:projects_plugin/projects_logic.dart"
+  ],
+  "lib/features/projects/presentation/projects_view_model.dart": [
+    "package:projects_plugin/projects_logic.dart"
+  ],
+  "lib/features/resources/data/obsidian_repository.dart": [
+    "package:obsidian_plugin/obsidian_plugin.dart",
+    "package:notes_api/notes_api.dart"
+  ],
+  "lib/features/resources/presentation/resources_view_model.dart": [
+    "package:resources_plugin/resources_plugin.dart"
+  ],
+  "lib/features/spheres/domain/spheres_graph_commands.dart": [
+    "package:spheres_plugin/spheres_logic.dart"
+  ],
+  "lib/features/spheres/domain/spheres_graph_contributor.dart": [
+    "package:spheres_plugin/spheres_logic.dart"
+  ],
+  "lib/features/spheres/domain/sphere_model.dart": [
+    "package:spheres_api/spheres_api.dart"
+  ],
+  "lib/features/tasks/domain/tag_model.dart": [
+    "package:tasks_api/tasks_api.dart"
+  ],
+  "lib/features/tasks/domain/tasks_graph_commands.dart": [
+    "package:tasks_plugin/tasks_logic.dart"
+  ],
+  "lib/features/tasks/domain/tasks_graph_contributor.dart": [
+    "package:tasks_plugin/tasks_logic.dart"
+  ],
+  "lib/features/tasks/domain/task_filter_config.dart": [
+    "package:tasks_plugin/tasks_logic.dart"
+  ],
+  "lib/features/tasks/domain/task_model.dart": [
+    "package:tasks_api/tasks_api.dart"
+  ],
+  "lib/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart": [
+    "package:tasks_plugin/tasks_logic.dart"
+  ],
+  "lib/features/tasks/domain/work_log_model.dart": [
+    "package:tasks_api/tasks_api.dart"
+  ],
+  "lib/features/tasks/presentation/tasks_view_model.dart": [
+    "package:tasks_plugin/tasks_logic.dart"
+  ],
+  "lib/features/tasks/presentation/task_state.dart": [
+    "package:tasks_plugin/tasks_logic.dart"
+  ],
+  "lib/features/tasks/presentation/work_logs_view_model.dart": [
+    "package:tasks_plugin/tasks_plugin.dart"
+  ],
+  "lib/app/plugins/life_graph_modules.dart": [
+    "package:spheres_plugin/spheres_plugin.dart",
+    "package:goals_plugin/goals_plugin.dart"
+  ],
+  "lib/features/lifegraph/presentation/widgets/builtin_graph_forms.dart": [
+    "package:graph_components/graph_components.dart"
+  ],
+  "lib/features/lifegraph/presentation/widgets/graph_node_card.dart": [
+    "package:graph_components/graph_components.dart"
+  ],
+  "lib/features/lifegraph/presentation/widgets/node_edit_dialog.dart": [
+    "package:graph_components/graph_components.dart"
+  ],
+  "lib/features/lifegraph/presentation/widgets/legacy_graph_component_spec.dart": [
+    "package:life_os/features/spheres/presentation/spheres_graph_ui.dart",
+    "package:life_os/features/goals/presentation/goals_graph_ui.dart",
+    "package:life_os/features/projects/presentation/projects_graph_ui.dart",
+    "package:life_os/features/tasks/presentation/tasks_graph_components.dart"
+  ],
+  "packages/tasks_plugin/lib/src/owned_streams.dart": [
+    "package:plugin_runtime/owned_streams.dart"
+  ],
+  "packages/tasks_api/lib/src/wrapped.dart": [
+    "package:core_contracts/core_contracts.dart"
+  ]
+}

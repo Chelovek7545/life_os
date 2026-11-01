@@ -1,9 +1,9 @@
+import 'package:life_os/features/lifegraph/data/drift_graph_deletion.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/core/database/database.dart';
-import 'package:life_os/features/lifegraph/data/drift_graph_deletion.dart';
-import 'package:life_os/features/lifegraph/domain/graph_node.dart';
+import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNodeType;
 import 'package:tasks_api/tasks_api.dart';
 
 void main() {

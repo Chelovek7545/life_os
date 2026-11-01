@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:plugin_ui/plugin_ui.dart';
 import 'resources_screen.dart';
-import 'resources_view_model.dart';
+import 'package:resources_plugin/resources_plugin.dart' show ResourcesViewModel;
 
 UiModuleSpec resourcesScreenModule(ResourcesViewModel viewModel) =>
     UiModuleSpec(

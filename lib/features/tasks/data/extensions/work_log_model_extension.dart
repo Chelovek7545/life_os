@@ -1,5 +1,5 @@
 import 'package:life_os/core/database/database.dart';
-import 'package:life_os/features/tasks/domain/work_log_model.dart';
+import 'package:tasks_api/tasks_api.dart' show WorkLog;
 
 extension WorkLogModelExtension on WorkLogModel {
   WorkLog toDomain() {

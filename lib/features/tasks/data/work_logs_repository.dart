@@ -1,9 +1,8 @@
-import 'package:tasks_api/tasks_api.dart' show WorkLogsApi;
+import 'package:tasks_api/tasks_api.dart' show WorkLogsApi, WorkLog;
 import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/work_logs_dao.dart';
 import 'package:life_os/features/tasks/data/extensions/work_log_model_extension.dart';
-import 'package:life_os/features/tasks/domain/work_log_model.dart';
 
 class WorkLogsRepository implements WorkLogsApi {
   WorkLogsRepository(this._workLogsDao);

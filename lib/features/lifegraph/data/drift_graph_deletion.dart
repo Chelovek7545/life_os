@@ -1,7 +1,7 @@
+import '../domain/graph_deletion.dart';
 import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
-import '../domain/graph_deletion.dart';
-import '../domain/graph_node.dart';
+import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNodeType;
 
 class DriftGraphDeletion implements GraphDeletion {
   DriftGraphDeletion(this.database);

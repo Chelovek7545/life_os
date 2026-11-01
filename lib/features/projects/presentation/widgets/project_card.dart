@@ -1,10 +1,10 @@
+import 'package:projects_plugin/projects_logic.dart';
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:projects_api/projects_api.dart';
-import 'package:projects_plugin/projects_logic.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus;
 
 class ProjectCard extends StatefulWidget {
   final String title;

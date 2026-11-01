@@ -1,7 +1,6 @@
-import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
-import 'package:life_os/features/tasks/domain/tag_model.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:drift/drift.dart';
+import 'package:tasks_api/tasks_api.dart' show Tag, Task;
 
 /// Extension для преобразования Drift модели в domain модель
 extension TaskDataToDomain on TaskModel {

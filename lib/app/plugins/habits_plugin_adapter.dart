@@ -6,7 +6,7 @@ import 'package:life_os/core/ui/collapsible_sheet.dart';
 import 'package:life_os/features/habits/presentation/habits_calendar_panel.dart';
 import 'package:life_os/features/habits/presentation/habits_sheet.dart';
 import 'package:life_os/features/habits/presentation/todays_habits_panel.dart';
-import 'package:life_os/features/lifegraph/presentation/pulse_panel_slots.dart';
+import 'package:lifegraph_plugin/lifegraph_plugin.dart' show PulsePanelSlots;
 
 HabitsPlugin createHabitsPlugin({
   required HabitsApi habits,

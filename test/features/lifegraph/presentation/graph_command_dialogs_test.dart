@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tasks_api/tasks_api.dart';
-import 'package:life_os/features/lifegraph/domain/graph_node.dart';
-import 'package:life_os/features/lifegraph/presentation/widgets/node_edit_dialog.dart';
-import 'package:life_os/features/lifegraph/presentation/widgets/existing_task_picker_dialog.dart';
+import 'package:graph_api/graph_api.dart';
+import 'package:graph_components/graph_components.dart';
+import 'package:life_os/features/tasks/presentation/tasks_graph_components.dart';
+import 'package:life_os/features/goals/presentation/goals_graph_ui.dart';
+import 'package:life_os/features/tasks/presentation/widgets/existing_task_picker_dialog.dart';
 
 Future<void> openDialog(WidgetTester tester, Widget dialog) async {
   await tester.pumpWidget(
@@ -24,9 +26,9 @@ Future<void> openDialog(WidgetTester tester, Widget dialog) async {
   await tester.pumpAndSettle();
 }
 
-const node = GraphNode(
+final node = GraphNodeData(
   id: 'task',
-  type: GraphNodeType.task,
+  kind: 'task',
   title: 'Original',
   subtitle: '',
   color: '#123456',
@@ -40,8 +42,9 @@ void main() {
       var attempts = 0;
       await openDialog(
         tester,
-        NodeEditDialog(
+        GraphNodeEditDialog(
           node: node,
+          spec: taskGraphComponent(),
           onDelete: (_) async {},
           onSave: (updated) async {
             attempts++;
@@ -56,7 +59,7 @@ void main() {
       await tester.enterText(find.byType(TextField).first, 'Edited');
       await tester.tap(find.text('Сохранить'));
       await tester.pump();
-      expect(find.byType(NodeEditDialog), findsOneWidget);
+      expect(find.byType(GraphNodeEditDialog), findsOneWidget);
       expect(
         tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull,
@@ -71,7 +74,7 @@ void main() {
       await tester.tap(find.text('Сохранить'));
       await tester.pumpAndSettle();
       expect(attempts, 2);
-      expect(find.byType(NodeEditDialog), findsNothing);
+      expect(find.byType(GraphNodeEditDialog), findsNothing);
     },
   );
 
@@ -81,8 +84,9 @@ void main() {
     var attempts = 0;
     await openDialog(
       tester,
-      NodeEditDialog(
+      GraphNodeEditDialog(
         node: node,
+        spec: taskGraphComponent(),
         onSave: (_) async {},
         onDelete: (keepChildren) async {
           expect(keepChildren, isFalse);
@@ -104,7 +108,7 @@ void main() {
     );
     await remove();
     expect(attempts, 2);
-    expect(find.byType(NodeEditDialog), findsNothing);
+    expect(find.byType(GraphNodeEditDialog), findsNothing);
   });
 
   testWidgets('failed creation keeps its title and enables another attempt', (
@@ -113,20 +117,12 @@ void main() {
     var attempts = 0;
     await openDialog(
       tester,
-      AddChildDialog(
-        childNodeType: GraphNodeType.goal,
-        onSave:
-            ({
-              required title,
-              required description,
-              color,
-              dueDate,
-              startsAt,
-              endsAt,
-            }) async {
-              expect(title, 'New goal');
-              if (++attempts == 1) throw StateError('Create failed');
-            },
+      GraphChildCreateDialog(
+        spec: goalGraphComponent,
+        onSave: (draft) async {
+          expect(draft.title, 'New goal');
+          if (++attempts == 1) throw StateError('Create failed');
+        },
       ),
     );
     await tester.enterText(find.byType(TextField).first, 'New goal');
@@ -140,7 +136,7 @@ void main() {
     await tester.tap(find.text('Создать'));
     await tester.pumpAndSettle();
     expect(attempts, 2);
-    expect(find.byType(AddChildDialog), findsNothing);
+    expect(find.byType(GraphChildCreateDialog), findsNothing);
   });
 
   testWidgets(

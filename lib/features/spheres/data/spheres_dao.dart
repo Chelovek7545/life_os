@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
-import 'package:life_os/features/spheres/domain/sphere_model.dart';
+import 'package:spheres_api/spheres_api.dart' show Sphere;
 import 'sphere_model_extension.dart';
 
 part 'spheres_dao.g.dart';

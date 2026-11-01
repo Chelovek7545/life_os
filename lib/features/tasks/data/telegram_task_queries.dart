@@ -1,8 +1,8 @@
+import 'package:life_os/core/database/database.dart';
 import 'package:telegram_plugin/telegram_plugin.dart';
 import 'extensions/task_model_extension.dart';
 import 'package:drift/drift.dart';
-import 'package:life_os/core/database/database.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus;
 
 /// One bounded SQL query combines all selected filters.
 class BotTaskStore implements TelegramTaskQueries {

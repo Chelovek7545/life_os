@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_os/core/bot/bot_keyboard.dart';
+import 'package:telegram_plugin/telegram_plugin.dart' show BotKeyboard;
 import 'package:teledart/model.dart';
 
 void main() {

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_os/core/bot/task_message_parser.dart';
+import 'package:telegram_plugin/telegram_plugin.dart' show TaskMessageParser;
 
 void main() {
   const parser = TaskMessageParser();

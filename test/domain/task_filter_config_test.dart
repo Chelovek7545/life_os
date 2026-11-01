@@ -1,4 +1,4 @@
-import 'package:life_os/features/tasks/domain/task_filter_config.dart';
+import 'package:tasks_plugin/tasks_logic.dart';
 import 'package:test/test.dart';
 
 void main() {

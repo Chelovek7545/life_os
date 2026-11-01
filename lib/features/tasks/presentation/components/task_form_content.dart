@@ -1,5 +1,5 @@
 import 'package:life_os/features/tasks/presentation/task_status_visuals.dart';
-import 'package:tasks_api/tasks_api.dart' show WorkLogsApi;
+import 'package:tasks_api/tasks_api.dart' show WorkLogsApi, Task, TaskStatus;
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
@@ -12,7 +12,6 @@ import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:projects_api/projects_api.dart';
 import 'package:life_os/features/tasks/presentation/components/work_logs_section.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
 
 typedef OnTaskSubmit = void Function(Task task);
 

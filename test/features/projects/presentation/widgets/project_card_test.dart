@@ -1,11 +1,11 @@
+import 'package:life_os/features/projects/presentation/widgets/project_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/core/theme/app_colors.dart';
-import 'package:life_os/core/utils/wrapped.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
-import 'package:life_os/features/projects/presentation/projects_view_model.dart';
-import 'package:life_os/features/projects/presentation/widgets/project_card.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:core_contracts/core_contracts.dart' show Wrapped;
+import 'package:projects_api/projects_api.dart' show Project;
+import 'package:projects_plugin/projects_logic.dart' show ProjectsViewModel;
+import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus;
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:rxdart/rxdart.dart';

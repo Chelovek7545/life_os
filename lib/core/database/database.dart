@@ -1,7 +1,7 @@
+import 'package:drift/native.dart';
 import 'package:habits_api/habits_api.dart';
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:tasks_api/tasks_api.dart' show TaskStatus;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io';

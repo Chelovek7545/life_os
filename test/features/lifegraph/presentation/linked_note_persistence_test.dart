@@ -4,9 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:notes_api/notes_api.dart';
 import 'package:path/path.dart' as p;
 import 'package:life_os/app/dependency_container.dart';
-import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
+import 'package:lifegraph_plugin/lifegraph_plugin.dart'
+    show LifeGraphViewModel, GraphSaveStatus;
 import 'package:life_os/features/settings/settings_service.dart';
-import 'package:life_os/features/spheres/domain/sphere_model.dart';
+import 'package:spheres_api/spheres_api.dart' show Sphere;
 import '../../../support/test_app.dart';
 
 class PendingVault extends Fake implements VaultNotesApi {

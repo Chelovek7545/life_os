@@ -1,4 +1,4 @@
-import 'package:life_os/features/tasks/presentation/task_state.dart';
+import 'package:tasks_plugin/tasks_logic.dart';
 import 'package:test/test.dart';
 
 import '../../../test_helpers.dart';

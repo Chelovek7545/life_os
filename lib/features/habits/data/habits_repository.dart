@@ -1,7 +1,7 @@
 import 'package:habits_api/habits_api.dart';
 import 'package:life_os/features/habits/data/habit_model_extension.dart';
 import 'package:life_os/features/habits/data/habits_dao.dart';
-import 'package:life_os/core/storage/storage_exception.dart';
+import 'package:core_contracts/core_contracts.dart' show StorageException;
 
 class HabitsRepository implements HabitsApi {
   HabitsRepository(this._dao);

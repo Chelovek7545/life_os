@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:tasks_api/tasks_api.dart';
-import 'owned_streams.dart';
+import 'package:plugin_runtime/owned_streams.dart';
 
 /// A plugin-owned lifetime for work log requests and subscriptions.
 class WorkLogsSession implements WorkLogsApi {

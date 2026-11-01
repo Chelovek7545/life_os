@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:test/test.dart';
 import 'package:habits_api/habits_api.dart';
 import 'package:habits_plugin/habits_logic.dart';
-import 'package:life_os/features/habits/domain/habit_model.dart' as legacy;
 import '../support/memory_habits.dart';
 
 Future<HabitsLoaded> loaded(HabitsViewModel model) async =>
@@ -16,7 +15,6 @@ void main() {
       type: const TimeHabit(time: HabitTime(hour: 21, minute: 5)),
       reminderTime: const HabitTime(hour: 21, minute: 0),
     );
-    expect(habit, isA<legacy.Habit>());
     expect(habit.type, habitTypeFromStorage(HabitTypeKind.time, time: '21:05'));
     expect(formatStoredTime(habit.reminderTime!), '21:00');
     expect(habit.copyWith(clearReminderTime: true).reminderTime, isNull);

@@ -249,14 +249,14 @@ void main() {
     expect(builder.contains('features/goals'), isFalse);
     expect(builder.contains('features/spheres'), isFalse);
     for (final file in [
-      'lib/features/spheres/domain/spheres_graph_contributor.dart',
-      'lib/features/goals/domain/goals_graph_contributor.dart',
-      'lib/features/projects/domain/projects_graph_contributor.dart',
-      'lib/features/tasks/domain/tasks_graph_contributor.dart',
-      'lib/features/spheres/domain/spheres_graph_commands.dart',
-      'lib/features/goals/domain/goals_graph_commands.dart',
-      'lib/features/projects/domain/projects_graph_commands.dart',
-      'lib/features/tasks/domain/tasks_graph_commands.dart',
+      'packages/spheres_plugin/lib/src/spheres_graph_contributor.dart',
+      'packages/goals_plugin/lib/src/goals_graph_contributor.dart',
+      'packages/projects_plugin/lib/src/projects_graph_contributor.dart',
+      'packages/tasks_plugin/lib/src/tasks_graph_contributor.dart',
+      'packages/spheres_plugin/lib/src/spheres_graph_commands.dart',
+      'packages/goals_plugin/lib/src/goals_graph_commands.dart',
+      'packages/projects_plugin/lib/src/projects_graph_commands.dart',
+      'packages/tasks_plugin/lib/src/tasks_graph_commands.dart',
       'packages/lifegraph_plugin/lib/src/life_graph_view_model.dart',
       'packages/lifegraph_plugin/lib/src/pulse_screen_view_model.dart',
     ]) {
@@ -414,10 +414,7 @@ void main() {
       expect(root.contains('TasksViewModel('), isFalse);
       expect(root.contains('GetTasksWithProjectsUseCase('), isFalse);
       expect(root.contains('...tasksPlugin.plugins'), isTrue);
-      final builtinGraph = File(
-        'lib/app/plugins/life_graph_modules.dart',
-      ).readAsStringSync();
-      expect(builtinGraph.contains('tasks.graph'), isFalse);
+      expect(root.contains('lifeGraphModules('), isFalse);
       final builtinUi = File(
         'lib/app/plugins/application_ui_modules.dart',
       ).readAsStringSync();
@@ -583,10 +580,6 @@ void main() {
           ]) {
             expect(logic.contains(forbidden), isFalse);
           }
-          final compatibility = File(
-            'lib/features/$feature/domain/${feature}_graph_$part.dart',
-          ).readAsStringSync();
-          expect(compatibility.trim().startsWith('export '), isTrue);
         }
         final adapter = File(
           'lib/app/plugins/${feature}_plugin_adapter.dart',

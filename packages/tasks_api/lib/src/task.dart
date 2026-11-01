@@ -1,6 +1,6 @@
 import 'package:uuid/uuid.dart';
 import 'tag.dart';
-import 'wrapped.dart';
+import 'package:core_contracts/core_contracts.dart' show Wrapped;
 
 enum TaskStatus { open, notStarted, inProgress, done }
 

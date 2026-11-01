@@ -1,10 +1,10 @@
+import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'dart:async';
 
 import 'package:life_os/features/projects/data/projects_repository.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
-import 'package:life_os/features/tasks/data/tasks_repository.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
-import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
+import 'package:projects_api/projects_api.dart' show Project;
+import 'package:tasks_api/tasks_api.dart' show Task;
+import 'package:tasks_plugin/tasks_logic.dart';
 import 'package:mockito/mockito.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:test/test.dart';

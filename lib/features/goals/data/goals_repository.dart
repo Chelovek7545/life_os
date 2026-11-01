@@ -1,8 +1,6 @@
-import 'package:goals_api/goals_api.dart' show GoalsApi;
-import 'package:life_os/core/storage/storage_exception.dart';
-export 'package:life_os/core/storage/storage_exception.dart';
+import 'package:goals_api/goals_api.dart' show GoalsApi, Goal;
+import 'package:core_contracts/core_contracts.dart' show StorageException;
 import 'package:life_os/features/goals/data/goals_dao.dart';
-import 'package:life_os/features/goals/domain/goal_model.dart';
 import 'package:life_os/features/goals/data/goal_model_extension.dart';
 
 class GoalsRepository implements GoalsApi {

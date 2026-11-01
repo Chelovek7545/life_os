@@ -1,9 +1,10 @@
+import 'package:core_contracts/core_contracts.dart' show StorageException;
+import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 import 'dart:async';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
-import 'package:life_os/features/tasks/data/tasks_repository.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus;
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:test/test.dart';

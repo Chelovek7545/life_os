@@ -1,10 +1,11 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:life_os/features/tasks/data/work_logs_dao.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:life_os/core/bot/bot_task_store.dart';
+import 'package:telegram_plugin/telegram_plugin.dart' show BotTaskFilter;
+import 'package:life_os/features/tasks/data/telegram_task_queries.dart';
 import 'package:life_os/core/database/database.dart';
-import 'package:life_os/features/tasks/data/work_logs_dao.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:tasks_api/tasks_api.dart' show TaskStatus;
 
 void main() {
   late AppDatabase db;

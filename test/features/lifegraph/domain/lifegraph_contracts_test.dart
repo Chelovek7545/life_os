@@ -3,7 +3,6 @@ import 'package:test/test.dart';
 import 'package:graph_api/graph_api.dart';
 import 'package:notes_api/notes_api.dart';
 import 'package:lifegraph_plugin/lifegraph_logic.dart';
-import 'package:life_os/features/lifegraph/domain/canvas_note.dart' as legacy;
 import '../../../support/memory_graph_sources.dart';
 
 class _Nodes implements GraphContributor {
@@ -43,7 +42,6 @@ void main() {
         height: 80,
         index: 0,
       );
-      expect(note, isA<legacy.CanvasNote>());
       expect(note.document.source!.sourceId, 'other');
     },
   );

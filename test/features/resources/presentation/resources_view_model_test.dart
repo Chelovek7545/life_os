@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:notes_api/notes_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
-import 'package:life_os/features/resources/presentation/resources_view_model.dart';
+import 'package:resources_plugin/resources_plugin.dart' show ResourcesViewModel;
 
 class FakeVault extends Fake implements VaultNotesApi {
   int listeners = 0;

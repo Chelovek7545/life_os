@@ -1,3 +1,4 @@
+import 'package:projects_api/projects_api.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -13,8 +14,7 @@ import 'package:life_os/core/ui/fixed_fade_mask.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/date_format.dart';
-import 'package:projects_api/projects_api.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:tasks_api/tasks_api.dart' show Task;
 
 import 'mini_task_form.dart';
 

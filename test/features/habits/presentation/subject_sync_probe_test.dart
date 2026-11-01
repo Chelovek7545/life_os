@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_os/features/habits/presentation/habits_state.dart';
+import 'package:habits_plugin/habits_logic.dart';
 import 'package:rxdart/rxdart.dart';
 
 void main() {

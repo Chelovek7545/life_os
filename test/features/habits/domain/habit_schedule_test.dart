@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_os/features/habits/domain/habit_schedule.dart';
+import 'package:habits_api/habits_api.dart';
 
 void main() {
   group('encode/decodeDaysOfWeek', () {

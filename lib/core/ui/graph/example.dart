@@ -3,7 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart' hide SelectAction;
 
-import 'graph_view.dart';
+import 'package:graph_canvas/graph_canvas.dart';
 
 void main() => runApp(const StreamGraphApp());
 

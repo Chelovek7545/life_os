@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
-import 'package:life_os/features/goals/domain/goal_model.dart';
+import 'package:goals_api/goals_api.dart' show Goal;
 import 'goal_model_extension.dart';
 
 part 'goals_dao.g.dart';

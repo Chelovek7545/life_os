@@ -1,10 +1,8 @@
+import 'package:tasks_plugin/tasks_logic.dart';
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
-import 'package:life_os/features/tasks/domain/task_filter_config.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
-import 'package:life_os/features/tasks/domain/tag_model.dart';
-import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
+import 'package:projects_api/projects_api.dart' show Project;
+import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus, Tag;
 import 'package:uuid/uuid.dart';
 
 const _uuid = Uuid();

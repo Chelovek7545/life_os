@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:plugin_ui/plugin_ui.dart';
 import 'package:tasks_api/tasks_api.dart';
 import 'pulse_screen.dart';
-import 'pulse_screen_view_model.dart';
+import 'package:lifegraph_plugin/lifegraph_plugin.dart'
+    show PulseScreenViewModel;
 
 UiModuleSpec pulseScreenModule(
   PulseScreenViewModel viewModel,

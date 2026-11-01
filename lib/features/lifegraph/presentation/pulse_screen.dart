@@ -1,5 +1,6 @@
 import 'package:plugin_ui/plugin_ui.dart';
-import 'pulse_panel_slots.dart';
+import 'package:lifegraph_plugin/lifegraph_plugin.dart'
+    show PulsePanelSlots, PulseScreenViewModel;
 import 'package:graph_api/graph_api.dart';
 import 'package:life_os/features/tasks/presentation/task_status_visuals.dart';
 import 'package:flutter/material.dart';
@@ -15,13 +16,12 @@ import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
-import 'package:life_os/features/goals/domain/goal_model.dart';
+import 'package:goals_api/goals_api.dart' show Goal;
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
-import 'package:lifegraph_plugin/lifegraph_plugin.dart' show PulseScreenViewModel;
 import 'package:life_os/features/lifegraph/presentation/widgets/create_sphere_dialog.dart';
 import 'package:projects_api/projects_api.dart';
-import 'package:life_os/features/spheres/domain/sphere_model.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:spheres_api/spheres_api.dart' show Sphere;
+import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus;
 
 /// Задача идёт прямо сейчас: не выполнена и её окно `startsAt..endsAt`
 /// содержит текущий момент.

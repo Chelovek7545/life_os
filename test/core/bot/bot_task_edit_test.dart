@@ -1,12 +1,12 @@
+import 'package:life_os/features/tasks/data/tasks_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_os/core/bot/bot_task_edit.dart';
+import 'package:telegram_plugin/telegram_plugin.dart'
+    show BotTaskEdit, BotTaskEditField;
 import 'package:life_os/core/database/database.dart';
-import 'package:life_os/core/utils/wrapped.dart';
+import 'package:core_contracts/core_contracts.dart' show Wrapped;
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
-import 'package:life_os/features/tasks/data/tasks_repository.dart';
-import 'package:life_os/features/tasks/domain/tag_model.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:tasks_api/tasks_api.dart' show Tag, Task, TaskStatus;
 
 void main() {
   final now = DateTime(2026, 10, 30, 12);

@@ -32,9 +32,9 @@ Features
 
 The modular migration introduces a Pub workspace with shared contracts, pure Dart task/note/sphere/goal/project/habits APIs, spheres, goals, projects, habits, tasks, LifeGraph/Pulse and resources plugins with explicit storage and UI adapters, a reusable graph canvas and generic graph cards/forms, public task/habit/project panels and a composed Today plugin, optional Telegram/Obsidian plugins, registered screens/panels/actions/settings, and extensible graph contributions. See [the migration guide](docs/modular-architecture.md) for current boundaries, validation, and remaining steps.
 
-### Existing feature layout
+### Application adapters
 
-The project follows a **feature-first** structure with clear layer separation (`data` → `domain` → `presentation`) and a lightweight manual DI container.
+The Pub workspace owns public contracts and module logic. The application keeps storage and presentation adapters in `lib/features` and connects them in `lib/app`. Consumers import the public package entry points directly; retired paths are checked by architecture tests.
 
 ```
 lib/
@@ -54,13 +54,14 @@ lib/
 └── main_screen.dart    # Bottom navigation shell
 ```
 
-Each feature is self-contained:
+For example, task contracts and logic are separate from their application adapters:
 
 ```
-features/tasks/
-├── data/           # Drift tables, DAOs, data sources
-├── domain/         # Models & business logic
-└── presentation/   # Screens, widgets, view models
+packages/tasks_api/       # Models and query/command contracts
+packages/tasks_plugin/    # Logic, graph contributions, public panels
+lib/features/tasks/
+├── data/                 # Drift adapters
+└── presentation/         # Application screens, forms and visual adapters
 ```
 
 ## Getting Started

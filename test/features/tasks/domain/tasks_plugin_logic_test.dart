@@ -2,8 +2,6 @@ import 'dart:async';
 import 'package:test/test.dart';
 import 'package:tasks_api/tasks_api.dart';
 import 'package:tasks_plugin/tasks_logic.dart';
-import 'package:life_os/features/tasks/presentation/tasks_view_model.dart'
-    as legacy;
 import '../support/memory_tasks.dart';
 
 Future<void> tick() => Future<void>.delayed(Duration.zero);
@@ -37,7 +35,6 @@ void main() {
         GetTasksWithProjectsUseCase(tasks, projects),
         projects,
       )..initialize();
-      expect(model, isA<legacy.TasksViewModel>());
       model.initialize();
       final extra = model.watchAllTasks().listen((_) {});
       final projectExtra = model.watchProjects().listen((_) {});

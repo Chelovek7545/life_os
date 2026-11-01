@@ -5,9 +5,8 @@ import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/semantic_tag.dart';
 import 'package:life_os/core/utils/date_format.dart';
-import 'package:life_os/core/utils/wrapped.dart';
-import 'package:life_os/features/tasks/domain/tag_model.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:core_contracts/core_contracts.dart' show Wrapped;
+import 'package:tasks_api/tasks_api.dart' show Tag, Task, TaskStatus;
 import 'glass_panel.dart';
 
 final testTask = Task.blank().copyWith(

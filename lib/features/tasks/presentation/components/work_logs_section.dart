@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:tasks_api/tasks_api.dart' show WorkLogsApi;
-import 'package:life_os/features/tasks/domain/work_log_model.dart';
+import 'package:tasks_api/tasks_api.dart' show WorkLogsApi, WorkLog;
 import 'package:tasks_plugin/tasks_plugin.dart' show WorkLogsViewModel;
 
 class WorkLogsSection extends StatefulWidget {

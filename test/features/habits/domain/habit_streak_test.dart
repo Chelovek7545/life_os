@@ -1,9 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_os/features/habits/domain/habit_entry_model.dart';
-import 'package:life_os/features/habits/domain/habit_model.dart';
-import 'package:life_os/features/habits/domain/habit_schedule.dart';
-import 'package:life_os/features/habits/domain/habit_streak.dart';
-import 'package:life_os/features/habits/domain/habit_type.dart';
+import 'package:habits_api/habits_api.dart';
 
 void main() {
   final calculator = HabitStreakCalculator();

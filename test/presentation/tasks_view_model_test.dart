@@ -1,16 +1,12 @@
+import 'package:tasks_plugin/tasks_logic.dart';
 import 'dart:async';
 
 import 'package:life_os/core/utils/datetime_utils.dart';
-import 'package:life_os/core/utils/wrapped.dart';
+import 'package:core_contracts/core_contracts.dart' show Wrapped;
 import 'package:life_os/features/projects/data/projects_repository.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart' show Project;
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
-import 'package:life_os/features/tasks/domain/task_filter_config.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
-import 'package:life_os/features/tasks/domain/tag_model.dart';
-import 'package:life_os/features/tasks/domain/use_cases/get_tasks_with_projects_use_case.dart';
-import 'package:life_os/features/tasks/presentation/task_state.dart';
-import 'package:life_os/features/tasks/presentation/tasks_view_model.dart';
+import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus, Tag;
 import 'package:mockito/annotations.dart';
 import 'package:mockito/mockito.dart';
 import 'package:rxdart/rxdart.dart';

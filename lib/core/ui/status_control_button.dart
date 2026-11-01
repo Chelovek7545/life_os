@@ -1,7 +1,7 @@
+import 'package:flutter/widget_previews.dart';
 import 'package:life_os/features/tasks/presentation/task_status_visuals.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/widget_previews.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:tasks_api/tasks_api.dart' show TaskStatus;
 
 @Preview()
 Widget segmentedControlPreview() => MaterialApp(

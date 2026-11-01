@@ -1,3 +1,4 @@
+import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -7,9 +8,8 @@ import 'package:plugin_runtime/plugin_runtime.dart';
 import 'package:spheres_api/spheres_api.dart';
 import 'package:goals_api/goals_api.dart';
 import 'package:tasks_api/tasks_api.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
-import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
-import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
+import 'package:projects_api/projects_api.dart' show Project;
+import 'package:lifegraph_plugin/lifegraph_plugin.dart' show LifeGraphViewModel;
 import '../../../support/test_app.dart';
 import '../support/editable_graph_module.dart';
 

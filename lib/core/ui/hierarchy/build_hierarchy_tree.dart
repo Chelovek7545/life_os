@@ -1,9 +1,9 @@
+import 'package:projects_api/projects_api.dart';
 import 'package:life_os/features/tasks/presentation/task_status_visuals.dart';
   import 'package:flutter/material.dart';
 import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:life_os/core/utils/color_format.dart';
-import 'package:projects_api/projects_api.dart';
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:tasks_api/tasks_api.dart' show Task;
 
 /// Построение дерева иерархии любой глубины
   List<HierarchyNode> buildHierarchyTree(

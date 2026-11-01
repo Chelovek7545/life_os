@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
 import 'package:life_os/features/resources/presentation/resources_screen.dart';
-import 'package:life_os/features/resources/presentation/resources_view_model.dart';
+import 'package:resources_plugin/resources_plugin.dart' show ResourcesViewModel;
 
 void main() {
   testWidgets(

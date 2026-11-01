@@ -5,7 +5,7 @@ import 'package:rxdart/rxdart.dart';
 import 'get_tasks_with_projects_use_case.dart';
 import 'task_filter_config.dart';
 import 'task_state.dart';
-import 'owned_streams.dart';
+import 'package:plugin_runtime/owned_streams.dart';
 
 class TasksUiFlags {
   const TasksUiFlags({this.isFormVisible = false, this.isEventMode = false});

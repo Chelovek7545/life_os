@@ -3,7 +3,7 @@ import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/extensions/tag_model_extension.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 
-import 'package:life_os/features/tasks/domain/task_model.dart';
+import 'package:tasks_api/tasks_api.dart' show Task;
 
 part 'tasks_dao.g.dart';
 

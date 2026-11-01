@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_os/core/di.dart';
-import 'package:life_os/features/spheres/domain/sphere_model.dart';
-import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
+import 'package:life_os/app/dependency_container.dart';
+import 'package:spheres_api/spheres_api.dart' show Sphere;
+import 'package:lifegraph_plugin/lifegraph_plugin.dart' show GraphSaveStatus;
 import '../../../support/test_app.dart';
 
 void main() {

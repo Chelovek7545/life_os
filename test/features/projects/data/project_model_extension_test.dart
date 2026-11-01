@@ -1,6 +1,6 @@
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/projects/data/extensions/project_model_extension.dart';
-import 'package:life_os/features/projects/domain/project_model.dart';
+import 'package:projects_api/projects_api.dart' show Project;
 import 'package:test/test.dart';
 
 void main() {

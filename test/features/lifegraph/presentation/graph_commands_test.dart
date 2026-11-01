@@ -1,13 +1,13 @@
+import 'package:life_os/app/dependency_container.dart';
+import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graph_api/graph_api.dart';
 import 'package:spheres_api/spheres_api.dart';
 import 'package:tasks_api/tasks_api.dart';
-import 'package:life_os/app/dependency_container.dart';
-import 'package:life_os/features/lifegraph/domain/graph_node.dart';
-import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
-import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
+import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNodeType;
+import 'package:lifegraph_plugin/lifegraph_plugin.dart' show LifeGraphViewModel;
 import '../../../support/test_app.dart';
 import '../support/editable_graph_module.dart';
 

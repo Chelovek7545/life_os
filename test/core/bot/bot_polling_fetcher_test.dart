@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_os/core/bot/bot_polling_fetcher.dart';
+import 'package:telegram_plugin/telegram_plugin.dart' show BotPollingFetcher;
 import 'package:teledart/model.dart';
 import 'package:teledart/telegram.dart';
 import 'package:teledart/util.dart';

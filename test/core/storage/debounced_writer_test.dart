@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_os/core/storage/debounced_writer.dart';
+import 'package:plugin_runtime/debounced_writer.dart';
 
 void main() {
   test('close flushes the last snapshot before its debounce expires', () async {
