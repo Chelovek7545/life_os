@@ -1,7 +1,6 @@
+import 'package:lifegraph_plugin/lifegraph_plugin.dart' show PulseScreenViewModel;
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
-import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
-import 'package:life_os/features/lifegraph/presentation/pulse_screen_view_model.dart';
 
 /// Диалог создания сферы. Владеет собственным [TextEditingController] и
 /// освобождает его в [dispose] — после полного удаления роута диалога

@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:notes_api/notes_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
-import 'package:life_os/features/lifegraph/domain/canvas_note.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

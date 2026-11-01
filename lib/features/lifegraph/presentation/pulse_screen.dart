@@ -17,7 +17,7 @@ import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/goals/domain/goal_model.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
-import 'package:life_os/features/lifegraph/presentation/pulse_screen_view_model.dart';
+import 'package:lifegraph_plugin/lifegraph_plugin.dart' show PulseScreenViewModel;
 import 'package:life_os/features/lifegraph/presentation/widgets/create_sphere_dialog.dart';
 import 'package:projects_api/projects_api.dart';
 import 'package:life_os/features/spheres/domain/sphere_model.dart';

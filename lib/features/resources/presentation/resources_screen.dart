@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
+import 'package:life_os/core/ui/hierarchy/build_note_hierarchy.dart';
 import 'package:notes_api/notes_api.dart';
-import 'package:life_os/features/resources/presentation/resources_view_model.dart';
+import 'package:resources_plugin/resources_plugin.dart' show ResourcesViewModel;
 
 class ResourcesScreen extends StatelessWidget {
   const ResourcesScreen({super.key, required this.viewModel});
@@ -39,15 +40,20 @@ class ResourcesScreen extends StatelessWidget {
                         tooltip: 'Обновить Obsidian Vault',
                         onPressed: !viewModel.hasVault
                             ? null
-                            : () {
-                                viewModel.refreshVault();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Сканирование Obsidian хранилища...',
-                                    ),
-                                  ),
-                                );
+                            : () async {
+                                try {
+                                  await viewModel.refreshVault();
+                                } catch (_) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'Не удалось обновить хранилище.',
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                }
                               },
                       ),
                     ],
@@ -209,7 +215,7 @@ class _ObsidianHierarchySection extends StatelessWidget {
               );
             }
 
-            final treeNodes = viewModel.getHierarchyTree();
+            final treeNodes = buildVaultHierarchy(viewModel.vaultNotes);
             if (treeNodes.isEmpty) {
               return const Card(
                 child: Padding(

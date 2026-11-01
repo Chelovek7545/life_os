@@ -6,7 +6,7 @@ import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
-import 'package:life_os/features/lifegraph/domain/graph_node.dart';
+import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNode, GraphNodeType;
 import 'package:life_os/features/tasks/domain/task_model.dart';
 
 /// Диалог редактирования ноды: название, описание, цвет (для всех, кроме

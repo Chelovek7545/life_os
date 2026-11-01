@@ -9,6 +9,9 @@ environment:
 
 
 workspace:
+  - packages/graph_canvas
+  - packages/lifegraph_plugin
+  - packages/resources_plugin
   - packages/core_contracts
   - packages/habits_api
   - packages/habits_plugin
@@ -27,6 +30,9 @@ workspace:
   - packages/plugin_ui
 
 dependencies:
+  graph_canvas: ^0.1.0
+  lifegraph_plugin: ^0.1.0
+  resources_plugin: ^0.1.0
   core_contracts: ^0.1.0
   habits_api: ^0.1.0
   habits_plugin: ^0.1.0

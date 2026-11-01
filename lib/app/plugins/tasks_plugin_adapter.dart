@@ -6,7 +6,7 @@ import 'package:graph_api/graph_api.dart';
 import 'package:graph_ui/graph_ui.dart';
 import 'package:life_os/features/tasks/presentation/tasks_screen.dart';
 import 'package:life_os/features/tasks/presentation/tasks_graph_ui.dart';
-import 'package:life_os/features/lifegraph/domain/graph_node.dart';
+import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNodeType;
 import 'package:life_os/features/lifegraph/presentation/widgets/builtin_graph_forms.dart';
 
 TasksPlugin createTasksPlugin({

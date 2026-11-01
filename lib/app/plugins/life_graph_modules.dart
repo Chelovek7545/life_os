@@ -9,7 +9,7 @@ import 'package:spheres_api/spheres_api.dart';
 import 'package:goals_api/goals_api.dart';
 import 'package:life_os/features/spheres/domain/spheres_graph_contributor.dart';
 import 'package:life_os/features/goals/domain/goals_graph_contributor.dart';
-import 'package:life_os/features/lifegraph/domain/graph_node.dart';
+import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNodeType;
 import 'package:life_os/features/lifegraph/presentation/widgets/builtin_graph_forms.dart';
 
 List<GraphModule> lifeGraphModules({

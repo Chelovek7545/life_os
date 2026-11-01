@@ -4,6 +4,34 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('pure packages and Telegram cannot depend on app internals', () {
     const forbidden = {
+      'graph_canvas': [
+        'dart:io',
+        'package:life_os/',
+        'package:drift/',
+        'package:tasks_api/',
+        'package:projects_api/',
+        'package:lifegraph_plugin/',
+      ],
+      'lifegraph_plugin': [
+        'dart:io',
+        'package:life_os/',
+        'package:drift/',
+        'package:tasks_plugin/',
+        'package:projects_plugin/',
+        'package:habits_plugin/',
+        'package:obsidian_plugin/',
+        'package:resources_plugin/',
+      ],
+      'resources_plugin': [
+        'dart:io',
+        'package:life_os/',
+        'package:drift/',
+        'package:lifegraph_plugin/',
+        'package:obsidian_plugin/',
+        'package:tasks_plugin/',
+        'package:projects_plugin/',
+        'package:graph_canvas/',
+      ],
       'core_contracts': [
         'dart:io',
         'dart:ui',
@@ -63,6 +91,7 @@ void main() {
         'package:graph_ui/',
       ],
       'graph_api': [
+        'package:lifegraph_plugin/',
         'dart:ui',
         'package:flutter/',
         'package:drift/',
@@ -79,6 +108,8 @@ void main() {
         'package:goals_api/',
       ],
       'notes_api': [
+        'package:lifegraph_plugin/',
+        'package:graph_canvas/',
         'dart:io',
         'dart:ui',
         'package:flutter/',
@@ -93,6 +124,8 @@ void main() {
         'package:plugin_ui/',
       ],
       'plugin_ui': [
+        'package:lifegraph_plugin/',
+        'package:resources_plugin/',
         'package:tasks_plugin/',
         'package:habits_api/',
         'package:habits_plugin/',
@@ -160,7 +193,7 @@ void main() {
   );
   test('graph assembly and feature contributors depend only on contracts', () {
     final builder = File(
-      'lib/features/lifegraph/domain/graph_builder.dart',
+      'packages/lifegraph_plugin/lib/src/graph_builder.dart',
     ).readAsStringSync();
     expect(builder.contains('features/tasks'), isFalse);
     expect(builder.contains('features/projects'), isFalse);
@@ -175,8 +208,8 @@ void main() {
       'lib/features/goals/domain/goals_graph_commands.dart',
       'lib/features/projects/domain/projects_graph_commands.dart',
       'lib/features/tasks/domain/tasks_graph_commands.dart',
-      'lib/features/lifegraph/presentation/life_graph_view_model.dart',
-      'lib/features/lifegraph/presentation/pulse_screen_view_model.dart',
+      'packages/lifegraph_plugin/lib/src/life_graph_view_model.dart',
+      'packages/lifegraph_plugin/lib/src/pulse_screen_view_model.dart',
     ]) {
       final source = File(file).readAsStringSync();
       expect(
@@ -197,7 +230,7 @@ void main() {
   });
   test('graph view model routes mutations through module commands', () {
     final source = File(
-      'lib/features/lifegraph/presentation/life_graph_view_model.dart',
+      'packages/lifegraph_plugin/lib/src/life_graph_view_model.dart',
     ).readAsStringSync();
     for (final forbidden in [
       'GoalsApi',
@@ -359,7 +392,7 @@ void main() {
       for (final file in [
         'packages/tasks_plugin/lib/src/tasks_view_model.dart',
         'packages/tasks_plugin/lib/src/get_tasks_with_projects_use_case.dart',
-        'lib/features/lifegraph/presentation/pulse_screen_view_model.dart',
+        'packages/lifegraph_plugin/lib/src/pulse_screen_view_model.dart',
         'lib/core/ui/hierarchy/build_hierarchy_tree.dart',
       ]) {
         final source = File(file).readAsStringSync();
@@ -384,6 +417,63 @@ void main() {
           reason: file.path,
         );
       }
+    },
+  );
+  test(
+    'graph lifecycle and persistence use public ports outside the composition root',
+    () {
+      final root = File('lib/app/dependency_container.dart').readAsStringSync();
+      for (final forbidden in [
+        'PulseScreenViewModel(',
+        'ResourcesViewModel(',
+        'GraphBuilder(',
+        'pulseScreenViewModel.initialize()',
+        'pulseScreenViewModel.dispose',
+        'pulseScreenViewModel.closeGraphs',
+        'resourcesViewModel.dispose',
+      ]) {
+        expect(root.contains(forbidden), isFalse, reason: forbidden);
+      }
+      expect(root.contains('...lifeGraphPlugin.plugins'), isTrue);
+      expect(root.contains('...resourcesPlugin.plugins'), isTrue);
+      final positions = File(
+        'lib/features/lifegraph/data/graph_positions_repository.dart',
+      ).readAsStringSync();
+      expect(positions.contains('implements GraphPositionsStore'), isTrue);
+      expect(positions.contains('dart:ui'), isFalse);
+      expect(positions.contains('Offset'), isFalse);
+      for (final file in [
+        'packages/lifegraph_plugin/lib/src/graph_builder.dart',
+        'packages/lifegraph_plugin/lib/src/graph_node.dart',
+        'packages/notes_api/lib/src/canvas_note.dart',
+      ]) {
+        expect(
+          File(file).readAsStringSync().contains('package:flutter/'),
+          isFalse,
+          reason: file,
+        );
+      }
+    },
+  );
+  test(
+    'resource state has no hierarchy widgets or concrete storage dependency',
+    () {
+      final source = File(
+        'packages/resources_plugin/lib/src/resources_view_model.dart',
+      ).readAsStringSync();
+      for (final forbidden in [
+        'HierarchyNode',
+        'buildVaultHierarchy',
+        'ObsidianVault',
+        'GraphNotesRepository',
+        'shared_preferences',
+      ]) {
+        expect(source.contains(forbidden), isFalse, reason: forbidden);
+      }
+      final uiComposition = File(
+        'lib/app/plugins/application_ui_modules.dart',
+      ).readAsStringSync();
+      expect(uiComposition.contains('features/'), isFalse);
     },
   );
 }

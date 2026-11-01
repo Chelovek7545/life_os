@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:ui';
+import 'package:graph_api/graph_api.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 ///
 /// Каждый граф (сфера) — отдельный ключ со снимком:
 /// `{ "v": 1, "entities": { "entityId": {"x": 100.0, "y": 200.0} } }`.
-class GraphPositionsRepository {
+class GraphPositionsRepository implements GraphPositionsStore {
   GraphPositionsRepository({this.prefix = 'graph_positions'});
 
   final String prefix;
@@ -19,7 +19,8 @@ class GraphPositionsRepository {
 
   /// Загружает позиции для графа (сферы).
   /// Возвращает null, если позиций ещё нет.
-  Future<Map<String, Offset>?> loadPositions(String sphereId) async {
+  @override
+  Future<Map<String, GraphPoint>?> loadPositions(String sphereId) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key(sphereId));
     if (raw == null) return null;
@@ -30,10 +31,13 @@ class GraphPositionsRepository {
       if (entities == null) return null;
       return entities.map((id, value) {
         final map = value as Map<String, dynamic>;
-        return MapEntry(id, Offset(
-          (map['x'] as num).toDouble(),
-          (map['y'] as num).toDouble(),
-        ));
+        return MapEntry(
+          id,
+          GraphPoint(
+            (map['x'] as num).toDouble(),
+            (map['y'] as num).toDouble(),
+          ),
+        );
       });
     } catch (_) {
       return null;
@@ -41,18 +45,25 @@ class GraphPositionsRepository {
   }
 
   /// Сохраняет позиции для графа.
-  Future<void> savePositions(String sphereId, Map<String, Offset> positions) async {
+  @override
+  Future<void> savePositions(
+    String sphereId,
+    Map<String, GraphPoint> positions,
+  ) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_key(sphereId), jsonEncode({
-      'v': _version,
-      'entities': positions.map((id, offset) => MapEntry(id, {
-        'x': offset.dx,
-        'y': offset.dy,
-      })),
-    }));
+    await prefs.setString(
+      _key(sphereId),
+      jsonEncode({
+        'v': _version,
+        'entities': positions.map(
+          (id, offset) => MapEntry(id, {'x': offset.x, 'y': offset.y}),
+        ),
+      }),
+    );
   }
 
   /// Удаляет позиции графа (например, при удалении сферы).
+  @override
   Future<void> deletePositions(String sphereId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_key(sphereId));
@@ -60,11 +71,13 @@ class GraphPositionsRepository {
 
   // ── App-state (не слот графа): какая сфера открыта последней ─────────────
 
+  @override
   Future<String?> loadLastSphereId() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString(_lastSphereKey);
   }
 
+  @override
   Future<void> saveLastSphereId(String sphereId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_lastSphereKey, sphereId);

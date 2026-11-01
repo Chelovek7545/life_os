@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:notes_api/notes_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:life_os/core/storage/storage_exception.dart';
-import '../domain/canvas_note.dart';
 
 class GraphNotesRepository implements CanvasNotesStore, NotesCatalog {
   GraphNotesRepository({this.prefix = 'graph_notes'});

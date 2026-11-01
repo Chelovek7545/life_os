@@ -5,11 +5,13 @@ import 'plugins/application_ui_modules.dart';
 import 'plugins/projects_plugin_adapter.dart';
 import 'plugins/habits_plugin_adapter.dart';
 import 'plugins/tasks_plugin_adapter.dart';
+import 'plugins/lifegraph_plugin_adapter.dart';
+import 'plugins/resources_plugin_adapter.dart';
+import 'package:lifegraph_plugin/lifegraph_plugin.dart';
+import 'package:resources_plugin/resources_plugin.dart';
 import 'package:tasks_plugin/tasks_plugin.dart';
 import 'package:habits_plugin/habits_plugin.dart';
 import 'package:projects_plugin/projects_plugin.dart';
-import 'package:life_os/features/lifegraph/domain/graph_node.dart';
-import 'package:life_os/features/spheres/domain/spheres_graph_contributor.dart';
 import 'package:obsidian_plugin/obsidian_plugin.dart';
 import 'package:plugin_ui/plugin_ui.dart';
 import 'plugins/telegram_ui.dart';
@@ -24,9 +26,6 @@ import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/telegram_task_queries.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
-import 'package:life_os/features/lifegraph/presentation/pulse_screen_view_model.dart';
-import 'package:life_os/features/resources/presentation/resources_view_model.dart';
-import 'package:life_os/features/lifegraph/domain/graph_builder.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
 import 'package:life_os/features/spheres/data/spheres_dao.dart';
@@ -55,6 +54,7 @@ class DependencyContainer {
     Iterable<GraphModule> graphModules = const [],
     Iterable<UiModuleSpec> uiModules = const [],
   }) : database = database ?? AppDatabase() {
+    final extraGraphModules = List<GraphModule>.of(graphModules);
     tasksDAO = TasksDao(this.database);
     projectsDao = ProjectsDao(this.database);
     spheresDao = SpheresDao(this.database);
@@ -76,27 +76,35 @@ class DependencyContainer {
     graphPresentations = GraphNodePresentationRegistry();
     graphEditors = GraphEditorRegistry();
     graphCommands = GraphCommandRegistry();
-    graphBuilder = GraphBuilder(
-      registry: graphContributors,
-      rootKind: SpheresGraphContributor.kind,
-    );
-    pulseScreenViewModel = PulseScreenViewModel(
-      spheresRepository: spheresRepository,
-      goalsRepository: goalsRepository,
-      projectsRepository: projectsRepository,
-      tasksRepository: tasksRepository,
-      positionsRepository: graphPositionsRepository,
-      notesRepository: graphNotesRepository,
-      graphBuilder: graphBuilder,
-      nodePresentations: graphPresentations,
-      nodeEditors: graphEditors,
+    lifeGraphPlugin = createLifeGraphPlugin(
+      spheres: spheresRepository,
+      goals: goalsRepository,
+      projects: projectsRepository,
+      tasks: tasksRepository,
+      positions: graphPositionsRepository,
+      notes: graphNotesRepository,
+      contributors: graphContributors,
+      presentations: graphPresentations,
+      editors: graphEditors,
       commands: graphCommands,
-      obsidianRepository: obsidianRepository,
+      ui: ui,
+      vault: obsidianRepository,
+      completeTask: (task) => tasksPlugin.viewModel.toggleTask(task),
+      dependencies: {
+        'spheres.graph',
+        'goals.graph',
+        'projects.graph',
+        'tasks.graph',
+        for (final module in extraGraphModules) module.id,
+        if (enableObsidian) 'obsidian',
+      },
     );
     habitsPlugin = createHabitsPlugin(habits: habitsRepository, ui: ui);
-    resourcesViewModel = ResourcesViewModel(
+    resourcesPlugin = createResourcesPlugin(
       notes: graphNotesRepository,
       vault: obsidianRepository,
+      ui: ui,
+      dependencies: {if (enableObsidian) 'obsidian'},
     );
     localBotService = enableTelegram
         ? LocalBotService(
@@ -142,7 +150,7 @@ class DependencyContainer {
           goals: goalsRepository,
           deletion: DriftGraphDeletion(this.database),
         ),
-        ...graphModules,
+        ...extraGraphModules,
       ])
         GraphModulePlugin(
           module: module,
@@ -154,12 +162,8 @@ class DependencyContainer {
       if (obsidianRepository != null)
         registerObsidianUi(obsidianRepository!, AppVaultSettings(), ui),
       if (localBotService != null) registerTelegramUi(localBotService!, ui),
-      ...applicationUiModules(
-        registry: ui,
-        pulse: pulseScreenViewModel,
-        completeTask: (task) => tasksPlugin.viewModel.toggleTask(task),
-        resources: resourcesViewModel,
-      ),
+      ...lifeGraphPlugin.plugins,
+      ...resourcesPlugin.plugins,
       ...projectsPlugin.plugins,
       ...habitsPlugin.plugins,
       ...tasksPlugin.plugins,
@@ -189,19 +193,21 @@ class DependencyContainer {
   late final GraphPositionsRepository graphPositionsRepository;
   late final GraphNotesRepository graphNotesRepository;
   late final ObsidianVault? obsidianRepository;
-  late final GraphBuilder graphBuilder;
+  GraphBuilder get graphBuilder => lifeGraphPlugin.graphBuilder;
   late final GraphContributorRegistry graphContributors;
   late final GraphNodePresentationRegistry graphPresentations;
   late final GraphEditorRegistry graphEditors;
   late final GraphCommandRegistry graphCommands;
-  late final PulseScreenViewModel pulseScreenViewModel;
+  late final LifeGraphPlugin lifeGraphPlugin;
+  PulseScreenViewModel get pulseScreenViewModel => lifeGraphPlugin.viewModel;
   late final TasksPlugin tasksPlugin;
   TasksViewModel get tasksViewModel => tasksPlugin.viewModel;
   late final ProjectsPlugin projectsPlugin;
   ProjectsViewModel get projectViewModel => projectsPlugin.viewModel;
   late final HabitsPlugin habitsPlugin;
   HabitsViewModel get habitsViewModel => habitsPlugin.viewModel;
-  late final ResourcesViewModel resourcesViewModel;
+  late final ResourcesPlugin resourcesPlugin;
+  ResourcesViewModel get resourcesViewModel => resourcesPlugin.viewModel;
   late final LocalBotService? localBotService;
   Future<void>? _initialization;
   Future<void>? _disposal;
@@ -216,7 +222,6 @@ class DependencyContainer {
   Future<void> _initialize() async {
     await graphNotesRepository.init();
     await plugins.start();
-    await pulseScreenViewModel.initialize();
   }
 
   Future<void> dispose() => _disposal ??= _dispose();
@@ -235,12 +240,7 @@ class DependencyContainer {
       }
     }
 
-    await close('graphs', pulseScreenViewModel.closeGraphs);
     await close('plugins', plugins.stop);
-    await close('pulse', pulseScreenViewModel.dispose);
-    await close('resources', () async {
-      resourcesViewModel.dispose();
-    });
     await close('graphCommands', graphCommands.dispose);
     await close('graphEditors', graphEditors.dispose);
     await close('graphContributors', graphContributors.dispose);

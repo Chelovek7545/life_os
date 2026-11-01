@@ -3,10 +3,11 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:life_os/core/ui/hierarchy/build_note_hierarchy.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
-import 'package:life_os/core/ui/graph/graph_view.dart' as graph;
-import 'package:life_os/features/lifegraph/presentation/life_graph_view_model.dart';
+import 'package:graph_canvas/graph_canvas.dart' as graph;
+import 'package:lifegraph_plugin/lifegraph_plugin.dart' show LifeGraphViewModel, GraphSaveStatus;
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
 import 'package:spheres_api/spheres_api.dart';
@@ -306,7 +307,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   }
 
   Future<void> _showVaultNotePicker(BuildContext context) async {
-    final treeNodes = widget.viewModel.getObsidianHierarchy();
+    final treeNodes = buildVaultHierarchy(widget.viewModel.vaultNotes);
     if (treeNodes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

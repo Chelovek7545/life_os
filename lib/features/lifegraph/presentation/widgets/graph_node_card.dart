@@ -2,7 +2,7 @@ import 'package:life_os/features/tasks/presentation/task_status_visuals.dart';
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/utils/color_format.dart';
-import 'package:life_os/features/lifegraph/domain/graph_node.dart';
+import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNode, GraphNodeType;
 import 'package:graph_ui/graph_ui.dart';
 import 'package:life_os/features/tasks/domain/task_model.dart';
 

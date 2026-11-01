@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:graph_api/graph_api.dart';
 import 'package:goals_api/goals_api.dart';
 import 'package:spheres_api/spheres_api.dart';
 import 'package:tasks_api/tasks_api.dart';
@@ -75,7 +76,7 @@ void main() {
         );
         expect(byId[nested.id]!.parentId, subtask.id);
         await app.graphPositionsRepository.savePositions(sphere.id, {
-          leaf.id: const Offset(220, 330),
+          leaf.id: const GraphPoint(220, 330),
         });
         final vm = await app.pulseScreenViewModel.openGraph(sphere.id);
         final displayed = await vm.graphStream.firstWhere(

@@ -1,3 +1,4 @@
+export 'src/graph_positions.dart';
 import 'dart:async';
 import 'src/graph_data.dart';
 export 'src/graph_data.dart';

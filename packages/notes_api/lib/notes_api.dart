@@ -1,3 +1,5 @@
+export 'src/canvas_note.dart';
+
 class NoteReference {
   const NoteReference({required this.sourceId, required this.path});
   final String sourceId;
