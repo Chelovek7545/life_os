@@ -48,8 +48,8 @@ Widget dateAndTimePickButton(
     children: [
       Container(
         constraints: BoxConstraints(minWidth: 120, maxWidth: 160),
-        child: AspectRatio(
-          aspectRatio: 5 / 6,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 192),
           child: OutlinedButton(
             style: OutlinedButton.styleFrom(
               overlayColor: AppColors.inputGlass,
@@ -59,6 +59,7 @@ Widget dateAndTimePickButton(
             
             onPressed: chooseDate,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -113,8 +114,10 @@ Widget dateAndTimePickButton(
                 ),
                 SizedBox(height: AppMargins.xs),
 
-                Expanded(
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(

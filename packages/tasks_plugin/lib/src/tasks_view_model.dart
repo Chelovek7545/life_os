@@ -112,46 +112,57 @@ class TasksViewModel {
   void resetFilters() =>
       updateFilter((old) => TaskFilterConfig(anchorDate: old.anchorDate));
 
+  List<TaskWithProject> _filterTasks(
+    List<TaskWithProject> items,
+    TaskFilterConfig filter, {
+    bool includeUnscheduled = false,
+  }) {
+    final anchor = filter.anchorDate;
+    final from = switch (filter.period) {
+      DatePeriod.day => DateTime(anchor.year, anchor.month, anchor.day),
+      DatePeriod.week => DateTime(
+        anchor.year,
+        anchor.month,
+        anchor.day - anchor.weekday + 1,
+      ),
+      DatePeriod.month => DateTime(anchor.year, anchor.month),
+      DatePeriod.year => DateTime(anchor.year),
+    };
+    final until = switch (filter.period) {
+      DatePeriod.day => DateTime(from.year, from.month, from.day + 1),
+      DatePeriod.week => DateTime(from.year, from.month, from.day + 7),
+      DatePeriod.month => DateTime(from.year, from.month + 1),
+      DatePeriod.year => DateTime(from.year + 1),
+    };
+    return items
+        .where((item) {
+          final task = item.task;
+          final start = task.startsAt;
+          final end = task.endsAt;
+          final last = start != null && end != null && !end.isBefore(start)
+              ? end
+              : start;
+          final matchesDate = start == null
+              ? includeUnscheduled
+              : start.isBefore(until) &&
+                    !DateTime(last!.year, last.month, last.day).isBefore(from);
+          return matchesDate &&
+              (filter.projectIds.isEmpty ||
+                  filter.projectIds.contains(task.projectId)) &&
+              (filter.tagIds.isEmpty ||
+                  task.tags.any((tag) => filter.tagIds.contains(tag.id))) &&
+              (filter.showCompleted == null ||
+                  task.isCompleted == filter.showCompleted);
+        })
+        .toList(growable: false);
+  }
+
   void _emit(List<TaskWithProject> tasks, TaskFilterConfig filter) {
     if (_disposed) return;
     final scheduled = <TaskWithProject>[];
     final unscheduled = <TaskWithProject>[];
-    final anchor = DateTime(
-      filter.anchorDate.year,
-      filter.anchorDate.month,
-      filter.anchorDate.day,
-    );
-    final week = DateTime(
-      anchor.year,
-      anchor.month,
-      anchor.day - anchor.weekday + 1,
-    );
-    final weekEnd = DateTime(week.year, week.month, week.day + 7);
-    for (final item in tasks) {
+    for (final item in _filterTasks(tasks, filter, includeUnscheduled: true)) {
       final task = item.task;
-      if (task.startsAt case final starts?) {
-        final day = DateTime(starts.year, starts.month, starts.day);
-        final matches = switch (filter.period) {
-          DatePeriod.day => day == anchor,
-          DatePeriod.week => !day.isBefore(week) && day.isBefore(weekEnd),
-          DatePeriod.month =>
-            day.year == anchor.year && day.month == anchor.month,
-          DatePeriod.year => day.year == anchor.year,
-        };
-        if (!matches) continue;
-      }
-      if (filter.projectIds.isNotEmpty &&
-          !filter.projectIds.contains(task.projectId)) {
-        continue;
-      }
-      if (filter.tagIds.isNotEmpty &&
-          !task.tags.any((tag) => filter.tagIds.contains(tag.id))) {
-        continue;
-      }
-      if (filter.showCompleted != null &&
-          task.isCompleted != filter.showCompleted) {
-        continue;
-      }
       (task.startsAt == null ? unscheduled : scheduled).add(item);
     }
     if (scheduled.isEmpty && unscheduled.isEmpty && _selected.isEmpty) {
@@ -219,11 +230,69 @@ class TasksViewModel {
   Stream<List<Task>> watchAllTasks() => _queries.watch(_repository.watchTasks);
   Stream<List<Project>> watchProjects() =>
       _queries.watch(_projects.watchAllProjects);
+  Stream<List<TaskWithProject>>? _calendarTasks;
+  Stream<List<TaskWithProject>> watchCalendarTasks() {
+    if (!_accepting) throw StateError('Tasks view model is closed.');
+    return _calendarTasks ??= _queries.watch(
+      () => Rx.combineLatest2(_useCase.call(), _filters.stream, (
+        List<TaskWithProject> items,
+        TaskFilterConfig filter,
+      ) {
+        return _filterTasks(items, filter);
+      }),
+    );
+  }
+
   Future<void> addTask(Task task) => _enqueue(
     () => _repository.addTask(task.copyWith(createdAt: DateTime.now())),
   );
   Future<void> updateTask(Task task) =>
       _enqueue(() => _repository.updateTask(task));
+  Future<void> scheduleTask(String id, DateTime startsAt, DateTime endsAt) =>
+      _enqueue(() async {
+        final current = await _repository.getById(id);
+        if (current == null) return;
+        await _repository.updateTask(
+          current.copyWith(
+            startsAt: Wrapped(startsAt),
+            endsAt: Wrapped(endsAt),
+            updatedAt: DateTime.now(),
+          ),
+        );
+      });
+
+  Future<void> rescheduleTask(
+    String id, {
+    int? startMinutes,
+    int? durationMinutes,
+    DateTime? newDate,
+  }) => _enqueue(() async {
+    final current = await _repository.getById(id);
+    final currentStart = current?.startsAt;
+    if (current == null || currentStart == null) return;
+    final reference = newDate ?? currentStart;
+    final startsAt = startMinutes == null && newDate == null
+        ? currentStart
+        : DateTime(
+            reference.year,
+            reference.month,
+            reference.day,
+            startMinutes == null ? currentStart.hour : startMinutes ~/ 60,
+            startMinutes == null ? currentStart.minute : startMinutes % 60,
+          );
+    await _repository.updateTask(
+      current.copyWith(
+        startsAt: Wrapped(startsAt),
+        endsAt: Wrapped(
+          startsAt.add(
+            Duration(minutes: durationMinutes ?? current.duration.inMinutes),
+          ),
+        ),
+        updatedAt: DateTime.now(),
+      ),
+    );
+  });
+
   Future<void> toggleTask(Task task) => _enqueue(() async {
     final current = await _repository.getById(task.id);
     if (current == null) return;

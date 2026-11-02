@@ -11,6 +11,7 @@ import 'plugins/tasks_plugin_adapter.dart';
 import 'plugins/lifegraph_plugin_adapter.dart';
 import 'plugins/resources_plugin_adapter.dart';
 import 'plugins/today_plugin_adapter.dart';
+import 'plugins/planner_plugin_adapter.dart';
 import 'package:today_plugin/today_plugin.dart';
 import 'package:lifegraph_plugin/lifegraph_plugin.dart';
 import 'package:resources_plugin/resources_plugin.dart';
@@ -198,6 +199,12 @@ class DependencyContainer {
       ...habitsPlugin.plugins,
       ...tasksPlugin.plugins,
       ...todayPlugin.plugins,
+      createPlannerPlugin(
+        ui: ui,
+        tasks: tasksRepository,
+        projects: projectsRepository,
+        habits: habitsRepository,
+      ),
       for (final module in uiModules) registerUiModule(module, ui),
       ...additionalPlugins,
     ]);

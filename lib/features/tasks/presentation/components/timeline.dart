@@ -17,6 +17,7 @@ import 'package:life_os/core/utils/date_format.dart';
 import 'package:tasks_api/tasks_api.dart' show Task;
 
 import 'mini_task_form.dart';
+import 'calendar_task_hint.dart';
 
 const _orange = Color(0xFFFF5C00);
 
@@ -42,6 +43,12 @@ const _maxDayWidthScale = 3.0;
 
 const _kDraftFormWidth = 260.0;
 const _kDraftFormHeight = 170.0;
+
+bool isCalendarRange(Task task) =>
+    task.startsAt != null &&
+    task.endsAt != null &&
+    task.endsAt!.isAfter(task.startsAt!) &&
+    !DateUtils.isSameDay(task.startsAt, task.endsAt);
 
 class TaskEvent {
   const TaskEvent({
@@ -95,6 +102,8 @@ class TimelineBody extends StatefulWidget {
     required this.onEventChanged,
     required this.onToggleTask,
     required this.topPadding,
+    this.dateOnlyTasks = const [],
+    this.onOpenTask,
     this.weekStart,
     this.anchorDate,
     this.onWeekChange,
@@ -107,6 +116,8 @@ class TimelineBody extends StatefulWidget {
   });
 
   final List<TaskEvent> events;
+  final List<Task> dateOnlyTasks;
+  final ValueChanged<Task>? onOpenTask;
   final double topPadding;
   final DateTime? weekStart;
   final DateTime? anchorDate;
@@ -133,6 +144,255 @@ class TimelineBody extends StatefulWidget {
 
 class _TimelineBodyState extends State<TimelineBody>
     with SingleTickerProviderStateMixin {
+  bool _panelExpanded = true;
+  List<Task> _dateOnlyTasksFor(DateTime day) =>
+      widget.dateOnlyTasks.where((task) {
+        final start = task.startsAt;
+        if (start == null) return false;
+        if (!isCalendarRange(task)) return _isSameDay(start, day);
+        final date = _dateOnly(day);
+        return !date.isBefore(_dateOnly(start)) &&
+            !date.isAfter(_dateOnly(task.endsAt!));
+      }).toList();
+
+  double get _dateOnlyHeight {
+    final week = widget.weekStart;
+    final days = week == null
+        ? [widget.anchorDate ?? DateTime.now()]
+        : List.generate(
+            _weekTotalDays,
+            (i) => _addDays(_visibleStart(week), i),
+          );
+    var count = 0;
+    for (final day in days) {
+      count = math.max(count, _dateOnlyTasksFor(day).length);
+    }
+    return count == 0
+        ? 0
+        : 28 + (_panelExpanded ? math.min(count, 3) * 38.0 + 12 : 0);
+  }
+
+  double get _gridTopPadding =>
+      (widget.weekStart == null ? widget.topPadding : 200.0) + _dateOnlyHeight;
+
+  Widget _buildDateOnlyRow({double? columnWidth}) {
+    final week = widget.weekStart;
+    Widget column(DateTime day, double width) => SizedBox(
+      key: ValueKey(('timeline.panel-day', _dateOnly(day))),
+      width: width,
+      child: ListView.builder(
+        primary: false,
+        padding: const EdgeInsets.all(4),
+        itemCount: _dateOnlyTasksFor(day).length,
+        itemBuilder: (context, index) {
+          final task = _dateOnlyTasksFor(day)[index];
+          if (isCalendarRange(task)) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: _dateOnlyCard(task),
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: LongPressDraggable<Task>(
+              data: task,
+              dragAnchorStrategy: pointerDragAnchorStrategy,
+              feedback: Material(
+                color: AppColors.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(8),
+                child: SizedBox(
+                  width: 200,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Text(
+                      task.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
+              childWhenDragging: Opacity(
+                opacity: .35,
+                child: _dateOnlyCard(task),
+              ),
+              child: _dateOnlyCard(task),
+            ),
+          );
+        },
+      ),
+    );
+    return Container(
+      key: const ValueKey('timeline.date-only'),
+      height: _dateOnlyHeight,
+      color: AppColors.surfaceContainer,
+      child: Column(
+        children: [
+          SizedBox(
+            height: 28,
+            child: Row(
+              children: [
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Задачи на день',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                CalendarTaskHint(
+                  message: _panelExpanded
+                      ? 'Скрыть панель задач'
+                      : 'Показать панель задач',
+                  child: IconButton(
+                    key: const ValueKey('timeline.toggle-day-panel'),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 40,
+                      height: 28,
+                    ),
+                    iconSize: 18,
+                    onPressed: () =>
+                        setState(() => _panelExpanded = !_panelExpanded),
+                    icon: Icon(
+                      _panelExpanded ? Icons.expand_less : Icons.expand_more,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_panelExpanded)
+            Expanded(
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: _leftLabelWidth,
+                    child: Text(
+                      'На\nдень',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: week == null
+                        ? LayoutBuilder(
+                            builder: (_, constraints) => column(
+                              widget.anchorDate ?? DateTime.now(),
+                              constraints.maxWidth,
+                            ),
+                          )
+                        : ClipRect(
+                            child: AnimatedBuilder(
+                              animation: _horizontalController,
+                              builder: (_, _) => Stack(
+                                children: [
+                                  Positioned(
+                                    left: -(_horizontalController.hasClients
+                                        ? _horizontalController.offset
+                                        : _weekBufferDays * columnWidth!),
+                                    top: 0,
+                                    bottom: 0,
+                                    width: _weekTotalDays * columnWidth!,
+                                    child: Row(
+                                      children: [
+                                        for (var i = 0; i < _weekTotalDays; i++)
+                                          column(
+                                            _addDays(_visibleStart(week), i),
+                                            columnWidth,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dateOnlyCard(Task task) => Material(
+    color: task.isCompleted
+        ? AppColors.surface
+        : AppColors.surfaceContainerHigh,
+    borderRadius: BorderRadius.circular(8),
+    child: InkWell(
+      key: ValueKey('timeline.date-only.${task.id}'),
+      borderRadius: BorderRadius.circular(8),
+      onTap: widget.onOpenTask == null ? null : () => widget.onOpenTask!(task),
+      child: SizedBox(
+        height: 34,
+        child: Row(
+          children: [
+            CalendarTaskHint(
+              message: task.isCompleted ? 'Вернуть в работу' : 'Выполнить',
+              child: IconButton(
+                constraints: const BoxConstraints.tightFor(
+                  width: 34,
+                  height: 34,
+                ),
+                padding: EdgeInsets.zero,
+                iconSize: 18,
+                onPressed: () => widget.onToggleTask(task),
+                icon: Icon(
+                  task.isCompleted
+                      ? Icons.check_circle
+                      : Icons.radio_button_unchecked,
+                  color: task.isCompleted
+                      ? AppColors.primary
+                      : AppColors.onSurfaceVariant,
+                ),
+              ),
+            ),
+            Expanded(
+              child: CalendarTaskHint(
+                message: task.title,
+                child: Text(
+                  task.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: task.isCompleted
+                        ? AppColors.onSurfaceVariant
+                        : AppColors.onSurface,
+                    decoration: task.isCompleted
+                        ? TextDecoration.lineThrough
+                        : null,
+                  ),
+                ),
+              ),
+            ),
+            if (isCalendarRange(task))
+              CalendarTaskHint(
+                message:
+                    'Период: ${formatDate(task.startsAt!)} — ${formatDate(task.endsAt!)}',
+                child: const Padding(
+                  padding: EdgeInsets.only(left: 4),
+                  child: Icon(
+                    Icons.date_range_outlined,
+                    size: 15,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            const SizedBox(width: 6),
+          ],
+        ),
+      ),
+    ),
+  );
   static const _totalMinutes = (_endHour - _startHour) * 60;
 
   // Width-only pinch (для шапки дней)
@@ -347,7 +607,7 @@ class _TimelineBodyState extends State<TimelineBody>
     final verticalOffset = _verticalController.hasClients
         ? _verticalController.offset
         : 0.0;
-    final topPad = isWeek ? 200.0 : widget.topPadding;
+    final topPad = _gridTopPadding;
     final dyFromGridTop = local.dy - topPad + verticalOffset;
     final minutes = _snapToGrid(
       (dyFromGridTop / _hourHeight * 60).round(),
@@ -395,8 +655,7 @@ class _TimelineBodyState extends State<TimelineBody>
     final drop = _dropFromGlobal(details.offset);
     final task = details.data;
     _clearExternalDrop();
-    
-    
+
     //Раньше здесь был if (drop == null || task.startsAt != null) return;
     if (drop == null) return;
 
@@ -556,7 +815,7 @@ class _TimelineBodyState extends State<TimelineBody>
         final hOffset = _horizontalController.hasClients
             ? _horizontalController.offset
             : 0.0;
-        final topPad = widget.weekStart == null ? widget.topPadding : 200.0;
+        final topPad = _gridTopPadding;
 
         final ghostLeft = widget.weekStart == null
             ? ghost.left
@@ -1389,7 +1648,7 @@ class _TimelineBodyState extends State<TimelineBody>
       children: [
         // ─── Таймлайн: зум ВЫСОТЫ ───
         FixedVerticalFadeMask(
-          topFade: 200,
+          topFade: _gridTopPadding,
           child: Listener(
             behavior: HitTestBehavior.opaque,
             onPointerDown: _handlePinchPointerDown,
@@ -1401,7 +1660,7 @@ class _TimelineBodyState extends State<TimelineBody>
             onPointerPanZoomEnd: _handlePanZoomEnd,
             onPointerSignal: _handlePointerSignal,
             child: SingleChildScrollView(
-              padding: EdgeInsets.only(top: 200),
+              padding: EdgeInsets.only(top: _gridTopPadding),
               key: _verticalScrollKey,
               controller: _verticalController,
               physics: _verticalPhysics(),
@@ -1490,6 +1749,9 @@ class _TimelineBodyState extends State<TimelineBody>
             onZoomOut: _zoomOut,
             onWidthZoomIn: _zoomWidthIn,
             onWidthZoomOut: _zoomWidthOut,
+            footer: _dateOnlyHeight == 0
+                ? null
+                : _buildDateOnlyRow(columnWidth: columnWidth),
           ),
         ),
         _buildDraftFormOverlay(),
@@ -1520,7 +1782,7 @@ class _TimelineBodyState extends State<TimelineBody>
             key: _verticalScrollKey,
             controller: _verticalController,
             physics: _verticalPhysics(),
-            padding: EdgeInsets.only(top: widget.topPadding),
+            padding: EdgeInsets.only(top: _gridTopPadding),
             child: SizedBox(
               width: maxWidth,
               height: _totalHeight + 24,
@@ -1552,6 +1814,13 @@ class _TimelineBodyState extends State<TimelineBody>
             ),
           ),
         ),
+        if (_dateOnlyHeight > 0)
+          Positioned(
+            top: widget.topPadding,
+            left: 0,
+            right: 0,
+            child: _buildDateOnlyRow(),
+          ),
         _buildDraftFormOverlay(),
       ],
     );
@@ -2041,6 +2310,7 @@ class _WeekGridHeader extends StatefulWidget {
     required this.onZoomOut,
     required this.onWidthZoomIn,
     required this.onWidthZoomOut,
+    this.footer,
     this.onWeekChange,
   });
 
@@ -2054,6 +2324,7 @@ class _WeekGridHeader extends StatefulWidget {
   final VoidCallback onZoomOut;
   final VoidCallback onWidthZoomIn;
   final VoidCallback onWidthZoomOut;
+  final Widget? footer;
 
   @override
   State<_WeekGridHeader> createState() => _WeekGridHeaderState();
@@ -2234,7 +2505,11 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
                       () => widget.onWeekChange!(_addDays(widget.weekStart, 7)),
                     ),
                     const SizedBox(width: 10),
-                    _glassIconButton(Icons.remove, 'Zoom out', widget.onZoomOut),
+                    _glassIconButton(
+                      Icons.remove,
+                      'Zoom out',
+                      widget.onZoomOut,
+                    ),
                     _glassIconButton(Icons.add, 'Zoom in', widget.onZoomIn),
                   ],
                 ),
@@ -2396,6 +2671,7 @@ class _WeekGridHeaderState extends State<_WeekGridHeader>
             ),
           ),
         ),
+        if (widget.footer != null) widget.footer!,
       ],
     );
   }
@@ -2531,9 +2807,11 @@ class _FlexibleSnapScrollPhysics extends ScrollPhysics {
     const tolerance = Tolerance.defaultTolerance;
     final minTarget = (position.minScrollExtent / step).ceil() * step;
     final maxTarget = (position.maxScrollExtent / step).floor() * step;
-    final target = _getTargetPixels(position, tolerance, velocity)
-        .clamp(minTarget, math.max(minTarget, maxTarget))
-        .toDouble();
+    final target = _getTargetPixels(
+      position,
+      tolerance,
+      velocity,
+    ).clamp(minTarget, math.max(minTarget, maxTarget)).toDouble();
 
     // Если текущая позиция уже достаточно близка к цели — ничего не делаем
     if ((target - position.pixels).abs() < tolerance.distance) {

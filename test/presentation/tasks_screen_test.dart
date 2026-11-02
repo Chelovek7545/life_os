@@ -345,6 +345,30 @@ void main() {
 
         expect(find.text('Monday Task'), findsOneWidget);
         expect(find.text('Wednesday Task'), findsOneWidget);
+        expect(find.byIcon(Icons.date_range_outlined), findsNothing);
+      });
+
+      testWidgets('shows a spanning task in each covered day section', (
+        tester,
+      ) async {
+        final task = createMockTaskWithProject(
+          task: createTaskWithTimes(
+            start: weekStart.subtract(const Duration(days: 2)).atTime(9),
+            end: weekStart.addDays(1).atTime(18),
+            title: 'Spanning Task',
+          ),
+        );
+        viewModel._filterController.add(
+          TaskFilterConfig(anchorDate: weekStart, period: DatePeriod.week),
+        );
+        viewModel._stateController.add(
+          TasksLoaded(curTask: task.task, tasks: [task], selectedTasks: []),
+        );
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pump();
+        expect(find.text('Spanning Task'), findsNWidgets(2));
+        expect(find.byIcon(Icons.date_range_outlined), findsNWidgets(2));
+        expect(tester.takeException(), isNull);
       });
     });
 

@@ -80,6 +80,7 @@ class TaskCard extends StatefulWidget {
   final VoidCallback? onDelete;
   final bool isOverdue;
   final Color? leftBorderColor;
+  final Widget? indicator;
 
   const TaskCard({
     super.key,
@@ -93,6 +94,7 @@ class TaskCard extends StatefulWidget {
     this.onDelete,
     this.isOverdue = false,
     this.leftBorderColor,
+    this.indicator,
   });
 
   @override
@@ -265,6 +267,10 @@ class _TaskCardState extends State<TaskCard>
                             ],
                           ),
                         ),
+                        if (widget.indicator != null) ...[
+                          widget.indicator!,
+                          const SizedBox(width: 8),
+                        ],
                         GestureDetector(
                           onTap: widget.onTap,
                           child: Icon(

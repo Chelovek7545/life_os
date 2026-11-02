@@ -141,6 +141,8 @@ class _DragHeader extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   isEditMode ? 'Edit task' : 'New task',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     fontWeight: FontWeight.w600,
                   ),

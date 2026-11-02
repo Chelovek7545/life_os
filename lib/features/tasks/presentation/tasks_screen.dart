@@ -22,7 +22,27 @@ import 'package:life_os/features/settings/settings_screen.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
 import 'package:life_os/features/tasks/presentation/components/date_header.dart';
 import 'package:life_os/features/tasks/presentation/components/day_calendar.dart';
-import 'package:life_os/features/tasks/presentation/components/timeline.dart';
+import 'package:life_os/features/tasks/presentation/components/task_calendar.dart';
+import 'package:life_os/features/tasks/presentation/components/calendar_task_hint.dart';
+
+Widget? _taskRangeIndicator(Task task) {
+  final start = task.startsAt;
+  final end = task.endsAt;
+  if (start == null ||
+      end == null ||
+      !end.isAfter(start) ||
+      DateUtils.isSameDay(start, end)) {
+    return null;
+  }
+  return CalendarTaskHint(
+    message: 'Период: ${formatDate(start)} — ${formatDate(end)}',
+    child: const Icon(
+      Icons.date_range_outlined,
+      size: 18,
+      color: AppColors.primary,
+    ),
+  );
+}
 
 const double _kHeaderHeight = 42.0;
 const double _kPeriodTabsHeight = 45.0;
@@ -237,6 +257,7 @@ class TasksScreenState extends State<TasksScreen> {
   Widget _buildUnscheduledCard(TaskWithProject item, DateTime today) {
     return TaskCard(
       task: item.task,
+      indicator: _taskRangeIndicator(item.task),
       projectTitle: item.project?.name,
       leftBorderColor: item.project != null
           ? parseHexColor(item.project!.color)
@@ -523,66 +544,14 @@ class TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  Widget _buildEventBody(bool isWide, DateTime anchorDate) {
-    return StreamBuilder<TaskScreenState>(
-      stream: widget.viewModel.state,
-      initialData: const TasksLoading(),
-      builder: (context, snapshot) {
-        final state = snapshot.data ?? const TasksLoading();
-        final anchorDate = widget.viewModel.currentFilterValue.anchorDate;
-        List<TaskEvent> events = [];
-        state.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          empty: (_, _) {
-            events = [];
-          },
-          error: (message) => Center(child: Text(message)),
-          loaded: (items, _, _, _, _) {
-            events = items
-                .where((item) {
-                  final startsAt = item.task.startsAt;
-                  return startsAt != null && !startsAt.isDateOnly;
-                })
-                .map(
-                  (item) => TaskEvent(
-                    accentColor: item.project != null
-                        ? parseHexColor(item.project!.color)
-                        : AppColors.onSurface,
-                    task: item.task,
-                    title: item.task.title,
-                    date: item.task.startsAt,
-                    startMinutes: item.task.startsAt!.durationInMinutes,
-                    durationMinutes: item.task.duration.inMinutes,
-                    isCompleted: item.task.isCompleted,
-                  ),
-                )
-                .toList(growable: false);
-          },
-        );
-
-        return TimelineBody(
-          events: events,
-          weekStart: isWide ? getWeekStart(anchorDate) : null,
-          anchorDate: isWide ? anchorDate : null,
-          onWeekChange: isWide
-              ? (date) => widget.viewModel.updateFilter(
-                  (old) => old.copyWith(anchorDate: date),
-                )
-              : null,
-          topPadding: isWide ? _kWeekTimelineTopPadding : _kTimelineTopPadding,
-          onEventChanged: _updateEvent,
-          onExternalDrop: _scheduleUnscheduledTask,
-          isOverUnscheduled: _isOverUnscheduled,
-          onEventToUnscheduled: _unscheduleTask,
-          onHoverUnscheduled: _onHoverUnscheduled,
-          onToggleTask: widget.viewModel.toggleTask,
-          taskFormProjects: widget.viewModel.watchProjects(),
-          onSubmitNewTask: widget.viewModel.addTask,
-        );
-      },
-    );
-  }
-
+  Widget _buildEventBody(bool isWide, DateTime anchorDate) => TaskCalendar(
+    viewModel: widget.viewModel,
+    isWeek: isWide,
+    topPadding: isWide ? _kWeekTimelineTopPadding : _kTimelineTopPadding,
+    isOverUnscheduled: _isOverUnscheduled,
+    onEventToUnscheduled: _unscheduleTask,
+    onHoverUnscheduled: _onHoverUnscheduled,
+  );
   Widget _buildHeaderPanel(
     bool isFormVisible,
     bool isLandscape,
@@ -712,49 +681,6 @@ class TasksScreenState extends State<TasksScreen> {
     final period = DatePeriod.values[index];
     setState(() => _showCalendar = period == DatePeriod.day);
     widget.viewModel.updateFilter((old) => old.copyWith(period: period));
-  }
-
-  Future<void> _updateEvent(
-    Task task, {
-    int? startMinutes,
-    int? durationMinutes,
-    DateTime? newDate,
-  }) async {
-    final currentStart = task.startsAt;
-    if (currentStart == null) {
-      return;
-    }
-
-    final referenceDate = newDate ?? currentStart;
-    final startsAt = startMinutes == null && newDate == null
-        ? currentStart
-        : DateTime(
-            referenceDate.year,
-            referenceDate.month,
-            referenceDate.day,
-            startMinutes == null ? currentStart.hour : startMinutes ~/ 60,
-            startMinutes == null ? currentStart.minute : startMinutes % 60,
-          );
-    final duration = Duration(
-      minutes: durationMinutes ?? task.duration.inMinutes,
-    );
-
-    await widget.viewModel.updateTask(
-      task.copyWith(
-        startsAt: Wrapped(startsAt),
-        endsAt: Wrapped(startsAt.add(duration)),
-      ),
-    );
-  }
-
-  Future<void> _scheduleUnscheduledTask(
-    Task task,
-    DateTime startsAt,
-    DateTime endsAt,
-  ) async {
-    await widget.viewModel.updateTask(
-      task.copyWith(startsAt: Wrapped(startsAt), endsAt: Wrapped(endsAt)),
-    );
   }
 
   Future<void> _submitTask(Task task) async {
@@ -1108,6 +1034,7 @@ class _TaskListState extends State<_TaskList> {
     return TaskCard(
       key: ValueKey(item.task.id),
       task: item.task,
+      indicator: _taskRangeIndicator(item.task),
       leftBorderColor: item.project != null
           ? parseHexColor(item.project!.color)
           : null,
@@ -1161,17 +1088,25 @@ class _WeekTasksListState extends State<_WeekTasksList> {
   @override
   void didUpdateWidget(_WeekTasksList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.items != widget.items) {
+    if (oldWidget.items != widget.items || oldWidget.anchorDate != widget.anchorDate) {
       _groupedItems = _buildGroupedItems();
     }
   }
 
   Map<DateTime, List<TaskWithProject>> _buildGroupedItems() {
     final grouped = <DateTime, List<TaskWithProject>>{};
+    final days = getDatesForWeek(widget.anchorDate);
     for (final item in widget.items) {
       final startsAt = item.task.startsAt;
       if (startsAt == null) continue;
-      grouped.putIfAbsent(startsAt.startOfDay, () => []).add(item);
+      final endsAt = item.task.endsAt;
+      final last = endsAt != null && !endsAt.isBefore(startsAt) ? endsAt : startsAt;
+      for (final day in days) {
+        final date = day.startOfDay;
+        if (!date.isBefore(startsAt.startOfDay) && !date.isAfter(last.startOfDay)) {
+          grouped.putIfAbsent(date, () => []).add(item);
+        }
+      }
     }
     return grouped;
   }
@@ -1291,6 +1226,7 @@ class _WeekDaySection extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: TaskCard(
                   key: ValueKey(item.task.id),
+                  indicator: _taskRangeIndicator(item.task),
                   leftBorderColor: item.project != null
                       ? parseHexColor(item.project!.color)
                       : null,

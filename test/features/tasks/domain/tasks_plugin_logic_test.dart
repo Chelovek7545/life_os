@@ -7,6 +7,196 @@ import '../support/memory_tasks.dart';
 Future<void> tick() => Future<void>.delayed(Duration.zero);
 
 void main() {
+  test('Tasks list includes every range day and overlapping periods', () async {
+    final tasks = MemoryTasks();
+    final projects = MemoryProjectQueries();
+    final range = Task.blank().copyWith(
+      startsAt: Wrapped(DateTime(2026, 12, 20, 9)),
+      endsAt: Wrapped(DateTime(2027, 1, 3)),
+    );
+    final unscheduled = Task.blank();
+    tasks.items.addAll({range.id: range, unscheduled.id: unscheduled});
+    final model = TasksViewModel(
+      tasks,
+      GetTasksWithProjectsUseCase(tasks, projects),
+      projects,
+    )..initialize();
+    addTearDown(model.dispose);
+    for (final day in [
+      DateTime(2026, 12, 19),
+      DateTime(2026, 12, 20),
+      DateTime(2026, 12, 31),
+      DateTime(2027, 1, 3),
+      DateTime(2027, 1, 4),
+    ]) {
+      model.updateFilter((_) => TaskFilterConfig(anchorDate: day));
+      await tick();
+      final state = await model.state.first as TasksLoaded;
+      final included =
+          !day.isBefore(DateTime(2026, 12, 20)) &&
+          !day.isAfter(DateTime(2027, 1, 3));
+      expect(
+        state.tasks.map((item) => item.task.id),
+        included ? [range.id] : isEmpty,
+        reason: '$day',
+      );
+      expect(state.unscheduledTasks.single.task.id, unscheduled.id);
+    }
+    for (final period in [DatePeriod.week, DatePeriod.month, DatePeriod.year]) {
+      model.updateFilter(
+        (_) =>
+            TaskFilterConfig(anchorDate: DateTime(2027, 1, 3), period: period),
+      );
+      await tick();
+      expect(
+        (await model.state.first as TasksLoaded).tasks.single.task.id,
+        range.id,
+      );
+    }
+    // Missing or invalid end dates remain single-day tasks.
+    tasks.items[range.id] = range.copyWith(
+      endsAt: Wrapped(DateTime(2026, 12, 1)),
+    );
+    tasks.emit();
+    model.updateFilter(
+      (_) => TaskFilterConfig(anchorDate: DateTime(2026, 12, 21)),
+    );
+    await tick();
+    expect((await model.state.first as TasksLoaded).tasks, isEmpty);
+  });
+
+  test(
+    'calendar includes overlapping ranges across years and respects filters',
+    () async {
+      final tasks = MemoryTasks();
+      final projects = MemoryProjectQueries();
+      final range = Task.blank().copyWith(
+        projectId: const Wrapped('p'),
+        startsAt: Wrapped(DateTime(2026, 12, 20, 9)),
+        endsAt: Wrapped(DateTime(2027, 1, 3)),
+      );
+      final excluded = range.copyWith(
+        id: 'other-project',
+        projectId: const Wrapped('other'),
+      );
+      tasks.items.addAll({range.id: range, excluded.id: excluded});
+      final model = TasksViewModel(
+        tasks,
+        GetTasksWithProjectsUseCase(tasks, projects),
+        projects,
+      )..initialize();
+      addTearDown(model.dispose);
+      final calendar = model.watchCalendarTasks();
+      for (final period in DatePeriod.values) {
+        model.updateFilter(
+          (_) => TaskFilterConfig(
+            anchorDate: DateTime(2027, 1, 3),
+            period: period,
+            projectIds: ['p'],
+          ),
+        );
+        expect((await calendar.first).map((item) => item.task.id), [range.id]);
+      }
+      model.updateFilter(
+        (_) => TaskFilterConfig(anchorDate: DateTime(2027, 1, 4)),
+      );
+      expect(await calendar.first, isEmpty);
+      model.updateFilter(
+        (_) => TaskFilterConfig(
+          anchorDate: DateTime(2027, 1, 3),
+          showCompleted: true,
+        ),
+      );
+      expect(await calendar.first, isEmpty);
+    },
+  );
+
+  test(
+    'calendar updates preserve fresh fields and serialize move then resize',
+    () async {
+      final tasks = MemoryTasks();
+      final projects = MemoryProjectQueries();
+      final model = TasksViewModel(
+        tasks,
+        GetTasksWithProjectsUseCase(tasks, projects),
+        projects,
+      );
+      addTearDown(model.dispose);
+      final original = Task.blank().copyWith(
+        startsAt: Wrapped(DateTime(2026, 11, 2, 8)),
+        endsAt: Wrapped(DateTime(2026, 11, 2, 9)),
+      );
+      final latest = original.copyWith(
+        title: 'Updated elsewhere',
+        description: 'Keep me',
+        tags: [const Tag(id: 1, name: 'Keep tag', colorHex: 0)],
+        status: TaskStatus.done,
+      );
+      tasks.items[latest.id] = latest;
+      await Future.wait([
+        model.rescheduleTask(
+          original.id,
+          startMinutes: 600,
+          newDate: DateTime(2026, 11, 3),
+        ),
+        model.rescheduleTask(original.id, durationMinutes: 90),
+      ]);
+      final moved = tasks.items[original.id]!;
+      expect(moved.startsAt, DateTime(2026, 11, 3, 10));
+      expect(moved.endsAt, DateTime(2026, 11, 3, 11, 30));
+      expect(moved.title, latest.title);
+      expect(moved.description, latest.description);
+      expect(moved.tags, latest.tags);
+      expect(moved.status, TaskStatus.done);
+      await model.scheduleTask(
+        original.id,
+        DateTime(2026, 11, 4, 8),
+        DateTime(2026, 11, 4, 10),
+      );
+      expect(tasks.items[original.id]!.title, latest.title);
+      expect(tasks.items[original.id]!.tags, latest.tags);
+      expect(tasks.items[original.id]!.endsAt, DateTime(2026, 11, 4, 10));
+      tasks.items.clear();
+      await model.rescheduleTask(original.id, startMinutes: 720);
+      await model.scheduleTask(original.id, DateTime(2026), DateTime(2027));
+      expect(tasks.items, isEmpty);
+    },
+  );
+
+  test(
+    'calendar writes finish before disposal and stale callbacks are rejected',
+    () async {
+      final tasks = MemoryTasks()
+        ..writeGate = Completer<void>()
+        ..entered = Completer<void>();
+      final projects = MemoryProjectQueries();
+      final model = TasksViewModel(
+        tasks,
+        GetTasksWithProjectsUseCase(tasks, projects),
+        projects,
+      );
+      final task = Task.blank();
+      tasks.items[task.id] = task;
+      final write = model.scheduleTask(
+        task.id,
+        DateTime(2026, 11, 2, 8),
+        DateTime(2026, 11, 2, 9),
+      );
+      await tasks.entered!.future;
+      var closed = false;
+      final closing = model.dispose().then((_) => closed = true);
+      expect(closed, isFalse);
+      await expectLater(
+        model.rescheduleTask(task.id, startMinutes: 600),
+        throwsStateError,
+      );
+      tasks.writeGate!.complete();
+      await write;
+      await closing;
+      expect(tasks.items[task.id]!.startsAt, DateTime(2026, 11, 2, 8));
+    },
+  );
+
   test('filter contracts copy lists and hash equal values consistently', () {
     final projects = ['p'];
     final tags = [1];

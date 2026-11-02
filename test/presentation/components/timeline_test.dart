@@ -14,6 +14,62 @@ void _noopEventChanged(
 }) {}
 
 void main() {
+  testWidgets('date-only day row scrolls and drags a task into the time grid', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final day = DateTime(2026, 11, 2);
+    final tasks = List.generate(
+      6,
+      (i) => createMockTask(
+        id: 'date-only-$i',
+        title: 'Task $i',
+        startsAt: day.add(const Duration(milliseconds: 1)),
+      ),
+    );
+    DateTime? droppedStart;
+    String? droppedId;
+    await tester.pumpWidget(
+      createTestWidget(
+        child: TimelineBody(
+          events: const [],
+          dateOnlyTasks: tasks,
+          anchorDate: day,
+          topPadding: 0,
+          onEventChanged: _noopEventChanged,
+          onToggleTask: (_) {},
+          onExternalDrop: (task, startsAt, endsAt) {
+            droppedId = task.id;
+            droppedStart = startsAt;
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final row = find.byKey(const ValueKey('timeline.date-only'));
+    expect(tester.getSize(row).height, lessThan(160));
+    await tester.drag(
+      find.descendant(of: row, matching: find.byType(ListView)),
+      const Offset(0, -180),
+    );
+    await tester.pumpAndSettle();
+    final card = find.byKey(const ValueKey('timeline.date-only.date-only-5'));
+    expect(card.hitTestable(), findsOneWidget);
+    final gesture = await tester.startGesture(tester.getCenter(card));
+    await tester.pump(const Duration(milliseconds: 600));
+    await gesture.moveTo(const Offset(200, 450));
+    await tester.pump();
+    await gesture.moveTo(const Offset(210, 460));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(droppedId, tasks.last.id);
+    expect(DateUtils.isSameDay(droppedStart, day), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   group('Timeline', () {
     group('TaskEvent', () {
       test('creates with all required fields', () {
