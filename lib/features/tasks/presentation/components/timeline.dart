@@ -224,100 +224,105 @@ class _TimelineBodyState extends State<TimelineBody>
     );
     return Container(
       key: const ValueKey('timeline.date-only'),
-      height: _dateOnlyHeight,
-      color: AppColors.surfaceContainer,
-      child: Column(
-        children: [
-          SizedBox(
-            height: 28,
-            child: Row(
-              children: [
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Text(
-                    'Задачи на день',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                CalendarTaskHint(
-                  message: _panelExpanded
-                      ? 'Скрыть панель задач'
-                      : 'Показать панель задач',
-                  child: IconButton(
-                    key: const ValueKey('timeline.toggle-day-panel'),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints.tightFor(
-                      width: 40,
-                      height: 28,
-                    ),
-                    iconSize: 18,
-                    onPressed: () =>
-                        setState(() => _panelExpanded = !_panelExpanded),
-                    icon: Icon(
-                      _panelExpanded ? Icons.expand_less : Icons.expand_more,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (_panelExpanded)
-            Expanded(
+      height: _dateOnlyHeight + 2,
+      
+      //color: AppColors.surfaceContainerHigh,
+      
+      child: GlassPanel(
+        borderRadius: 16,
+        child: Column(
+          children: [
+            SizedBox(
+              height: 28,
               child: Row(
                 children: [
-                  const SizedBox(
-                    width: _leftLabelWidth,
+                  const SizedBox(width: 12),
+                  const Expanded(
                     child: Text(
-                      'На\nдень',
-                      textAlign: TextAlign.center,
+                      'Задачи на день',
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 11,
                         color: AppColors.onSurfaceVariant,
                       ),
                     ),
                   ),
-                  Expanded(
-                    child: week == null
-                        ? LayoutBuilder(
-                            builder: (_, constraints) => column(
-                              widget.anchorDate ?? DateTime.now(),
-                              constraints.maxWidth,
-                            ),
-                          )
-                        : ClipRect(
-                            child: AnimatedBuilder(
-                              animation: _horizontalController,
-                              builder: (_, _) => Stack(
-                                children: [
-                                  Positioned(
-                                    left: -(_horizontalController.hasClients
-                                        ? _horizontalController.offset
-                                        : _weekBufferDays * columnWidth!),
-                                    top: 0,
-                                    bottom: 0,
-                                    width: _weekTotalDays * columnWidth!,
-                                    child: Row(
-                                      children: [
-                                        for (var i = 0; i < _weekTotalDays; i++)
-                                          column(
-                                            _addDays(_visibleStart(week), i),
-                                            columnWidth,
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                  CalendarTaskHint(
+                    message: _panelExpanded
+                        ? 'Скрыть панель задач'
+                        : 'Показать панель задач',
+                    child: IconButton(
+                      key: const ValueKey('timeline.toggle-day-panel'),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 40,
+                        height: 28,
+                      ),
+                      iconSize: 18,
+                      onPressed: () =>
+                          setState(() => _panelExpanded = !_panelExpanded),
+                      icon: Icon(
+                        _panelExpanded ? Icons.expand_less : Icons.expand_more,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-        ],
+            if (_panelExpanded)
+              Expanded(
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: _leftLabelWidth,
+                      child: Text(
+                        'На\nдень',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: week == null
+                          ? LayoutBuilder(
+                              builder: (_, constraints) => column(
+                                widget.anchorDate ?? DateTime.now(),
+                                constraints.maxWidth,
+                              ),
+                            )
+                          : ClipRect(
+                              child: AnimatedBuilder(
+                                animation: _horizontalController,
+                                builder: (_, _) => Stack(
+                                  children: [
+                                    Positioned(
+                                      left: -(_horizontalController.hasClients
+                                          ? _horizontalController.offset
+                                          : _weekBufferDays * columnWidth!),
+                                      top: 0,
+                                      bottom: 0,
+                                      width: _weekTotalDays * columnWidth!,
+                                      child: Row(
+                                        children: [
+                                          for (var i = 0; i < _weekTotalDays; i++)
+                                            column(
+                                              _addDays(_visibleStart(week), i),
+                                              columnWidth,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

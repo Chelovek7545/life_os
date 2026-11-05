@@ -1,6 +1,9 @@
 import 'package:tasks_plugin/tasks_logic.dart';
 import 'package:tasks_api/tasks_api.dart' show WorkLogsApi, Task;
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
@@ -1448,7 +1451,7 @@ class _TasksHeader extends StatelessWidget {
   }
 }
 
-class CalendarRow extends StatelessWidget {
+class CalendarRow extends StatefulWidget {
   const CalendarRow({
     super.key,
     required this.selectedDate,
@@ -1459,30 +1462,138 @@ class CalendarRow extends StatelessWidget {
   final ValueChanged<DateTime> onDaySelected;
 
   @override
+  State<CalendarRow> createState() => _CalendarRowState();
+}
+
+class _CalendarRowState extends State<CalendarRow> {
+  static const _weekSwipeThreshold = 72.0;
+  final _controller = ScrollController();
+  double _dragOverflow = 0;
+  double _wheelOverflow = 0;
+  bool _wheelChangedWeek = false;
+  Timer? _wheelIdle;
+
+  @override
+  void dispose() {
+    _wheelIdle?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(CalendarRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldWeek = getWeekStart(oldWidget.selectedDate);
+    final newWeek = getWeekStart(widget.selectedDate);
+    if (oldWeek == newWeek) return;
+    _dragOverflow = 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_controller.hasClients) return;
+      _controller.jumpTo(
+        newWeek.isAfter(oldWeek) ? 0 : _controller.position.maxScrollExtent,
+      );
+    });
+  }
+
+  void _changeWeek(double overflow) {
+    final date = widget.selectedDate;
+    widget.onDaySelected(
+      DateTime(date.year, date.month, date.day + (overflow > 0 ? 7 : -7)),
+    );
+  }
+
+  bool _onScroll(ScrollNotification notification) {
+    if (notification.depth != 0 || notification.metrics.axis != Axis.horizontal) {
+      return false;
+    }
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      _dragOverflow = 0;
+    } else if (notification is OverscrollNotification &&
+        notification.dragDetails != null) {
+      final delta = notification.overscroll;
+      if (delta.sign != _dragOverflow.sign) _dragOverflow = 0;
+      _dragOverflow += delta;
+    } else if (notification is ScrollUpdateNotification &&
+        notification.dragDetails != null) {
+      _dragOverflow = 0;
+    } else if (notification is ScrollEndNotification) {
+      final overflow = _dragOverflow;
+      _dragOverflow = 0;
+      if (overflow.abs() >= _weekSwipeThreshold) _changeWeek(overflow);
+    }
+    return false;
+  }
+
+  void _onPointerSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent || !_controller.hasClients) return;
+    final keys = HardwareKeyboard.instance.logicalKeysPressed;
+    final shift =
+        keys.contains(LogicalKeyboardKey.shiftLeft) ||
+        keys.contains(LogicalKeyboardKey.shiftRight);
+    var delta = shift ? event.scrollDelta.dy : event.scrollDelta.dx;
+    final position = _controller.position;
+    if (position.axisDirection == AxisDirection.left) delta = -delta;
+    if (delta == 0) return;
+    _wheelIdle?.cancel();
+    _wheelIdle = Timer(const Duration(milliseconds: 220), () {
+      _wheelOverflow = 0;
+      _wheelChangedWeek = false;
+    });
+    final atEdge = delta > 0
+        ? position.pixels >= position.maxScrollExtent
+        : position.pixels <= position.minScrollExtent;
+    if (!atEdge) {
+      _wheelOverflow = 0;
+      return;
+    }
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      if (!mounted || _wheelChangedWeek) return;
+      if (delta.sign != _wheelOverflow.sign) _wheelOverflow = 0;
+      _wheelOverflow += delta;
+      if (_wheelOverflow.abs() >= _weekSwipeThreshold) {
+        _wheelChangedWeek = true;
+        _wheelOverflow = 0;
+        _changeWeek(delta);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final weekDates = getDatesForWeek(selectedDate);
+    final weekDates = getDatesForWeek(widget.selectedDate);
 
     return SizedBox(
       height: 90,
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: AppMargins.sm),
-        clipBehavior: Clip.hardEdge,
-        scrollDirection: Axis.horizontal,
-        itemCount: weekDates.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 12),
-        itemBuilder: (context, index) {
-          final date = weekDates[index];
-          final isSelected = date.startOfDay.isAtSameMomentAs(
-            selectedDate.startOfDay,
-          );
+      child: Listener(
+        onPointerSignal: _onPointerSignal,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: _onScroll,
+          child: ListView.separated(
+            controller: _controller,
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: ClampingScrollPhysics(),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: AppMargins.sm),
+            clipBehavior: Clip.hardEdge,
+            scrollDirection: Axis.horizontal,
+            itemCount: weekDates.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 12),
+            itemBuilder: (context, index) {
+              final date = weekDates[index];
+              final isSelected = date.startOfDay.isAtSameMomentAs(
+                widget.selectedDate.startOfDay,
+              );
 
-          return DateTimelineCard(
-            weekday: getWeekDayName(date.weekday),
-            day: '${date.day}',
-            isSelected: isSelected,
-            onTap: () => onDaySelected(date),
-          );
-        },
+              return DateTimelineCard(
+                weekday: getWeekDayName(date.weekday),
+                day: '${date.day}',
+                isSelected: isSelected,
+                onTap: () => widget.onDaySelected(date),
+              );
+            },
+          ),
+        ),
       ),
     );
   }
