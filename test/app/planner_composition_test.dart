@@ -14,6 +14,167 @@ import 'today_composition_test.dart' show pumpStorage;
 
 void main() {
   testWidgets(
+    'browsing weeks keeps the chosen day until an explicit date selection',
+    (tester) async {
+      tester.view.physicalSize = const Size(1800, 1050);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final app = (await tester.runAsync(
+        () => createTestApp(enableObsidian: false),
+      ))!;
+      await tester.pumpWidget(MyApp(diContainer: app));
+      app.navigation.open('planner');
+      await pumpStorage(tester);
+      final planner = find.byType(PlannerScreen);
+      final model = tester.widget<PlannerScreen>(planner).tasks;
+      final timeline = find.descendant(
+        of: planner,
+        matching: find.byType(TimelineBody),
+      );
+      TimelineBody body() => tester.widget<TimelineBody>(timeline);
+      Finder day(DateTime date) => find.byKey(ValueKey(('timeline.day', date)));
+      Color border(DateTime date) => tester
+          .widgetList<DecoratedBox>(
+            find.descendant(of: day(date), matching: find.byType(DecoratedBox)),
+          )
+          .map((box) => box.decoration)
+          .whereType<BoxDecoration>()
+          .where((decoration) => decoration.border != null)
+          .first
+          .border!
+          .top
+          .color;
+
+      final monday = body().weekStart!;
+      final chosen = monday.add(const Duration(days: 2));
+      await tester.tap(day(chosen));
+      await tester.pump();
+      expect(body().anchorDate, chosen);
+      expect(border(chosen), Colors.white.withValues(alpha: .6));
+      await pumpStorage(tester);
+      final header = find.byKey(const ValueKey('timeline.header-scroll'));
+      await tester.drag(header, const Offset(-1000, 0));
+      await tester.pumpAndSettle();
+      await pumpStorage(tester);
+      final nextWeek = monday.add(const Duration(days: 7));
+      expect(body().weekStart, nextWeek);
+      expect(body().anchorDate, chosen);
+      expect(border(chosen), Colors.white.withValues(alpha: .6));
+      expect(border(nextWeek), isNot(Colors.white.withValues(alpha: .6)));
+
+      await tester.tap(find.byTooltip('Previous week'));
+      await pumpStorage(tester);
+      expect(body().weekStart, monday);
+      expect(body().anchorDate, chosen);
+      await tester.tap(find.byTooltip('Next week'));
+      await pumpStorage(tester);
+      expect(body().weekStart, nextWeek);
+      expect(body().anchorDate, chosen);
+
+      final nextChosen = nextWeek.add(const Duration(days: 1));
+      await tester.tap(day(nextChosen));
+      await tester.pump();
+      expect(body().anchorDate, nextChosen);
+      expect(border(nextChosen), Colors.white.withValues(alpha: .6));
+      await pumpStorage(tester);
+      final externalDate = monday.subtract(const Duration(days: 3));
+      model.updateFilter((old) => old.copyWith(anchorDate: externalDate));
+      await pumpStorage(tester);
+      expect(body().anchorDate, externalDate);
+      expect(border(externalDate), Colors.white.withValues(alpha: .6));
+      expect(tester.takeException(), isNull);
+      await disposeTestApp(tester, app);
+    },
+  );
+
+  testWidgets(
+    'adjacent timed tasks are visible during scroll before the selected week changes',
+    (tester) async {
+      tester.view.physicalSize = const Size(1800, 1050);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final app = (await tester.runAsync(
+        () => createTestApp(enableObsidian: false),
+      ))!;
+      final monday = getWeekStart(DateTime.now());
+      final previous = Task.blank().copyWith(
+        title: 'Previous week task',
+        startsAt: Wrapped(
+          DateTime(monday.year, monday.month, monday.day - 3, 9),
+        ),
+        endsAt: Wrapped(
+          DateTime(monday.year, monday.month, monday.day - 3, 10),
+        ),
+      );
+      final next = Task.blank().copyWith(
+        title: 'Next week task',
+        startsAt: Wrapped(
+          DateTime(monday.year, monday.month, monday.day + 8, 9),
+        ),
+        endsAt: Wrapped(
+          DateTime(monday.year, monday.month, monday.day + 8, 10),
+        ),
+      );
+      await tester.runAsync(() async {
+        await app.tasksRepository.addTask(previous);
+        await app.tasksRepository.addTask(next);
+      });
+      await tester.pumpWidget(MyApp(diContainer: app));
+      app.navigation.open('planner');
+      await pumpStorage(tester);
+      final planner = find.byType(PlannerScreen);
+      final model = tester.widget<PlannerScreen>(planner).tasks;
+      final anchor = model.currentFilterValue.anchorDate;
+      final timeline = find.descendant(
+        of: planner,
+        matching: find.byType(TimelineBody),
+      );
+      expect(
+        tester
+            .widget<TimelineBody>(timeline)
+            .events
+            .map((event) => event.task.id),
+        [previous.id, next.id],
+      );
+      final horizontal = tester
+          .widgetList<SingleChildScrollView>(
+            find.descendant(
+              of: timeline,
+              matching: find.byType(SingleChildScrollView),
+            ),
+          )
+          .firstWhere(
+            (view) =>
+                view.scrollDirection == Axis.horizontal &&
+                view.controller != null,
+          )
+          .controller!;
+      horizontal.jumpTo(horizontal.offset + 450);
+      await tester.pump();
+      expect(
+        model.currentFilterValue.anchorDate,
+        anchor,
+        reason: 'The selected week must not have switched yet',
+      );
+      final futureCard = find.descendant(
+        of: timeline,
+        matching: find.byKey(ValueKey(next.id)),
+      );
+      final intersection = tester
+          .getRect(futureCard)
+          .intersect(tester.getRect(timeline));
+      expect(
+        intersection.width,
+        greaterThan(0),
+        reason:
+            'The next-week event is already rendered in the entering columns',
+      );
+      expect(tester.takeException(), isNull);
+      await disposeTestApp(tester, app);
+    },
+  );
+
+  testWidgets(
     'range tasks cover each day and panel can be hidden across navigation',
     (tester) async {
       tester.view.physicalSize = const Size(1800, 1050);
@@ -66,7 +227,7 @@ void main() {
       expect(find.text(range.title), findsNothing);
       expect(
         tester.getSize(find.byKey(const ValueKey('timeline.date-only'))).height,
-        28,
+        30,
       );
       await tester.tap(find.byTooltip('Previous week'));
       await pumpStorage(tester);
@@ -113,7 +274,11 @@ void main() {
         matching: find.byType(TimelineBody),
       );
       TimelineBody timeline() => tester.widget<TimelineBody>(timelineFinder);
-      expect(timeline().dateOnlyTasks.map((t) => t.id), [withoutTime.id]);
+      expect(
+        timeline().dateOnlyTasks.map((t) => t.id),
+        [withoutTime.id, nextWeek.id],
+        reason: 'The next week must be ready before the selected week changes',
+      );
       expect(timeline().events, isEmpty);
       final card = find.byKey(ValueKey('timeline.date-only.${withoutTime.id}'));
       final day = find.byKey(ValueKey(('timeline.day', monday)));
@@ -134,7 +299,10 @@ void main() {
       );
       await tester.tap(find.byTooltip('Next week'));
       await pumpStorage(tester);
-      expect(timeline().dateOnlyTasks.map((t) => t.id), [nextWeek.id]);
+      expect(timeline().dateOnlyTasks.map((t) => t.id), [
+        withoutTime.id,
+        nextWeek.id,
+      ]);
       await tester.tap(find.byTooltip('Previous week'));
       await pumpStorage(tester);
       await tester.tap(card);
@@ -150,9 +318,12 @@ void main() {
         monday.copyWith(hour: 10),
       );
       await pumpStorage(tester);
-      expect(timeline().dateOnlyTasks, isEmpty);
+      expect(timeline().dateOnlyTasks.map((t) => t.id), [nextWeek.id]);
       expect(timeline().events.single.task.id, withoutTime.id);
-      expect(find.byKey(const ValueKey('timeline.date-only')), findsNothing);
+      expect(
+        find.byKey(ValueKey('timeline.date-only.${withoutTime.id}')),
+        findsNothing,
+      );
       expect(tester.takeException(), isNull);
       await disposeTestApp(tester, app);
     },
@@ -216,7 +387,11 @@ void main() {
       expect(tester.getSize(eventFinder).height, greaterThan(initialHeight));
       await tester.tap(find.byTooltip('Next week'));
       await pumpStorage(tester);
-      expect(tester.widget<TimelineBody>(timelineFinder).events, isEmpty);
+      expect(
+        tester.widget<TimelineBody>(timelineFinder).events.single.task.id,
+        task.id,
+        reason: 'The previous week stays available in the scroll buffer',
+      );
       expect(app.tasksViewModel.currentFilterValue, originalFilter);
       await tester.tap(find.byTooltip('Previous week'));
       await pumpStorage(tester);

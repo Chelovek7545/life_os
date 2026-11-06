@@ -116,9 +116,10 @@ class TasksViewModel {
     List<TaskWithProject> items,
     TaskFilterConfig filter, {
     bool includeUnscheduled = false,
+    int bufferDays = 0,
   }) {
     final anchor = filter.anchorDate;
-    final from = switch (filter.period) {
+    final periodFrom = switch (filter.period) {
       DatePeriod.day => DateTime(anchor.year, anchor.month, anchor.day),
       DatePeriod.week => DateTime(
         anchor.year,
@@ -128,12 +129,30 @@ class TasksViewModel {
       DatePeriod.month => DateTime(anchor.year, anchor.month),
       DatePeriod.year => DateTime(anchor.year),
     };
-    final until = switch (filter.period) {
-      DatePeriod.day => DateTime(from.year, from.month, from.day + 1),
-      DatePeriod.week => DateTime(from.year, from.month, from.day + 7),
-      DatePeriod.month => DateTime(from.year, from.month + 1),
-      DatePeriod.year => DateTime(from.year + 1),
+    final periodUntil = switch (filter.period) {
+      DatePeriod.day => DateTime(
+        periodFrom.year,
+        periodFrom.month,
+        periodFrom.day + 1,
+      ),
+      DatePeriod.week => DateTime(
+        periodFrom.year,
+        periodFrom.month,
+        periodFrom.day + 7,
+      ),
+      DatePeriod.month => DateTime(periodFrom.year, periodFrom.month + 1),
+      DatePeriod.year => DateTime(periodFrom.year + 1),
     };
+    final from = DateTime(
+      periodFrom.year,
+      periodFrom.month,
+      periodFrom.day - bufferDays,
+    );
+    final until = DateTime(
+      periodUntil.year,
+      periodUntil.month,
+      periodUntil.day + bufferDays,
+    );
     return items
         .where((item) {
           final task = item.task;
@@ -230,16 +249,20 @@ class TasksViewModel {
   Stream<List<Task>> watchAllTasks() => _queries.watch(_repository.watchTasks);
   Stream<List<Project>> watchProjects() =>
       _queries.watch(_projects.watchAllProjects);
-  Stream<List<TaskWithProject>>? _calendarTasks;
-  Stream<List<TaskWithProject>> watchCalendarTasks() {
+  final _calendarTaskStreams = <int, Stream<List<TaskWithProject>>>{};
+  Stream<List<TaskWithProject>> watchCalendarTasks({int bufferDays = 0}) {
     if (!_accepting) throw StateError('Tasks view model is closed.');
-    return _calendarTasks ??= _queries.watch(
-      () => Rx.combineLatest2(_useCase.call(), _filters.stream, (
-        List<TaskWithProject> items,
-        TaskFilterConfig filter,
-      ) {
-        return _filterTasks(items, filter);
-      }),
+    RangeError.checkNotNegative(bufferDays, 'bufferDays');
+    return _calendarTaskStreams.putIfAbsent(
+      bufferDays,
+      () => _queries.watch(
+        () => Rx.combineLatest2(_useCase.call(), _filters.stream, (
+          List<TaskWithProject> items,
+          TaskFilterConfig filter,
+        ) {
+          return _filterTasks(items, filter, bufferDays: bufferDays);
+        }),
+      ),
     );
   }
 
@@ -260,6 +283,50 @@ class TasksViewModel {
           ),
         );
       });
+
+  Future<void> moveTaskToDay(
+    String id,
+    DateTime sourceDay,
+    DateTime targetDay,
+  ) => _enqueue(() async {
+    final current = await _repository.getById(id);
+    final start = current?.startsAt;
+    if (current == null || start == null) return;
+    final days = DateTime.utc(targetDay.year, targetDay.month, targetDay.day)
+        .difference(
+          DateTime.utc(sourceDay.year, sourceDay.month, sourceDay.day),
+        )
+        .inDays;
+    if (days == 0) return;
+    DateTime shift(DateTime date) => date.isUtc
+        ? DateTime.utc(
+            date.year,
+            date.month,
+            date.day + days,
+            date.hour,
+            date.minute,
+            date.second,
+            date.millisecond,
+            date.microsecond,
+          )
+        : DateTime(
+            date.year,
+            date.month,
+            date.day + days,
+            date.hour,
+            date.minute,
+            date.second,
+            date.millisecond,
+            date.microsecond,
+          );
+    await _repository.updateTask(
+      current.copyWith(
+        startsAt: Wrapped(shift(start)),
+        endsAt: Wrapped(current.endsAt == null ? null : shift(current.endsAt!)),
+        updatedAt: DateTime.now(),
+      ),
+    );
+  });
 
   Future<void> rescheduleTask(
     String id, {

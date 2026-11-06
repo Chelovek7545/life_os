@@ -7,6 +7,132 @@ import '../support/memory_tasks.dart';
 Future<void> tick() => Future<void>.delayed(Duration.zero);
 
 void main() {
+  test(
+    'calendar preloads the full three-week window without widening the Tasks list',
+    () async {
+      final tasks = MemoryTasks();
+      final projects = MemoryProjectQueries();
+      final dates = [
+        DateTime(2026, 12, 20, 9),
+        DateTime(2026, 12, 21, 9),
+        DateTime(2026, 12, 28, 9),
+        DateTime(2027, 1, 10, 23),
+        DateTime(2027, 1, 11),
+      ];
+      final items = [
+        for (final date in dates)
+          Task.blank().copyWith(
+            startsAt: Wrapped(date),
+            projectId: const Wrapped('p'),
+          ),
+      ];
+      for (final item in items) {
+        tasks.items[item.id] = item;
+      }
+      final range = Task.blank().copyWith(
+        startsAt: Wrapped(DateTime(2026, 12, 1)),
+        endsAt: Wrapped(DateTime(2026, 12, 21)),
+        projectId: const Wrapped('p'),
+      );
+      tasks.items[range.id] = range;
+      final other = items[2].copyWith(
+        id: 'other',
+        projectId: const Wrapped('other'),
+      );
+      tasks.items[other.id] = other;
+      final model =
+          TasksViewModel(
+              tasks,
+              GetTasksWithProjectsUseCase(tasks, projects),
+              projects,
+            )
+            ..updateFilter(
+              (_) => TaskFilterConfig(
+                anchorDate: DateTime(2027, 1, 3),
+                period: DatePeriod.week,
+                projectIds: ['p'],
+              ),
+            )
+            ..initialize();
+      addTearDown(model.dispose);
+      final stream = model.watchCalendarTasks(bufferDays: 7);
+      expect(
+        identical(stream, model.watchCalendarTasks(bufferDays: 7)),
+        isTrue,
+      );
+      expect((await stream.first).map((item) => item.task.id), [
+        items[1].id,
+        items[2].id,
+        items[3].id,
+        range.id,
+      ]);
+      final state =
+          await model.state.firstWhere((state) => state is TasksLoaded)
+              as TasksLoaded;
+      expect(state.tasks.single.task.id, items[2].id);
+      expect(
+        (await model.watchCalendarTasks().first).single.task.id,
+        items[2].id,
+      );
+      await model.updateTask(items[1].copyWith(title: 'Updated buffered task'));
+      expect((await stream.first).first.task.title, 'Updated buffered task');
+      expect(
+        () => model.watchCalendarTasks(bufferDays: -1),
+        throwsArgumentError,
+      );
+    },
+  );
+
+  test(
+    'moving a panel task preserves date-only markers, range length and fresh fields',
+    () async {
+      final tasks = MemoryTasks();
+      final projects = MemoryProjectQueries();
+      final model = TasksViewModel(
+        tasks,
+        GetTasksWithProjectsUseCase(tasks, projects),
+        projects,
+      );
+      addTearDown(model.dispose);
+      final task = Task.blank().copyWith(
+        title: 'Fresh title',
+        startsAt: Wrapped(DateTime(2026, 12, 31, 0, 0, 0, 1)),
+        endsAt: Wrapped(DateTime(2027, 1, 3, 0, 0, 0, 1)),
+        tags: [const Tag(id: 1, name: 'Tag', colorHex: 0)],
+      );
+      tasks.items[task.id] = task;
+      await model.moveTaskToDay(
+        task.id,
+        DateTime(2027, 1, 2),
+        DateTime(2027, 1, 4),
+      );
+      final moved = tasks.items[task.id]!;
+      expect(moved.startsAt, DateTime(2027, 1, 2, 0, 0, 0, 1));
+      expect(moved.endsAt, DateTime(2027, 1, 5, 0, 0, 0, 1));
+      expect(moved.title, task.title);
+      expect(moved.tags, task.tags);
+      final timed = task.copyWith(
+        startsAt: Wrapped(DateTime(2026, 11, 3, 9)),
+        endsAt: Wrapped(DateTime(2026, 11, 5, 18)),
+      );
+      tasks.items[task.id] = timed;
+      await model.moveTaskToDay(
+        task.id,
+        DateTime(2026, 11, 4),
+        DateTime(2026, 11, 6),
+      );
+      expect(tasks.items[task.id]!.startsAt, DateTime(2026, 11, 5, 9));
+      expect(tasks.items[task.id]!.endsAt, DateTime(2026, 11, 7, 18));
+      tasks.items[task.id] = task.copyWith(endsAt: const Wrapped(null));
+      await model.moveTaskToDay(
+        task.id,
+        DateTime(2026, 12, 31),
+        DateTime(2027, 1, 1),
+      );
+      expect(tasks.items[task.id]!.endsAt, isNull);
+    },
+  );
+
   test('Tasks list includes every range day and overlapping periods', () async {
     final tasks = MemoryTasks();
     final projects = MemoryProjectQueries();

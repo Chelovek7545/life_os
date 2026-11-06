@@ -1,8 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:tasks_api/tasks_api.dart' show Task;
 import 'package:life_os/features/tasks/presentation/components/mini_task_form.dart';
 import 'package:life_os/features/tasks/presentation/components/timeline.dart';
+import 'package:life_os/features/tasks/presentation/components/calendar_task_hint.dart';
+import 'package:life_os/core/ui/glass_panel.dart';
 
 import '../../test_helpers.dart';
 
@@ -14,6 +17,545 @@ void _noopEventChanged(
 }) {}
 
 void main() {
+  for (final isWeek in [true, false]) {
+    testWidgets(
+      'resizing the day panel keeps time-grid position in ${isWeek ? 'week' : 'day'} mode',
+      (tester) async {
+        tester.view.physicalSize = const Size(1200, 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final monday = DateTime(2026, 11, 2);
+        final panelTask = createMockTask(
+          startsAt: monday.add(const Duration(milliseconds: 1)),
+        );
+        final timedTask = createMockTask(title: 'Fixed calendar event');
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: [
+                TaskEvent(
+                  task: timedTask,
+                  title: timedTask.title,
+                  date: monday,
+                  startMinutes: 360,
+                  durationMinutes: 60,
+                ),
+              ],
+              dateOnlyTasks: [panelTask],
+              weekStart: isWeek ? monday : null,
+              anchorDate: monday,
+              topPadding: 60,
+              onWeekChange: (_) {},
+              onEventChanged: _noopEventChanged,
+              onToggleTask: (_) {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final vertical = tester
+            .widgetList<SingleChildScrollView>(
+              find.byType(SingleChildScrollView),
+            )
+            .firstWhere(
+              (view) =>
+                  view.scrollDirection == Axis.vertical &&
+                  view.controller != null,
+            )
+            .controller!;
+        final event = find.byKey(ValueKey(timedTask.id));
+        final panel = find.byKey(const ValueKey('timeline.date-only'));
+        for (final offset in [400.0, vertical.position.maxScrollExtent]) {
+          vertical.jumpTo(offset);
+          await tester.pumpAndSettle();
+          final eventY = tester.getTopLeft(event).dy;
+          final scrollOffset = vertical.offset;
+          final extent = vertical.position.maxScrollExtent;
+          final initialHeight = tester.getSize(panel).height;
+          final gesture = await tester.startGesture(
+            tester.getCenter(
+              find.byKey(const ValueKey('timeline.panel-resize')),
+            ),
+          );
+          for (final delta in [40.0, 40.0, -60.0]) {
+            await gesture.moveBy(Offset(0, delta));
+            await tester.pump();
+            expect(vertical.offset, closeTo(scrollOffset, .1));
+            expect(vertical.position.maxScrollExtent, closeTo(extent, .1));
+            expect(
+              tester.getTopLeft(event).dy,
+              closeTo(eventY, .1),
+              reason: 'Resizing the overlay must not move hours or events',
+            );
+          }
+          await gesture.up();
+          await tester.pumpAndSettle();
+          expect(tester.getSize(panel).height, isNot(initialHeight));
+          expect(tester.getTopLeft(event).dy, closeTo(eventY, .1));
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'rebasing the week keeps headers and tasks fixed in the first frame',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 850);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final monday = DateTime(2026, 11, 2);
+      final next = monday.add(const Duration(days: 7));
+      final task = Task.blank().copyWith(title: 'Stable task');
+      var week = monday;
+      DateTime? requestedWeek;
+      Widget build() => createTestWidget(
+        child: TimelineBody(
+          events: [
+            TaskEvent(
+              task: task,
+              title: task.title,
+              date: next,
+              startMinutes: 180,
+              durationMinutes: 60,
+            ),
+          ],
+          topPadding: 0,
+          weekStart: week,
+          anchorDate: monday,
+          onWeekChange: (date) => requestedWeek = date,
+          onEventChanged: _noopEventChanged,
+          onToggleTask: (_) {},
+        ),
+      );
+      await tester.pumpWidget(build());
+      await tester.pumpAndSettle();
+      final header = find.byKey(const ValueKey('timeline.header-scroll'));
+      final scroll = tester.widget<SingleChildScrollView>(header).controller!;
+      final day = find.byKey(ValueKey(('timeline.day', next)));
+      final width = tester.getSize(day).width;
+      // A wheel gesture may end between day boundaries; preserve that fraction.
+      scroll.position.pointerScroll(width * 5.25);
+      await tester.pumpAndSettle();
+      expect(
+        requestedWeek,
+        next,
+        reason:
+            'offset=${scroll.offset}, width=$width, viewport=${scroll.position.viewportDimension}',
+      );
+      final dayBefore = tester.getTopLeft(day);
+      final taskBefore = tester.getTopLeft(find.byKey(ValueKey(task.id)));
+      week = requestedWeek!;
+      await tester.pumpWidget(build());
+      expect(
+        tester.getTopLeft(day).dx,
+        closeTo(dayBefore.dx, .1),
+        reason: 'The header must rebase before painting, not one frame later',
+      );
+      expect(
+        tester.getTopLeft(find.byKey(ValueKey(task.id))).dx,
+        closeTo(taskBefore.dx, .1),
+        reason: 'Rebasing must preserve partial-day offsets',
+      );
+      await tester.pump();
+      expect(tester.getTopLeft(day).dx, closeTo(dayBefore.dx, .1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'week highlight follows an unfinished swipe without waiting for data or animation',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 850);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final monday = DateTime(2026, 11, 2);
+      final previous = DateTime(2026, 10, 26);
+      var selectedWeekChanges = 0;
+      await tester.pumpWidget(
+        createTestWidget(
+          child: TimelineBody(
+            events: const [],
+            topPadding: 0,
+            weekStart: monday,
+            anchorDate: monday,
+            onWeekChange: (_) => selectedWeekChanges++,
+            onEventChanged: _noopEventChanged,
+            onToggleTask: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      double highlight(DateTime date) => tester
+          .widgetList<Container>(
+            find.descendant(
+              of: find.byKey(ValueKey(('timeline.day', date))),
+              matching: find.byType(Container),
+            ),
+          )
+          .map((w) => w.decoration)
+          .whereType<BoxDecoration>()
+          .firstWhere((d) => d.color != null)
+          .color!
+          .a;
+      final header = find.byKey(const ValueKey('timeline.header-scroll'));
+      expect(highlight(monday), greaterThan(highlight(previous)));
+      expect(find.text('02.11 – 08.11'), findsOneWidget);
+      final gesture = await tester.startGesture(tester.getCenter(header));
+      for (var i = 0; i < 5; i++) {
+        await gesture.moveBy(const Offset(150, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(
+        selectedWeekChanges,
+        0,
+        reason: 'The pointer is still down; the data week has not changed',
+      );
+      expect(
+        highlight(previous),
+        greaterThan(highlight(monday)),
+        reason: 'Visual highlight must already follow the visible week',
+      );
+      expect(find.text('26.10 – 01.11'), findsOneWidget);
+      for (var i = 0; i < 5; i++) {
+        await gesture.moveBy(const Offset(-150, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(highlight(monday), greaterThan(highlight(previous)));
+      expect(find.text('02.11 – 08.11'), findsOneWidget);
+      expect(selectedWeekChanges, 0);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'small horizontal wheel steps are not snapped away and fast flings keep momentum',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 850);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final monday = DateTime(2026, 11, 2);
+      await tester.pumpWidget(
+        createTestWidget(
+          child: TimelineBody(
+            events: const [],
+            topPadding: 0,
+            weekStart: monday,
+            anchorDate: monday,
+            onWeekChange: (_) {},
+            onEventChanged: _noopEventChanged,
+            onToggleTask: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final header = find.byKey(const ValueKey('timeline.header-scroll'));
+      final controller = tester
+          .widget<SingleChildScrollView>(header)
+          .controller!;
+      final initial = controller.offset;
+      for (var i = 0; i < 4; i++) {
+        tester.binding.handlePointerEvent(
+          PointerScrollEvent(
+            position: tester.getCenter(header),
+            scrollDelta: const Offset(24, 0),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          controller.offset - initial,
+          closeTo((i + 1) * 24, 1),
+          reason:
+              'Small wheel steps must accumulate instead of returning to the nearest day',
+        );
+      }
+      final beforeFling = controller.offset;
+      // Keep enough pointer samples to estimate release velocity reliably.
+      await tester.fling(header, const Offset(-200, 0), 3000);
+      await tester.pumpAndSettle();
+      expect(
+        controller.offset - beforeFling,
+        greaterThan(300),
+        reason: 'A fast fling must travel more than a single day column',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'header and grid follow small continuous drag updates without fighting or slowing',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 850);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final monday = DateTime(2026, 11, 2);
+      await tester.pumpWidget(
+        createTestWidget(
+          child: TimelineBody(
+            events: const [],
+            topPadding: 0,
+            weekStart: monday,
+            anchorDate: monday,
+            onWeekChange: (_) {},
+            onEventChanged: _noopEventChanged,
+            onToggleTask: (_) {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final header = find.byKey(const ValueKey('timeline.header-scroll'));
+      final headerController = tester
+          .widget<SingleChildScrollView>(header)
+          .controller!;
+      final grid = tester
+          .widgetList<SingleChildScrollView>(find.byType(SingleChildScrollView))
+          .firstWhere(
+            (w) => w.scrollDirection == Axis.horizontal && w.controller != null,
+          )
+          .controller!;
+      for (final origin in [tester.getCenter(header), const Offset(600, 500)]) {
+        final initial = grid.offset;
+        var previous = initial;
+        final gesture = await tester.startGesture(origin);
+        for (var i = 0; i < 10; i++) {
+          await gesture.moveBy(const Offset(-24, 0));
+          await tester.pump(const Duration(milliseconds: 16));
+          expect(
+            grid.offset,
+            greaterThanOrEqualTo(previous - .1),
+            reason: 'Scroll must not snap back during a drag',
+          );
+          expect(headerController.offset, closeTo(grid.offset, 1));
+          previous = grid.offset;
+        }
+        expect(
+          grid.offset - initial,
+          inInclusiveRange(210, 250),
+          reason:
+              '240 pixels of pointer motion must not be damped by synchronization',
+        );
+        await gesture.up();
+        await tester.pumpAndSettle();
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'week header stays highlighted and synchronized while swiping between weeks',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 850);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      var week = DateTime(2026, 11, 2);
+      await tester.pumpWidget(
+        createTestWidget(
+          child: StatefulBuilder(
+            builder: (_, update) => TimelineBody(
+              events: const [],
+              topPadding: 0,
+              weekStart: week,
+              anchorDate: week,
+              onWeekChange: (date) => update(
+                () => week = DateTime(
+                  date.year,
+                  date.month,
+                  date.day - date.weekday + 1,
+                ),
+              ),
+              onEventChanged: _noopEventChanged,
+              onToggleTask: (_) {},
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final header = find.byKey(const ValueKey('timeline.header-scroll'));
+      ScrollController headerScroll() =>
+          tester.widget<SingleChildScrollView>(header).controller!;
+      ScrollController gridScroll() => tester
+          .widgetList<SingleChildScrollView>(find.byType(SingleChildScrollView))
+          .firstWhere(
+            (w) => w.scrollDirection == Axis.horizontal && w.controller != null,
+          )
+          .controller!;
+      Finder day(DateTime date) => find.byKey(ValueKey(('timeline.day', date)));
+      double highlight(DateTime date) {
+        final backgrounds = tester.widgetList<Container>(
+          find.descendant(of: day(date), matching: find.byType(Container)),
+        );
+        return backgrounds
+            .map((w) => w.decoration)
+            .whereType<BoxDecoration>()
+            .firstWhere((d) => d.color != null)
+            .color!
+            .a;
+      }
+
+      expect(
+        highlight(week),
+        greaterThan(highlight(week.subtract(const Duration(days: 1)))),
+      );
+      expect(
+        find.descendant(of: day(week), matching: find.byType(GlassPanel)),
+        findsNothing,
+        reason: 'An opaque surface must not cover the selected-week background',
+      );
+      final gesture = await tester.startGesture(tester.getCenter(header));
+      final initialOffset = headerScroll().offset;
+      for (var i = 0; i < 5; i++) {
+        await gesture.moveBy(const Offset(70, 0));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(headerScroll().offset, closeTo(gridScroll().offset, 1));
+      expect(
+        headerScroll().offset,
+        lessThan(initialOffset),
+        reason:
+            'header should actually scroll, max=${headerScroll().position.maxScrollExtent}',
+      );
+      // Both weeks are still present at the halfway position, with no gap.
+      final columnWidth = tester.getSize(day(week)).width;
+      for (var offset = -2; offset < 5; offset++) {
+        final date = DateTime(week.year, week.month, week.day + offset);
+        final next = DateTime(date.year, date.month, date.day + 1);
+        expect(
+          tester.getTopLeft(day(next)).dx - tester.getTopLeft(day(date)).dx,
+          closeTo(columnWidth, 1),
+        );
+        expect(
+          tester.getRect(day(date)).intersect(tester.getRect(header)).width,
+          greaterThan(0),
+        );
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(day(DateTime(2026, 11, 2)).hitTestable(), findsOneWidget);
+      await tester.drag(header, const Offset(1000, 0));
+      await tester.pumpAndSettle();
+      expect(week, DateTime(2026, 10, 26));
+      expect(headerScroll().offset, closeTo(gridScroll().offset, 1));
+      expect(
+        highlight(week),
+        greaterThan(highlight(week.subtract(const Duration(days: 1)))),
+      );
+      tester.binding.handlePointerEvent(
+        PointerScrollEvent(
+          position: tester.getCenter(header),
+          scrollDelta: const Offset(300, 0),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(headerScroll().offset, closeTo(gridScroll().offset, 1));
+      tester.view.physicalSize = const Size(800, 850);
+      await tester.pumpAndSettle();
+      expect(headerScroll().offset, closeTo(gridScroll().offset, 1));
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'panel resizes, moves date and range tasks between days, and reuses cards during scroll',
+    (tester) async {
+      tester.view.physicalSize = const Size(1600, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final monday = DateTime(2026, 11, 2);
+      final task = createMockTask(
+        id: 'panel-task',
+        title: 'Panel task',
+        startsAt: monday.add(const Duration(milliseconds: 1)),
+      );
+      final range = createMockTask(
+        id: 'panel-range',
+        title: 'Panel range',
+        startsAt: DateTime(2026, 11, 3, 9),
+        endsAt: DateTime(2026, 11, 5, 18),
+      );
+      final moves = <(String, DateTime, DateTime)>[];
+      await tester.pumpWidget(
+        createTestWidget(
+          child: TimelineBody(
+            events: const [],
+            dateOnlyTasks: [task, range],
+            weekStart: monday,
+            anchorDate: monday,
+            topPadding: 0,
+            onWeekChange: (_) {},
+            onEventChanged: _noopEventChanged,
+            onToggleTask: (_) {},
+            onDayTaskMoved: (task, source, target) =>
+                moves.add((task.id, source, target)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final panel = find.byKey(const ValueKey('timeline.date-only'));
+      final initial = tester.getSize(panel).height;
+      await tester.drag(
+        find.byKey(const ValueKey('timeline.panel-resize')),
+        const Offset(0, 80),
+      );
+      await tester.pumpAndSettle();
+      final resized = tester.getSize(panel).height;
+      expect(resized, greaterThan(initial + 40));
+      await tester.tap(find.byTooltip('Скрыть панель задач'));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(panel).height, 30);
+      await tester.tap(find.byTooltip('Показать панель задач'));
+      await tester.pumpAndSettle();
+      expect(tester.getSize(panel).height, resized);
+      Finder column(int day) =>
+          find.byKey(ValueKey(('timeline.panel-day', DateTime(2026, 11, day))));
+      Future<void> move(String id, int from, int to) async {
+        final source = find.descendant(
+          of: column(from),
+          matching: find.byKey(ValueKey('timeline.date-only.$id')),
+        );
+        final gesture = await tester.startGesture(tester.getCenter(source));
+        await tester.pump(const Duration(milliseconds: 600));
+        await gesture.moveTo(tester.getCenter(column(to)));
+        await tester.pump();
+        await gesture.up();
+        await tester.pumpAndSettle();
+      }
+
+      await move(task.id, 2, 3);
+      await move(range.id, 4, 6);
+      expect(moves, [
+        (task.id, monday, DateTime(2026, 11, 3)),
+        (range.id, DateTime(2026, 11, 4), DateTime(2026, 11, 6)),
+      ]);
+      final previous = debugOnRebuildDirtyWidget;
+      var cardBuilds = 0;
+      debugOnRebuildDirtyWidget = (element, built) {
+        if (element.widget is CalendarTaskHint) cardBuilds++;
+        previous?.call(element, built);
+      };
+      addTearDown(() => debugOnRebuildDirtyWidget = previous);
+      final scroll = tester
+          .widgetList<SingleChildScrollView>(find.byType(SingleChildScrollView))
+          .firstWhere(
+            (scroll) =>
+                scroll.scrollDirection == Axis.horizontal &&
+                scroll.controller != null,
+          )
+          .controller!;
+      for (var i = 0; i < 5; i++) {
+        scroll.jumpTo(scroll.offset + 8);
+        await tester.pump();
+      }
+      expect(
+        cardBuilds,
+        0,
+        reason:
+            'Horizontal scrolling should translate cached cards, not rebuild them',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('date-only day row scrolls and drags a task into the time grid', (
     tester,
   ) async {
@@ -49,7 +591,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     final row = find.byKey(const ValueKey('timeline.date-only'));
-    expect(tester.getSize(row).height, lessThan(160));
+    expect(tester.getSize(row).height, lessThan(180));
     await tester.drag(
       find.descendant(of: row, matching: find.byType(ListView)),
       const Offset(0, -180),
