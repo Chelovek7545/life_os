@@ -6,6 +6,7 @@ import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/ui/base_container.dart';
+import 'package:life_os/core/ui/app_dropdown_menu.dart';
 import 'package:life_os/core/ui/date_and_time_pick_button.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
@@ -410,36 +411,11 @@ class TaskFormContentState extends State<TaskFormContent> {
                             ),
                           ),
                           Flexible(
-                            child: DropdownMenu(
+                            child: AppDropdownMenu<TaskStatus>(
                               width: 180,
                               selectOnly: true,
                               onSelected: _onTaskStatusChange,
-                              textStyle: AppTypography.bodySm,
-                              trailingIcon: const Icon(
-                                Icons.keyboard_arrow_down_rounded,
-                                color: AppColors.primary,
-                              ),
-                              selectedTrailingIcon: const Icon(
-                                Icons.keyboard_arrow_up_rounded,
-                                color: AppColors.primary,
-                              ),
                               initialSelection: _taskStatus,
-                              menuStyle: MenuStyle(
-                                backgroundColor: WidgetStateProperty.all(
-                                  AppColors.surfaceContainerLow,
-                                ),
-                                elevation: WidgetStateProperty.all(8),
-                                shape: WidgetStateProperty.all(
-                                  RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                ),
-                                padding: WidgetStateProperty.all(
-                                  EdgeInsets.all(8),
-                                ),
-                              ),
-                              inputDecorationTheme:
-                                  AppButtonStyles.baseInputDecoration,
                               dropdownMenuEntries: [
                                 ...TaskStatus.values.map((e) {
                                   return DropdownMenuEntry(
@@ -467,25 +443,14 @@ class TaskFormContentState extends State<TaskFormContent> {
                               stream: widget.projects,
                               builder: (_, snapshot) {
                                 final projectsAsync = snapshot.data;
-                                return DropdownMenu<String?>(
+                                return AppDropdownMenu<String?>(
                                   //key чтобы перестраивалось меню и был виден initial
                                   key: ValueKey(
                                     'project_${_selectedProjectId}_${projectsAsync?.length ?? 0}',
                                   ),
                                   initialSelection: _selectedProjectId,
-                                  textStyle: AppTypography.bodySm,
                                   hintText: "Choose project",
                                   width: 180,
-                                  trailingIcon: const Icon(
-                                    Icons.keyboard_arrow_down_rounded,
-                                    color: AppColors.primary,
-                                  ),
-                                  selectedTrailingIcon: const Icon(
-                                    Icons.keyboard_arrow_up_rounded,
-                                    color: AppColors.primary,
-                                  ),
-                                  inputDecorationTheme:
-                                      AppButtonStyles.baseInputDecoration,
                                   menuStyle: MenuStyle(
                                     backgroundColor: WidgetStateProperty.all(
                                       AppColors.surfaceContainer,

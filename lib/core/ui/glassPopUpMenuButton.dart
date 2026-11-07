@@ -9,11 +9,13 @@ class PopUpMenuAction {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final bool enabled;
 
   const PopUpMenuAction({
     required this.icon,
     required this.label,
     required this.onTap,
+    this.enabled = true,
   });
 }
 
@@ -22,9 +24,11 @@ class GlassPopUpMenuButton extends StatelessWidget {
   const GlassPopUpMenuButton({
     super.key,
     required this.overflowActions,
+    this.tooltip,
   });
 
   final List<PopUpMenuAction> overflowActions;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +42,7 @@ class GlassPopUpMenuButton extends StatelessWidget {
         
       ),
       child: PopupMenuButton<PopUpMenuAction>(
+        tooltip: tooltip,
         // Стиль выпадающего контейнера
         color: Colors.black.withValues(
           alpha: 0,
@@ -71,6 +76,7 @@ class GlassPopUpMenuButton extends StatelessWidget {
                 action,
               ) => PopupMenuItem<PopUpMenuAction>(
                 value: action,
+                enabled: action.enabled,
                 height: 44,
                 padding:
                     const EdgeInsets.symmetric(
@@ -85,18 +91,18 @@ class GlassPopUpMenuButton extends StatelessWidget {
                         action.icon,
                         
                         color: Colors.white
-                            .withValues(alpha: 0.9),
+                            .withValues(alpha: action.enabled ? 0.9 : 0.38),
                       ),
                       const SizedBox(width: 10),
-                      Text(
-                        action.label,
-                        style: AppTypography.bodySm
-                            .copyWith(
-                              color: Colors.white
-                                  .withValues(
-                                    alpha: 0.9,
-                                  ),
+                      Flexible(
+                        child: Text(
+                          action.label,
+                          style: AppTypography.bodySm.copyWith(
+                            color: Colors.white.withValues(
+                              alpha: action.enabled ? 0.9 : 0.38,
                             ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
