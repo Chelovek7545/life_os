@@ -218,6 +218,7 @@ class _PlannerSidebarState extends State<PlannerSidebar> {
         if (task is! Task) return child;
         return LongPressDraggable<Task>(
           data: task,
+          dragAnchorStrategy: pointerDragAnchorStrategy,
           maxSimultaneousDrags: widget.isActive() ? 1 : 0,
           feedback: Material(
             color: AppColors.surfaceContainerHigh,

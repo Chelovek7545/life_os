@@ -14,6 +14,192 @@ import 'today_composition_test.dart' show pumpStorage;
 
 void main() {
   testWidgets(
+    'hierarchy tasks drop into day panel or time grid and cancel without changes',
+    (tester) async {
+      tester.view.physicalSize = const Size(1800, 1050);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final app = (await tester.runAsync(
+        () => createTestApp(enableObsidian: false),
+      ))!;
+      final monday = getWeekStart(DateTime.now());
+      final project = Project.create(name: 'Hierarchy project');
+      final task = Task.blank().copyWith(
+        title: 'Hierarchy task',
+        projectId: Wrapped(project.id),
+      );
+      await tester.runAsync(() => app.projectsRepository.addProject(project));
+      await tester.runAsync(() => app.tasksRepository.addTask(task));
+      await tester.pumpWidget(MyApp(diContainer: app));
+      app.navigation.open('planner');
+      await pumpStorage(tester);
+      final timeline = find.descendant(
+        of: find.byType(PlannerScreen),
+        matching: find.byType(TimelineBody),
+      );
+      final tree = find.byType(HierarchyColumn);
+      final source = find.descendant(of: tree, matching: find.text(task.title));
+      Future<TestGesture> startDrag() async {
+        final gesture = await tester.startGesture(tester.getCenter(source));
+        await tester.pump(const Duration(milliseconds: 600));
+        return gesture;
+      }
+
+      final panel = find.byKey(const ValueKey('timeline.date-only'));
+      final enter = tester.getTopLeft(timeline) + const Offset(200, 220);
+      final cancelled = await startDrag();
+      await cancelled.moveTo(enter);
+      await tester.pump();
+      expect(panel, findsOneWidget);
+      await cancelled.moveTo(tester.getCenter(source));
+      await tester.pump();
+      await cancelled.up();
+      await pumpStorage(tester);
+      expect(panel, findsNothing);
+      expect(
+        (await tester.runAsync(
+          () => app.tasksRepository.getById(task.id),
+        ))!.startsAt,
+        isNull,
+      );
+
+      final toDay = await startDrag();
+      await toDay.moveTo(enter);
+      await tester.pump();
+      final target = monday.add(const Duration(days: 2));
+      final column = find.byKey(ValueKey(('timeline.panel-day', target)));
+      await toDay.moveTo(tester.getCenter(column));
+      await tester.pump();
+      await toDay.up();
+      await pumpStorage(tester);
+      final dated = (await tester.runAsync(
+        () => app.tasksRepository.getById(task.id),
+      ))!;
+      expect(dated.startsAt, target.startOfDay);
+      expect(dated.endsAt, isNull);
+      expect(
+        find.descendant(
+          of: column,
+          matching: find.byKey(ValueKey('timeline.date-only.${task.id}')),
+        ),
+        findsOneWidget,
+      );
+
+      // A collapsed panel also opens for hierarchy drags; the grid remains a time target.
+      await tester.tap(find.byTooltip('Скрыть панель задач'));
+      await tester.pump();
+      final toCollapsedDay = await startDrag();
+      await toCollapsedDay.moveTo(enter);
+      await tester.pump();
+      final anotherDay = monday.add(const Duration(days: 3));
+      await toCollapsedDay.moveTo(
+        tester.getCenter(
+          find.byKey(ValueKey(('timeline.panel-day', anotherDay))),
+        ),
+      );
+      await tester.pump();
+      await toCollapsedDay.up();
+      await pumpStorage(tester);
+      expect(
+        (await tester.runAsync(
+          () => app.tasksRepository.getById(task.id),
+        ))!.startsAt,
+        anotherDay.startOfDay,
+      );
+      expect(tester.getSize(panel).height, 30);
+      final toTime = await startDrag();
+      await toTime.moveTo(enter);
+      await tester.pump();
+      expect(tester.getSize(panel).height, greaterThan(30));
+      await toTime.moveTo(tester.getTopLeft(timeline) + const Offset(400, 600));
+      await tester.pump();
+      await toTime.up();
+      await pumpStorage(tester);
+      final timed = (await tester.runAsync(
+        () => app.tasksRepository.getById(task.id),
+      ))!;
+      expect(timed.startsAt!.isDateOnly, isFalse);
+      expect(timed.endsAt, isNotNull);
+      expect(
+        tester.widget<TimelineBody>(timeline).events.single.task.id,
+        task.id,
+      );
+      expect(tester.takeException(), isNull);
+      await disposeTestApp(tester, app);
+    },
+  );
+
+  testWidgets(
+    'timed task can be dragged into an empty day panel and saved without time',
+    (tester) async {
+      tester.view.physicalSize = const Size(1800, 1050);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final app = (await tester.runAsync(
+        () => createTestApp(enableObsidian: false),
+      ))!;
+      final monday = getWeekStart(DateTime.now());
+      final task = Task.blank().copyWith(
+        title: 'Move out of time blocking',
+        startsAt: Wrapped(monday.copyWith(hour: 6)),
+        endsAt: Wrapped(monday.copyWith(hour: 7)),
+      );
+      await tester.runAsync(() => app.tasksRepository.addTask(task));
+      await tester.pumpWidget(MyApp(diContainer: app));
+      app.navigation.open('planner');
+      await pumpStorage(tester);
+      final timeline = find.descendant(
+        of: find.byType(PlannerScreen),
+        matching: find.byType(TimelineBody),
+      );
+      final vertical = tester
+          .widgetList<SingleChildScrollView>(
+            find.descendant(
+              of: timeline,
+              matching: find.byType(SingleChildScrollView),
+            ),
+          )
+          .firstWhere(
+            (view) =>
+                view.scrollDirection == Axis.vertical &&
+                view.controller != null,
+          )
+          .controller!;
+      vertical.jumpTo(400);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('timeline.date-only')), findsNothing);
+      final event = find.descendant(
+        of: timeline,
+        matching: find.byKey(ValueKey(task.id)),
+      );
+      final gesture = await tester.startGesture(tester.getCenter(event));
+      await tester.pump(const Duration(milliseconds: 600));
+      final target = monday.add(const Duration(days: 1));
+      final column = find.byKey(ValueKey(('timeline.panel-day', target)));
+      expect(column, findsOneWidget);
+      await gesture.moveTo(tester.getCenter(column));
+      await tester.pump();
+      await gesture.up();
+      await pumpStorage(tester);
+      final saved = (await tester.runAsync(
+        () => app.tasksRepository.getById(task.id),
+      ))!;
+      expect(saved.startsAt, target.startOfDay);
+      expect(saved.endsAt, isNull);
+      expect(tester.widget<TimelineBody>(timeline).events, isEmpty);
+      expect(
+        find.descendant(
+          of: column,
+          matching: find.byKey(ValueKey('timeline.date-only.${task.id}')),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await disposeTestApp(tester, app);
+    },
+  );
+
+  testWidgets(
     'browsing weeks keeps the chosen day until an explicit date selection',
     (tester) async {
       tester.view.physicalSize = const Size(1800, 1050);

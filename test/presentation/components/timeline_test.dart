@@ -19,6 +19,89 @@ void _noopEventChanged(
 void main() {
   for (final isWeek in [true, false]) {
     testWidgets(
+      'timed drag opens a collapsed panel and selects its day in ${isWeek ? 'week' : 'day'} mode',
+      (tester) async {
+        tester.view.physicalSize = const Size(1600, 1000);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final monday = DateTime(2026, 11, 2);
+        final task = createMockTask(title: 'Timed task');
+        final dayTask = createMockTask(
+          startsAt: monday.add(const Duration(milliseconds: 1)),
+        );
+        final drops = <(String, DateTime)>[];
+        var timeChanges = 0;
+        await tester.pumpWidget(
+          createTestWidget(
+            child: TimelineBody(
+              events: [
+                TaskEvent(
+                  task: task,
+                  title: task.title,
+                  date: monday,
+                  startMinutes: 360,
+                  durationMinutes: 60,
+                ),
+              ],
+              dateOnlyTasks: [dayTask],
+              weekStart: isWeek ? monday : null,
+              anchorDate: monday,
+              topPadding: 0,
+              onWeekChange: (_) {},
+              onEventChanged: (_, {startMinutes, durationMinutes, newDate}) =>
+                  timeChanges++,
+              onToggleTask: (_) {},
+              onEventToDay: (task, day) => drops.add((task.id, day)),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final vertical = tester
+            .widgetList<SingleChildScrollView>(
+              find.byType(SingleChildScrollView),
+            )
+            .firstWhere(
+              (view) =>
+                  view.scrollDirection == Axis.vertical &&
+                  view.controller != null,
+            )
+            .controller!;
+        vertical.jumpTo(400);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Скрыть панель задач'));
+        await tester.pumpAndSettle();
+        final panel = find.byKey(const ValueKey('timeline.date-only'));
+        expect(tester.getSize(panel).height, 30);
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(ValueKey(task.id))),
+        );
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(tester.getSize(panel).height, greaterThan(30));
+        final targetDay = isWeek ? monday.add(const Duration(days: 1)) : monday;
+        final column = find.byKey(ValueKey(('timeline.panel-day', targetDay)));
+        await gesture.moveTo(tester.getCenter(column));
+        await tester.pump();
+        await gesture.up();
+        await tester.pumpAndSettle();
+        expect(drops, [(task.id, targetDay)]);
+        expect(
+          timeChanges,
+          0,
+          reason:
+              'Dropping on the panel must not also reschedule the time block',
+        );
+        expect(
+          tester.getSize(panel).height,
+          30,
+          reason: 'Temporary expansion keeps the user collapse preference',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final isWeek in [true, false]) {
+    testWidgets(
       'resizing the day panel keeps time-grid position in ${isWeek ? 'week' : 'day'} mode',
       (tester) async {
         tester.view.physicalSize = const Size(1200, 1000);

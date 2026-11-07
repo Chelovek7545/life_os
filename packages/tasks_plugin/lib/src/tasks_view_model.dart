@@ -328,6 +328,18 @@ class TasksViewModel {
     );
   });
 
+  Future<void> makeTaskDateOnly(String id, DateTime day) => _enqueue(() async {
+    final current = await _repository.getById(id);
+    if (current == null) return;
+    await _repository.updateTask(
+      current.copyWith(
+        startsAt: Wrapped(DateTime(day.year, day.month, day.day, 0, 0, 0, 1)),
+        endsAt: const Wrapped(null),
+        updatedAt: DateTime.now(),
+      ),
+    );
+  });
+
   Future<void> rescheduleTask(
     String id, {
     int? startMinutes,

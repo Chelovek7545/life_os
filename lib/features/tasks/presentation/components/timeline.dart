@@ -106,6 +106,7 @@ class TimelineBody extends StatefulWidget {
     this.dateOnlyTasks = const [],
     this.onOpenTask,
     this.onDayTaskMoved,
+    this.onEventToDay,
     this.weekStart,
     this.anchorDate,
     this.onWeekChange,
@@ -123,6 +124,7 @@ class TimelineBody extends StatefulWidget {
   final ValueChanged<Task>? onOpenTask;
   final void Function(Task task, DateTime sourceDay, DateTime targetDay)?
   onDayTaskMoved;
+  final void Function(Task task, DateTime day)? onEventToDay;
   final double topPadding;
   final DateTime? weekStart;
   final DateTime? anchorDate;
@@ -156,6 +158,35 @@ class _TimelineBodyState extends State<TimelineBody>
   double? _panelHeight;
   double _panelMaxHeight = 360;
   DateTime? _panelDragOrigin;
+  final _dayPanelKey = GlobalKey();
+  DateTime? _hoveredPanelDay;
+  bool get _showPanelDropTargets =>
+      (_draggingId != null ||
+          (_dropTask != null && _panelDragOrigin == null)) &&
+      widget.onEventToDay != null;
+  bool get _showPanelContents => _panelExpanded || _showPanelDropTargets;
+
+  DateTime? _panelDropDayAt(Offset global) {
+    if (!_showPanelDropTargets) return null;
+    final box = _dayPanelKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return null;
+    final local = box.globalToLocal(global);
+    if (!(Offset.zero & box.size).contains(local) ||
+        local.dx < _leftLabelWidth) {
+      return null;
+    }
+    final week = widget.weekStart;
+    if (week == null) return _dateOnly(widget.anchorDate ?? DateTime.now());
+    if (_lastColumnWidth <= 0) return null;
+    final offset = _horizontalController.hasClients
+        ? _horizontalController.offset
+        : 0.0;
+    final index = ((local.dx - _leftLabelWidth + offset) / _lastColumnWidth)
+        .floor();
+    return index >= 0 && index < _weekTotalDays
+        ? _addDays(_visibleStart(week), index)
+        : null;
+  }
 
   void _indexPanelTasks() {
     _panelTasksByDay.clear();
@@ -186,8 +217,8 @@ class _TimelineBodyState extends State<TimelineBody>
       _panelTasksByDay[_dateOnly(day)] ?? const [];
 
   double get _dateOnlyHeight {
-    if (_panelMaxCount == 0) return 0;
-    if (!_panelExpanded) return 28;
+    if (_panelMaxCount == 0 && !_showPanelDropTargets) return 0;
+    if (!_showPanelContents) return 28;
     return (_panelHeight ?? (28 + math.min(_panelMaxCount, 3) * 38.0 + 22))
         .clamp(80.0, _panelMaxHeight)
         .toDouble();
@@ -213,7 +244,10 @@ class _TimelineBodyState extends State<TimelineBody>
           }
         },
         builder: (context, candidates, rejected) => ColoredBox(
-          color: candidates.isEmpty
+          color:
+              candidates.isEmpty &&
+                  !(_hoveredPanelDay != null &&
+                      _isSameDay(day, _hoveredPanelDay!))
               ? Colors.transparent
               : AppColors.primary.withValues(alpha: .12),
           child: ListView.builder(
@@ -262,6 +296,8 @@ class _TimelineBodyState extends State<TimelineBody>
 
       //color: AppColors.surfaceContainerHigh,
       child: GlassPanel(
+        key: _dayPanelKey,
+        borderColor: _hoveredPanelDay == null ? null : AppColors.primary,
         borderRadius: 16,
         //hasBlur: false,
         child: Column(
@@ -302,7 +338,7 @@ class _TimelineBodyState extends State<TimelineBody>
                 ],
               ),
             ),
-            if (_panelExpanded)
+            if (_showPanelContents)
               Expanded(
                 child: Row(
                   children: [
@@ -358,7 +394,7 @@ class _TimelineBodyState extends State<TimelineBody>
                   ],
                 ),
               ),
-            if (_panelExpanded)
+            if (_showPanelContents)
               MouseRegion(
                 cursor: SystemMouseCursors.resizeUpDown,
                 child: GestureDetector(
@@ -712,24 +748,35 @@ class _TimelineBodyState extends State<TimelineBody>
   void _onExternalDropMove(DragTargetDetails<Task> details) {
     final drop = _dropFromGlobal(details.offset);
     if (drop == null) return;
+    final panelDay = _panelDropDayAt(details.offset);
+    final minutes = panelDay == null ? drop.minutes : null;
     final duration = _dropDurationFor(details.data);
-    if (_dropMinutes == drop.minutes &&
+    if (_dropTask?.id == details.data.id &&
+        _dropMinutes == minutes &&
+        _hoveredPanelDay == panelDay &&
         _dropDayIndex == drop.dayIndex &&
         _dropDurationMinutes == duration) {
       return;
     }
     setState(() {
       _dropTask = details.data;
-      _dropMinutes = drop.minutes;
+      _dropMinutes = minutes;
+      _hoveredPanelDay = panelDay;
       _dropDayIndex = drop.dayIndex;
       _dropDurationMinutes = duration;
     });
   }
 
   void _onExternalDropAccept(DragTargetDetails<Task> details) {
+    final panelDay = _panelDropDayAt(details.offset);
     final drop = _dropFromGlobal(details.offset);
     final task = details.data;
     _clearExternalDrop();
+
+    if (panelDay != null) {
+      widget.onEventToDay?.call(task, panelDay);
+      return;
+    }
 
     //Раньше здесь был if (drop == null || task.startsAt != null) return;
     if (drop == null) return;
@@ -764,9 +811,21 @@ class _TimelineBodyState extends State<TimelineBody>
     setState(() {
       _dropTask = null;
       _dropMinutes = null;
+      _hoveredPanelDay = null;
       _dropDurationMinutes = 60;
       _dropDayIndex = 0;
     });
+  }
+
+  bool _onExternalDropWillAccept(DragTargetDetails<Task> details) {
+    if (_isSelecting ||
+        _showDraftForm ||
+        (_panelDragOrigin != null && isCalendarRange(details.data))) {
+      return false;
+    }
+    // Reveal even an empty/collapsed day panel as soon as a task enters.
+    _onExternalDropMove(details);
+    return true;
   }
 
   Widget _buildDropGhost() {
@@ -955,6 +1014,7 @@ class _TimelineBodyState extends State<TimelineBody>
   void _cancelDrag() {
     setState(() {
       _draggingId = null;
+      _hoveredPanelDay = null;
       _ghostStart = null;
       _ghostDuration = null;
       _ghostDayOffset = 0;
@@ -1491,6 +1551,7 @@ class _TimelineBodyState extends State<TimelineBody>
     setState(() {
       _ghostStart = newStart;
       _ghostDayOffset = dayOffset;
+      _hoveredPanelDay = _panelDropDayAt(details.globalPosition);
     });
 
     final hovering =
@@ -1499,9 +1560,12 @@ class _TimelineBodyState extends State<TimelineBody>
   }
 
   void _onDragEnd(TaskEvent event, LongPressEndDetails details) {
+    final panelDay = _panelDropDayAt(details.globalPosition);
     final isHoveringUnscheduled =
         widget.isOverUnscheduled?.call(details.globalPosition) ?? false;
-    if (isHoveringUnscheduled && _ghostStart != null) {
+    if (panelDay != null && _ghostStart != null) {
+      widget.onEventToDay?.call(event.task, panelDay);
+    } else if (isHoveringUnscheduled && _ghostStart != null) {
       widget.onEventToUnscheduled?.call(event.task);
     } else if (_ghostStart != null) {
       final date = event.date;
@@ -1522,6 +1586,7 @@ class _TimelineBodyState extends State<TimelineBody>
     }
     setState(() {
       _draggingId = null;
+      _hoveredPanelDay = null;
       _ghostStart = null;
       _ghostDuration = null;
       _ghostDayOffset = 0;
@@ -1661,10 +1726,7 @@ class _TimelineBodyState extends State<TimelineBody>
 
         if (isWeekMode) {
           return DragTarget<Task>(
-            onWillAcceptWithDetails: (details) =>
-                !_isSelecting &&
-                !_showDraftForm &&
-                !(_panelDragOrigin != null && isCalendarRange(details.data)),
+            onWillAcceptWithDetails: _onExternalDropWillAccept,
             onMove: _onExternalDropMove,
             onLeave: (data) => _clearExternalDrop(),
             onAcceptWithDetails: _onExternalDropAccept,
@@ -1673,10 +1735,7 @@ class _TimelineBodyState extends State<TimelineBody>
           );
         }
         return DragTarget<Task>(
-          onWillAcceptWithDetails: (details) =>
-              !_isSelecting &&
-              !_showDraftForm &&
-              !(_panelDragOrigin != null && isCalendarRange(details.data)),
+          onWillAcceptWithDetails: _onExternalDropWillAccept,
           onMove: _onExternalDropMove,
           onLeave: (data) => _clearExternalDrop(),
           onAcceptWithDetails: _onExternalDropAccept,
@@ -2100,7 +2159,8 @@ class _TimelineBodyState extends State<TimelineBody>
     final isDragging = _draggingId == event.task.id;
     final isResizing = _resizingId == event.task.id;
     final isInteracting = isDragging || isResizing;
-    final snappedBack = isDragging && _hoveringUnscheduled;
+    final snappedBack =
+        isDragging && (_hoveringUnscheduled || _hoveredPanelDay != null);
 
     final displayStart = isInteracting && !snappedBack
         ? (_ghostStart ?? event.startMinutes)

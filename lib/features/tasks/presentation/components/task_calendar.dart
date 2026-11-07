@@ -100,6 +100,10 @@ class _TaskCalendarState extends State<TaskCalendar> {
           context,
           () => widget.viewModel.moveTaskToDay(task.id, source, target),
         ),
+        onEventToDay: (task, day) => _run(
+          context,
+          () => widget.viewModel.makeTaskDateOnly(task.id, day),
+        ),
         events: [
           for (final item in items)
             if (item.task.startsAt != null && !item.task.startsAt!.isDateOnly)

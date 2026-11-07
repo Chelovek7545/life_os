@@ -8,6 +8,43 @@ Future<void> tick() => Future<void>.delayed(Duration.zero);
 
 void main() {
   test(
+    'moving a timed task to a day removes time and preserves fresh fields',
+    () async {
+      final tasks = MemoryTasks();
+      final projects = MemoryProjectQueries();
+      final model = TasksViewModel(
+        tasks,
+        GetTasksWithProjectsUseCase(tasks, projects),
+        projects,
+      );
+      addTearDown(model.dispose);
+      final task = Task.blank().copyWith(
+        title: 'Fresh title',
+        description: 'Keep description',
+        projectId: const Wrapped('p'),
+        tags: [const Tag(id: 1, name: 'Keep tag', colorHex: 0)],
+        status: TaskStatus.done,
+        startsAt: Wrapped(DateTime(2026, 11, 2, 9)),
+        endsAt: Wrapped(DateTime(2026, 11, 4, 18)),
+      );
+      tasks.items[task.id] = task;
+      await model.makeTaskDateOnly(task.id, DateTime(2026, 11, 3));
+      final saved = tasks.items[task.id]!;
+      expect(saved.startsAt, DateTime(2026, 11, 3, 0, 0, 0, 1));
+      expect(saved.endsAt, isNull);
+      expect(saved.title, task.title);
+      expect(saved.description, task.description);
+      expect(saved.projectId, task.projectId);
+      expect(saved.tags, task.tags);
+      expect(saved.status, task.status);
+      await model.makeTaskDateOnly('deleted', DateTime(2026));
+      expect(tasks.items.length, 1);
+      await model.dispose();
+      expect(model.makeTaskDateOnly(task.id, DateTime(2026)), throwsStateError);
+    },
+  );
+
+  test(
     'calendar preloads the full three-week window without widening the Tasks list',
     () async {
       final tasks = MemoryTasks();
