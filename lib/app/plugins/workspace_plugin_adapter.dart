@@ -48,7 +48,9 @@ AppPlugin createWorkspacePlugin({
               controller.isActive &&
               lifecycle.controller == controller;
           void open(Task task) {
-            if (active()) screen.openScreen('tasks', argument: task);
+            if (active()) {
+              screen.openScreen('tasks', argument: task, select: false);
+            }
           }
 
           return WorkspaceScreen(

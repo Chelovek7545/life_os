@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:tasks_api/tasks_api.dart' show WorkLogsApi, Task;
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
@@ -29,6 +30,7 @@ class CollapsibleTaskForm extends StatefulWidget {
     required this.onChanged,
     this.forceExpanded = false,
     this.workLogs,
+    this.resetAfterSubmit = true,
   });
 
   final OnTaskSubmit onSubmit;
@@ -37,6 +39,7 @@ class CollapsibleTaskForm extends StatefulWidget {
   final Stream<List<Project>> projects;
   final Task task;
   final WorkLogsApi? workLogs;
+  final bool resetAfterSubmit;
   final bool isEditMode;
   final double height;
   final ValueChanged<bool>? onFormVisibilityChanged;
@@ -58,7 +61,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
   @override
   Widget build(BuildContext context) {
     return CollapsibleSheet(
-      snapPoints: [60, 190, widget.height],
+      snapPoints: [60, math.min(190, widget.height), widget.height],
       forceExpanded: widget.forceExpanded,
       // Стартуем сразу в развернутом виде, если это редактирование
       initialHeight: widget.isEditMode ? widget.height : null,
@@ -76,6 +79,7 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
             ),
       bodyBuilder: (progress, snapIndex) => TaskFormContent(
         workLogs: widget.workLogs,
+        resetAfterSubmit: widget.resetAfterSubmit,
         key: _formKey,
         task: widget.task,
         projects: widget.projects,
@@ -119,6 +123,7 @@ class _DragHeader extends StatelessWidget {
             child: Align(
               alignment: Alignment.centerLeft,
               child: IconButton(
+                key: const ValueKey('task-editor.close'),
                 onPressed: onCancel,
                 icon: Icon(Icons.close),
               ),
@@ -143,9 +148,9 @@ class _DragHeader extends StatelessWidget {
                   isEditMode ? 'Edit task' : 'New task',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -155,6 +160,7 @@ class _DragHeader extends StatelessWidget {
             child: Align(
               alignment: Alignment.centerRight,
               child: FilledButton(
+                key: const ValueKey('task-editor.save'),
                 style: AppButtonStyles.saveButton,
                 onPressed: onSave,
                 child: Text(
@@ -195,6 +201,7 @@ class _PanelHeader extends StatelessWidget {
       child: Row(
         children: [
           IconButton(
+            key: const ValueKey('task-editor.close'),
             onPressed: onCancel,
             icon: const Icon(Icons.close),
           ),
@@ -208,6 +215,7 @@ class _PanelHeader extends StatelessWidget {
             ),
           ),
           FilledButton(
+            key: const ValueKey('task-editor.save'),
             style: AppButtonStyles.saveButton,
             onPressed: onSave,
             child: Text(

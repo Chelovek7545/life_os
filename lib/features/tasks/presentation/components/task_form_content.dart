@@ -31,10 +31,12 @@ class TaskFormContent extends StatefulWidget {
     required this.midProgress,
     required this.maxProgress,
     this.workLogs,
+    this.resetAfterSubmit = true,
   });
 
   final Task task;
   final WorkLogsApi? workLogs;
+  final bool resetAfterSubmit;
   final Stream<List<Project>> projects;
   final bool isEditMode;
   final OnTaskSubmit onSubmit;
@@ -137,7 +139,7 @@ class TaskFormContentState extends State<TaskFormContent> {
 
     widget.onSubmit(updatedTask);
 
-    if (!isEditMode) {
+    if (!isEditMode && widget.resetAfterSubmit) {
       _titleController.clear();
       _descController.clear();
       _selectedProjectId = null;

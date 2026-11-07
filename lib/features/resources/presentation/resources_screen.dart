@@ -28,11 +28,13 @@ class ResourcesScreen extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Ресурсы и Заметки',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
+                      const Expanded(
+                        child: Text(
+                          'Ресурсы и Заметки',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       IconButton(

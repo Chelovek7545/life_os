@@ -32,6 +32,7 @@ class TasksUiBindings {
     required this.screen,
     required this.task,
     required this.subtask,
+    this.overlay,
   });
   final Widget Function(
     BuildContext,
@@ -42,6 +43,7 @@ class TasksUiBindings {
   screen;
   final TasksNodeUi task;
   final TasksNodeUi subtask;
+  final Widget Function(BuildContext, TasksViewModel, WorkLogsApi)? overlay;
 }
 
 List<GraphChildAction> tasksChildActions(
@@ -127,6 +129,15 @@ class TasksPlugin {
     final screen = UiPluginRegistration(
       plugin: _TasksScreenLifecycle(this),
       registry: ui,
+      panels: [
+        if (visuals.overlay != null)
+          PluginPanelContribution(
+            id: 'tasks.editor.overlay',
+            slot: 'app.overlays',
+            builder: (context, _) =>
+                visuals.overlay!(context, viewModel, workLogs),
+          ),
+      ],
       screens: [
         PluginScreenContribution(
           id: 'tasks',

@@ -32,7 +32,7 @@ class GlassPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: blurAllowed
             ? color ?? AppColors.surfaceGlass
-            : AppColors.surfaceContainerLow.withValues(alpha: 0.9),
+            : AppColors.surfaceContainer.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(
           color: borderColor ?? AppColors.borderGlass,

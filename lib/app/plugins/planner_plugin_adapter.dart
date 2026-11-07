@@ -27,7 +27,8 @@ AppPlugin createPlannerPlugin({
         builder: (_, screen) => PlannerScreen(
           tasks: lifecycle.tasksModel!,
           habits: lifecycle.model!,
-          onOpenTask: (task) => screen.openScreen('tasks', argument: task),
+          onOpenTask: (task) =>
+              screen.openScreen('tasks', argument: task, select: false),
           isActive: () => screen.isActive,
         ),
       ),

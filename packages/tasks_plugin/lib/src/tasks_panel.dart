@@ -177,7 +177,11 @@ class TasksPanelModule implements AppPlugin {
             viewModel: viewModel,
             onOpenTask: (task) {
               if (panel.isActive) {
-                panel.screen?.openScreen('tasks', argument: task);
+                panel.screen?.openScreen(
+                  'tasks',
+                  argument: task,
+                  select: false,
+                );
               }
             },
           ),

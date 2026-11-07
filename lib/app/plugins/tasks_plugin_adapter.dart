@@ -5,6 +5,7 @@ import 'package:plugin_ui/plugin_ui.dart';
 import 'package:graph_api/graph_api.dart';
 import 'package:graph_ui/graph_ui.dart';
 import 'package:life_os/features/tasks/presentation/tasks_screen.dart';
+import 'package:life_os/features/tasks/presentation/components/task_editor_overlay.dart';
 import 'package:life_os/features/tasks/presentation/tasks_graph_ui.dart';
 import 'package:graph_components/graph_components.dart';
 import 'package:life_os/features/tasks/presentation/tasks_graph_components.dart';
@@ -48,7 +49,10 @@ TasksPlugin createTasksPlugin({
         viewModel: model,
         workLogs: logs,
         onFormVisibilityChanged: setInset,
+        embeddedEditor: false,
       ),
+      overlay: (_, model, logs) =>
+          TaskEditorOverlay(viewModel: model, workLogs: logs),
       task: node(),
       subtask: node(subtask: true),
     ),

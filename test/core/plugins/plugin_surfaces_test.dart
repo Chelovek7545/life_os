@@ -59,6 +59,54 @@ PluginScreenContribution screen(
 
 void main() {
   test(
+    'overlay requests preserve selection and reject a revoked screen context',
+    () {
+      final registry = PluginUiRegistry();
+      Object? request;
+      registry.register(
+        'source',
+        screens: [
+          PluginScreenContribution(
+            id: 'source',
+            label: 'Source',
+            icon: Icons.home,
+            builder: (_, _) => const SizedBox(),
+          ),
+        ],
+      );
+      registry.register(
+        'editor',
+        screens: [
+          PluginScreenContribution(
+            id: 'editor',
+            label: 'Editor',
+            icon: Icons.edit,
+            builder: (_, _) => const SizedBox(),
+            onOpen: (argument) => request = argument,
+          ),
+        ],
+      );
+      final navigation = PluginNavigationController(registry);
+      final source = navigation.contextFor(registry.screens.first);
+      expect(
+        source.openScreen('editor', argument: 'draft', select: false),
+        isTrue,
+      );
+      expect(request, 'draft');
+      expect(navigation.selectedId, 'source');
+      registry.unregister('source');
+      request = null;
+      expect(
+        source.openScreen('editor', argument: 'stale', select: false),
+        isFalse,
+      );
+      expect(request, isNull);
+      navigation.dispose();
+      registry.dispose();
+    },
+  );
+
+  test(
     'screen and panel IDs share atomic registration with existing UI contributions',
     () {
       final registry = PluginUiRegistry();

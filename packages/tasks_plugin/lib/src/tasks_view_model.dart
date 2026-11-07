@@ -233,14 +233,6 @@ class TasksViewModel {
 
   void openTaskInEditor(Task task) {
     if (!_accepting) return;
-    if (task.startsAt case final starts?) {
-      updateFilter(
-        (old) => old.copyWith(
-          period: DatePeriod.day,
-          anchorDate: DateTime(starts.year, starts.month, starts.day),
-        ),
-      );
-    }
     startEditingTask(TaskWithProject(task: task));
     showForm();
   }
@@ -271,6 +263,22 @@ class TasksViewModel {
   );
   Future<void> updateTask(Task task) =>
       _enqueue(() => _repository.updateTask(task));
+  Future<void> updateTaskFromEditor(Task draft) => _enqueue(() async {
+    final current = await _repository.getById(draft.id);
+    if (current == null) return;
+    await _repository.updateTask(
+      current.copyWith(
+        title: draft.title,
+        description: draft.description,
+        projectId: Wrapped(draft.projectId),
+        startsAt: Wrapped(draft.startsAt),
+        endsAt: Wrapped(draft.endsAt),
+        dueDate: Wrapped(draft.dueDate),
+        status: draft.status,
+        updatedAt: DateTime.now(),
+      ),
+    );
+  });
   Future<void> scheduleTask(String id, DateTime startsAt, DateTime endsAt) =>
       _enqueue(() async {
         final current = await _repository.getById(id);

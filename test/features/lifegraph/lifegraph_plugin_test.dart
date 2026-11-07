@@ -359,7 +359,7 @@ void main() {
       await h.completeTask!(Task.blank());
       expect(h.completions, 1);
       h.openTask!(Task.blank());
-      expect(navigation.selectedId, 'tasks');
+      expect(navigation.selectedId, 'pulse');
       await tester.pumpWidget(const SizedBox());
       navigation.dispose();
       await lifecycle(h.dispose);

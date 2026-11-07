@@ -63,10 +63,12 @@ class TasksScreen extends StatefulWidget {
     required this.viewModel,
     this.onFormVisibilityChanged,
     this.workLogs,
+    this.embeddedEditor = true,
   });
 
   final TasksViewModel viewModel;
   final WorkLogsApi? workLogs;
+  final bool embeddedEditor;
   final ValueChanged<bool>? onFormVisibilityChanged;
 
   @override
@@ -569,8 +571,11 @@ class TasksScreenState extends State<TasksScreen> {
         _TasksHeader(
           vm: widget.viewModel,
           tasksScreenWidth: tasksScreenWidth,
-          onAddPressed: isFormVisible
-              ? widget.viewModel.hideForm
+          onAddPressed: widget.viewModel.currentUiFlags.isFormVisible
+              ? () {
+                  widget.viewModel.hideForm();
+                  if (!widget.embeddedEditor) widget.viewModel.disableForm();
+                }
               : widget.viewModel.showForm,
           onModeChanged: (index) => _onModeChanged(index, isWide),
           onToggleUnscheduled: _toggleUnscheduledOverlay,
@@ -636,6 +641,7 @@ class TasksScreenState extends State<TasksScreen> {
     bool isFormVisible,
     double width,
   ) {
+    if (!widget.embeddedEditor) return const SizedBox.shrink();
     double _kFormExpandedHeight = MediaQuery.sizeOf(context).height * 0.8;
 
     return AnimatedPositioned(
@@ -729,7 +735,7 @@ class TasksScreenState extends State<TasksScreen> {
           return _buildLandscapeLayout(
             overlayHeight,
             today,
-            uiFlags.isFormVisible,
+            widget.embeddedEditor && uiFlags.isFormVisible,
             uiFlags.isEventMode,
           );
         }
@@ -1091,7 +1097,8 @@ class _WeekTasksListState extends State<_WeekTasksList> {
   @override
   void didUpdateWidget(_WeekTasksList oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.items != widget.items || oldWidget.anchorDate != widget.anchorDate) {
+    if (oldWidget.items != widget.items ||
+        oldWidget.anchorDate != widget.anchorDate) {
       _groupedItems = _buildGroupedItems();
     }
   }
@@ -1103,10 +1110,13 @@ class _WeekTasksListState extends State<_WeekTasksList> {
       final startsAt = item.task.startsAt;
       if (startsAt == null) continue;
       final endsAt = item.task.endsAt;
-      final last = endsAt != null && !endsAt.isBefore(startsAt) ? endsAt : startsAt;
+      final last = endsAt != null && !endsAt.isBefore(startsAt)
+          ? endsAt
+          : startsAt;
       for (final day in days) {
         final date = day.startOfDay;
-        if (!date.isBefore(startsAt.startOfDay) && !date.isAfter(last.startOfDay)) {
+        if (!date.isBefore(startsAt.startOfDay) &&
+            !date.isAfter(last.startOfDay)) {
           grouped.putIfAbsent(date, () => []).add(item);
         }
       }
@@ -1503,7 +1513,8 @@ class _CalendarRowState extends State<CalendarRow> {
   }
 
   bool _onScroll(ScrollNotification notification) {
-    if (notification.depth != 0 || notification.metrics.axis != Axis.horizontal) {
+    if (notification.depth != 0 ||
+        notification.metrics.axis != Axis.horizontal) {
       return false;
     }
     if (notification is ScrollStartNotification &&

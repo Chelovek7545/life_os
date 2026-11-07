@@ -100,7 +100,7 @@ void main() {
       await tester.tap(find.text(task.title));
       await tester.pumpAndSettle();
       expect(opened?.id, task.id);
-      expect(navigation.selectedId, 'tasks');
+      expect(navigation.selectedId, 'today');
       await tester.pumpWidget(const SizedBox());
       navigation.dispose();
       await pumpPluginLifecycle(tester, h.dispose);

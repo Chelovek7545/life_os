@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
+import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/ui/app_dropdown_menu.dart';
 import 'package:life_os/core/ui/glassPopUpMenuButton.dart';
@@ -206,7 +207,7 @@ class WorkspaceScreen extends StatelessWidget {
             padding: EdgeInsets.all(AppSpacing.md),
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              color: colors.surface,
+              color: AppColors.surfaceContainerLow,
               borderRadius: BorderRadius.circular(AppRadius.lg),
             ),
             child: Column(

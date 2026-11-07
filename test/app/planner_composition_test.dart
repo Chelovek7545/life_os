@@ -493,7 +493,7 @@ void main() {
       await pumpStorage(tester);
       await tester.tap(card);
       await pumpStorage(tester);
-      expect(app.navigation.selectedId, 'tasks');
+      expect(app.navigation.selectedId, 'planner');
       expect(app.tasksViewModel.activeTaskWithProject?.task.id, withoutTime.id);
       app.tasksViewModel.hideForm();
       app.navigation.open('planner');
@@ -641,7 +641,7 @@ void main() {
         find.descendant(of: treeFinder, matching: find.text(task.title)),
       );
       await pumpStorage(tester);
-      expect(app.navigation.selectedId, 'tasks');
+      expect(app.navigation.selectedId, 'planner');
       expect(app.tasksViewModel.activeTaskWithProject?.task.id, task.id);
       app.tasksViewModel.hideForm();
       app.navigation.open('planner');
@@ -661,7 +661,7 @@ void main() {
         ),
       );
       await pumpStorage(tester);
-      expect(app.navigation.selectedId, 'tasks');
+      expect(app.navigation.selectedId, 'planner');
       expect(find.text('Иерархия'), findsNothing);
       expect(tester.takeException(), isNull);
       await disposeTestApp(tester, app);

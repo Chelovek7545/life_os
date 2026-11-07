@@ -27,7 +27,7 @@ UiModuleSpec pulseScreenModule(
           compact: true,
         ),
         onOpenTask: (task) {
-          if (!screen.openScreen('tasks', argument: task)) {
+          if (!screen.openScreen('tasks', argument: task, select: false)) {
             registry.notify(const PluginNotice('Экран задач недоступен.'));
           }
         },

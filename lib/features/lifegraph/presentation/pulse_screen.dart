@@ -73,27 +73,29 @@ class _PulseScreenState extends State<PulseScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.surfaceDim,
-      appBar: AppBar(
-        centerTitle: true,
-        title: Text('PULSE', style: AppTypography.headlineLgMobile),
-        forceMaterialTransparency: true,
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        actions: [
-          PluginPanelSlot(
-            registry: widget.registry,
-            slot: PulsePanelSlots.toolbar,
-            layout: (_, panels) =>
-                Row(mainAxisSize: MainAxisSize.min, children: panels),
-          ),
-          if (MediaQuery.orientationOf(context) == Orientation.portrait &&
-              widget.portraitAppBarAction != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: widget.portraitAppBarAction!,
+      appBar: MediaQuery.orientationOf(context) == Orientation.portrait
+          ? null
+          : AppBar(
+              centerTitle: true,
+              title: Text('PULSE', style: AppTypography.headlineLgMobile),
+              forceMaterialTransparency: true,
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              actions: [
+                PluginPanelSlot(
+                  registry: widget.registry,
+                  slot: PulsePanelSlots.toolbar,
+                  layout: (_, panels) =>
+                      Row(mainAxisSize: MainAxisSize.min, children: panels),
+                ),
+                if (MediaQuery.orientationOf(context) == Orientation.portrait &&
+                    widget.portraitAppBarAction != null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: widget.portraitAppBarAction!,
+                  ),
+              ],
             ),
-        ],
-      ),
       body: LayoutBuilder(
         builder: (context, asyncSnapshot) {
           bool isSplit = asyncSnapshot.maxWidth >= 900;
@@ -1159,7 +1161,7 @@ class _SphereTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = parseHexColor(sphere.color);
     return Material(
-      color: AppColors.surfaceContainer,
+      color: AppColors.surfaceContainerHigh,
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),

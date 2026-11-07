@@ -87,6 +87,20 @@ class _CollapsibleSheetState extends State<CollapsibleSheet> {
     }
   }
 
+  @override
+  void didUpdateWidget(covariant CollapsibleSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.forceExpanded) {
+      _currentHeight = _maxHeight;
+    } else if (oldWidget.forceExpanded) {
+      _currentHeight =
+          (widget.initialHeight ?? _snapPoints[_snapPoints.length > 1 ? 1 : 0])
+              .clamp(_minHeight, _maxHeight);
+    } else {
+      _currentHeight = _currentHeight.clamp(_minHeight, _maxHeight);
+    }
+  }
+
   /// Индекс нижнего снаппоинта сегмента, в котором находится шторка
   /// (на максимуме — последний индекс списка).
   int _currentSnapIndex() {
@@ -188,11 +202,10 @@ class _CollapsibleSheetState extends State<CollapsibleSheet> {
                   setState(() {
                     // Изменяем высоту в зависимости от движения пальца/курсора
                     // Движение вверх уменьшает Y, но увеличивает высоту
-                    _currentHeight =
-                        (_currentHeight - details.delta.dy).clamp(
-                          _minHeight,
-                          _maxHeight,
-                        );
+                    _currentHeight = (_currentHeight - details.delta.dy).clamp(
+                      _minHeight,
+                      _maxHeight,
+                    );
                   });
                 },
                 onVerticalDragEnd: (details) {
@@ -209,9 +222,9 @@ class _CollapsibleSheetState extends State<CollapsibleSheet> {
                             ? const BouncingScrollPhysics()
                             : const NeverScrollableScrollPhysics(), // Блокируем скролл контента, если шторка не на максимуме
                         padding: widget.contentPadding,
-                        child: widget.bodyBuilder(progress, snapIndex, ),
+                        child: widget.bodyBuilder(progress, snapIndex),
                       )
-                    : widget.bodyBuilder(progress, snapIndex, ),
+                    : widget.bodyBuilder(progress, snapIndex),
               ),
             ],
           ),
@@ -237,9 +250,9 @@ class _CollapsibleSheetState extends State<CollapsibleSheet> {
                 ? SingleChildScrollView(
                     physics: const BouncingScrollPhysics(),
                     padding: widget.contentPadding,
-                    child: widget.bodyBuilder(1.0, _snapPoints.length - 1, ),
+                    child: widget.bodyBuilder(1.0, _snapPoints.length - 1),
                   )
-                : widget.bodyBuilder(1.0, _snapPoints.length - 1, ),
+                : widget.bodyBuilder(1.0, _snapPoints.length - 1),
           ),
         ],
       ),

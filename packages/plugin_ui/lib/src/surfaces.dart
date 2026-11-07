@@ -54,8 +54,8 @@ class PluginScreenContext {
   bool get isActive =>
       !_navigation._disposed &&
       _navigation.registry.contributionKey(id) == _key;
-  bool openScreen(String id, {Object? argument}) =>
-      isActive && _navigation.open(id, argument: argument);
+  bool openScreen(String id, {Object? argument, bool select = true}) =>
+      isActive && _navigation.open(id, argument: argument, select: select);
   void setResizeToAvoidBottomInset(bool value) {
     if (isActive) _navigation._setInset(_key, value);
   }
@@ -95,7 +95,8 @@ class PluginNavigationController extends ChangeNotifier {
     return PluginScreenContext._(this, screen.id, key);
   }
 
-  bool open(String id, {Object? argument}) {
+  /// Dispatches a request; [select] can keep the current screen for overlays.
+  bool open(String id, {Object? argument, bool select = true}) {
     if (_disposed) return false;
     final matches = registry.screens.where((screen) => screen.id == id);
     if (matches.isEmpty) return false;
@@ -103,8 +104,10 @@ class PluginNavigationController extends ChangeNotifier {
     final key = registry.contributionKey(id);
     screen.onOpen?.call(argument);
     if (_disposed || key != registry.contributionKey(id)) return false;
-    _selectedId = id;
-    notifyListeners();
+    if (select) {
+      _selectedId = id;
+      notifyListeners();
+    }
     return true;
   }
 

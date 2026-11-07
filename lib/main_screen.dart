@@ -51,7 +51,6 @@ class _MainScreenState extends State<MainScreen> {
       final registry = widget.diContainer.ui;
       final navigation = widget.diContainer.navigation;
       final destinations = registry.screens;
-      final selected = navigation.selected;
       final index = destinations.indexWhere(
         (screen) => screen.id == navigation.selectedId,
       );
@@ -60,23 +59,6 @@ class _MainScreenState extends State<MainScreen> {
       void select(int index) => navigation.open(destinations[index].id);
       return SafeArea(
         child: Scaffold(
-          appBar: landscape || selected == null || selected.ownsAppBar
-              ? null
-              : AppBar(
-                  toolbarHeight: 56,
-                  backgroundColor: AppColors.surfaceDim,
-                  title: Text(selected.label, style: AppTypography.codeLabel),
-                  actions: [
-                    Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: PluginActions(
-                        registry: registry,
-                        location: PluginActionLocation.appBar,
-                        compact: true,
-                      ),
-                    ),
-                  ],
-                ),
           bottomNavigationBar: landscape || destinations.isEmpty
               ? null
               : SlidingNavBar(
@@ -86,19 +68,30 @@ class _MainScreenState extends State<MainScreen> {
                 ),
           backgroundColor: AppColors.surfaceDim,
           resizeToAvoidBottomInset: navigation.resizeToAvoidBottomInset,
-          body: Row(
+          body: Stack(
+            fit: StackFit.expand,
             children: [
-              if (landscape && destinations.isNotEmpty)
-                _LandscapeNavRail(
-                  destinations: destinations,
-                  selectedIndex: index,
-                  onTap: select,
-                  pluginActions: PluginActions(
-                    registry: registry,
-                    location: PluginActionLocation.navigationRail,
-                  ),
-                ),
-              Expanded(child: PluginScreenDeck(navigation: navigation)),
+              Row(
+                children: [
+                  if (landscape && destinations.isNotEmpty)
+                    _LandscapeNavRail(
+                      destinations: destinations,
+                      selectedIndex: index,
+                      onTap: select,
+                      pluginActions: PluginActions(
+                        registry: registry,
+                        location: PluginActionLocation.navigationRail,
+                      ),
+                    ),
+                  Expanded(child: PluginScreenDeck(navigation: navigation)),
+                ],
+              ),
+              PluginPanelSlot(
+                registry: registry,
+                slot: 'app.overlays',
+                layout: (_, panels) =>
+                    Stack(fit: StackFit.expand, children: panels),
+              ),
             ],
           ),
         ),

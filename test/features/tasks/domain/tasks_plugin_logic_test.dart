@@ -8,6 +8,40 @@ Future<void> tick() => Future<void>.delayed(Duration.zero);
 
 void main() {
   test(
+    'editor updates preserve fields changed outside the form and do not revive deleted tasks',
+    () async {
+      final tasks = MemoryTasks();
+      final projects = MemoryProjectQueries();
+      final model = TasksViewModel(
+        tasks,
+        GetTasksWithProjectsUseCase(tasks, projects),
+        projects,
+      );
+      addTearDown(model.dispose);
+      final original = Task.blank();
+      final latest = original.copyWith(
+        parentTaskId: const Wrapped('parent'),
+        tags: [const Tag(id: 5, name: 'New tag', colorHex: 0)],
+      );
+      tasks.items[original.id] = latest;
+      await model.updateTaskFromEditor(
+        original.copyWith(
+          title: 'Edited',
+          startsAt: Wrapped(DateTime(2026, 11, 8)),
+        ),
+      );
+      final saved = tasks.items[original.id]!;
+      expect(saved.title, 'Edited');
+      expect(saved.startsAt, DateTime(2026, 11, 8));
+      expect(saved.tags, latest.tags);
+      expect(saved.parentTaskId, latest.parentTaskId);
+      tasks.items.clear();
+      await model.updateTaskFromEditor(original);
+      expect(tasks.items, isEmpty);
+    },
+  );
+
+  test(
     'moving a timed task to a day removes time and preserves fresh fields',
     () async {
       final tasks = MemoryTasks();

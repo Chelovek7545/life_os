@@ -61,7 +61,11 @@ class LifeGraphPlugin {
               ui,
               (task) {
                 if (!controls.isActive) return;
-                if (!controls.openScreen('tasks', argument: task)) {
+                if (!controls.openScreen(
+                  'tasks',
+                  argument: task,
+                  select: false,
+                )) {
                   ui.notify(const PluginNotice('Экран задач недоступен.'));
                 }
               },
