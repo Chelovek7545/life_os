@@ -10,13 +10,14 @@ import 'package:life_os/features/habits/presentation/widgets/habit_card.dart';
 /// Показывает только запланированные на сегодня и ещё активные привычки
 /// с возможностью отметить выполненной или пропустить.
 ///
-/// ViewModel живёт на уровне приложения (см. DependencyContainer), поэтому
-/// панель только переинициализирует подписку, но не вызывает dispose.
+/// Модель принадлежит владельцу панели. Панель инициализирует её,
+/// но не вызывает dispose.
 class TodaysHabitsPanel extends StatefulWidget {
   const TodaysHabitsPanel({
     super.key,
     required this.viewModel,
     required this.onOpenCalendar,
+    this.onEditHabits,
     this.expand = true,
   });
 
@@ -24,6 +25,7 @@ class TodaysHabitsPanel extends StatefulWidget {
 
   /// Открывает карту выполненных дней (коллапсируемую шторку).
   final VoidCallback onOpenCalendar;
+  final VoidCallback? onEditHabits;
   final bool expand;
 
   @override
@@ -95,9 +97,26 @@ class _TodaysHabitsPanelState extends State<TodaysHabitsPanel> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            const Spacer(),
-            Text("Habits", style: AppTypography.headlineLg),
-            const Spacer(),
+            const SizedBox(width: AppMargins.md),
+
+            if (widget.onEditHabits != null)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                style: AppButtonStyles.menuButtonStyle(),
+                icon: const Icon(Icons.edit_outlined, color: Colors.white),
+                tooltip: 'Редактировать привычки',
+                onPressed: widget.onEditHabits,
+              ),
+            Expanded(
+              child: Text(
+                "Habits",
+                style: AppTypography.headlineLg,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+
             IconButton(
               visualDensity: VisualDensity.compact,
               style: AppButtonStyles.menuButtonStyle(),

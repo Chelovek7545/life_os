@@ -74,7 +74,13 @@ class WorkspaceScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                Tooltip(
+                TextButton.icon(
+                  key: const ValueKey('workspace-edit-toggle'),
+                  onPressed: () => controller.setEditing(!controller.isEditing),
+                  icon: Icon(controller.isEditing ? Icons.done : Icons.edit_outlined, size: 18),
+                  label: Text(controller.isEditing ? 'Готово' : 'Изменить'),
+                ),
+                if (controller.isEditing) Tooltip(
                   message:
                       'Выберите содержимое в заголовке области. В меню ⋮ можно разделить область или закрыть её. Границы можно перетаскивать.',
                   triggerMode: TooltipTriggerMode.tap,
@@ -197,23 +203,21 @@ class WorkspaceScreen extends StatelessWidget {
         child: Listener(
           onPointerDown: (_) => controller.select(pane.id),
           child: Container(
+            padding: EdgeInsets.all(AppSpacing.md),
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: colors.surface,
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              border: Border.all(
-                color: controller.selectedId == pane.id
-                    ? colors.primary
-                    : colors.outlineVariant,
-              ),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
             ),
             child: Column(
               children: [
-                SizedBox(
+                if (controller.isEditing) SizedBox(
                   height: 44,
                   child: Container(
                     padding: EdgeInsets.all(2.0),
-                    color: colors.surfaceContainerHighest,
+                    color: controller.selectedId == pane.id
+                        ? colors.surfaceContainerLow
+                        : colors.surfaceDim,
                     child: Row(
                       children: [
                         const SizedBox(width: 8),
@@ -315,6 +319,7 @@ class WorkspaceScreen extends StatelessWidget {
                   ),
                 ),
                 Expanded(
+                  key: ValueKey('workspace-content:${pane.id}'),
                   child: KeyedSubtree(
                     key: ValueKey(pane.editorId),
                     child: editors[pane.editorId]!.builder(context, pane.id),

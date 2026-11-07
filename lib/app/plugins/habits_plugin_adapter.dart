@@ -21,10 +21,16 @@ HabitsPlugin createHabitsPlugin({
     calendar: PulsePanelSlots.overlay,
   ),
   visuals: HabitsUiBindings(
-    today: (_, model, expand, openCalendar) => TodaysHabitsPanel(
+    showToolbar: false,
+    today: (context, model, expand, openCalendar) => TodaysHabitsPanel(
       viewModel: model,
       expand: expand,
       onOpenCalendar: openCalendar,
+      onEditHabits: () {
+        if (model.isActive) {
+          showAllHabitsSheet(context: context, viewModel: model);
+        }
+      },
     ),
     showAll: (context, model) =>
         showAllHabitsSheet(context: context, viewModel: model),

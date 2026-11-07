@@ -20,6 +20,7 @@ class HabitsUiBindings {
     required this.today,
     required this.calendar,
     required this.showAll,
+    this.showToolbar = true,
   });
   final Widget Function(
     BuildContext context,
@@ -36,6 +37,7 @@ class HabitsUiBindings {
   calendar;
   final Future<void> Function(BuildContext context, HabitsViewModel model)
   showAll;
+  final bool showToolbar;
 }
 
 /// Owns habits state, subscriptions and UI registrations. Storage and views
@@ -62,20 +64,21 @@ class HabitsPlugin {
                   if (panel.isActive) _calendar?.value = true;
                 }),
           ),
-          PluginPanelContribution(
-            id: 'habits.toolbar',
-            slot: slots.toolbar,
-            builder: (context, panel) {
-              final model = viewModel;
-              return IconButton(
-                tooltip: 'Habits',
-                icon: const Icon(Icons.repeat_rounded),
-                onPressed: () {
-                  if (panel.isActive) visuals.showAll(context, model);
-                },
-              );
-            },
-          ),
+          if (visuals.showToolbar)
+            PluginPanelContribution(
+              id: 'habits.toolbar',
+              slot: slots.toolbar,
+              builder: (context, panel) {
+                final model = viewModel;
+                return IconButton(
+                  tooltip: 'Habits',
+                  icon: const Icon(Icons.repeat_rounded),
+                  onPressed: () {
+                    if (panel.isActive) visuals.showAll(context, model);
+                  },
+                );
+              },
+            ),
           PluginPanelContribution(
             id: 'habits.calendar',
             slot: slots.calendar,

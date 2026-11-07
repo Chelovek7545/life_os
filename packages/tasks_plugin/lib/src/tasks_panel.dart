@@ -11,9 +11,21 @@ import 'task_state.dart';
 import 'tasks_view_model.dart';
 
 class TasksPanel extends StatefulWidget {
-  const TasksPanel({super.key, required this.viewModel, this.onOpenTask});
+  const TasksPanel({
+    super.key,
+    required this.viewModel,
+    this.onOpenTask,
+    this.taskBuilder,
+  });
   final TasksViewModel viewModel;
   final void Function(Task)? onOpenTask;
+  final Widget Function(
+    BuildContext context,
+    TaskWithProject item,
+    VoidCallback? onToggle,
+    VoidCallback? onOpen,
+  )?
+  taskBuilder;
   @override
   State<TasksPanel> createState() => _TasksPanelState();
 }
@@ -93,6 +105,17 @@ class _TasksPanelState extends State<TasksPanel> {
                 itemBuilder: (context, index) {
                   final item = items[index];
                   final task = item.task;
+                  final builder = widget.taskBuilder;
+                  if (builder != null) {
+                    return builder(
+                      context,
+                      item,
+                      _pending.contains(task.id) ? null : () => _toggle(task),
+                      widget.onOpenTask == null
+                          ? null
+                          : () => widget.onOpenTask!(task),
+                    );
+                  }
                   final when = task.startsAt;
                   final time = when == null
                       ? 'Без расписания'

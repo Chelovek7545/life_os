@@ -9,7 +9,39 @@ void main() {
         editorIds: const {'tasks', 'calendar'},
         save: save ?? (_) async {},
         onSaveError: (_, _) {},
+      )..setEditing(true);
+
+  test(
+    'structure changes require edit mode but resizing remains available',
+    () async {
+      final writes = <String>[];
+      final controller = create(
+        save: (value) async {
+          writes.add(value);
+        },
       );
+      final root = controller.layout.root as WorkspaceSplit;
+      controller.toggleMaximize(root.first.id);
+      controller.setEditing(false);
+      expect(controller.maximizedId, isNull);
+      final before = controller.layout.encode();
+      controller.split(root.first.id, WorkspaceAxis.vertical);
+      controller.changeEditor(root.first.id, 'calendar');
+      controller.closePane(root.first.id);
+      controller.toggleMaximize(root.first.id);
+      expect(controller.layout.encode(), before);
+      expect(controller.maximizedId, isNull);
+      await controller.flush();
+      expect(writes, isEmpty);
+      controller.resize(root, .7);
+      expect((controller.layout.root as WorkspaceSplit).ratio, .7);
+      controller.setEditing(true);
+      controller.split(root.first.id, WorkspaceAxis.vertical);
+      expect(controller.layout.root.panes.length, 3);
+      await controller.close();
+      controller.dispose();
+    },
+  );
 
   test(
     'nested split and close preserve remaining identities and contents',

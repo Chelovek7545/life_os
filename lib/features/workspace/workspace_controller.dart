@@ -25,7 +25,16 @@ class WorkspaceController extends ChangeNotifier {
   String? get maximizedId => _maximizedId;
   bool _active = true;
   bool get isActive => _active;
+  bool _isEditing = false;
+  bool get isEditing => _isEditing;
   Future<void>? _closing;
+
+  void setEditing(bool value) {
+    if (!_active || _isEditing == value) return;
+    _isEditing = value;
+    if (!value) _maximizedId = null;
+    notifyListeners();
+  }
 
   void select(String id) {
     if (!_active || !layout.root.panes.any((pane) => pane.id == id)) return;
@@ -35,13 +44,15 @@ class WorkspaceController extends ChangeNotifier {
   }
 
   void changeEditor(String id, String editor) {
-    if (!_active || !editorIds.contains(editor)) return;
+    if (!_active || !_isEditing || !editorIds.contains(editor)) return;
     if (!layout.root.panes.any((pane) => pane.id == id)) return;
     _commit(layout.root.replace(id, WorkspacePane(id, editor)));
   }
 
   void split(String id, WorkspaceAxis axis) {
-    if (!_active || layout.root.panes.length >= WorkspaceLayout.maxPanes) {
+    if (!_active ||
+        !_isEditing ||
+        layout.root.panes.length >= WorkspaceLayout.maxPanes) {
       return;
     }
     final matches = layout.root.panes.where((pane) => pane.id == id);
@@ -59,7 +70,7 @@ class WorkspaceController extends ChangeNotifier {
   }
 
   void closePane(String id) {
-    if (!_active || layout.root.panes.length == 1) return;
+    if (!_active || !_isEditing || layout.root.panes.length == 1) return;
     final next = layout.root.remove(id);
     if (next == null) return;
     if (_selectedId == id) _selectedId = next.panes.first.id;
@@ -86,7 +97,11 @@ class WorkspaceController extends ChangeNotifier {
   }
 
   void toggleMaximize(String id) {
-    if (!_active || !layout.root.panes.any((pane) => pane.id == id)) return;
+    if (!_active ||
+        !_isEditing ||
+        !layout.root.panes.any((pane) => pane.id == id)) {
+      return;
+    }
     _selectedId = id;
     _maximizedId = _maximizedId == id ? null : id;
     notifyListeners();

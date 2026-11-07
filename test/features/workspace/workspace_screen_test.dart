@@ -26,6 +26,92 @@ class _CounterState extends State<_Counter> {
 }
 
 void main() {
+  testWidgets(
+    'edit toggle hides layout controls without recreating panel content',
+    (tester) async {
+      tester.view.physicalSize = const Size(1400, 1000);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final controller = WorkspaceController(
+        editorIds: const {'tasks', 'calendar'},
+        save: (_) async {},
+        onSaveError: (_, _) {},
+      );
+      final id = controller.selectedId;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: WorkspaceScreen(
+              controller: controller,
+              editors: [
+                WorkspaceEditor(
+                  id: 'tasks',
+                  label: 'Задачи',
+                  icon: Icons.checklist,
+                  builder: (_, id) => _Counter(id),
+                ),
+                WorkspaceEditor(
+                  id: 'calendar',
+                  label: 'Календарь',
+                  icon: Icons.calendar_month,
+                  builder: (_, _) => const SizedBox(),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      final counter = find.byKey(ValueKey('counter:$id'));
+      await tester.tap(counter);
+      await tester.pump();
+      final state = tester.state<_CounterState>(find.byType(_Counter));
+      final initialLayout = controller.layout.encode();
+      expect(controller.isEditing, isFalse);
+      expect(find.byKey(ValueKey('workspace-editor:$id')), findsNothing);
+      expect(find.byKey(ValueKey('workspace-menu:$id')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('workspace-divider:initial-split')),
+        findsOneWidget,
+      );
+      final toggle = find.byKey(const ValueKey('workspace-edit-toggle'));
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(controller.isEditing, isTrue);
+      expect(find.byKey(ValueKey('workspace-editor:$id')), findsOneWidget);
+      expect(find.byKey(ValueKey('workspace-menu:$id')), findsOneWidget);
+      final divider = find.byKey(
+        const ValueKey('workspace-divider:initial-split'),
+      );
+      expect(divider, findsOneWidget);
+      expect(tester.state<_CounterState>(find.byType(_Counter)), same(state));
+      expect(find.text('count:1'), findsOneWidget);
+      final dividerPosition = tester.getCenter(divider);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      final pane = find.byKey(ValueKey('workspace-pane:$id'));
+      final width = tester.getSize(pane).width;
+      await tester.dragFrom(dividerPosition, const Offset(100, 0));
+      await tester.pump();
+      expect(controller.isEditing, isFalse);
+      expect(find.byKey(ValueKey('workspace-menu:$id')), findsNothing);
+      expect(divider, findsOneWidget);
+      expect(tester.state<_CounterState>(find.byType(_Counter)), same(state));
+      expect(controller.layout.encode(), isNot(initialLayout));
+      expect(tester.getSize(pane).width, closeTo(width + 100, .01));
+      tester.view.physicalSize = const Size(390, 844);
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('workspace-area-selector')),
+        findsOneWidget,
+      );
+      expect(toggle, findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await controller.close();
+      controller.dispose();
+    },
+  );
+
   for (final axis in WorkspaceAxis.values) {
     testWidgets(
       'moving the second $axis divider keeps the first divider fixed',
@@ -53,6 +139,7 @@ void main() {
             ),
           ),
         );
+        controller.setEditing(true);
         await tester.pumpWidget(
           MaterialApp(
             home: Scaffold(
@@ -146,6 +233,7 @@ void main() {
         onSaveError: (_, _) {},
       );
       final first = controller.layout.root.panes.first.id;
+      controller.setEditing(true);
       final second = controller.layout.root.panes.last.id;
       await tester.pumpWidget(
         MaterialApp(

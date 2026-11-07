@@ -26,6 +26,7 @@ class HabitsViewModel {
   final _pending = <(String, String), List<_EntryEdit>>{};
   bool _initialized = false;
   bool _accepting = true;
+  bool get isActive => _accepting;
   bool _disposed = false;
   Future<void> _operations = Future.value();
   Future<void>? _closing;

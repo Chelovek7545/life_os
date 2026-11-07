@@ -102,7 +102,7 @@ class _PulseScreenState extends State<PulseScreen> {
             child: HierarchyPanel(viewModel: widget.viewModel),
           );
           final spheresPanel = SingleChildScrollView(
-            child: _SpheresPanel(
+            child: SpheresPanel(
               viewModel: widget.viewModel,
               onCreate: () => _showCreateSphereDialog(context),
               onOpenSphere: (sphere) => _openGraph(context, sphere),
@@ -118,7 +118,7 @@ class _PulseScreenState extends State<PulseScreen> {
               layout: (context, panels) => Column(
                 children: [
                   Expanded(
-                    child: _StatsPanel(
+                    child: StatsPanel(
                       viewModel: widget.viewModel,
                       onOpenTask: widget.onOpenTask,
                       onCompleteTask: widget.onCompleteTask,
@@ -151,7 +151,7 @@ class _PulseScreenState extends State<PulseScreen> {
               layout: (context, panels) => ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
-                  _StatsPanel(
+                  StatsPanel(
                     viewModel: widget.viewModel,
                     expand: false,
                     onOpenTask: widget.onOpenTask,
@@ -164,7 +164,7 @@ class _PulseScreenState extends State<PulseScreen> {
                   const SizedBox(height: 12),
                   HierarchyPanel(viewModel: widget.viewModel, expand: false),
                   const SizedBox(height: 12),
-                  _SpheresPanel(
+                  SpheresPanel(
                     viewModel: widget.viewModel,
                     expand: false,
                     onCreate: () => _showCreateSphereDialog(context),
@@ -332,13 +332,14 @@ class _GoalTile extends StatelessWidget {
 }
 
 /// Панель списка сфер с кнопкой создания.
-class _SpheresPanel extends StatelessWidget {
+class SpheresPanel extends StatelessWidget {
   final PulseScreenViewModel viewModel;
   final VoidCallback onCreate;
   final ValueChanged<Sphere> onOpenSphere;
   final bool expand;
 
-  const _SpheresPanel({
+  const SpheresPanel({
+    super.key,
     required this.viewModel,
     required this.onCreate,
     required this.onOpenSphere,
@@ -492,13 +493,14 @@ class _GoalsSection extends StatelessWidget {
 
 /// Центральная панель Pulse: активная задача «сейчас» + статистика
 /// выполненных задач за последние 7 дней.
-class _StatsPanel extends StatelessWidget {
+class StatsPanel extends StatelessWidget {
   final PulseScreenViewModel viewModel;
   final bool expand;
   final ValueChanged<Task>? onOpenTask;
   final ValueChanged<Task>? onCompleteTask;
 
-  const _StatsPanel({
+  const StatsPanel({
+    super.key,
     required this.viewModel,
     this.expand = true,
     this.onOpenTask,

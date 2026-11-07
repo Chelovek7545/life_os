@@ -7,8 +7,9 @@ import 'package:life_os/core/theme/app_colors.dart';
 /// (когда TextField уже размонтирован), исключая «controller used after disposed».
 class CreateSphereDialog extends StatefulWidget {
   final PulseScreenViewModel viewModel;
+  final bool Function()? isActive;
 
-  const CreateSphereDialog({super.key, required this.viewModel});
+  const CreateSphereDialog({super.key, required this.viewModel, this.isActive});
 
   @override
   State<CreateSphereDialog> createState() => _CreateSphereDialogState();
@@ -39,6 +40,7 @@ class _CreateSphereDialogState extends State<CreateSphereDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
         FilledButton(
           onPressed: () {
+            if (!(widget.isActive?.call() ?? true)) return;
             final name = _controller.text.trim();
             if (name.isNotEmpty) {
               widget.viewModel.createSphere(name: name);
