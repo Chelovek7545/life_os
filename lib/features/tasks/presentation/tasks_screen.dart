@@ -1574,35 +1574,40 @@ class _CalendarRowState extends State<CalendarRow> {
   Widget build(BuildContext context) {
     final weekDates = getDatesForWeek(widget.selectedDate);
 
-    return SizedBox(
-      height: 90,
-      child: Listener(
-        onPointerSignal: _onPointerSignal,
-        child: NotificationListener<ScrollNotification>(
-          onNotification: _onScroll,
-          child: ListView.separated(
-            controller: _controller,
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: ClampingScrollPhysics(),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: AppMargins.sm),
-            clipBehavior: Clip.hardEdge,
-            scrollDirection: Axis.horizontal,
-            itemCount: weekDates.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (context, index) {
-              final date = weekDates[index];
-              final isSelected = date.startOfDay.isAtSameMomentAs(
-                widget.selectedDate.startOfDay,
-              );
+    // The date cells blur the task list behind this overlay. Viewport effects
+    // isolate that backdrop in an offscreen layer, so keep this strip unfiltered.
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
+      child: SizedBox(
+        height: 90,
+        child: Listener(
+          onPointerSignal: _onPointerSignal,
+          child: NotificationListener<ScrollNotification>(
+            onNotification: _onScroll,
+            child: ListView.separated(
+              controller: _controller,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: ClampingScrollPhysics(),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: AppMargins.sm),
+              clipBehavior: Clip.hardEdge,
+              scrollDirection: Axis.horizontal,
+              itemCount: weekDates.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final date = weekDates[index];
+                final isSelected = date.startOfDay.isAtSameMomentAs(
+                  widget.selectedDate.startOfDay,
+                );
 
-              return DateTimelineCard(
-                weekday: getWeekDayName(date.weekday),
-                day: '${date.day}',
-                isSelected: isSelected,
-                onTap: () => widget.onDaySelected(date),
-              );
-            },
+                return DateTimelineCard(
+                  weekday: getWeekDayName(date.weekday),
+                  day: '${date.day}',
+                  isSelected: isSelected,
+                  onTap: () => widget.onDaySelected(date),
+                );
+              },
+            ),
           ),
         ),
       ),

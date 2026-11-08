@@ -222,55 +222,59 @@ class WorkspaceScreen extends StatelessWidget {
                     child: Row(
                       children: [
                         const SizedBox(width: 8),
-                        SizedBox(
-                          width: 200,
-                          child: AppDropdownMenu<String>(
-                            key: ValueKey('workspace-editor:${pane.id}'),
-                            initialSelection: pane.editorId,
-                            selectOnly: true,
-                            width: null,
-                            expandedInsets: EdgeInsets.zero,
-                            leadingIcon: Icon(
-                              editors[pane.editorId]!.icon,
-                              size: 18,
-                            ),
-                            inputDecorationTheme: AppButtonStyles
-                                .baseInputDecoration
-                                .copyWith(
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 8,
-                                  ),
-                                  constraints: const BoxConstraints(
-                                    maxHeight: 40,
-                                  ),
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: SizedBox(
+                              width: 200,
+                              child: AppDropdownMenu<String>(
+                                key: ValueKey('workspace-editor:${pane.id}'),
+                                initialSelection: pane.editorId,
+                                selectOnly: true,
+                                width: null,
+                                expandedInsets: EdgeInsets.zero,
+                                leadingIcon: Icon(
+                                  editors[pane.editorId]!.icon,
+                                  size: 18,
                                 ),
-                            dropdownMenuEntries: [
-                              for (final editor in editors.values)
-                                DropdownMenuEntry(
-                                  value: editor.id,
-                                  label: editor.label,
-                                  style: AppButtonStyles.baseButtonStyle.copyWith(
-                                    padding: WidgetStatePropertyAll(EdgeInsets.all(AppSpacing.md))
-                                  ),
-                                  leadingIcon: Icon(editor.icon, size: 18),
-                                  labelWidget: Text(
-                                    editor.label,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                            ],
+                                inputDecorationTheme: AppButtonStyles
+                                    .baseInputDecoration
+                                    .copyWith(
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
+                                      constraints: const BoxConstraints(
+                                        maxHeight: 40,
+                                      ),
+                                    ),
+                                dropdownMenuEntries: [
+                                  for (final editor in editors.values)
+                                    DropdownMenuEntry(
+                                      value: editor.id,
+                                      label: editor.label,
+                                      style: AppButtonStyles.baseButtonStyle.copyWith(
+                                        padding: WidgetStatePropertyAll(EdgeInsets.all(AppSpacing.md))
+                                      ),
+                                      leadingIcon: Icon(editor.icon, size: 18),
+                                      labelWidget: Text(
+                                        editor.label,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                ],
 
-                            onSelected: (editor) {
-                              if (editor != null) {
-                                controller.changeEditor(pane.id, editor);
-                              }
-                            },
+                                onSelected: (editor) {
+                                  if (editor != null) {
+                                    controller.changeEditor(pane.id, editor);
+                                  }
+                                },
+                              ),
+                            ),
                           ),
                         ),
-                        Spacer(),
                         GlassPopUpMenuButton(
                           key: ValueKey('workspace-menu:${pane.id}'),
                           tooltip: 'Действия области',
@@ -334,5 +338,3 @@ class WorkspaceScreen extends StatelessWidget {
     );
   }
 }
-
-

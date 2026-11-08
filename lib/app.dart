@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:life_os/app/dependency_container.dart';
 import 'package:life_os/core/theme/app_theme.dart';
 import 'package:life_os/main_screen.dart';
+import 'package:life_os/core/ui/app_scroll_behavior.dart';
 
 class MyApp extends StatelessWidget {
   final DependencyContainer diContainer;
@@ -14,6 +15,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Life OS',
+      scrollBehavior: const AppScrollBehavior(),
       //      themeMode: ThemeMode.dark,
       theme: AppTheme.darkTheme,
       // ThemeData(

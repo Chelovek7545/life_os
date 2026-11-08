@@ -125,7 +125,7 @@ class _HierarchyColumnState extends State<HierarchyColumn> {
 
     return Container(
       height: widget.height,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      //padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: ListView.builder(
         itemCount: flatItems.length,
         itemBuilder: (context, index) {
