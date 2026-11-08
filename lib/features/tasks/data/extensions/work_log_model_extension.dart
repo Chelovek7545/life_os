@@ -1,4 +1,5 @@
 import 'package:life_os/core/database/database.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:tasks_api/tasks_api.dart' show WorkLog;
 
 extension WorkLogModelExtension on WorkLogModel {
@@ -9,6 +10,8 @@ extension WorkLogModelExtension on WorkLogModel {
       taskId: taskId,
       date: date,
       description: description,
+      startedAt: startedAt,
+      endedAt: endedAt,
     );
   }
 }
@@ -21,6 +24,8 @@ extension WorkLogDomainExtension on WorkLog {
       taskId: taskId,
       date: date,
       description: description,
+      startedAt: Value(startedAt),
+      endedAt: Value(endedAt),
     );
   }
 }

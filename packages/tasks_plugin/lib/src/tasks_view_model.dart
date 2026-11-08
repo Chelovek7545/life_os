@@ -40,6 +40,15 @@ class TasksViewModel {
   Task draftTask = Task.blank();
   bool shouldRenderForm = false;
   bool isEventMode = false;
+  DateTime? _calendarCreationDate;
+  DateTime? _calendarCreationAnchor;
+
+  void selectCalendarCreationDate(DateTime day) {
+    if (!_accepting) return;
+    _calendarCreationDate = DateTime(day.year, day.month, day.day, 0, 0, 0, 1);
+    _calendarCreationAnchor = currentFilterValue.anchorDate;
+  }
+
   StreamSubscription<void>? _subscription;
   bool _initialized = false;
   bool _accepting = true;
@@ -81,6 +90,14 @@ class TasksViewModel {
 
   void showForm() {
     if (!_accepting) return;
+    if (activeTaskWithProject == null && draftTask.startsAt == null) {
+      final day = _calendarCreationAnchor == currentFilterValue.anchorDate
+          ? _calendarCreationDate ?? currentFilterValue.anchorDate
+          : currentFilterValue.anchorDate;
+      draftTask = draftTask.copyWith(
+        startsAt: Wrapped(DateTime(day.year, day.month, day.day, 0, 0, 0, 1)),
+      );
+    }
     shouldRenderForm = true;
     _flags.add(currentUiFlags.copyWith(isFormVisible: true));
   }
@@ -263,6 +280,14 @@ class TasksViewModel {
   );
   Future<void> updateTask(Task task) =>
       _enqueue(() => _repository.updateTask(task));
+  Future<void> setTaskStatus(String id, TaskStatus status) =>
+      _enqueue(() async {
+        final current = await _repository.getById(id);
+        if (current == null || current.status == status) return;
+        await _repository.updateTask(
+          current.copyWith(status: status, updatedAt: DateTime.now()),
+        );
+      });
   Future<void> updateTaskFromEditor(Task draft) => _enqueue(() async {
     final current = await _repository.getById(draft.id);
     if (current == null) return;

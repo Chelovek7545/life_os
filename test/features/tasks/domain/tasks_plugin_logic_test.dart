@@ -8,6 +8,69 @@ Future<void> tick() => Future<void>.delayed(Duration.zero);
 
 void main() {
   test(
+    'new drafts use the selected calendar day while edits retain their own date',
+    () async {
+      final tasks = MemoryTasks();
+      final projects = MemoryProjectQueries();
+      final model = TasksViewModel(
+        tasks,
+        GetTasksWithProjectsUseCase(tasks, projects),
+        projects,
+      );
+      addTearDown(model.dispose);
+      final selected = DateTime(2027, 2, 3);
+      model.updateFilter(
+        (old) => old.copyWith(anchorDate: DateTime(2027, 2, 8)),
+      );
+      model.selectCalendarCreationDate(selected);
+      model.showForm();
+      expect(model.draftTask.startsAt, DateTime(2027, 2, 3, 0, 0, 0, 1));
+      expect(model.draftTask.endsAt, isNull);
+      model.hideForm();
+      model.disableForm();
+      final existing = Task.blank().copyWith(
+        startsAt: Wrapped(DateTime(2026, 1, 1, 9)),
+      );
+      model.openTaskInEditor(existing);
+      expect(model.draftTask.startsAt, existing.startsAt);
+      model.hideForm();
+      model.disableForm();
+      model.updateFilter(
+        (old) => old.copyWith(anchorDate: DateTime(2028, 3, 5)),
+      );
+      model.showForm();
+      expect(model.draftTask.startsAt, DateTime(2028, 3, 5, 0, 0, 0, 1));
+    },
+  );
+
+  test(
+    'kanban status writes preserve current fields and ignore deleted tasks',
+    () async {
+      final tasks = MemoryTasks();
+      final projects = MemoryProjectQueries();
+      final model = TasksViewModel(
+        tasks,
+        GetTasksWithProjectsUseCase(tasks, projects),
+        projects,
+      );
+      addTearDown(model.dispose);
+      final task = Task.blank().copyWith(
+        title: 'Fresh title',
+        tags: [const Tag(id: 1, name: 'Keep', colorHex: 0)],
+        startsAt: Wrapped(DateTime(2026, 11, 8, 9)),
+      );
+      tasks.items[task.id] = task;
+      await model.setTaskStatus(task.id, TaskStatus.inProgress);
+      expect(tasks.items[task.id]!.status, TaskStatus.inProgress);
+      expect(tasks.items[task.id]!.title, task.title);
+      expect(tasks.items[task.id]!.tags, task.tags);
+      expect(tasks.items[task.id]!.startsAt, task.startsAt);
+      await model.setTaskStatus('deleted', TaskStatus.done);
+      expect(tasks.items.length, 1);
+    },
+  );
+
+  test(
     'editor updates preserve fields changed outside the form and do not revive deleted tasks',
     () async {
       final tasks = MemoryTasks();

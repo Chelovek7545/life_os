@@ -44,6 +44,8 @@ class WorkLogsViewModel extends ChangeNotifier {
     required String description,
     int status = 0,
     DateTime? date,
+    DateTime? startedAt,
+    DateTime? endedAt,
   }) async {
     if (_disposed) throw StateError('Work logs model is closed.');
     final log = WorkLog(
@@ -52,6 +54,8 @@ class WorkLogsViewModel extends ChangeNotifier {
       taskId: taskId,
       date: date ?? DateTime.now(),
       description: description,
+      startedAt: startedAt,
+      endedAt: endedAt,
     );
     await _repository.addWorkLog(log);
   }

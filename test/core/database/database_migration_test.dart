@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:drift/native.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:tasks_api/tasks_api.dart';
@@ -7,6 +8,75 @@ import 'package:tasks_api/tasks_api.dart';
 void main() {
   late Directory directory;
   late File file;
+  test(
+    'upgrading v9 preserves legacy work logs and supports optional intervals',
+    () async {
+      final previous = AppDatabase(NativeDatabase(file));
+      final now = DateTime(2026, 11, 8);
+      await previous
+          .into(previous.tasks)
+          .insert(
+            TasksCompanion.insert(
+              id: 'task',
+              title: 'Preserve',
+              description: '',
+              status: TaskStatus.open,
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+      await previous
+          .into(previous.workLogs)
+          .insert(
+            WorkLogsCompanion.insert(
+              id: 'old-log',
+              taskId: 'task',
+              status: 1,
+              date: now,
+              description: 'Legacy description',
+            ),
+          );
+      await previous.customStatement(
+        'ALTER TABLE work_logs DROP COLUMN started_at',
+      );
+      await previous.customStatement(
+        'ALTER TABLE work_logs DROP COLUMN ended_at',
+      );
+      await previous.customStatement('PRAGMA user_version = 9');
+      await previous.close();
+      final upgraded = AppDatabase(NativeDatabase(file));
+      try {
+        final log = await upgraded.select(upgraded.workLogs).getSingle();
+        expect(log.description, 'Legacy description');
+        expect(log.status, 1);
+        expect(log.startedAt, isNull);
+        expect(log.endedAt, isNull);
+        await upgraded
+            .into(upgraded.workLogs)
+            .insert(
+              WorkLogsCompanion.insert(
+                id: 'timed',
+                taskId: 'task',
+                status: 1,
+                date: now,
+                description: 'Timed',
+                startedAt: Value(now.copyWith(hour: 14, minute: 10)),
+                endedAt: Value(now.copyWith(hour: 15, minute: 30)),
+              ),
+            );
+        final timed = await (upgraded.select(
+          upgraded.workLogs,
+        )..where((row) => row.id.equals('timed'))).getSingle();
+        expect(
+          timed.endedAt!.difference(timed.startedAt!),
+          const Duration(minutes: 80),
+        );
+      } finally {
+        await upgraded.close();
+      }
+    },
+  );
+
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('life_os_migration_');
     file = File(directory.path + Platform.pathSeparator + 'test.sqlite');

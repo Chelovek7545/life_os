@@ -6,7 +6,9 @@ import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/semantic_tag.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:core_contracts/core_contracts.dart' show Wrapped;
-import 'package:tasks_api/tasks_api.dart' show Tag, Task, TaskStatus;
+import 'package:tasks_api/tasks_api.dart'
+    show Tag, Task, TaskStatus, WorkLogsApi;
+import 'task_work_logs.dart';
 import 'glass_panel.dart';
 
 final testTask = Task.blank().copyWith(
@@ -17,8 +19,6 @@ final testTask = Task.blank().copyWith(
     'gym',
   ].map((e) => Tag(id: 1, name: e, colorHex: 183024)).toList(),
 );
-
-
 
 @Preview()
 Widget preview0() => MaterialApp(
@@ -81,6 +81,8 @@ class TaskCard extends StatefulWidget {
   final bool isOverdue;
   final Color? leftBorderColor;
   final Widget? indicator;
+  final WorkLogsApi? workLogs;
+  final Widget? footer;
 
   const TaskCard({
     super.key,
@@ -95,6 +97,8 @@ class TaskCard extends StatefulWidget {
     this.isOverdue = false,
     this.leftBorderColor,
     this.indicator,
+    this.workLogs,
+    this.footer,
   });
 
   @override
@@ -141,12 +145,22 @@ class _TaskCardState extends State<TaskCard>
 
   @override
   Widget build(BuildContext context) {
+    if (widget.workLogs != null) {
+      return TaskWorkLogsBuilder(
+        taskId: widget.task.id,
+        repository: widget.workLogs,
+        builder: _buildCard,
+      );
+    }
+    return _buildCard(widget.footer);
+  }
+
+  Widget _buildCard(Widget? footer) {
     final cardContent = GestureDetector(
+      onTap: widget.onTap,
+      onLongPress: widget.onLongPress,
       onHorizontalDragUpdate: widget.onDelete != null ? _onDragUpdate : null,
       onHorizontalDragEnd: widget.onDelete != null ? _onDragEnd : null,
-      onLongPress: widget.onLongPress,
-      onTap: widget.onTap,
-      onDoubleTap: widget.onSelected,
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 200),
         opacity: widget.task.isCompleted ? 0.5 : 1.0,
@@ -178,108 +192,133 @@ class _TaskCardState extends State<TaskCard>
                       ? AppColors.primaryContainer
                       : null,
                   child: Container(
-                    padding: const EdgeInsets.all(22),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    padding: EdgeInsets.all(footer == null ? 22 : 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        CheckDot(
-                          isCompleted: widget.task.isCompleted,
-                          isOverdue: widget.isOverdue,
-                          isSelected: widget.isSelected,
-                          onCheckChanged: () => widget.onCheckChanged?.call(),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.task.title,
-                                style: AppTypography.bodyMd.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  color: widget.isOverdue
-                                      ? AppColors.primaryContainer
-                                      : Colors.white,
+                        Padding(
+                          padding: EdgeInsets.all(footer == null ? 0 : 8),
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: widget.onTap,
+                            onDoubleTap: widget.onSelected,
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                CheckDot(
+                                  isCompleted: widget.task.isCompleted,
+                                  isOverdue: widget.isOverdue,
+                                  isSelected: widget.isSelected,
+                                  onCheckChanged: () =>
+                                      widget.onCheckChanged?.call(),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              if (widget.projectTitle != null)
-                                Text(
-                                  widget.projectTitle!,
-                                  style: AppTypography.bodySm.copyWith(
-                                    color: AppColors.onSurfaceVariant
-                                        .withValues(alpha: 0.7),
-                                  ),
-                                ),
-                              const SizedBox(height: 8),
-                              if (widget.task.dueDate != null)
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.schedule,
-                                      size: 12,
-                                      color: widget.isOverdue
-                                          ? AppColors.primaryContainer
-                                          : AppColors.onSurfaceVariant,
-                                    ),
-                                    const SizedBox(width: 4),
-
-                                    Text(
-                                      formatDate(widget.task.dueDate!),
-                                      style: AppTypography.codeLabel.copyWith(
-                                        color: widget.isOverdue
-                                            ? AppColors.primaryContainer
-                                            : AppColors.onSurfaceVariant,
-                                      ),
-                                    ),
-                                    if (widget.task.tags.isNotEmpty) ...[
-                                      const SizedBox(width: 12),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        widget.task.title,
+                                        style: AppTypography.bodyMd.copyWith(
+                                          fontWeight: FontWeight.w600,
                                           color: widget.isOverdue
                                               ? AppColors.primaryContainer
-                                                    .withValues(alpha: 0.2)
-                                              : AppColors.surfaceGlass,
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                        ),
-                                        child: Wrap(
-                                          spacing: 12,
-                                          runSpacing: 8,
-                                          children: widget.task.tags
-                                              .map(
-                                                (link) => SemanticTag(
-                                                  label: link.name,
-                                                  accentColor: Colors.black,
-                                                ),
-                                              )
-                                              .toList(),
+                                              : Colors.white,
                                         ),
                                       ),
+                                      const SizedBox(height: 4),
+                                      if (widget.projectTitle != null)
+                                        Text(
+                                          widget.projectTitle!,
+                                          style: AppTypography.bodySm.copyWith(
+                                            color: AppColors.onSurfaceVariant
+                                                .withValues(alpha: 0.7),
+                                          ),
+                                        ),
+                                      const SizedBox(height: 8),
+                                      if (widget.task.dueDate != null)
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              Icons.schedule,
+                                              size: 12,
+                                              color: widget.isOverdue
+                                                  ? AppColors.primaryContainer
+                                                  : AppColors.onSurfaceVariant,
+                                            ),
+                                            const SizedBox(width: 4),
+
+                                            Text(
+                                              formatDate(widget.task.dueDate!),
+                                              style: AppTypography.codeLabel
+                                                  .copyWith(
+                                                    color: widget.isOverdue
+                                                        ? AppColors
+                                                              .primaryContainer
+                                                        : AppColors
+                                                              .onSurfaceVariant,
+                                                  ),
+                                            ),
+                                            if (widget
+                                                .task
+                                                .tags
+                                                .isNotEmpty) ...[
+                                              const SizedBox(width: 12),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 2,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: widget.isOverdue
+                                                      ? AppColors
+                                                            .primaryContainer
+                                                            .withValues(
+                                                              alpha: 0.2,
+                                                            )
+                                                      : AppColors.surfaceGlass,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                                child: Wrap(
+                                                  spacing: 12,
+                                                  runSpacing: 8,
+                                                  children: widget.task.tags
+                                                      .map(
+                                                        (link) => SemanticTag(
+                                                          label: link.name,
+                                                          accentColor:
+                                                              Colors.black,
+                                                        ),
+                                                      )
+                                                      .toList(),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
                                     ],
-                                  ],
+                                  ),
                                 ),
-                            ],
-                          ),
-                        ),
-                        if (widget.indicator != null) ...[
-                          widget.indicator!,
-                          const SizedBox(width: 8),
-                        ],
-                        GestureDetector(
-                          onTap: widget.onTap,
-                          child: Icon(
-                            Icons.drag_indicator,
-                            color: AppColors.onSurfaceVariant.withValues(
-                              alpha: 0.4,
+                                if (widget.indicator != null) ...[
+                                  widget.indicator!,
+                                  const SizedBox(width: 8),
+                                ],
+                                GestureDetector(
+                                  onTap: widget.onTap,
+                                  child: Icon(
+                                    Icons.drag_indicator,
+                                    color: AppColors.onSurfaceVariant
+                                        .withValues(alpha: 0.4),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
+                        ?footer,
                       ],
                     ),
                   ),
@@ -298,8 +337,7 @@ class _TaskCardState extends State<TaskCard>
                               AppColors.onSurfaceVariant,
                           blurRadius: 13,
                           spreadRadius: -2,
-                          offset: Offset(3, 0)
-                          
+                          offset: Offset(3, 0),
                         ),
                       ],
                       color:

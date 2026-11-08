@@ -48,6 +48,7 @@ class _TaskCalendarState extends State<TaskCalendar> {
   void _changeWeek(DateTime date) {
     _lastAnchorDate = date;
     widget.viewModel.updateFilter((old) => old.copyWith(anchorDate: date));
+    widget.viewModel.selectCalendarCreationDate(_selectedDate);
   }
 
   void _selectDay(DateTime date) {

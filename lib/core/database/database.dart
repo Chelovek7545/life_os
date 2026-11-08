@@ -12,9 +12,12 @@ part 'database.g.dart';
 class WorkLogs extends Table {
   TextColumn get id => text()(); // UUID
   IntColumn get status => integer()();
-  TextColumn get taskId => text().references(Tasks, #id, onDelete: KeyAction.cascade)();
+  TextColumn get taskId =>
+      text().references(Tasks, #id, onDelete: KeyAction.cascade)();
   DateTimeColumn get date => dateTime()();
   TextColumn get description => text()();
+  DateTimeColumn get startedAt => dateTime().nullable()();
+  DateTimeColumn get endedAt => dateTime().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -74,7 +77,7 @@ class Goals extends Table {
   TextColumn get description => text()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
-  
+
   TextColumn get color => text()(); // Hex color, например "#FF5733"
   DateTimeColumn get dueDate => dateTime().nullable()();
   TextColumn get sphereId => text().nullable()(); // FK к Spheres
@@ -110,8 +113,10 @@ class Habits extends Table {
   TextColumn get color => text().withDefault(const Constant('#FF5C00'))();
   IntColumn get typeKind => intEnum<HabitTypeKind>()();
   TextColumn get timeOfDay => text().nullable()(); // "HH:mm" для TimeHabit
-  IntColumn get daysOfWeek => integer().withDefault(const Constant(254))(); // bitmask
-  IntColumn get durationWeeks => integer().nullable()(); // null = без ограничения
+  IntColumn get daysOfWeek =>
+      integer().withDefault(const Constant(254))(); // bitmask
+  IntColumn get durationWeeks =>
+      integer().nullable()(); // null = без ограничения
   TextColumn get reminderTime => text().nullable()(); // "HH:mm"
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -141,17 +146,19 @@ class HabitEntries extends Table {
 }
 
 // Часть 2: Определение базы данных
-@DriftDatabase(tables: [
-  Tasks,
-  Projects,
-  Tags,
-  TaskTagEntries,
-  Goals,
-  Spheres,
-  Habits,
-  HabitEntries,
-  WorkLogs,
-])
+@DriftDatabase(
+  tables: [
+    Tasks,
+    Projects,
+    Tags,
+    TaskTagEntries,
+    Goals,
+    Spheres,
+    Habits,
+    HabitEntries,
+    WorkLogs,
+  ],
+)
 class AppDatabase extends _$AppDatabase {
   // Конструктор
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
@@ -163,7 +170,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration {
@@ -176,7 +183,9 @@ class AppDatabase extends _$AppDatabase {
       },
       onUpgrade: (Migrator m, int from, int to) async {
         if (from <= 2) {
-          await m.database.customStatement('DROP TABLE IF EXISTS dashboard_widgets');
+          await m.database.customStatement(
+            'DROP TABLE IF EXISTS dashboard_widgets',
+          );
         }
         if (from <= 4) {
           // Миграция v4 была сломана: зависела от несуществующей таблицы `spaces`
@@ -222,8 +231,11 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from < 9) {
           await m.createTable(workLogs);
+        } else if (from < 10) {
+          await m.addColumn(workLogs, workLogs.startedAt);
+          await m.addColumn(workLogs, workLogs.endedAt);
         }
-      }, 
+      },
     );
   }
 }

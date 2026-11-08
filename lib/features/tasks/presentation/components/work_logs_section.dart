@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:tasks_api/tasks_api.dart' show WorkLogsApi, WorkLog;
+import 'package:tasks_api/tasks_api.dart' show WorkLogsApi, WorkLog, Wrapped;
 import 'package:tasks_plugin/tasks_plugin.dart' show WorkLogsViewModel;
 
 class WorkLogsSection extends StatefulWidget {
@@ -162,6 +162,9 @@ class _WorkLogEditor extends StatefulWidget {
 }
 
 class _WorkLogEditorState extends State<_WorkLogEditor> {
+  late DateTime _day = widget.existing?.date.toLocal() ?? DateTime.now();
+  late DateTime? _start = widget.existing?.startedAt?.toLocal();
+  late DateTime? _end = widget.existing?.endedAt?.toLocal();
   late final _controller = TextEditingController(
     text: widget.existing?.description ?? '',
   );
@@ -171,15 +174,31 @@ class _WorkLogEditorState extends State<_WorkLogEditor> {
     if (_saving) return;
     final text = _controller.text.trim();
     if (text.isEmpty) return;
+    if ((_start == null) != (_end == null)) {
+      setState(() => _error = 'Укажите начало и конец или уберите время.');
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
       if (widget.existing case final log?) {
-        await widget.model.updateWorkLog(log.copyWith(description: text));
+        await widget.model.updateWorkLog(
+          log.copyWith(
+            description: text,
+            date: _start ?? _day,
+            startedAt: Wrapped(_start),
+            endedAt: Wrapped(_end),
+          ),
+        );
       } else {
-        await widget.model.addWorkLog(description: text);
+        await widget.model.addWorkLog(
+          description: text,
+          date: _start ?? _day,
+          startedAt: _start,
+          endedAt: _end,
+        );
       }
       if (mounted) Navigator.of(context).pop();
     } catch (_) {
@@ -204,14 +223,93 @@ class _WorkLogEditorState extends State<_WorkLogEditor> {
     title: Text(
       widget.existing == null ? 'Добавить ворклог' : 'Редактировать ворклог',
     ),
-    content: TextField(
-      controller: _controller,
-      enabled: !_saving,
-      maxLines: 3,
-      decoration: InputDecoration(
-        labelText: 'Описание этапа',
-        hintText: 'Что было сделано...',
-        errorText: _error,
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _controller,
+            enabled: !_saving,
+            maxLines: 3,
+            decoration: InputDecoration(
+              labelText: 'Описание этапа',
+              hintText: 'Что было сделано...',
+              errorText: _error,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            icon: const Icon(Icons.calendar_today, size: 18),
+            label: Text('${_day.day}.${_day.month}.${_day.year}'),
+            onPressed: _saving
+                ? null
+                : () async {
+                    final day = await showDatePicker(
+                      context: context,
+                      initialDate: _day,
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2140),
+                    );
+                    if (!mounted || day == null) return;
+                    setState(() {
+                      final overnight =
+                          _start != null &&
+                          _end != null &&
+                          !DateUtils.isSameDay(_start, _end);
+                      _day = day;
+                      if (_start != null) {
+                        _start = DateTime(
+                          day.year,
+                          day.month,
+                          day.day,
+                          _start!.hour,
+                          _start!.minute,
+                        );
+                      }
+                      if (_end != null) {
+                        _end = DateTime(
+                          day.year,
+                          day.month,
+                          day.day + (overnight ? 1 : 0),
+                          _end!.hour,
+                          _end!.minute,
+                        );
+                      }
+                    });
+                  },
+          ),
+          Wrap(
+            spacing: 8,
+            children: [
+              TextButton(
+                onPressed: _saving ? null : () => _pickTime(true),
+                child: Text(
+                  _start == null
+                      ? 'Начало'
+                      : 'Начало: ${TimeOfDay.fromDateTime(_start!).format(context)}',
+                ),
+              ),
+              TextButton(
+                onPressed: _saving ? null : () => _pickTime(false),
+                child: Text(
+                  _end == null
+                      ? 'Конец'
+                      : 'Конец: ${TimeOfDay.fromDateTime(_end!).format(context)}',
+                ),
+              ),
+              if (_start != null || _end != null)
+                TextButton(
+                  onPressed: _saving
+                      ? null
+                      : () => setState(() {
+                          _start = null;
+                          _end = null;
+                        }),
+                  child: const Text('Без времени'),
+                ),
+            ],
+          ),
+        ],
       ),
     ),
     actions: [
@@ -225,4 +323,45 @@ class _WorkLogEditorState extends State<_WorkLogEditor> {
       ),
     ],
   );
+
+  Future<void> _pickTime(bool start) async {
+    final current = (start ? _start : _end)?.toLocal() ?? DateTime.now();
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(current),
+    );
+    if (!mounted || time == null) return;
+    setState(() {
+      final value = DateTime(
+        _day.year,
+        _day.month,
+        _day.day,
+        time.hour,
+        time.minute,
+      );
+      if (start) {
+        _start = value;
+      } else {
+        _end = value;
+      }
+      if (_start != null && _end != null) {
+        _end = DateTime(
+          _day.year,
+          _day.month,
+          _day.day,
+          _end!.hour,
+          _end!.minute,
+        );
+        if (!_end!.isAfter(_start!)) {
+          _end = DateTime(
+            _day.year,
+            _day.month,
+            _day.day + 1,
+            _end!.hour,
+            _end!.minute,
+          );
+        }
+      }
+    });
+  }
 }

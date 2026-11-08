@@ -4069,8 +4069,38 @@ class $WorkLogsTable extends WorkLogs
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _startedAtMeta = const VerificationMeta(
+    'startedAt',
+  );
   @override
-  List<GeneratedColumn> get $columns => [id, status, taskId, date, description];
+  late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
+    'started_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _endedAtMeta = const VerificationMeta(
+    'endedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> endedAt = GeneratedColumn<DateTime>(
+    'ended_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    status,
+    taskId,
+    date,
+    description,
+    startedAt,
+    endedAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -4123,6 +4153,18 @@ class $WorkLogsTable extends WorkLogs
     } else if (isInserting) {
       context.missing(_descriptionMeta);
     }
+    if (data.containsKey('started_at')) {
+      context.handle(
+        _startedAtMeta,
+        startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta),
+      );
+    }
+    if (data.containsKey('ended_at')) {
+      context.handle(
+        _endedAtMeta,
+        endedAt.isAcceptableOrUnknown(data['ended_at']!, _endedAtMeta),
+      );
+    }
     return context;
   }
 
@@ -4152,6 +4194,14 @@ class $WorkLogsTable extends WorkLogs
         DriftSqlType.string,
         data['${effectivePrefix}description'],
       )!,
+      startedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}started_at'],
+      ),
+      endedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}ended_at'],
+      ),
     );
   }
 
@@ -4167,12 +4217,16 @@ class WorkLogModel extends DataClass implements Insertable<WorkLogModel> {
   final String taskId;
   final DateTime date;
   final String description;
+  final DateTime? startedAt;
+  final DateTime? endedAt;
   const WorkLogModel({
     required this.id,
     required this.status,
     required this.taskId,
     required this.date,
     required this.description,
+    this.startedAt,
+    this.endedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4182,6 +4236,12 @@ class WorkLogModel extends DataClass implements Insertable<WorkLogModel> {
     map['task_id'] = Variable<String>(taskId);
     map['date'] = Variable<DateTime>(date);
     map['description'] = Variable<String>(description);
+    if (!nullToAbsent || startedAt != null) {
+      map['started_at'] = Variable<DateTime>(startedAt);
+    }
+    if (!nullToAbsent || endedAt != null) {
+      map['ended_at'] = Variable<DateTime>(endedAt);
+    }
     return map;
   }
 
@@ -4192,6 +4252,12 @@ class WorkLogModel extends DataClass implements Insertable<WorkLogModel> {
       taskId: Value(taskId),
       date: Value(date),
       description: Value(description),
+      startedAt: startedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startedAt),
+      endedAt: endedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endedAt),
     );
   }
 
@@ -4206,6 +4272,8 @@ class WorkLogModel extends DataClass implements Insertable<WorkLogModel> {
       taskId: serializer.fromJson<String>(json['taskId']),
       date: serializer.fromJson<DateTime>(json['date']),
       description: serializer.fromJson<String>(json['description']),
+      startedAt: serializer.fromJson<DateTime?>(json['startedAt']),
+      endedAt: serializer.fromJson<DateTime?>(json['endedAt']),
     );
   }
   @override
@@ -4217,6 +4285,8 @@ class WorkLogModel extends DataClass implements Insertable<WorkLogModel> {
       'taskId': serializer.toJson<String>(taskId),
       'date': serializer.toJson<DateTime>(date),
       'description': serializer.toJson<String>(description),
+      'startedAt': serializer.toJson<DateTime?>(startedAt),
+      'endedAt': serializer.toJson<DateTime?>(endedAt),
     };
   }
 
@@ -4226,12 +4296,16 @@ class WorkLogModel extends DataClass implements Insertable<WorkLogModel> {
     String? taskId,
     DateTime? date,
     String? description,
+    Value<DateTime?> startedAt = const Value.absent(),
+    Value<DateTime?> endedAt = const Value.absent(),
   }) => WorkLogModel(
     id: id ?? this.id,
     status: status ?? this.status,
     taskId: taskId ?? this.taskId,
     date: date ?? this.date,
     description: description ?? this.description,
+    startedAt: startedAt.present ? startedAt.value : this.startedAt,
+    endedAt: endedAt.present ? endedAt.value : this.endedAt,
   );
   WorkLogModel copyWithCompanion(WorkLogsCompanion data) {
     return WorkLogModel(
@@ -4242,6 +4316,8 @@ class WorkLogModel extends DataClass implements Insertable<WorkLogModel> {
       description: data.description.present
           ? data.description.value
           : this.description,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+      endedAt: data.endedAt.present ? data.endedAt.value : this.endedAt,
     );
   }
 
@@ -4252,13 +4328,16 @@ class WorkLogModel extends DataClass implements Insertable<WorkLogModel> {
           ..write('status: $status, ')
           ..write('taskId: $taskId, ')
           ..write('date: $date, ')
-          ..write('description: $description')
+          ..write('description: $description, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('endedAt: $endedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, status, taskId, date, description);
+  int get hashCode =>
+      Object.hash(id, status, taskId, date, description, startedAt, endedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -4267,7 +4346,9 @@ class WorkLogModel extends DataClass implements Insertable<WorkLogModel> {
           other.status == this.status &&
           other.taskId == this.taskId &&
           other.date == this.date &&
-          other.description == this.description);
+          other.description == this.description &&
+          other.startedAt == this.startedAt &&
+          other.endedAt == this.endedAt);
 }
 
 class WorkLogsCompanion extends UpdateCompanion<WorkLogModel> {
@@ -4276,6 +4357,8 @@ class WorkLogsCompanion extends UpdateCompanion<WorkLogModel> {
   final Value<String> taskId;
   final Value<DateTime> date;
   final Value<String> description;
+  final Value<DateTime?> startedAt;
+  final Value<DateTime?> endedAt;
   final Value<int> rowid;
   const WorkLogsCompanion({
     this.id = const Value.absent(),
@@ -4283,6 +4366,8 @@ class WorkLogsCompanion extends UpdateCompanion<WorkLogModel> {
     this.taskId = const Value.absent(),
     this.date = const Value.absent(),
     this.description = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.endedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   WorkLogsCompanion.insert({
@@ -4291,6 +4376,8 @@ class WorkLogsCompanion extends UpdateCompanion<WorkLogModel> {
     required String taskId,
     required DateTime date,
     required String description,
+    this.startedAt = const Value.absent(),
+    this.endedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        status = Value(status),
@@ -4303,6 +4390,8 @@ class WorkLogsCompanion extends UpdateCompanion<WorkLogModel> {
     Expression<String>? taskId,
     Expression<DateTime>? date,
     Expression<String>? description,
+    Expression<DateTime>? startedAt,
+    Expression<DateTime>? endedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4311,6 +4400,8 @@ class WorkLogsCompanion extends UpdateCompanion<WorkLogModel> {
       if (taskId != null) 'task_id': taskId,
       if (date != null) 'date': date,
       if (description != null) 'description': description,
+      if (startedAt != null) 'started_at': startedAt,
+      if (endedAt != null) 'ended_at': endedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -4321,6 +4412,8 @@ class WorkLogsCompanion extends UpdateCompanion<WorkLogModel> {
     Value<String>? taskId,
     Value<DateTime>? date,
     Value<String>? description,
+    Value<DateTime?>? startedAt,
+    Value<DateTime?>? endedAt,
     Value<int>? rowid,
   }) {
     return WorkLogsCompanion(
@@ -4329,6 +4422,8 @@ class WorkLogsCompanion extends UpdateCompanion<WorkLogModel> {
       taskId: taskId ?? this.taskId,
       date: date ?? this.date,
       description: description ?? this.description,
+      startedAt: startedAt ?? this.startedAt,
+      endedAt: endedAt ?? this.endedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4351,6 +4446,12 @@ class WorkLogsCompanion extends UpdateCompanion<WorkLogModel> {
     if (description.present) {
       map['description'] = Variable<String>(description.value);
     }
+    if (startedAt.present) {
+      map['started_at'] = Variable<DateTime>(startedAt.value);
+    }
+    if (endedAt.present) {
+      map['ended_at'] = Variable<DateTime>(endedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4365,6 +4466,8 @@ class WorkLogsCompanion extends UpdateCompanion<WorkLogModel> {
           ..write('taskId: $taskId, ')
           ..write('date: $date, ')
           ..write('description: $description, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('endedAt: $endedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -7179,6 +7282,8 @@ typedef $$WorkLogsTableCreateCompanionBuilder =
       required String taskId,
       required DateTime date,
       required String description,
+      Value<DateTime?> startedAt,
+      Value<DateTime?> endedAt,
       Value<int> rowid,
     });
 typedef $$WorkLogsTableUpdateCompanionBuilder =
@@ -7188,6 +7293,8 @@ typedef $$WorkLogsTableUpdateCompanionBuilder =
       Value<String> taskId,
       Value<DateTime> date,
       Value<String> description,
+      Value<DateTime?> startedAt,
+      Value<DateTime?> endedAt,
       Value<int> rowid,
     });
 
@@ -7239,6 +7346,16 @@ class $$WorkLogsTableFilterComposer
 
   ColumnFilters<String> get description => $composableBuilder(
     column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get endedAt => $composableBuilder(
+    column: $table.endedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7295,6 +7412,16 @@ class $$WorkLogsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get endedAt => $composableBuilder(
+    column: $table.endedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$TasksTableOrderingComposer get taskId {
     final $$TasksTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -7341,6 +7468,12 @@ class $$WorkLogsTableAnnotationComposer
     column: $table.description,
     builder: (column) => column,
   );
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get endedAt =>
+      $composableBuilder(column: $table.endedAt, builder: (column) => column);
 
   $$TasksTableAnnotationComposer get taskId {
     final $$TasksTableAnnotationComposer composer = $composerBuilder(
@@ -7399,6 +7532,8 @@ class $$WorkLogsTableTableManager
                 Value<String> taskId = const Value.absent(),
                 Value<DateTime> date = const Value.absent(),
                 Value<String> description = const Value.absent(),
+                Value<DateTime?> startedAt = const Value.absent(),
+                Value<DateTime?> endedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => WorkLogsCompanion(
                 id: id,
@@ -7406,6 +7541,8 @@ class $$WorkLogsTableTableManager
                 taskId: taskId,
                 date: date,
                 description: description,
+                startedAt: startedAt,
+                endedAt: endedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -7415,6 +7552,8 @@ class $$WorkLogsTableTableManager
                 required String taskId,
                 required DateTime date,
                 required String description,
+                Value<DateTime?> startedAt = const Value.absent(),
+                Value<DateTime?> endedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => WorkLogsCompanion.insert(
                 id: id,
@@ -7422,6 +7561,8 @@ class $$WorkLogsTableTableManager
                 taskId: taskId,
                 date: date,
                 description: description,
+                startedAt: startedAt,
+                endedAt: endedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

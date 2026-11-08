@@ -8,6 +8,13 @@ class WorkLogsRepository implements WorkLogsApi {
   WorkLogsRepository(this._workLogsDao);
 
   final WorkLogsDao _workLogsDao;
+  void _validate(WorkLog log) {
+    if (log.startedAt != null &&
+        log.endedAt != null &&
+        !log.endedAt!.isAfter(log.startedAt!)) {
+      throw ArgumentError('Work log end must follow its start.');
+    }
+  }
 
   @override
   Future<List<WorkLog>> getWorkLogsForTask(String taskId) async {
@@ -50,11 +57,13 @@ class WorkLogsRepository implements WorkLogsApi {
 
   @override
   Future<void> addWorkLog(WorkLog workLog) async {
+    _validate(workLog);
     await _workLogsDao.insertWorkLog(workLog.toCompanion());
   }
 
   @override
   Future<void> updateWorkLog(WorkLog workLog) async {
+    _validate(workLog);
     await _workLogsDao.updateWorkLog(
       WorkLogsCompanion(
         id: Value(workLog.id),
@@ -62,6 +71,8 @@ class WorkLogsRepository implements WorkLogsApi {
         taskId: Value(workLog.taskId),
         date: Value(workLog.date),
         description: Value(workLog.description),
+        startedAt: Value(workLog.startedAt),
+        endedAt: Value(workLog.endedAt),
       ),
     );
   }

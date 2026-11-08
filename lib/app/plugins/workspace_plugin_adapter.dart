@@ -28,6 +28,7 @@ AppPlugin createWorkspacePlugin({
   required ProjectsQueries projects,
   required HabitsApi habits,
   required PulseScreenViewModel Function() pulse,
+  WorkLogsApi Function()? workLogs,
 }) {
   final lifecycle = _WorkspaceLifecycle(ui, tasks, projects, habits, pulse);
   return UiPluginRegistration(
@@ -70,6 +71,7 @@ AppPlugin createWorkspacePlugin({
                           taskBuilder: (_, item, onToggle, onOpen) => Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4),
                             child: TaskCard(
+                              workLogs: workLogs?.call(),
                               key: ValueKey('workspace-task:${item.task.id}'),
                               task: item.task,
                               projectTitle: item.project?.name,

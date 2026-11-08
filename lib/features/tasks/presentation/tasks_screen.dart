@@ -27,6 +27,7 @@ import 'package:life_os/features/tasks/presentation/components/date_header.dart'
 import 'package:life_os/features/tasks/presentation/components/day_calendar.dart';
 import 'package:life_os/features/tasks/presentation/components/task_calendar.dart';
 import 'package:life_os/features/tasks/presentation/components/calendar_task_hint.dart';
+import 'package:life_os/features/tasks/presentation/components/task_kanban_board.dart';
 
 Widget? _taskRangeIndicator(Task task) {
   final start = task.startsAt;
@@ -76,6 +77,7 @@ class TasksScreen extends StatefulWidget {
 }
 
 class TasksScreenState extends State<TasksScreen> {
+  bool _kanbanMode = false;
   bool _showCalendar = true;
   bool _showUnscheduledOverlay = false;
   bool _draggingFromOverlay = false;
@@ -261,6 +263,7 @@ class TasksScreenState extends State<TasksScreen> {
 
   Widget _buildUnscheduledCard(TaskWithProject item, DateTime today) {
     return TaskCard(
+      workLogs: widget.workLogs,
       task: item.task,
       indicator: _taskRangeIndicator(item.task),
       projectTitle: item.project?.name,
@@ -491,6 +494,40 @@ class TasksScreenState extends State<TasksScreen> {
   }
 
   Widget _buildTaskBody(double overlayHeight, DateTime today) {
+    if (_kanbanMode) {
+      return StreamBuilder<TaskScreenState>(
+        stream: widget.viewModel.state,
+        builder: (context, snapshot) {
+          Widget board(List<TaskWithProject> items) => TaskKanbanBoard(
+            items: items,
+            topPadding: overlayHeight,
+            workLogs: widget.workLogs,
+            onOpen: _openTaskEditor,
+            onToggle: widget.viewModel.toggleTask,
+            onMove: (task, status) async {
+              try {
+                await widget.viewModel.setTaskStatus(task.id, status);
+              } catch (_) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Не удалось изменить статус задачи'),
+                    ),
+                  );
+                }
+              }
+            },
+          );
+          return (snapshot.data ?? const TasksLoading()).when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            empty: (_, _) => board(const []),
+            error: (message) => Center(child: Text(message)),
+            loaded: (items, _, _, _, unscheduled) =>
+                board([...items, ...unscheduled]),
+          );
+        },
+      );
+    }
     return StreamBuilder<TaskScreenState>(
       stream: widget.viewModel.state,
       initialData: const TasksLoading(),
@@ -519,6 +556,7 @@ class TasksScreenState extends State<TasksScreen> {
                 onEditTask: _openTaskEditor,
                 onToggleSelection: widget.viewModel.toggleTaskSelection,
                 onDeleteTask: widget.viewModel.deleteTask,
+                workLogs: widget.workLogs,
               ),
               DatePeriod.day => _TaskList(
                 key: ValueKey(widget.viewModel.currentFilterValue.anchorDate),
@@ -530,6 +568,7 @@ class TasksScreenState extends State<TasksScreen> {
                 onEditTask: _openTaskEditor,
                 onToggleSelection: widget.viewModel.toggleTaskSelection,
                 onDeleteTask: widget.viewModel.deleteTask,
+                workLogs: widget.workLogs,
               ),
               _ => _TaskList(
                 key: ValueKey(widget.viewModel.currentFilterValue.anchorDate),
@@ -541,6 +580,7 @@ class TasksScreenState extends State<TasksScreen> {
                 onEditTask: _openTaskEditor,
                 onToggleSelection: widget.viewModel.toggleTaskSelection,
                 onDeleteTask: widget.viewModel.deleteTask,
+                workLogs: widget.workLogs,
               ),
             };
           },
@@ -569,6 +609,11 @@ class TasksScreenState extends State<TasksScreen> {
       children: [
         const SizedBox(height: AppSpacing.sm),
         _TasksHeader(
+          selectedMode: _kanbanMode
+              ? 2
+              : widget.viewModel.currentUiFlags.isEventMode
+              ? 1
+              : 0,
           vm: widget.viewModel,
           tasksScreenWidth: tasksScreenWidth,
           onAddPressed: widget.viewModel.currentUiFlags.isFormVisible
@@ -668,8 +713,12 @@ class TasksScreenState extends State<TasksScreen> {
   }
 
   void _onModeChanged(int index, bool isWide) {
-    _onPeriodChanged(isWide ? DatePeriod.week.index : 0);
-    widget.viewModel.toggleEventMode();
+    if (index < 0 || index > 2) return;
+    setState(() => _kanbanMode = index == 2);
+    if (index == 1) _onPeriodChanged(isWide ? DatePeriod.week.index : 0);
+    if (widget.viewModel.currentUiFlags.isEventMode != (index == 1)) {
+      widget.viewModel.toggleEventMode();
+    }
   }
 
   void _syncEventPeriod(bool isWide, bool isEventMode) {
@@ -762,7 +811,9 @@ class TasksScreenState extends State<TasksScreen> {
       alignment: AlignmentDirectional.topCenter,
       children: [
         ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: 550),
+          constraints: BoxConstraints(
+            maxWidth: _kanbanMode ? double.infinity : 550,
+          ),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: FixedVerticalFadeMask(
@@ -836,7 +887,7 @@ class TasksScreenState extends State<TasksScreen> {
                 children: [
                   ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxWidth: isWide ? double.infinity : 550,
+                      maxWidth: isWide || _kanbanMode ? double.infinity : 550,
                     ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -944,6 +995,7 @@ class _TaskList extends StatefulWidget {
     required this.onEditTask,
     required this.onToggleSelection,
     required this.onDeleteTask,
+    this.workLogs,
   });
 
   final List<TaskWithProject> items;
@@ -954,6 +1006,7 @@ class _TaskList extends StatefulWidget {
   final ValueChanged<TaskWithProject> onEditTask;
   final ValueChanged<Task> onToggleSelection;
   final ValueChanged<String> onDeleteTask;
+  final WorkLogsApi? workLogs;
 
   @override
   State<_TaskList> createState() => _TaskListState();
@@ -1042,6 +1095,7 @@ class _TaskListState extends State<_TaskList> {
   Widget _buildCard(TaskWithProject item) {
     return TaskCard(
       key: ValueKey(item.task.id),
+      workLogs: widget.workLogs,
       task: item.task,
       indicator: _taskRangeIndicator(item.task),
       leftBorderColor: item.project != null
@@ -1070,6 +1124,7 @@ class _WeekTasksList extends StatefulWidget {
     required this.onEditTask,
     required this.onToggleSelection,
     required this.onDeleteTask,
+    this.workLogs,
   });
 
   final List<TaskWithProject> items;
@@ -1080,6 +1135,7 @@ class _WeekTasksList extends StatefulWidget {
   final ValueChanged<TaskWithProject> onEditTask;
   final ValueChanged<Task> onToggleSelection;
   final ValueChanged<String> onDeleteTask;
+  final WorkLogsApi? workLogs;
 
   @override
   State<_WeekTasksList> createState() => _WeekTasksListState();
@@ -1145,6 +1201,7 @@ class _WeekTasksListState extends State<_WeekTasksList> {
           onEditTask: widget.onEditTask,
           onToggleSelection: widget.onToggleSelection,
           onDeleteTask: widget.onDeleteTask,
+          workLogs: widget.workLogs,
         );
       },
     );
@@ -1161,6 +1218,7 @@ class _WeekDaySection extends StatelessWidget {
     required this.onEditTask,
     required this.onToggleSelection,
     required this.onDeleteTask,
+    this.workLogs,
   });
 
   final DateTime date;
@@ -1171,6 +1229,7 @@ class _WeekDaySection extends StatelessWidget {
   final ValueChanged<TaskWithProject> onEditTask;
   final ValueChanged<Task> onToggleSelection;
   final ValueChanged<String> onDeleteTask;
+  final WorkLogsApi? workLogs;
 
   @override
   Widget build(BuildContext context) {
@@ -1239,6 +1298,7 @@ class _WeekDaySection extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: TaskCard(
                   key: ValueKey(item.task.id),
+                  workLogs: workLogs,
                   indicator: _taskRangeIndicator(item.task),
                   leftBorderColor: item.project != null
                       ? parseHexColor(item.project!.color)
@@ -1269,6 +1329,7 @@ class _TasksHeader extends StatelessWidget {
     required this.tasksScreenWidth,
     required this.onToggleUnscheduled,
     required this.onToggleHierarchy,
+    required this.selectedMode,
   });
   final TasksViewModel vm;
   final VoidCallback onAddPressed;
@@ -1276,6 +1337,7 @@ class _TasksHeader extends StatelessWidget {
   final double tasksScreenWidth;
   final VoidCallback onToggleUnscheduled;
   final VoidCallback onToggleHierarchy;
+  final int selectedMode;
 
   @override
   Widget build(BuildContext context) {
@@ -1329,11 +1391,18 @@ class _TasksHeader extends StatelessWidget {
           SizedBox(
             width: 150,
             child: PillSwitcher(
-              selectedIndex: vm.currentUiFlags.isEventMode ? 1 : 0,
+              selectedIndex: selectedMode,
               outerPadding: 1,
               paddingBetweenOptions: 1,
               innerPadding: 1,
-              options: const [Icon(Icons.check_box), Icon(Icons.event)],
+              options: const [
+                Tooltip(message: 'Список', child: Icon(Icons.check_box)),
+                Tooltip(message: 'Календарь', child: Icon(Icons.event)),
+                Tooltip(
+                  message: 'Канбан',
+                  child: Icon(Icons.view_kanban_outlined),
+                ),
+              ],
               onSelectionChanged: onModeChanged,
             ),
           ),

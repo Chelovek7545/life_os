@@ -212,6 +212,7 @@ class DependencyContainer {
         projects: projectsRepository,
         habits: habitsRepository,
         pulse: () => lifeGraphPlugin.viewModel,
+        workLogs: () => tasksPlugin.workLogs,
       ),
       for (final module in uiModules) registerUiModule(module, ui),
       ...additionalPlugins,
