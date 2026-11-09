@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local inference runtime, models and Python caches
+/.venv-openvino/
+/.openvino-runtime/
+/models/
+__pycache__/
+.superdesign/

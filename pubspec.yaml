@@ -9,6 +9,7 @@ environment:
 
 
 workspace:
+  - packages/agent_bridge
   - packages/graph_components
   - packages/goals_plugin
   - packages/spheres_plugin
@@ -34,6 +35,7 @@ workspace:
   - packages/plugin_ui
 
 dependencies:
+  agent_bridge: ^0.1.0
   graph_components: ^0.1.0
   goals_plugin: ^0.1.0
   spheres_plugin: ^0.1.0
@@ -85,6 +87,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - tool/openvino/worker.py
 
   fonts:
     - family: Inter

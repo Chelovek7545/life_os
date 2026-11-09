@@ -1,14 +1,23 @@
 import 'package:core_contracts/core_contracts.dart' show StorageException;
-import 'package:tasks_api/tasks_api.dart' show TasksApi, Task;
+import 'package:tasks_api/tasks_api.dart'
+    show TasksApi, Task, TaskCompletionCommands;
 import 'package:life_os/features/tasks/data/extensions/tag_model_extension.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 
-
-class TasksRepository implements TasksApi {
+class TasksRepository implements TasksApi, TaskCompletionCommands {
   TasksRepository(this._dao);
 
   final TasksDao _dao;
+
+  @override
+  Future<Task?> completeTask(String id) async {
+    try {
+      return await _dao.completeTask(id);
+    } catch (error) {
+      throw StorageException('Failed to complete task.', error);
+    }
+  }
 
   @override
   Stream<List<Task>> watchTasks() => _dao.watchAllTasksWithTags();

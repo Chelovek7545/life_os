@@ -3,13 +3,27 @@ import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/extensions/tag_model_extension.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 
-import 'package:tasks_api/tasks_api.dart' show Task;
+import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus;
 
 part 'tasks_dao.g.dart';
 
 @DriftAccessor(tables: [Tasks, Tags, TaskTagEntries])
 class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
   TasksDao(super.db);
+
+  Future<Task?> completeTask(String id) => transaction(() async {
+    final current = await getById(id);
+    if (current == null) return null;
+    if (current.status != TaskStatus.done) {
+      await (update(tasks)..where((row) => row.id.equals(id))).write(
+        TasksCompanion(
+          status: const Value(TaskStatus.done),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+    }
+    return getTaskWithTags(id);
+  });
 
   // =============== CREATE ===============
 

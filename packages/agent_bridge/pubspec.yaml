@@ -1,0 +1,10 @@
+name: agent_bridge
+publish_to: none
+version: 0.1.0
+environment:
+  sdk: ^3.12.0
+resolution: workspace
+dependencies:
+  tasks_api: ^0.1.0
+  plugin_runtime: ^0.1.0
+  path: ^1.8.0

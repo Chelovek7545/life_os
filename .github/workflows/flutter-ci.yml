@@ -10,6 +10,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      ASSISTANT_TEST_PYTHON: python3
 
     steps:
       - name: Checkout repository
@@ -31,8 +33,11 @@ jobs:
       - name: Generate code (build_runner)
         run: flutter pub run build_runner build
 
+      - name: Check OpenVINO worker protocol without model
+        run: python3 tool/openvino/test_worker.py
+
       - name: Check module boundaries and lifecycle
-        run: flutter test test/architecture test/core/plugins test/core/storage test/features/goals test/features/today test/features/resources test/features/lifegraph test/features/projects test/features/habits test/features/tasks test/presentation/tasks_view_model_test.dart test/presentation/components/timeline_test.dart test/core/ui/task_card_test.dart test/core/ui/graph_components_test.dart test/app test/main_screen_test.dart
+        run: flutter test test/features/agents test/architecture test/core/plugins test/core/storage test/features/goals test/features/today test/features/resources test/features/lifegraph test/features/projects test/features/habits test/features/tasks test/presentation/tasks_view_model_test.dart test/presentation/components/timeline_test.dart test/core/ui/task_card_test.dart test/core/ui/graph_components_test.dart test/app test/main_screen_test.dart
 
       - name: Analyze
         run: flutter analyze --fatal-warnings

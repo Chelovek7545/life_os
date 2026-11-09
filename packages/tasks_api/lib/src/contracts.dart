@@ -16,6 +16,10 @@ abstract interface class TaskCommands {
 
 abstract interface class TasksApi implements TaskQueries, TaskCommands {}
 
+abstract interface class TaskCompletionCommands {
+  Future<Task?> completeTask(String id);
+}
+
 abstract interface class WorkLogsApi {
   Future<List<WorkLog>> getWorkLogsForTask(String taskId);
   Future<List<WorkLog>> getPageForTask(

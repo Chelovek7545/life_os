@@ -1,4 +1,7 @@
 import 'package:graph_api/graph_api.dart';
+import 'package:agent_bridge/agent_bridge.dart';
+import 'package:agent_bridge/local_assistant.dart';
+import 'plugins/assistant_plugin_adapter.dart';
 import 'package:graph_ui/graph_ui.dart';
 import 'plugins/spheres_plugin_adapter.dart';
 import 'plugins/goals_plugin_adapter.dart';
@@ -57,6 +60,16 @@ class DependencyContainer {
       'ENABLE_OBSIDIAN',
       defaultValue: true,
     ),
+    this.enableMcp = const bool.fromEnvironment(
+      'ENABLE_MCP',
+      defaultValue: false,
+    ),
+    this.enableAssistant = const bool.fromEnvironment(
+      'ENABLE_ASSISTANT',
+      defaultValue: true,
+    ),
+    AssistantBackendFactory? assistantBackendFactory,
+    McpServerOptions? mcpOptions,
     Iterable<AppPlugin> additionalPlugins = const [],
     Iterable<GraphModule> graphModules = const [],
     Iterable<UiModuleSpec> uiModules = const [],
@@ -69,6 +82,13 @@ class DependencyContainer {
     habitsDao = HabitsDao(this.database);
     workLogsDao = WorkLogsDao(this.database);
     tasksRepository = TasksRepository(tasksDAO);
+    mcpPlugin = enableMcp
+        ? McpServerPlugin(
+            tasks: tasksRepository,
+            completion: tasksRepository,
+            options: mcpOptions,
+          )
+        : null;
     projectsRepository = ProjectsRepository(projectsDao);
     spheresRepository = SpheresRepository(spheresDao);
     goalsRepository = GoalsRepository(goalsDao);
@@ -180,6 +200,14 @@ class DependencyContainer {
         keepChildren: request.keepChildren,
       ),
     );
+    assistantPlugin = enableAssistant
+        ? AssistantPlugin(
+            ui: ui,
+            tasks: tasksRepository,
+            completion: tasksRepository,
+            backendFactory: assistantBackendFactory,
+          )
+        : null;
     plugins = PluginHost([
       ...spheresPlugin.plugins,
       ...goalsPlugin.plugins,
@@ -216,12 +244,18 @@ class DependencyContainer {
       ),
       for (final module in uiModules) registerUiModule(module, ui),
       ...additionalPlugins,
+      ?mcpPlugin,
+      ?assistantPlugin,
     ]);
   }
 
   final AppDatabase database;
   final bool enableTelegram;
   final bool enableObsidian;
+  final bool enableMcp;
+  final bool enableAssistant;
+  late final AssistantPlugin? assistantPlugin;
+  late final McpServerPlugin? mcpPlugin;
   late final PluginUiRegistry ui;
   late final PluginNavigationController navigation;
   late final PluginHost plugins;

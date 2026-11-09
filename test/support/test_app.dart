@@ -1,4 +1,6 @@
 import 'package:graph_ui/graph_ui.dart';
+import 'package:agent_bridge/agent_bridge.dart';
+import 'package:agent_bridge/local_assistant.dart';
 import 'package:plugin_ui/plugin_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +12,10 @@ import 'package:life_os/app/dependency_container.dart';
 Future<DependencyContainer> createTestApp({
   bool enableTelegram = false,
   bool enableObsidian = true,
+  bool enableMcp = false,
+  bool enableAssistant = false,
+  AssistantBackendFactory? assistantBackendFactory,
+  McpServerOptions? mcpOptions,
   Iterable<GraphModule> graphModules = const [],
   Iterable<UiModuleSpec> uiModules = const [],
 }) async {
@@ -18,6 +24,10 @@ Future<DependencyContainer> createTestApp({
     database: AppDatabase(NativeDatabase.memory()),
     enableTelegram: enableTelegram,
     enableObsidian: enableObsidian,
+    enableMcp: enableMcp,
+    enableAssistant: enableAssistant,
+    assistantBackendFactory: assistantBackendFactory,
+    mcpOptions: mcpOptions,
     graphModules: graphModules,
     uiModules: uiModules,
   );

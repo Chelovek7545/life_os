@@ -4,6 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('pure packages and Telegram cannot depend on app internals', () {
     const forbidden = {
+      'agent_bridge': [
+        'dart:ui',
+        'package:flutter/',
+        'package:life_os/',
+        'package:drift/',
+        'package:tasks_plugin/',
+        'package:projects_plugin/',
+        'package:habits_plugin/',
+      ],
       'graph_components': [
         'dart:io',
         'package:life_os/',

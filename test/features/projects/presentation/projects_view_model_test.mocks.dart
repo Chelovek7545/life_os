@@ -97,6 +97,14 @@ class MockTasksRepository extends _i1.Mock implements _i5.TasksRepository {
   }
 
   @override
+  _i3.Future<_i6.Task?> completeTask(String? id) =>
+      (super.noSuchMethod(
+            Invocation.method(#completeTask, [id]),
+            returnValue: _i3.Future<_i6.Task?>.value(),
+          )
+          as _i3.Future<_i6.Task?>);
+
+  @override
   _i3.Stream<List<_i6.Task>> watchTasks() =>
       (super.noSuchMethod(
             Invocation.method(#watchTasks, []),
