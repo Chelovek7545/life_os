@@ -9,6 +9,45 @@ import '../support/test_app.dart';
 import 'today_composition_test.dart' show pumpStorage;
 
 void main() {
+  testWidgets('kanban header spacing stays consistent after calendar mode', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1800, 1050);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final app = (await tester.runAsync(
+      () => createTestApp(enableObsidian: false),
+    ))!;
+    await tester.pumpWidget(MyApp(diContainer: app));
+    app.navigation.open('tasks');
+    await pumpStorage(tester);
+    await tester.tap(find.text('Week'));
+    await pumpStorage(tester);
+    await tester.tap(find.byIcon(Icons.view_kanban_outlined));
+    await pumpStorage(tester);
+    final board = find.byKey(const ValueKey('tasks.kanban'));
+    final weekTop = tester.getTopLeft(board).dy;
+
+    await tester.tap(find.byIcon(Icons.event));
+    await pumpStorage(tester);
+    expect(app.tasksViewModel.currentFilterValue.period, DatePeriod.week);
+    await tester.tap(find.byIcon(Icons.view_kanban_outlined));
+    await pumpStorage(tester);
+    expect(tester.getTopLeft(board).dy, weekTop);
+
+    await tester.tap(find.text('Day'));
+    await pumpStorage(tester);
+    expect(tester.getTopLeft(board).dy, greaterThan(weekTop));
+    await tester.tap(find.text('Week'));
+    await pumpStorage(tester);
+    expect(tester.getTopLeft(board).dy, weekTop);
+    await tester.tap(find.text('Month'));
+    await pumpStorage(tester);
+    expect(tester.getTopLeft(board).dy, weekTop);
+    expect(tester.takeException(), isNull);
+    await disposeTestApp(tester, app);
+  });
+
   testWidgets(
     'new task form uses the chosen day after calendar week navigation',
     (tester) async {

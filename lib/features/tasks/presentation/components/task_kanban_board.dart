@@ -36,7 +36,7 @@ class TaskKanbanBoard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: EdgeInsets.only(top: topPadding, bottom: 8),
+    padding: EdgeInsets.only(top: topPadding + AppSpacing.md, bottom: 8),
     child: LayoutBuilder(
       builder: (context, constraints) {
         final width = math.max(260.0, (constraints.maxWidth - 36) / 4);

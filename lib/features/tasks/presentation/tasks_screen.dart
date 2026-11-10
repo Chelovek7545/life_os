@@ -17,6 +17,8 @@ import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/ui/segmented_pill_controller.dart';
 import 'package:life_os/core/ui/resizable_panel.dart';
 import 'package:life_os/core/ui/task_card.dart';
+import 'package:life_os/core/ui/task_work_logs.dart';
+import 'package:life_os/core/ui/app_scroll_behavior.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
@@ -77,8 +79,13 @@ class TasksScreen extends StatefulWidget {
 }
 
 class TasksScreenState extends State<TasksScreen> {
+  bool _weekHorizontal = false;
+  bool get _wideWeek =>
+      _weekHorizontal &&
+      !_kanbanMode &&
+      !widget.viewModel.currentUiFlags.isEventMode &&
+      widget.viewModel.currentFilterValue.period == DatePeriod.week;
   bool _kanbanMode = false;
-  bool _showCalendar = true;
   bool _showUnscheduledOverlay = false;
   bool _draggingFromOverlay = false;
   bool _hoveringUnscheduled = false;
@@ -536,10 +543,14 @@ class TasksScreenState extends State<TasksScreen> {
 
         return state.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          empty: (_, _) => const EmptyPlaceholder(),
+          empty: (_, _) =>
+              widget.viewModel.currentFilterValue.period == DatePeriod.week
+              ? _buildWeekTasks(const [], const {}, overlayHeight)
+              : const EmptyPlaceholder(),
           error: (message) => Center(child: Text(message)),
           loaded: (items, selectedTasks, _, _, _) {
-            if (items.isEmpty) {
+            if (items.isEmpty &&
+                widget.viewModel.currentFilterValue.period != DatePeriod.week) {
               return const EmptyPlaceholder();
             }
 
@@ -547,16 +558,10 @@ class TasksScreenState extends State<TasksScreen> {
             final period = widget.viewModel.currentFilterValue.period;
 
             return switch (period) {
-              DatePeriod.week => _WeekTasksList(
-                items: items,
-                selectedIds: selectedIds,
-                overlayHeight: overlayHeight,
-                anchorDate: widget.viewModel.currentFilterValue.anchorDate,
-                onToggleTask: widget.viewModel.toggleTask,
-                onEditTask: _openTaskEditor,
-                onToggleSelection: widget.viewModel.toggleTaskSelection,
-                onDeleteTask: widget.viewModel.deleteTask,
-                workLogs: widget.workLogs,
+              DatePeriod.week => _buildWeekTasks(
+                items,
+                selectedIds,
+                overlayHeight,
               ),
               DatePeriod.day => _TaskList(
                 key: ValueKey(widget.viewModel.currentFilterValue.anchorDate),
@@ -596,6 +601,34 @@ class TasksScreenState extends State<TasksScreen> {
     isOverUnscheduled: _isOverUnscheduled,
     onEventToUnscheduled: _unscheduleTask,
     onHoverUnscheduled: _onHoverUnscheduled,
+  );
+
+  Widget _buildWeekTasks(
+    List<TaskWithProject> items,
+    Set<String> selectedIds,
+    double overlayHeight,
+  ) => _WeekTasksList(
+    items: items,
+    selectedIds: selectedIds,
+    overlayHeight: overlayHeight,
+    anchorDate: widget.viewModel.currentFilterValue.anchorDate,
+    horizontal: _weekHorizontal,
+    onMove: (task, source, target) async {
+      try {
+        await widget.viewModel.moveTaskToDay(task.id, source, target);
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Не удалось перенести задачу')),
+          );
+        }
+      }
+    },
+    onToggleTask: widget.viewModel.toggleTask,
+    onEditTask: _openTaskEditor,
+    onToggleSelection: widget.viewModel.toggleTaskSelection,
+    onDeleteTask: widget.viewModel.deleteTask,
+    workLogs: widget.workLogs,
   );
   Widget _buildHeaderPanel(
     bool isFormVisible,
@@ -651,10 +684,33 @@ class TasksScreenState extends State<TasksScreen> {
                       horizontal: AppMargins.sm,
                     ),
 
-                    child: SegmentedPillControl(
-                      tabs: const ['Day', 'Week', 'Month'],
-                      currentIdx: currentFilter.period.index,
-                      onTabChanged: _onPeriodChanged,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: SegmentedPillControl(
+                            tabs: const ['Day', 'Week', 'Month'],
+                            currentIdx: currentFilter.period.index,
+                            onTabChanged: _onPeriodChanged,
+                          ),
+                        ),
+                        if (currentFilter.period == DatePeriod.week &&
+                            !_kanbanMode)
+                          IconButton(
+                            key: const ValueKey('tasks.week-layout'),
+                            tooltip: _weekHorizontal
+                                ? 'Дни по вертикали'
+                                : 'Дни по горизонтали',
+                            onPressed: () => setState(
+                              () => _weekHorizontal = !_weekHorizontal,
+                            ),
+                            icon: Icon(
+                              _weekHorizontal
+                                  ? Icons.view_agenda_outlined
+                                  : Icons.view_week_outlined,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   if (currentFilter.period == DatePeriod.day) ...[
@@ -737,7 +793,6 @@ class TasksScreenState extends State<TasksScreen> {
     }
 
     final period = DatePeriod.values[index];
-    setState(() => _showCalendar = period == DatePeriod.day);
     widget.viewModel.updateFilter((old) => old.copyWith(period: period));
   }
 
@@ -767,12 +822,6 @@ class TasksScreenState extends State<TasksScreen> {
     final isLandscape =
         MediaQuery.of(context).orientation == Orientation.landscape;
 
-    final overlayHeight =
-        _kHeaderHeight +
-        _kPeriodTabsHeight +
-        AppSpacing.sm * 2 +
-        (_showCalendar ? _kCalendarHeight + AppSpacing.sm : 0);
-
     return StreamBuilder<TasksUiFlags>(
       stream: widget.viewModel.uiFlags,
       initialData: TasksUiFlags(),
@@ -780,19 +829,35 @@ class TasksScreenState extends State<TasksScreen> {
         final uiFlags = snapshot.data ?? TasksUiFlags();
         final today = DateTime.now().startOfDay;
 
-        if (isLandscape) {
-          return _buildLandscapeLayout(
-            overlayHeight,
-            today,
-            widget.embeddedEditor && uiFlags.isFormVisible,
-            uiFlags.isEventMode,
-          );
-        }
-        return _buildPortraitLayout(
-          overlayHeight,
-          today,
-          uiFlags.isFormVisible,
-          uiFlags.isEventMode,
+        return StreamBuilder<TaskFilterConfig>(
+          stream: widget.viewModel.currentFilter,
+          initialData: widget.viewModel.currentFilterValue,
+          builder: (context, snapshot) {
+            final period =
+                (snapshot.data ?? widget.viewModel.currentFilterValue).period;
+            final overlayHeight =
+                _kHeaderHeight +
+                _kPeriodTabsHeight +
+                AppSpacing.sm * 2 +
+                (period == DatePeriod.day && !uiFlags.isEventMode
+                    ? _kCalendarHeight + AppSpacing.sm
+                    : 0);
+
+            if (isLandscape) {
+              return _buildLandscapeLayout(
+                overlayHeight,
+                today,
+                widget.embeddedEditor && uiFlags.isFormVisible,
+                uiFlags.isEventMode,
+              );
+            }
+            return _buildPortraitLayout(
+              overlayHeight,
+              today,
+              uiFlags.isFormVisible,
+              uiFlags.isEventMode,
+            );
+          },
         );
       },
     );
@@ -812,7 +877,7 @@ class TasksScreenState extends State<TasksScreen> {
       children: [
         ConstrainedBox(
           constraints: BoxConstraints(
-            maxWidth: _kanbanMode ? double.infinity : 550,
+            maxWidth: _kanbanMode || _wideWeek ? double.infinity : 550,
           ),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -887,7 +952,9 @@ class TasksScreenState extends State<TasksScreen> {
                 children: [
                   ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxWidth: isWide || _kanbanMode ? double.infinity : 550,
+                      maxWidth: isWide || _kanbanMode || _wideWeek
+                          ? double.infinity
+                          : 550,
                     ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -1114,23 +1181,32 @@ class _TaskListState extends State<_TaskList> {
 }
 
 //Week view
+class _WeekTaskDrag {
+  const _WeekTaskDrag(this.task, this.sourceDay);
+  final Task task;
+  final DateTime sourceDay;
+}
+
 class _WeekTasksList extends StatefulWidget {
   const _WeekTasksList({
     required this.items,
     required this.selectedIds,
     required this.overlayHeight,
     required this.anchorDate,
+    required this.horizontal,
+    required this.onMove,
     required this.onToggleTask,
     required this.onEditTask,
     required this.onToggleSelection,
     required this.onDeleteTask,
     this.workLogs,
   });
-
   final List<TaskWithProject> items;
   final Set<String> selectedIds;
   final double overlayHeight;
   final DateTime anchorDate;
+  final bool horizontal;
+  final void Function(Task, DateTime, DateTime) onMove;
   final ValueChanged<Task> onToggleTask;
   final ValueChanged<TaskWithProject> onEditTask;
   final ValueChanged<Task> onToggleSelection;
@@ -1142,68 +1218,79 @@ class _WeekTasksList extends StatefulWidget {
 }
 
 class _WeekTasksListState extends State<_WeekTasksList> {
-  Map<DateTime, List<TaskWithProject>> _groupedItems = {};
-
   @override
-  void initState() {
-    super.initState();
-    _groupedItems = _buildGroupedItems();
-  }
-
-  @override
-  void didUpdateWidget(_WeekTasksList oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.items != widget.items ||
-        oldWidget.anchorDate != widget.anchorDate) {
-      _groupedItems = _buildGroupedItems();
-    }
-  }
-
-  Map<DateTime, List<TaskWithProject>> _buildGroupedItems() {
+  Widget build(BuildContext context) {
+    final anchorDate = widget.anchorDate;
+    final items = widget.items;
+    final horizontal = widget.horizontal;
+    final selectedIds = widget.selectedIds;
+    final overlayHeight = widget.overlayHeight;
+    final onMove = widget.onMove;
+    final onToggleTask = widget.onToggleTask;
+    final onEditTask = widget.onEditTask;
+    final onToggleSelection = widget.onToggleSelection;
+    final onDeleteTask = widget.onDeleteTask;
+    final workLogs = widget.workLogs;
+    final days = getDatesForWeek(anchorDate);
+    final today = DateUtils.dateOnly(DateTime.now());
     final grouped = <DateTime, List<TaskWithProject>>{};
-    final days = getDatesForWeek(widget.anchorDate);
-    for (final item in widget.items) {
-      final startsAt = item.task.startsAt;
-      if (startsAt == null) continue;
-      final endsAt = item.task.endsAt;
-      final last = endsAt != null && !endsAt.isBefore(startsAt)
-          ? endsAt
-          : startsAt;
+    for (final item in items) {
+      final start = item.task.startsAt;
+      if (start == null) continue;
+      final end = item.task.endsAt;
+      final last = end != null && !end.isBefore(start) ? end : start;
       for (final day in days) {
-        final date = day.startOfDay;
-        if (!date.isBefore(startsAt.startOfDay) &&
-            !date.isAfter(last.startOfDay)) {
+        final date = DateUtils.dateOnly(day);
+        if (!date.isBefore(DateUtils.dateOnly(start)) &&
+            !date.isAfter(DateUtils.dateOnly(last))) {
           grouped.putIfAbsent(date, () => []).add(item);
         }
       }
     }
-    return grouped;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final weekDates = getDatesForWeek(widget.anchorDate);
-    final today = DateTime.now().startOfDay;
-
-    return ListView.builder(
-      padding: EdgeInsets.symmetric(vertical: widget.overlayHeight),
-      itemCount: weekDates.length,
-      itemBuilder: (context, index) {
-        final date = weekDates[index];
-        final dayItems = _groupedItems[date.startOfDay] ?? const [];
-
-        return _WeekDaySection(
-          date: date,
-          isToday: date.startOfDay.isAtSameMomentAs(today),
-          items: dayItems,
-          selectedIds: widget.selectedIds,
-          onToggleTask: widget.onToggleTask,
-          onEditTask: widget.onEditTask,
-          onToggleSelection: widget.onToggleSelection,
-          onDeleteTask: widget.onDeleteTask,
-          workLogs: widget.workLogs,
-        );
-      },
+    Widget section(DateTime day) => _WeekDaySection(
+      date: DateUtils.dateOnly(day),
+      isToday: DateUtils.isSameDay(day, today),
+      horizontal: horizontal,
+      items: grouped[DateUtils.dateOnly(day)] ?? const [],
+      selectedIds: selectedIds,
+      onMove: onMove,
+      onToggleTask: onToggleTask,
+      onEditTask: onEditTask,
+      onToggleSelection: onToggleSelection,
+      onDeleteTask: onDeleteTask,
+      workLogs: workLogs,
+    );
+    if (!horizontal) {
+      return ListView.builder(
+        key: const ValueKey('tasks.week.vertical'),
+        padding: EdgeInsets.symmetric(vertical: overlayHeight),
+        itemCount: days.length,
+        itemBuilder: (_, index) => section(days[index]),
+      );
+    }
+    return Padding(
+      padding: EdgeInsets.only(top: overlayHeight + AppSpacing.md, bottom: 8),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = ((constraints.maxWidth - 72) / 7).clamp(
+            260.0,
+            double.infinity,
+          );
+          return SingleChildScrollView(
+            key: const ValueKey('tasks.week.horizontal'),
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < days.length; i++) ...[
+                  if (i != 0) const SizedBox(width: 12),
+                  SizedBox(width: width, child: section(days[i])),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -1212,112 +1299,177 @@ class _WeekDaySection extends StatelessWidget {
   const _WeekDaySection({
     required this.date,
     required this.isToday,
+    required this.horizontal,
     required this.items,
     required this.selectedIds,
+    required this.onMove,
     required this.onToggleTask,
     required this.onEditTask,
     required this.onToggleSelection,
     required this.onDeleteTask,
     this.workLogs,
   });
-
   final DateTime date;
   final bool isToday;
+  final bool horizontal;
   final List<TaskWithProject> items;
   final Set<String> selectedIds;
+  final void Function(Task, DateTime, DateTime) onMove;
   final ValueChanged<Task> onToggleTask;
   final ValueChanged<TaskWithProject> onEditTask;
   final ValueChanged<Task> onToggleSelection;
   final ValueChanged<String> onDeleteTask;
   final WorkLogsApi? workLogs;
 
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(
-              top: AppSpacing.xl,
-              bottom: AppSpacing.xs,
-            ),
-            child: Row(
-              children: [
-                if (isToday) ...[
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppColors.primaryContainer.withValues(
-                            alpha: 0.8,
-                          ),
-                          blurRadius: 10,
-                        ),
-                      ],
-                      color: AppColors.primaryContainer,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const SizedBox(width: 8, height: 8),
+  Widget _card(TaskWithProject item) => LayoutBuilder(
+    builder: (_, constraints) => TaskWorkLogsBuilder(
+      taskId: item.task.id,
+      repository: workLogs,
+      builder: (footer) {
+        Widget card() => TaskCard(
+          key: ValueKey(item.task.id),
+          footer: footer,
+          task: item.task,
+          indicator: _taskRangeIndicator(item.task),
+          leftBorderColor: item.project == null
+              ? null
+              : parseHexColor(item.project!.color),
+          onCheckChanged: () => onToggleTask(item.task),
+          onTap: () => onEditTask(item),
+          onDelete: horizontal ? null : () => onDeleteTask(item.task.id),
+          projectTitle: item.project?.name,
+          isSelected: selectedIds.contains(item.task.id),
+          onSelected: () => onToggleSelection(item.task),
+        );
+        return Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          child: LongPressDraggable<_WeekTaskDrag>(
+            key: ValueKey(('week.task', date, item.task.id)),
+            data: _WeekTaskDrag(item.task, date),
+            feedback: Material(
+              key: ValueKey(('week.feedback', date, item.task.id)),
+              color: Colors.transparent,
+              child: SizedBox(
+                width: constraints.maxWidth,
+                child: DecoratedBox(
+                  position: DecorationPosition.foreground,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    border: Border.all(color: AppColors.primary, width: 1.2),
                   ),
-                  const SizedBox(width: 8),
-                ],
-                Text(
+                  child: card(),
+                ),
+              ),
+            ),
+            childWhenDragging: Opacity(opacity: .4, child: card()),
+            child: card(),
+          ),
+        );
+      },
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => DragTarget<_WeekTaskDrag>(
+    key: ValueKey(('week.day', date)),
+    onWillAcceptWithDetails: (details) =>
+        !DateUtils.isSameDay(details.data.sourceDay, date),
+    onAcceptWithDetails: (details) =>
+        onMove(details.data.task, details.data.sourceDay, date),
+    builder: (context, candidates, _) {
+      final color = candidates.isNotEmpty
+          ? Color.alphaBlend(
+              AppColors.primary.withValues(alpha: .12),
+              AppColors.surfaceContainerLow,
+            )
+          : AppColors.surfaceContainerLow;
+      final header = Padding(
+        padding: EdgeInsets.only(
+          top: horizontal ? 12 : AppSpacing.xl,
+          bottom: AppSpacing.xs,
+        ),
+        child: Row(
+          children: [
+            if (isToday) ...[
+              const Icon(
+                Icons.circle,
+                size: 8,
+                color: AppColors.primaryContainer,
+              ),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
                   '${getWeekDayName(date.weekday)} ${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}',
                   style: AppTypography.headlineLgMobile.copyWith(
-                    shadows: [
-                      if (isToday)
-                        Shadow(
-                          color: AppColors.overdueGlow.withValues(alpha: 0.7),
-                          blurRadius: 21,
-                        ),
-                    ],
                     color: isToday
                         ? AppColors.primaryContainer
                         : AppColors.primary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-              ],
+              ),
             ),
+          ],
+        ),
+      );
+      final empty = Padding(
+        padding: const EdgeInsets.all(8),
+        child: Text(
+          'No tasks',
+          style: AppTypography.bodySm.copyWith(
+            color: AppColors.onSurfaceVariant.withValues(alpha: .5),
           ),
-          if (items.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10, left: 8),
-              child: Text(
-                'No tasks',
-                style: AppTypography.bodySm.copyWith(
-                  color: AppColors.onSurfaceVariant.withValues(alpha: 0.5),
-                ),
-              ),
-            )
-          else
-            ...items.map(
-              (item) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: TaskCard(
-                  key: ValueKey(item.task.id),
-                  workLogs: workLogs,
-                  indicator: _taskRangeIndicator(item.task),
-                  leftBorderColor: item.project != null
-                      ? parseHexColor(item.project!.color)
-                      : null,
-                  task: item.task,
-                  onCheckChanged: () => onToggleTask(item.task),
-                  onTap: () => onEditTask(item),
-                  onDelete: () => onDeleteTask(item.task.id),
-                  projectTitle: item.project?.name,
-                  isSelected: selectedIds.contains(item.task.id),
-                  onSelected: () => onToggleSelection(item.task),
-                  //onTap: () {},
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
+        ),
+      );
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          color: horizontal || candidates.isNotEmpty
+              ? color
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(16),
+          border: horizontal || candidates.isNotEmpty
+              ? Border.all(
+                  color: candidates.isEmpty
+                      ? AppColors.borderGlass
+                      : AppColors.primary,
+                )
+              : null,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              header,
+              if (horizontal)
+                Expanded(
+                  child: ClipRect(
+                    child: ScrollConfiguration(
+                      behavior: AppScrollBehavior(fadeColor: color),
+                      child: items.isEmpty
+                          ? Align(alignment: Alignment.topLeft, child: empty)
+                          : ListView.builder(
+                              padding: const EdgeInsets.only(top: 8),
+                              itemCount: items.length,
+                              itemBuilder: (_, index) => _card(items[index]),
+                            ),
+                    ),
+                  ),
+                )
+              else if (items.isEmpty)
+                empty
+              else
+                ...items.map(_card),
+            ],
+          ),
+        ),
+      );
+    },
+  );
 }
 
 // Header elements

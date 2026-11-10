@@ -310,6 +310,7 @@ class _WorkLogPanel extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 460;
+          final tight = constraints.maxWidth < 260;
           final compact = constraints.maxWidth < 360;
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -329,15 +330,26 @@ class _WorkLogPanel extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          badge(),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: totalLabel(),
+                          if (tight)
+                            Expanded(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: badge(),
+                              ),
+                            )
+                          else
+                            badge(),
+                          if (!tight) ...[
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: totalLabel(),
+                              ),
                             ),
-                          ),
+                          ],
                           if (wide && timed) ...[
                             const SizedBox(width: 12),
                             bars(),
@@ -354,9 +366,19 @@ class _WorkLogPanel extends StatelessWidget {
                             size: 21,
                             color: AppColors.onSurfaceVariant,
                           ),
-
                         ],
                       ),
+                      if (tight)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: totalLabel(),
+                            ),
+                          ),
+                        ),
                       if (!wide && timed)
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
