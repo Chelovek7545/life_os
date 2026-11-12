@@ -7,6 +7,41 @@ import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
+    'rename updates every catalog scope and normalizes queued stale snapshots before close',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final store = GraphNotesRepository();
+      const note = CanvasNote(
+        document: NoteDocument(
+          id: 'id',
+          text: 'body',
+          source: NoteReference(sourceId: 'obsidian', path: '/Notes/Old.md'),
+        ),
+        x: 1,
+        y: 2,
+        width: 250,
+        height: 180,
+        index: 3,
+      );
+      await store.saveNotes('one', [note]);
+      await store.saveNotes('two', [note]);
+      await store.renameSource('/Notes/Old.md', '/Notes/New.md');
+      final saving = store.saveNotes('two', [note]);
+      await store.dispose();
+      await saving;
+      final reopened = GraphNotesRepository();
+      for (final scope in ['one', 'two']) {
+        final restored = (await reopened.loadNotes(scope))!.single;
+        expect(restored.document.source!.path, '/Notes/New.md');
+        expect(restored.id, 'id');
+        expect(restored.text, 'body');
+        expect(restored.x, 1);
+        expect(restored.index, 3);
+      }
+      await reopened.dispose();
+    },
+  );
+  test(
     'loads legacy snapshots without filesystem access and preserves source links',
     () async {
       SharedPreferences.setMockInitialValues({

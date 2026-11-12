@@ -50,6 +50,36 @@ abstract interface class VaultNotesApi {
   Future<VaultNote> createNote(String title, String content);
 }
 
+abstract interface class NotesLibrarySourcesApi {
+  VaultState get graphMarkdownState;
+  VaultState? get obsidianState;
+}
+
+abstract interface class VaultCanvasApi {
+  String canvasNotePath(String absolutePath);
+  Future<String> createCanvas(String sphereId, Map<String, Object?> document);
+}
+
+abstract interface class VaultCanvasBoardsApi {
+  Future<CanvasBoardSession> openCanvasBoard(String sphereId);
+}
+
+abstract interface class CanvasBoardSession {
+  String get path;
+  String notePath(String absolutePath);
+  String resolveNote(String relativePath);
+  Future<String?> read();
+  Future<void> write(String content, {required String? expected});
+}
+
+class CanvasBoardConflict implements Exception {
+  const CanvasBoardConflict(this.recoveryPath);
+  final String recoveryPath;
+  @override
+  String toString() =>
+      'Canvas изменён снаружи. Копия правок Pulse: $recoveryPath';
+}
+
 abstract interface class NotesCatalog {
   List<NoteDocument> get notes;
   Stream<List<NoteDocument>> watchNotes();
@@ -58,4 +88,51 @@ abstract interface class NotesCatalog {
 abstract interface class VaultSettings {
   String get vaultPath;
   Stream<String> watchVaultPath();
+}
+
+class VaultFolders {
+  const VaultFolders({
+    this.boards = 'Pulse/Boards',
+    this.notes = 'Pulse/Notes',
+    this.exports = 'Pulse/Canvases',
+    this.backups = 'Pulse/Backups',
+  });
+  final String boards;
+  final String notes;
+  final String exports;
+  final String backups;
+  Map<String, String> toJson() => {
+    'boards': boards,
+    'notes': notes,
+    'exports': exports,
+    'backups': backups,
+  };
+  factory VaultFolders.fromJson(Map<String, dynamic> value) => VaultFolders(
+    boards: value['boards'] as String? ?? 'Pulse/Boards',
+    notes: value['notes'] as String? ?? 'Pulse/Notes',
+    exports: value['exports'] as String? ?? 'Pulse/Canvases',
+    backups: value['backups'] as String? ?? 'Pulse/Backups',
+  );
+}
+
+abstract interface class CanvasStorageFoldersApi {
+  VaultFolders get folders;
+  Future<void> configureFolders(VaultFolders folders, {bool copyBoards = true});
+  Future<List<String>> listFolders();
+}
+
+abstract interface class MarkdownNoteSaveApi {
+  Future<String> saveMarkdownCopy(String directory, String title, String text);
+}
+
+class NotePathChange {
+  const NotePathChange(this.previousPath, this.path);
+  final String previousPath;
+  final String path;
+}
+
+abstract interface class MarkdownNoteRenameApi {
+  Future<String> renameMarkdownNote(String path, String title);
+  String resolveNotePath(String path);
+  Stream<NotePathChange> watchNoteRenames();
 }

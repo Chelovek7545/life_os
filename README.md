@@ -15,8 +15,12 @@ A personal life management app built with Flutter. Life OS brings your tasks, pr
 - **Dark theme** — carefully crafted dark UI with custom typography (Inter, Space Grotesk, JetBrains Mono)
 
 ### Graph view
-Features
-- Move, Collapse, Remove nodes
+
+- Move/collapse business cards and edit them through registered module forms.
+- Use text stickers or Markdown files, rename files inline, and select existing notes from Notes or Obsidian.
+- Store sphere boards as Canvas in a vault or a local Pulse folder, with conflict copies and exports.
+- [Full Graph/Pulse guide: features, settings, API and limitations](docs/lifegraph-plugin.md).
+- [Canvas format and Obsidian integration](docs/obsidian-canvas.md).
 
 ## Tech Stack
 

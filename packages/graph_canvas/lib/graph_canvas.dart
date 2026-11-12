@@ -711,6 +711,9 @@ class _GraphViewState extends State<GraphView>
         _notes[fresh.id] = fresh;
         changed = true;
       } else if (existing.text != fresh.text ||
+          existing.source?.sourceId != fresh.source?.sourceId ||
+          existing.source?.path != fresh.source?.path ||
+          existing.isReadOnly != fresh.isReadOnly ||
           existing.index != fresh.index ||
           (existing.size != fresh.size && fresh.id != _resizingNoteId)) {
         _notes[fresh.id] = fresh;
@@ -757,6 +760,7 @@ class _GraphViewState extends State<GraphView>
         _nodes[fresh.id] = fresh;
         changed = true;
       } else if (existing.label != fresh.label ||
+          existing.size != fresh.size ||
           existing.parentId != fresh.parentId ||
           existing.depth != fresh.depth ||
           existing.index != fresh.index) {
@@ -1804,7 +1808,17 @@ class _DefaultNodeCardState extends State<DefaultNodeCard> {
 class DefaultNoteCard extends StatefulWidget {
   final NoteState state;
   final GraphViewTheme theme;
-  const DefaultNoteCard({super.key, required this.state, required this.theme});
+  final ValueChanged<Offset>? onContextMenu;
+  final String? title;
+  final Future<void> Function(String)? onTitleSubmitted;
+  const DefaultNoteCard({
+    super.key,
+    required this.state,
+    required this.theme,
+    this.onContextMenu,
+    this.title,
+    this.onTitleSubmitted,
+  });
 
   @override
   State<DefaultNoteCard> createState() => _DefaultNoteCardState();
@@ -1812,6 +1826,7 @@ class DefaultNoteCard extends StatefulWidget {
 
 class _DefaultNoteCardState extends State<DefaultNoteCard> {
   bool _hovered = false;
+  bool _titleEditing = false;
   final TextEditingController _textCtrl = TextEditingController();
   final FocusNode _focus = FocusNode();
 
@@ -1847,7 +1862,7 @@ class _DefaultNoteCardState extends State<DefaultNoteCard> {
     final tilt = ((s.note.index % 5) - 2) * 0.008; // лёгкий наклон «от руки»
 
     return MouseRegion(
-      cursor: s.editing ? SystemMouseCursors.text : SystemMouseCursors.grab,
+      cursor: (s.editing || _titleEditing) ? SystemMouseCursors.text : SystemMouseCursors.grab,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: Stack(
@@ -1856,13 +1871,17 @@ class _DefaultNoteCardState extends State<DefaultNoteCard> {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: s.select,
-            onDoubleTap: s.beginEdit,
-            onLongPress: s.canDelete ? s.remove : null,
+            onDoubleTap: s.editing || _titleEditing ? null : s.beginEdit,
+            onSecondaryTapDown: widget.onContextMenu == null ? null
+                : (details) => widget.onContextMenu!(details.globalPosition),
+            onLongPress: widget.onContextMenu == null && s.canDelete ? s.remove : null,
+            onLongPressStart: widget.onContextMenu == null ? null
+                : (details) => widget.onContextMenu!(details.globalPosition),
             // Пока идёт редактирование, жесты отданы TextField.
-            onPanStart: s.editing ? null : s.dragStart,
-            onPanUpdate: s.editing ? null : s.dragUpdate,
-            onPanEnd: s.editing ? null : s.dragEnd,
-            onPanCancel: s.editing ? null : () => s.dragEnd(DragEndDetails()),
+            onPanStart: s.editing || _titleEditing ? null : s.dragStart,
+            onPanUpdate: s.editing || _titleEditing ? null : s.dragUpdate,
+            onPanEnd: s.editing || _titleEditing ? null : s.dragEnd,
+            onPanCancel: s.editing || _titleEditing ? null : () => s.dragEnd(DragEndDetails()),
             child: Transform.rotate(
               angle: s.editing ? 0 : tilt,
               child: AnimatedScale(
@@ -1899,6 +1918,18 @@ class _DefaultNoteCardState extends State<DefaultNoteCard> {
                           ),
                         ),
                       ),
+                      if (widget.title case final title?)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                          child: _EditableNoteTitle(
+                            title: title,
+                            theme: t,
+                            enabled: s.editing && widget.onTitleSubmitted != null,
+                            onSubmitted: widget.onTitleSubmitted,
+                            commitBody: s.endEdit,
+                            onEditingChanged: (editing) => setState(() => _titleEditing = editing),
+                          ),
+                        ),
                       Expanded(
                         child: ClipRect(
                           child: Padding(
@@ -2492,6 +2523,211 @@ class _ControlButtonState extends State<ControlButton> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+
+class _EditableNoteTitle extends StatefulWidget {
+  const _EditableNoteTitle({
+    required this.title,
+    required this.theme,
+    required this.enabled,
+    required this.onSubmitted,
+    required this.commitBody,
+    required this.onEditingChanged,
+  });
+  final String title;
+  final GraphViewTheme theme;
+  final bool enabled;
+  final Future<void> Function(String)? onSubmitted;
+  final VoidCallback commitBody;
+  final ValueChanged<bool> onEditingChanged;
+
+  @override
+  State<_EditableNoteTitle> createState() => _EditableNoteTitleState();
+}
+
+class _EditableNoteTitleState extends State<_EditableNoteTitle> {
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+  bool _editing = false;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() {
+      if (!_focus.hasFocus && _editing && !_saving) unawaited(_submit());
+    });
+  }
+
+  void _begin() {
+    if (!widget.enabled || _saving) return;
+    _controller.text = widget.title;
+    _controller.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _controller.text.length,
+    );
+    setState(() {
+      _editing = true;
+      _error = null;
+    });
+    widget.onEditingChanged(true);
+    widget.commitBody();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _editing) _focus.requestFocus();
+    });
+  }
+
+  void _finish() {
+    setState(() {
+      _editing = false;
+      _error = null;
+    });
+    widget.onEditingChanged(false);
+    _focus.unfocus();
+  }
+
+  Future<void> _submit() async {
+    if (!_editing || _saving) return;
+    final title = _controller.text.trim();
+    if (title.isEmpty) {
+      setState(() => _error = 'Укажите название.');
+      return;
+    }
+    if (title == widget.title) {
+      _finish();
+      return;
+    }
+    final submit = widget.onSubmitted;
+    if (submit == null) {
+      _finish();
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await submit(title);
+      if (mounted) _finish();
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.theme;
+    final style = TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w600,
+      color: t.text,
+    );
+    return TextFieldTapRegion(
+      child: Focus(
+        onKeyEvent: (_, event) {
+          if (_editing &&
+              event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.escape) {
+            if (!_saving) _finish();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                if (_saving)
+                  SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.5,
+                      color: t.textDim,
+                    ),
+                  )
+                else
+                  Icon(Icons.description_outlined, size: 14, color: t.textDim),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _editing
+                      ? TextField(
+                          key: const ValueKey('note-title-editor'),
+                          controller: _controller,
+                          focusNode: _focus,
+                          readOnly: _saving,
+                          maxLines: 1,
+                          style: style,
+                          textInputAction: TextInputAction.done,
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 2,
+                            ),
+                            hintText: 'Название',
+                            border: UnderlineInputBorder(
+                              borderSide: BorderSide(color: t.border),
+                            ),
+                          ),
+                          onChanged: (_) {
+                            if (_error != null) setState(() => _error = null);
+                          },
+                          onEditingComplete: () {},
+                      onTapOutside: (_) => _focus.unfocus(),
+                          onSubmitted: (_) => unawaited(_submit()),
+                        )
+                      : Tooltip(
+                          message: widget.title,
+                          child: MouseRegion(
+                            cursor: widget.enabled
+                                ? SystemMouseCursors.click
+                                : MouseCursor.defer,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: widget.enabled ? _begin : null,
+                              child: Text(
+                                widget.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: style,
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+            if (_error case final error?)
+              Tooltip(
+                message: error,
+                child: Text(
+                  error,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

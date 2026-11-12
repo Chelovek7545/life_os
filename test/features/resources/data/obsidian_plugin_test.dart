@@ -103,7 +103,10 @@ void main() {
         'safe',
       );
       expect(p.isWithin(directory.path, safe.absolutePath), isTrue);
-      expect(File(safe.absolutePath).parent.path, directory.path);
+      expect(
+        File(safe.absolutePath).parent.path,
+        p.join(directory.path, 'Pulse', 'Notes'),
+      );
       await vault.dispose();
     },
   );

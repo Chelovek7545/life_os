@@ -92,7 +92,15 @@ void main() {
         find.descendant(of: row, matching: find.text('Не указан')),
         findsOneWidget,
       );
-      expect(find.byIcon(Icons.folder_open_outlined), findsOneWidget);
+      expect(
+        find.descendant(
+          of: row,
+          matching: find.byIcon(Icons.folder_open_outlined),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Доски сфер'), findsNothing);
+      expect(find.text('Markdown-заметки'), findsNothing);
       expect(
         find.descendant(of: row, matching: find.byIcon(Icons.edit_outlined)),
         findsOneWidget,

@@ -36,6 +36,8 @@ import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/telegram_task_queries.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
+import 'package:life_os/features/lifegraph/data/graph_storage_repository.dart';
+import 'package:life_os/features/settings/settings_service.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
 import 'package:life_os/features/spheres/data/spheres_dao.dart';
@@ -99,6 +101,18 @@ class DependencyContainer {
     navigation = PluginNavigationController(ui);
     graphPositionsRepository = GraphPositionsRepository();
     graphNotesRepository = GraphNotesRepository();
+    graphStorageRepository = GraphStorageRepository(
+      target: SettingsService.graphStorageTarget,
+      vaultFolders: SettingsService.graphFolders,
+      obsidian: obsidianRepository,
+      onNoteRenamed: graphNotesRepository.renameSource,
+      beforeSwitch: () async {
+        await Future.wait([
+          lifeGraphPlugin.viewModel.closeGraphs(),
+          resourcesPlugin.viewModel.flush(),
+        ]);
+      },
+    );
     graphContributors = GraphContributorRegistry();
     graphPresentations = GraphNodePresentationRegistry();
     graphEditors = GraphEditorRegistry();
@@ -139,13 +153,15 @@ class DependencyContainer {
       editors: graphEditors,
       commands: graphCommands,
       ui: ui,
-      vault: obsidianRepository,
+      vault: graphStorageRepository,
+      selectStorageTarget: graphStorageRepository.selectTarget,
       completeTask: (task) => tasksPlugin.viewModel.toggleTask(task),
       dependencies: {
         'spheres.graph',
         'goals.graph',
         'projects.graph',
         'tasks.graph',
+        'graph.storage',
         for (final module in extraGraphModules) module.id,
         if (enableObsidian) 'obsidian',
       },
@@ -153,9 +169,9 @@ class DependencyContainer {
     habitsPlugin = createHabitsPlugin(habits: habitsRepository, ui: ui);
     resourcesPlugin = createResourcesPlugin(
       notes: graphNotesRepository,
-      vault: obsidianRepository,
+      vault: graphStorageRepository,
       ui: ui,
-      dependencies: {if (enableObsidian) 'obsidian'},
+      dependencies: {'graph.storage'},
     );
     todayPlugin = createTodayPlugin(
       ui: ui,
@@ -221,6 +237,7 @@ class DependencyContainer {
         ),
       if (obsidianRepository != null)
         registerObsidianUi(obsidianRepository!, AppVaultSettings(), ui),
+      graphStorageRepository,
       if (localBotService != null) registerTelegramUi(localBotService!, ui),
       ...lifeGraphPlugin.plugins,
       ...resourcesPlugin.plugins,
@@ -274,6 +291,7 @@ class DependencyContainer {
   late final GraphPositionsRepository graphPositionsRepository;
   late final GraphNotesRepository graphNotesRepository;
   late final ObsidianVault? obsidianRepository;
+  late final GraphStorageRepository graphStorageRepository;
   GraphBuilder get graphBuilder => lifeGraphPlugin.graphBuilder;
   late final GraphContributorRegistry graphContributors;
   late final GraphNodePresentationRegistry graphPresentations;
@@ -330,6 +348,7 @@ class DependencyContainer {
     await close('graphContributors', graphContributors.dispose);
     await close('graphPresentations', graphPresentations.dispose);
     await close('graphNotes', graphNotesRepository.dispose);
+    await close('graphStorage', graphStorageRepository.dispose);
     if (obsidianRepository != null)
       await close('obsidian', obsidianRepository!.dispose);
     await close('navigation', navigation.dispose);

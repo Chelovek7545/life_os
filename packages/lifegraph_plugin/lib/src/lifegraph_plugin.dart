@@ -10,6 +10,8 @@ import 'package:plugin_runtime/plugin_runtime.dart';
 import 'package:plugin_ui/plugin_ui.dart';
 import 'graph_builder.dart';
 import 'pulse_screen_view_model.dart';
+import '../graph_storage_settings.dart';
+import 'dart:async';
 
 abstract final class PulsePanelSlots {
   static const center = 'pulse.center';
@@ -25,6 +27,9 @@ typedef PulseScreenBuilder =
       void Function(Task) openTask,
       Future<void> Function(Task) completeTask,
     );
+
+typedef GraphStorageSettingsBuilder =
+    Widget Function(BuildContext context, bool Function() isActive);
 
 class LifeGraphPlugin {
   LifeGraphPlugin({
@@ -44,11 +49,27 @@ class LifeGraphPlugin {
     this._vault,
     this.rootKind = 'sphere',
     Set<String> dependencies = const {},
-  }) {
+    this.storageSettings,
+    GraphStorageSettingsBuilder? storageSettingsBuilder,
+  }) : _ui = ui {
     plugins = List.unmodifiable([
       UiPluginRegistration(
         plugin: _LifeGraphLifecycle(this, Set.unmodifiable(dependencies)),
         registry: ui,
+        settings: [
+          if (storageSettingsBuilder != null)
+            PluginSettingsContribution(
+              id: 'lifegraph.storage.settings',
+              title: 'Граф',
+              builder: (context) {
+                final model = _model;
+                return storageSettingsBuilder(
+                  context,
+                  () => model != null && identical(model, _model),
+                );
+              },
+            ),
+        ],
         screens: [
           PluginScreenContribution(
             id: 'pulse',
@@ -102,6 +123,8 @@ class LifeGraphPlugin {
   final GraphCommandRegistry _commands;
   final VaultNotesApi? _vault;
   final String rootKind;
+  final GraphStorageSettings? storageSettings;
+  final PluginUiRegistry _ui;
   late final List<AppPlugin> plugins;
   PulseScreenViewModel? _model;
   GraphBuilder? _builder;
@@ -114,6 +137,8 @@ class LifeGraphPlugin {
 class _LifeGraphLifecycle implements AppPlugin {
   _LifeGraphLifecycle(this.module, this.dependencies);
   final LifeGraphPlugin module;
+  StreamSubscription<VaultFolders>? _folderSubscription;
+  int _settingsGeneration = 0;
   @override
   String get id => 'lifegraph.screen';
   @override
@@ -121,6 +146,30 @@ class _LifeGraphLifecycle implements AppPlugin {
   @override
   Future<void> start() async {
     if (module._model != null) return;
+    final generation = ++_settingsGeneration;
+    final settings = module.storageSettings;
+    final storage = module._vault;
+    if (settings != null && storage is CanvasStorageFoldersApi) {
+      final folders = storage as CanvasStorageFoldersApi;
+      await folders.configureFolders(settings.folders, copyBoards: false);
+      _folderSubscription = settings.watchFolders().listen((value) {
+        unawaited(
+          Future<void>.sync(() async {
+            if (generation != _settingsGeneration) return;
+            await folders.configureFolders(value);
+          }).catchError((Object error) {
+            if (generation == _settingsGeneration) {
+              module._ui.notify(
+                PluginNotice(
+                  'Не удалось применить папки графа: $error',
+                  isError: true,
+                ),
+              );
+            }
+          }),
+        );
+      });
+    }
     final builder = GraphBuilder(
       registry: module._contributors,
       rootKind: module.rootKind,
@@ -145,6 +194,9 @@ class _LifeGraphLifecycle implements AppPlugin {
 
   @override
   Future<void> stop() async {
+    _settingsGeneration++;
+    await _folderSubscription?.cancel();
+    _folderSubscription = null;
     final model = module._model;
     final builder = module._builder;
     module._model = null;

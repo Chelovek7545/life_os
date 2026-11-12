@@ -1,6 +1,9 @@
 import 'package:graph_ui/graph_ui.dart';
 import 'package:uuid/uuid.dart';
 import 'canvas_note_mapper.dart';
+import '../canvas_document.dart';
+import '../canvas_board.dart';
+import 'dart:convert';
 import 'package:plugin_runtime/debounced_writer.dart';
 import 'package:plugin_runtime/owned_streams.dart';
 import 'package:graph_api/graph_api.dart';
@@ -32,6 +35,23 @@ class LifeGraphViewModel {
     this.worldMargin = 24,
   }) {
     nodePresentations.addListener(_onPresentationsChanged);
+    final files = obsidianRepository;
+    if (files is MarkdownNoteRenameApi) {
+      _noteRenames = (files as MarkdownNoteRenameApi).watchNoteRenames().listen(
+        (_) {
+          if (_accepting) {
+            unawaited(
+              _enqueue(_applyRenamedNotePaths).catchError((
+                Object error,
+                StackTrace stack,
+              ) {
+                _onSaveError(error, stack);
+              }),
+            );
+          }
+        },
+      );
+    }
   }
 
   /// Координата центра мира: корень (сфера) размещается здесь, если нет сохранённой позиции.
@@ -48,8 +68,303 @@ class LifeGraphViewModel {
   final GraphCommandRegistry commands;
   final VaultNotesApi? obsidianRepository;
   final void Function()? onDisposed;
+  StreamSubscription<NotePathChange>? _noteRenames;
+
+  _CanvasBoardState? _board;
+  Offset _boardOrigin = Offset.zero;
+  double _boardWorldSize = 4200;
+  final Map<String, Size> _boardSizes = {};
+  bool _discardBoardWrite = false;
+  (Object, StackTrace)? _boardBuildFailure;
+  bool get hasCanvasBoard => _board != null;
+  double get canvasWorldSize => hasCanvasBoard ? _boardWorldSize : worldSize;
+  String? get canvasBoardPath => _board?.session.path;
+  late final _boardWriter = DebouncedWriter<_CanvasBoardWrite>(
+    _persistBoard,
+    onError: _onSaveError,
+    onIdle: _onSaveIdle,
+  );
+
+  Map<String, Object?> _canvasSnapshot(String Function(String) filePath) =>
+      createSphereCanvas(
+        sphereId: _scope().rootId,
+        entities: [
+          for (final view in graph)
+            CanvasEntity(
+              node: _domainNode(view.id).toData(),
+              position: GraphPoint(
+                (_positions[view.id] ?? view.position).dx + _boardOrigin.dx,
+                (_positions[view.id] ?? view.position).dy + _boardOrigin.dy,
+              ),
+              width: view.size.width,
+              height: view.size.height,
+            ),
+        ],
+        notes: _canvasNotes(),
+        filePath: filePath,
+      );
+
+  List<CanvasNote> _canvasNotes() => [
+    for (final note in notes)
+      CanvasNote(
+        document: note.toRecord().document,
+        x: note.position.dx + _boardOrigin.dx,
+        y: note.position.dy + _boardOrigin.dy,
+        width: note.size.width,
+        height: note.size.height,
+        index: note.index,
+      ),
+  ];
+
+  void _scheduleBoard() {
+    final board = _board;
+    final sphereId = _currentSphereId;
+    if (board == null || sphereId == null || graph.isEmpty || _disposed) return;
+    saveStatus.value = GraphSaveStatus.saving;
+    _boardWriter.schedule(
+      _CanvasBoardWrite(
+        board,
+        sphereId,
+        _canvasSnapshot(board.session.notePath),
+        _canvasNotes(),
+        Map.of(_externalWrites),
+      ),
+    );
+    _boardBuildFailure = null;
+  }
+
+  Future<void> _persistBoard(_CanvasBoardWrite snapshot) async {
+    if (_discardBoardWrite) return;
+    final document = snapshot.board.document.merge(snapshot.generated);
+    final content = const JsonEncoder.withIndent('  ').convert(document);
+    await snapshot.board.session.write(content, expected: snapshot.board.raw);
+    snapshot.board.raw = content;
+    snapshot.board.document = CanvasBoardDocument(content);
+    final vault = obsidianRepository;
+    for (final entry in snapshot.externalWrites.entries) {
+      if (vault == null) throw StateError('Плагин заметок отключён.');
+      await vault.writeContent(entry.key, entry.value);
+      if (_externalWrites[entry.key] == entry.value) {
+        _externalWrites.remove(entry.key);
+      }
+    }
+    // Offline mirror and Resources catalog; the Canvas remains authoritative.
+    await notesRepository.saveNotes(snapshot.sphereId, snapshot.notes);
+  }
+
+  Future<void> _openBoard(String sphereId) async {
+    _board = null;
+    _boardBuildFailure = null;
+    _boardOrigin = Offset.zero;
+    _boardWorldSize = worldSize;
+    _boardSizes.clear();
+    final vault = obsidianRepository;
+    if (vault is! VaultCanvasBoardsApi ||
+        (vault?.state.vaultPath.isEmpty ?? true)) {
+      return;
+    }
+    final session = await (vault as VaultCanvasBoardsApi).openCanvasBoard(
+      sphereId,
+    );
+    final raw = await session.read();
+    final document = CanvasBoardDocument(raw ?? '{"nodes":[],"edges":[]}');
+    document.validateScope(sphereId);
+    _board = _CanvasBoardState(session, raw, document);
+    if (raw != null) _readBoardLayout(document);
+  }
+
+  void _readBoardLayout(CanvasBoardDocument document) {
+    double minX = 0, minY = 0, maxX = worldSize, maxY = worldSize;
+    for (final node in document.nodes) {
+      final x = (node['x'] as num).toDouble(),
+          y = (node['y'] as num).toDouble();
+      if (x - worldMargin < minX) minX = x - worldMargin;
+      if (y - worldMargin < minY) minY = y - worldMargin;
+      final right = x + (node['width'] as num).toDouble() + worldMargin;
+      final bottom = y + (node['height'] as num).toDouble() + worldMargin;
+      if (right > maxX) maxX = right;
+      if (bottom > maxY) maxY = bottom;
+    }
+    _boardOrigin = Offset(minX, minY);
+    _boardWorldSize = (maxX - minX) > (maxY - minY) ? maxX - minX : maxY - minY;
+    _positions.clear();
+    _boardSizes.clear();
+    for (final node in document.nodes) {
+      final id = document.entityId(node);
+      if (id == null) continue;
+      _positions[id] =
+          Offset((node['x'] as num).toDouble(), (node['y'] as num).toDouble()) -
+          _boardOrigin;
+      _boardSizes[id] = Size(
+        (node['width'] as num).toDouble(),
+        (node['height'] as num).toDouble(),
+      );
+    }
+  }
+
+  Future<void> reloadCanvasBoard() => _enqueue(() async {
+    final sphereId = _currentSphereId;
+    if (sphereId == null || _board == null) return;
+    try {
+      await _flush();
+    } on CanvasBoardConflict {
+      // A recovery document was written before the conflict was reported.
+      _discardBoardWrite = true;
+      try {
+        await _boardWriter.flush();
+      } finally {
+        _discardBoardWrite = false;
+      }
+      _externalWrites.clear();
+    }
+    final previous = _board!;
+    final raw = await previous.session.read();
+    if (raw == null) throw StateError('Файл Canvas удалён.');
+    final document = CanvasBoardDocument(raw);
+    document.validateScope(sphereId);
+    _board = _CanvasBoardState(previous.session, raw, document);
+    _readBoardLayout(document);
+    await _loadNotes(sphereId);
+    _graphSubject.add(_toViewNodes(_domainNodes));
+    saveStatus.value = GraphSaveStatus.saved;
+  });
 
   List<VaultNote> get vaultNotes => obsidianRepository?.state.notes ?? const [];
+  List<VaultNote> get markdownLibraryNotes {
+    final files = obsidianRepository;
+    return files is NotesLibrarySourcesApi
+        ? (files as NotesLibrarySourcesApi).graphMarkdownState.notes
+        : const [];
+  }
+
+  List<VaultNote> get obsidianLibraryNotes {
+    final files = obsidianRepository;
+    return files is NotesLibrarySourcesApi
+        ? (files as NotesLibrarySourcesApi).obsidianState?.notes ?? const []
+        : files?.state.notes ?? const [];
+  }
+
+  bool canRenameNote(gv.GraphNote note) =>
+      obsidianRepository is MarkdownNoteRenameApi &&
+      note.source?.sourceId == 'obsidian' &&
+      !note.isReadOnly;
+
+  Future<void> _applyRenamedNotePaths() async {
+    final files = obsidianRepository;
+    if (files is! MarkdownNoteRenameApi) return;
+    final renamer = files as MarkdownNoteRenameApi;
+    await _flush();
+    var changed = false;
+    final updated = [
+      for (final note in notes)
+        () {
+          final source = note.source;
+          if (source == null || source.sourceId != 'obsidian') return note;
+          final path = renamer.resolveNotePath(source.path);
+          if (path == source.path) return note;
+          changed = true;
+          return note.clone()
+            ..source = NoteReference(sourceId: source.sourceId, path: path);
+        }(),
+    ];
+    if (!changed) return;
+    _notesSubject.add(updated);
+    await _scheduleSaveNotes();
+    await _flush();
+  }
+
+  Future<String> renameNote(String id, String title) => _enqueue(() async {
+    final note = notes.where((note) => note.id == id).firstOrNull;
+    if (note == null || !canRenameNote(note)) {
+      throw StateError('Переименование этой заметки недоступно.');
+    }
+    await _flush();
+    final path = await (obsidianRepository as MarkdownNoteRenameApi)
+        .renameMarkdownNote(note.source!.path, title);
+    await _applyRenamedNotePaths();
+    return path;
+  });
+  bool get canCreateMarkdown =>
+      obsidianRepository != null &&
+      obsidianRepository!.state.vaultPath.isNotEmpty;
+  bool get canSaveMarkdownCopy => obsidianRepository is MarkdownNoteSaveApi;
+  bool get isClosing => !_accepting;
+  Future<String> saveNoteMarkdownCopy(
+    String id, {
+    required String directory,
+    required String title,
+  }) => _enqueue(() async {
+    final files = obsidianRepository;
+    if (files is! MarkdownNoteSaveApi) {
+      throw StateError('Сохранение копии недоступно.');
+    }
+    final note = notes.where((note) => note.id == id).firstOrNull;
+    if (note == null) throw StateError('Заметка не найдена.');
+    return (files as MarkdownNoteSaveApi).saveMarkdownCopy(
+      directory,
+      title,
+      note.text,
+    );
+  });
+
+  Future<String> createMarkdownNote({
+    required String title,
+    String text = '',
+  }) => _enqueue(() async {
+    if (_currentSphereId == null || !canCreateMarkdown) {
+      throw StateError('Откройте граф и подключите vault.');
+    }
+    await _flush();
+    final file = await obsidianRepository!.createNote(title, text);
+    await _createNoteWithText(
+      title: title,
+      text: text,
+      obsidianPath: file.absolutePath,
+    );
+    await _flush();
+    return file.absolutePath;
+  });
+
+  Future<String> convertNoteToMarkdown(String id, {required String title}) =>
+      _enqueue(() async {
+        if (!canCreateMarkdown) throw StateError('Подключите vault.');
+        await _flush();
+        final original = notes.where((note) => note.id == id).firstOrNull;
+        if (original == null || original.source != null) {
+          throw StateError('Выберите обычный стикер.');
+        }
+        final file = await obsidianRepository!.createNote(title, original.text);
+        final converted = original.clone()
+          ..source = NoteReference(
+            sourceId: 'obsidian',
+            path: file.absolutePath,
+          );
+        _notesSubject.add([
+          for (final note in notes)
+            if (note.id == id) converted else note,
+        ]);
+        await _scheduleSaveNotes();
+        await _flush();
+        return file.absolutePath;
+      });
+
+  bool get canExportCanvas =>
+      obsidianRepository is VaultCanvasApi &&
+      (obsidianRepository?.state.vaultPath.isNotEmpty ?? false);
+
+  Future<String> exportCanvas() => _enqueue(() async {
+    final vault = obsidianRepository;
+    if (vault is! VaultCanvasApi) {
+      throw StateError('Экспорт Canvas недоступен: подключите Obsidian.');
+    }
+    final canvas = vault as VaultCanvasApi;
+    final scope = _scope();
+    if (graph.isEmpty) throw StateError('Граф ещё загружается.');
+    await _flush();
+    final generated = _canvasSnapshot(canvas.canvasNotePath);
+    final document = _board?.document.merge(generated) ?? generated;
+    return canvas.createCanvas(scope.rootId, document);
+  });
 
   String? _currentSphereId;
   String? get currentSphereId => _currentSphereId;
@@ -101,7 +416,10 @@ class LifeGraphViewModel {
   Future<void> _operationQueue = Future.value();
   Future<void>? _closing;
   void _onSaveIdle() {
-    if (!_disposed && _positionWriter.isIdle && _noteWriter.isIdle) {
+    if (!_disposed &&
+        _positionWriter.isIdle &&
+        _noteWriter.isIdle &&
+        _boardWriter.isIdle) {
       saveStatus.value = GraphSaveStatus.saved;
     }
   }
@@ -260,8 +578,8 @@ class LifeGraphViewModel {
   /// Клампит позицию внутрь мирового канваса с учётом размера ноды.
   Offset _clampPosition(Offset pos, Size size) {
     return Offset(
-      pos.dx.clamp(worldMargin, worldSize - size.width - worldMargin),
-      pos.dy.clamp(worldMargin, worldSize - size.height - worldMargin),
+      pos.dx.clamp(worldMargin, canvasWorldSize - size.width - worldMargin),
+      pos.dy.clamp(worldMargin, canvasWorldSize - size.height - worldMargin),
     );
   }
 
@@ -336,10 +654,10 @@ class LifeGraphViewModel {
           index: i,
           depth: depth[n.id] ?? 0,
           parentId: n.parentId,
-          size: nodePresentations.sizeFor(n.kind),
+          size: _boardSizes[n.id] ?? nodePresentations.sizeFor(n.kind),
           position: _clampPosition(
             positions[n.id] ?? Offset.zero,
-            nodePresentations.sizeFor(n.kind),
+            _boardSizes[n.id] ?? nodePresentations.sizeFor(n.kind),
           ),
         ),
       );
@@ -411,6 +729,10 @@ class LifeGraphViewModel {
   Future<void> _scheduleSavePositions() async {
     final sphereId = _currentSphereId;
     if (sphereId == null || _disposed) return;
+    if (_board != null) {
+      _scheduleBoard();
+      return;
+    }
     saveStatus.value = GraphSaveStatus.saving;
     _positionWriter.schedule((sphereId, Map.of(_positions)));
   }
@@ -419,7 +741,14 @@ class LifeGraphViewModel {
 
   Future<void> _flush() async {
     try {
-      await Future.wait([_positionWriter.flush(), _noteWriter.flush()]);
+      await Future.wait([
+        _positionWriter.flush(),
+        _noteWriter.flush(),
+        _boardWriter.flush(),
+      ]);
+      if (_boardBuildFailure case final failure?) {
+        Error.throwWithStackTrace(failure.$1, failure.$2);
+      }
       if (!_disposed) saveStatus.value = GraphSaveStatus.saved;
     } catch (error, stack) {
       _onSaveError(error, stack);
@@ -451,9 +780,11 @@ class LifeGraphViewModel {
     nodePresentations.removeListener(_onPresentationsChanged);
     await release(() async => _graphSubscription?.cancel());
     await release(() async => _notesSubscription?.cancel());
+    await release(() async => _noteRenames?.cancel());
     await release(_sourceStreams.close);
     await release(_positionWriter.close);
     await release(_noteWriter.close);
+    await release(_boardWriter.close);
     await release(saveStatus.dispose);
     await release(_graphSubject.close);
     await release(_notesSubject.close);
@@ -628,8 +959,10 @@ class LifeGraphViewModel {
   /// заметок, привязанных к Obsidian, подтягивается заново из файла по пути.
   Future<void> _loadNotes(String sphereId) async {
     final generation = ++_notesLoadGeneration;
-    final loaded =
-        await notesRepository.loadNotes(sphereId) ?? const <CanvasNote>[];
+    final board = _board;
+    final loaded = board != null && board.raw != null
+        ? board.document.notes(board.session.resolveNote)
+        : await notesRepository.loadNotes(sphereId) ?? const <CanvasNote>[];
     final refreshed = <gv.GraphNote>[];
     var cacheChanged = false;
     for (final note in loaded) {
@@ -645,19 +978,28 @@ class LifeGraphViewModel {
           }
         }
       }
-      refreshed.add(
-        note.toView(
-          text: text,
-          readOnly:
-              note.document.source != null &&
-              (note.document.source!.sourceId != 'obsidian' ||
-                  obsidianRepository == null),
-        ),
+      final view = note.toView(
+        text: text,
+        readOnly:
+            note.document.source != null &&
+            (note.document.source!.sourceId != 'obsidian' ||
+                obsidianRepository == null),
       );
+      final files = obsidianRepository;
+      if (view.source != null && files is MarkdownNoteRenameApi) {
+        view.source = NoteReference(
+          sourceId: view.source!.sourceId,
+          path: (files as MarkdownNoteRenameApi).resolveNotePath(
+            view.source!.path,
+          ),
+        );
+      }
+      if (board != null && board.raw != null) view.position -= _boardOrigin;
+      refreshed.add(view);
     }
     if (!_disposed && generation == _notesLoadGeneration) {
       _notesSubject.add(refreshed);
-      if (cacheChanged) {
+      if (cacheChanged && _board == null) {
         saveStatus.value = GraphSaveStatus.saving;
         _noteWriter.schedule((
           sphereId,
@@ -665,6 +1007,7 @@ class LifeGraphViewModel {
           {},
         ));
       }
+      if (cacheChanged && _board != null) _scheduleBoard();
     }
   }
 
@@ -691,6 +1034,10 @@ class LifeGraphViewModel {
   Future<void> _scheduleSaveNotes() async {
     final sphereId = _currentSphereId;
     if (sphereId == null || _disposed) return;
+    if (_board != null) {
+      _scheduleBoard();
+      return;
+    }
     saveStatus.value = GraphSaveStatus.saving;
     _noteWriter.schedule((
       sphereId,
@@ -711,6 +1058,7 @@ class LifeGraphViewModel {
     _notesSubject.add(const []);
     await positionsRepository.saveLastSphereId(sphereId);
     await _loadPositions(sphereId);
+    await _openBoard(sphereId);
     await _loadNotes(sphereId);
     if (_disposed) return;
     _currentSphereId = sphereId;
@@ -722,6 +1070,34 @@ class LifeGraphViewModel {
     _graphSubscription = graphBuilder.watchGraph(sphereId).listen((nodes) {
       _domainNodes = nodes.map(GraphNode.fromData).toList(growable: false);
       _graphSubject.add(_toViewNodes(_domainNodes));
+      try {
+        _scheduleBoard();
+      } catch (error, stack) {
+        _boardBuildFailure = (error, stack);
+        _onSaveError(error, stack);
+      }
     }, onError: (e) => debugPrint('Graph stream error: $e'));
   }
+}
+
+class _CanvasBoardState {
+  _CanvasBoardState(this.session, this.raw, this.document);
+  final CanvasBoardSession session;
+  String? raw;
+  CanvasBoardDocument document;
+}
+
+class _CanvasBoardWrite {
+  _CanvasBoardWrite(
+    this.board,
+    this.sphereId,
+    this.generated,
+    this.notes,
+    this.externalWrites,
+  );
+  final _CanvasBoardState board;
+  final String sphereId;
+  final Map<String, Object?> generated;
+  final List<CanvasNote> notes;
+  final Map<String, String> externalWrites;
 }

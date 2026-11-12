@@ -3,16 +3,21 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:life_os/core/ui/hierarchy/build_note_hierarchy.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:graph_canvas/graph_canvas.dart' as graph;
-import 'package:lifegraph_plugin/lifegraph_plugin.dart' show LifeGraphViewModel, GraphSaveStatus;
+import 'package:lifegraph_plugin/lifegraph_plugin.dart'
+    show LifeGraphViewModel, GraphSaveStatus;
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
 import 'package:spheres_api/spheres_api.dart';
 import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:notes_api/notes_api.dart';
+import 'widgets/markdown_note_dialog.dart';
+import 'widgets/graph_note_context_menu.dart';
+import 'widgets/graph_directory_picker.dart';
 
 /// Экран графа жизни: сфера -> цель -> проект -> задача.
 ///
@@ -23,7 +28,12 @@ import 'package:notes_api/notes_api.dart';
 class LifeGraphScreen extends StatefulWidget {
   final LifeGraphViewModel viewModel;
 
-  const LifeGraphScreen({super.key, required this.viewModel});
+  const LifeGraphScreen({
+    super.key,
+    required this.viewModel,
+    this.pickDirectory = pickGraphDirectory,
+  });
+  final Future<String?> Function() pickDirectory;
 
   @override
   State<LifeGraphScreen> createState() => _LifeGraphScreenState();
@@ -34,6 +44,68 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   String? _syncedSphereId;
   bool _allowPop = false;
   bool _closing = false;
+  bool _exporting = false;
+
+  Future<void> _reloadCanvas() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Перечитать Canvas?'),
+        content: const Text(
+          'При конфликте правки Pulse останутся в отдельной копии, а граф загрузится из основного файла.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Перечитать'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.viewModel.reloadCanvasBoard();
+      if (mounted) {
+        setState(() => _syncedSphereId = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Canvas загружен: ${widget.viewModel.canvasBoardPath}',
+            ),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
+  }
+
+  Future<void> _exportCanvas() async {
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    try {
+      final path = await widget.viewModel.exportCanvas();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Canvas сохранён: $path')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось экспортировать Canvas: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
 
   @override
   void initState() {
@@ -65,7 +137,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         if (didPop || _closing) return;
         _closing = true;
         try {
-          await widget.viewModel.flush();
+          if (!widget.viewModel.isClosing) await widget.viewModel.flush();
           if (!mounted) return;
           setState(() => _allowPop = true);
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -129,8 +201,26 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                 onAction: _onAction,
                 camera: _camera,
                 theme: AppGraphThemes.dark,
-                layout: appGraphLayout(),
+                layout: appGraphLayout(
+                  worldSize: widget.viewModel.canvasWorldSize,
+                ),
                 nodeBuilder: _nodeBuilder,
+                noteBuilder: (context, state) {
+                  final model = widget.viewModel;
+                  return graph.DefaultNoteCard(
+                    state: state,
+                    theme: AppGraphThemes.dark,
+                    title: state.note.source == null
+                        ? null
+                        : p.basenameWithoutExtension(state.note.source!.path),
+                    onTitleSubmitted: model.canRenameNote(state.note)
+                        ? (title) async {
+                            await model.renameNote(state.note.id, title);
+                          }
+                        : null,
+                    onContextMenu: (position) => _showNoteMenu(state, position),
+                  );
+                },
                 doubleTapCreatesRoot: false,
                 longPressDeletes: false,
                 notesDeletable: true,
@@ -157,6 +247,12 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                   _SphereDropdown(viewModel: widget.viewModel),
                   const SizedBox(width: 10),
                   _SaveBadge(viewModel: widget.viewModel),
+                  if (widget.viewModel.canExportCanvas)
+                    IconButton(
+                      tooltip: 'Экспорт Canvas',
+                      onPressed: _exporting ? null : _exportCanvas,
+                      icon: const Icon(Icons.file_upload_outlined),
+                    ),
                 ],
               ),
             ),
@@ -286,7 +382,17 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, 1),
-            child: const Text('Выбрать из Obsidian Vault'),
+            child: const Text('Из Obsidian'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, 3),
+            child: const Text('Из Markdown-хранилища'),
+          ),
+          FilledButton(
+            onPressed: widget.viewModel.canCreateMarkdown
+                ? () => Navigator.pop(ctx, 2)
+                : null,
+            child: const Text('Создать .md'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -297,21 +403,153 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     );
 
     if (choice == null) return;
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     if (choice == 0) {
       widget.viewModel.createNote();
     } else if (choice == 1) {
-      _showVaultNotePicker(context);
+      _showVaultNotePicker(context, markdown: false);
+    } else if (choice == 3) {
+      _showVaultNotePicker(context, markdown: true);
+    } else if (choice == 2) {
+      final value = await showMarkdownNoteDialog(context);
+      if (value == null || !mounted) return;
+      try {
+        final path = await widget.viewModel.createMarkdownNote(
+          title: value.title,
+          text: value.text,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(
+            this.context,
+          ).showSnackBar(SnackBar(content: Text('Заметка создана: $path')));
+        }
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            this.context,
+          ).showSnackBar(SnackBar(content: Text('$error')));
+        }
+      }
     }
   }
 
-  Future<void> _showVaultNotePicker(BuildContext context) async {
-    final treeNodes = buildVaultHierarchy(widget.viewModel.vaultNotes);
+  Future<void> _convertNote(graph.NoteState state) async {
+    state.endEdit();
+    final title = state.text
+        .split('\n')
+        .first
+        .trim()
+        .replaceFirst(RegExp(r'^#+\s*'), '');
+    final value = await showMarkdownNoteDialog(
+      context,
+      initialTitle: title,
+      converting: true,
+    );
+    if (value == null || !mounted) return;
+    try {
+      final path = await widget.viewModel.convertNoteToMarkdown(
+        state.note.id,
+        title: value.title,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Заметка сохранена: $path')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
+  }
+
+  Future<void> _showNoteMenu(graph.NoteState state, Offset position) async {
+    state.select();
+    final action = await showGraphNoteContextMenu(
+      context,
+      position,
+      accent: state.accent,
+      canEdit: !state.note.isReadOnly,
+      canConvert:
+          state.note.source == null && widget.viewModel.canCreateMarkdown,
+      canDelete: state.canDelete,
+      canSaveCopy: widget.viewModel.canSaveMarkdownCopy,
+      canReload:
+          widget.viewModel.hasCanvasBoard &&
+          widget.viewModel.saveStatus.value == GraphSaveStatus.failed,
+    );
+    if (!mounted || widget.viewModel.currentSphereId == null) return;
+    switch (action) {
+      case GraphNoteMenuAction.edit:
+        state.beginEdit();
+      case GraphNoteMenuAction.markdown:
+        await _convertNote(state);
+      case GraphNoteMenuAction.remove:
+        state.remove();
+      case GraphNoteMenuAction.saveCopy:
+        await _saveNoteCopy(state);
+      case GraphNoteMenuAction.reload:
+        await _reloadCanvas();
+      case null:
+        break;
+    }
+  }
+
+  Future<void> _saveNoteCopy(graph.NoteState state) async {
+    state.endEdit();
+    try {
+      final directory = await widget.pickDirectory();
+      if (directory == null || !mounted) return;
+      final value = await showMarkdownNoteDialog(
+        context,
+        initialTitle: state.text
+            .split('\n')
+            .first
+            .trim()
+            .replaceFirst(RegExp(r'^#+\s*'), ''),
+        converting: true,
+        savingCopy: true,
+      );
+      if (value == null || !mounted) return;
+      final path = await widget.viewModel.saveNoteMarkdownCopy(
+        state.note.id,
+        directory: directory,
+        title: value.title,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Копия заметки сохранена: $path')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
+  }
+
+  Future<void> _showVaultNotePicker(
+    BuildContext context, {
+    required bool markdown,
+  }) async {
+    final treeNodes = buildVaultHierarchy(
+      markdown
+          ? widget.viewModel.markdownLibraryNotes
+          : widget.viewModel.obsidianLibraryNotes,
+    );
     if (treeNodes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('В Obsidian Vault нет заметок или путь не указан.'),
+        SnackBar(
+          content: Text(
+            markdown
+                ? 'В выбранной папке Notes нет заметок.'
+                : 'В подключённом Obsidian нет заметок.',
+          ),
         ),
       );
       return;
@@ -321,7 +559,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceContainer,
-        title: const Text('Выберите заметку из Obsidian'),
+        title: Text(markdown ? 'Markdown-хранилище' : 'Obsidian Vault'),
         content: SizedBox(
           width: 500,
           height: 400,

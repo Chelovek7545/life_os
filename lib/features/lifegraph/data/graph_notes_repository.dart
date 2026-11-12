@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:path/path.dart' as p;
 import 'package:notes_api/notes_api.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:core_contracts/core_contracts.dart' show StorageException;
@@ -7,6 +8,55 @@ import 'package:core_contracts/core_contracts.dart' show StorageException;
 class GraphNotesRepository implements CanvasNotesStore, NotesCatalog {
   GraphNotesRepository({this.prefix = 'graph_notes'});
   final String prefix;
+  final _renamedPaths = <String, String>{};
+  Future<void> _writes = Future.value();
+  bool _accepting = true;
+  Future<void>? _disposal;
+  Future<void> _enqueue(Future<void> Function() action) {
+    if (!_accepting) return Future.error(StateError('Каталог заметок закрыт.'));
+    final result = _writes.then((_) => action());
+    _writes = result.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return result;
+  }
+
+  CanvasNote _resolveSource(CanvasNote note) {
+    final source = note.document.source;
+    final path = source == null
+        ? null
+        : _renamedPaths[p.normalize(source.path)];
+    if (source == null || path == null || source.sourceId != 'obsidian') {
+      return note;
+    }
+    return CanvasNote(
+      document: NoteDocument(
+        id: note.id,
+        text: note.text,
+        source: NoteReference(sourceId: source.sourceId, path: path),
+      ),
+      x: note.x,
+      y: note.y,
+      width: note.width,
+      height: note.height,
+      index: note.index,
+    );
+  }
+
+  Future<void> renameSource(String previous, String next) => _enqueue(() async {
+    await init();
+    final redirects = <String, String>{
+      for (final entry in _renamedPaths.entries)
+        entry.key: p.equals(entry.value, previous) ? next : entry.value,
+      p.normalize(previous): next,
+    }..removeWhere((key, value) => p.equals(key, value));
+    _renamedPaths
+      ..clear()
+      ..addAll(redirects);
+    for (final entry in Map.of(_cache).entries) {
+      if (entry.value.any((note) => !identical(_resolveSource(note), note))) {
+        await _saveNotes(entry.key, entry.value);
+      }
+    }
+  });
   final Map<String, List<CanvasNote>> _cache = {};
   final _changes = StreamController<List<NoteDocument>>.broadcast();
   Future<void>? _initialization;
@@ -77,8 +127,12 @@ class GraphNotesRepository implements CanvasNotesStore, NotesCatalog {
   }
 
   @override
-  Future<void> saveNotes(String sphereId, List<CanvasNote> values) async {
+  Future<void> saveNotes(String sphereId, List<CanvasNote> values) =>
+      _enqueue(() => _saveNotes(sphereId, values));
+
+  Future<void> _saveNotes(String sphereId, List<CanvasNote> values) async {
     await init();
+    values = values.map(_resolveSource).toList();
     final prefs = await SharedPreferences.getInstance();
     final serialized = {
       for (final value in values)
@@ -107,14 +161,19 @@ class GraphNotesRepository implements CanvasNotesStore, NotesCatalog {
   }
 
   @override
-  Future<void> deleteNotes(String sphereId) async {
+  Future<void> deleteNotes(String sphereId) => _enqueue(() async {
     await init();
     final prefs = await SharedPreferences.getInstance();
     if (!await prefs.remove(_key(sphereId)))
       throw StorageException('Failed to delete graph notes.');
     _cache.remove(sphereId);
     _changes.add(notes);
-  }
+  });
 
-  Future<void> dispose() => _changes.close();
+  Future<void> dispose() => _disposal ??= _dispose();
+  Future<void> _dispose() async {
+    _accepting = false;
+    await _writes;
+    await _changes.close();
+  }
 }

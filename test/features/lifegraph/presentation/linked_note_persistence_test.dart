@@ -153,7 +153,11 @@ void main() {
         await realApp?.dispose();
         SettingsService.obsidianVaultPath.value = previous;
         await file.delete();
-        await directory.delete();
+        final tempRoot = await Directory.systemTemp.resolveSymbolicLinks();
+        if (!p.isWithin(tempRoot, await directory.resolveSymbolicLinks())) {
+          throw StateError('Unexpected test vault path.');
+        }
+        await directory.delete(recursive: true);
       }
     },
   );

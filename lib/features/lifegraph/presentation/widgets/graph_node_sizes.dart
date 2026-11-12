@@ -11,9 +11,9 @@ const double graphWorldSize = 4200.0;
 const double graphWorldMargin = 24.0;
 
 /// Геометрия графа: размер узлов, зазоры, размер мира.
-GraphLayout appGraphLayout() => const GraphLayout(
+GraphLayout appGraphLayout({double worldSize = graphWorldSize}) => GraphLayout(
   nodeSize: graphNodeSize,
   levelGap: 236,
   siblingGap: 112,
-  worldSize: Size.square(graphWorldSize),
+  worldSize: Size.square(worldSize),
 );

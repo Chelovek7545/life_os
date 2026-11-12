@@ -8,6 +8,11 @@ import 'package:goals_api/goals_api.dart';
 import 'package:projects_api/projects_api.dart';
 import 'package:tasks_api/tasks_api.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
+import 'package:life_os/features/lifegraph/presentation/widgets/graph_folders_form.dart';
+import 'package:life_os/features/lifegraph/data/graph_storage_settings_adapter.dart';
+import 'package:life_os/features/settings/settings_service.dart';
+import 'package:lifegraph_plugin/graph_storage_settings.dart';
+import 'package:life_os/features/lifegraph/presentation/widgets/graph_directory_picker.dart';
 
 LifeGraphPlugin createLifeGraphPlugin({
   required SpheresApi spheres,
@@ -24,6 +29,7 @@ LifeGraphPlugin createLifeGraphPlugin({
   required Future<void> Function(Task) completeTask,
   required Set<String> dependencies,
   VaultNotesApi? vault,
+  Future<void> Function(GraphStorageTarget)? selectStorageTarget,
 }) => LifeGraphPlugin(
   spheres: spheres,
   goals: goals,
@@ -39,6 +45,35 @@ LifeGraphPlugin createLifeGraphPlugin({
   completeTask: completeTask,
   vault: vault,
   dependencies: dependencies,
+  storageSettings: AppGraphStorageSettings(),
+  storageSettingsBuilder: (_, isActive) => GraphFoldersForm(
+    initial: SettingsService.graphFolders.value,
+    initialTarget: SettingsService.graphStorageTarget.value,
+    vaultPath: SettingsService.obsidianVaultPath.value,
+    pickDirectory: pickGraphDirectory,
+    saveTarget: selectStorageTarget == null
+        ? null
+        : (target) async {
+            if (!isActive()) throw StateError('Настройки графа уже закрыты.');
+            await selectStorageTarget(target);
+            if (!isActive()) throw StateError('Настройки графа уже закрыты.');
+            await SettingsService.setGraphStorageTarget(target);
+          },
+    listFolders: () async => vault is CanvasStorageFoldersApi
+        ? (vault as CanvasStorageFoldersApi).listFolders()
+        : [],
+    save: (value) async {
+      if (!isActive()) throw StateError('Настройки графа уже закрыты.');
+      var folders = value;
+      if (vault is CanvasStorageFoldersApi) {
+        final storage = vault as CanvasStorageFoldersApi;
+        await storage.configureFolders(value);
+        folders = storage.folders;
+      }
+      if (!isActive()) throw StateError('Настройки графа уже закрыты.');
+      await SettingsService.setGraphFolders(folders);
+    },
+  ),
   screen: (_, model, registry, openTask, completeTask) => PulseScreen(
     viewModel: model,
     registry: registry,

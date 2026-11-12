@@ -36,6 +36,32 @@ class ResourcesViewModel extends ChangeNotifier {
       List.unmodifiable(_vault?.state.notes ?? const []);
   List<NoteDocument> getAllNotes() => List.unmodifiable(_notes.notes);
 
+  VaultState? get obsidianState {
+    final vault = _vault;
+    return vault is NotesLibrarySourcesApi
+        ? (vault as NotesLibrarySourcesApi).obsidianState
+        : vault?.state;
+  }
+
+  VaultState get graphMarkdownState {
+    final vault = _vault;
+    return vault is NotesLibrarySourcesApi
+        ? (vault as NotesLibrarySourcesApi).graphMarkdownState
+        : VaultState();
+  }
+
+  List<NoteDocument> get markdownNotes {
+    final files = <String, NoteDocument>{};
+    for (final note in graphMarkdownState.notes) {
+      files[note.absolutePath] = NoteDocument(
+        id: note.absolutePath,
+        text: note.content,
+        source: NoteReference(sourceId: 'obsidian', path: note.absolutePath),
+      );
+    }
+    return List.unmodifiable(files.values);
+  }
+
   void initialize() {
     if (!_accepting) throw StateError('Resources module is closed.');
     if (_started) return;
@@ -80,6 +106,7 @@ class ResourcesViewModel extends ChangeNotifier {
 
   Future<void> refreshVault() =>
       _enqueue(() => _vault?.refresh() ?? Future.value());
+  Future<void> flush() => _enqueue(() async {});
   Future<String> readNoteContent(String path) => _enqueue(() {
     final vault = _vault;
     if (vault == null) throw StateError('Vault plugin is unavailable.');
