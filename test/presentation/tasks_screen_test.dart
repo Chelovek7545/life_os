@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rxdart/rxdart.dart';
 
 import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/ui/app_scroll_behavior.dart';
 import 'package:life_os/core/ui/empty_placeholder.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
@@ -175,6 +176,7 @@ void main() {
 
     Widget createWidgetUnderTest() {
       return MaterialApp(
+        scrollBehavior: const AppScrollBehavior(),
         theme: ThemeData.dark().copyWith(
           scaffoldBackgroundColor: AppColors.surfaceDim,
           colorScheme: const ColorScheme.dark(
@@ -234,6 +236,93 @@ void main() {
             ),
           ),
         ];
+      });
+
+      for (final size in [const Size(520, 720), const Size(1100, 530)]) {
+        testWidgets('short task list stretches below the header at $size', (
+          tester,
+        ) async {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          viewModel._stateController.add(
+            TasksLoaded(
+              curTask: mockTasks.first.task,
+              tasks: mockTasks,
+              selectedTasks: [],
+            ),
+          );
+          await tester.pumpWidget(createWidgetUnderTest());
+          await tester.pumpAndSettle();
+          final list = find.byType(AnimatedList);
+          final scrollable = find.descendant(
+            of: list,
+            matching: find.byType(Scrollable),
+          );
+          final position = tester.state<ScrollableState>(scrollable).position;
+          final first = find.byKey(ValueKey(mockTasks.first.task.id));
+          final originalRect = tester.getRect(first);
+          expect(position.maxScrollExtent, 0);
+          for (final delta in [const Offset(0, -120), const Offset(0, 120)]) {
+            final gesture = await tester.startGesture(tester.getCenter(list));
+            await gesture.moveBy(delta * .2);
+            await tester.pump();
+            await gesture.moveBy(delta);
+            await tester.pump(const Duration(milliseconds: 100));
+            expect(position.pixels, 0);
+            final stretchedRect = tester.getRect(first);
+            expect(stretchedRect.top, greaterThanOrEqualTo(originalRect.top));
+            expect(stretchedRect.height, greaterThan(originalRect.height));
+            await gesture.up();
+            await tester.pumpAndSettle();
+            expect(tester.getRect(first), originalRect);
+          }
+          expect(tester.takeException(), isNull);
+        });
+      }
+
+      testWidgets('long task list scrolls and reveals the entire final card', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(1100, 530);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final tasks = List.generate(
+          20,
+          (index) => createMockTaskWithProject(
+            task: createTaskWithTimes(
+              start: today.atTime(9),
+              title: 'Scrollable task $index',
+            ),
+          ),
+        );
+        viewModel._stateController.add(
+          TasksLoaded(
+            curTask: tasks.first.task,
+            tasks: tasks,
+            selectedTasks: [],
+          ),
+        );
+        await tester.pumpWidget(createWidgetUnderTest());
+        await tester.pumpAndSettle();
+        final list = find.byType(AnimatedList);
+        final position = tester
+            .state<ScrollableState>(
+              find.descendant(of: list, matching: find.byType(Scrollable)),
+            )
+            .position;
+        await tester.drag(list, const Offset(0, -250));
+        await tester.pumpAndSettle();
+        expect(position.pixels, greaterThan(0));
+        position.jumpTo(position.maxScrollExtent);
+        await tester.pumpAndSettle();
+        final last = find.byKey(ValueKey(tasks.last.task.id));
+        expect(last.hitTestable(), findsOneWidget);
+        expect(
+          tester.getBottomRight(last).dy,
+          lessThanOrEqualTo(tester.getBottomRight(list).dy),
+        );
+        expect(tester.takeException(), isNull);
       });
 
       testWidgets('renders task list for day period', (tester) async {

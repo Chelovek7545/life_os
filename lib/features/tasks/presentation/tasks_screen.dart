@@ -1079,9 +1079,50 @@ class _TaskList extends StatefulWidget {
   State<_TaskList> createState() => _TaskListState();
 }
 
-class _TaskListState extends State<_TaskList> {
+class _TaskListState extends State<_TaskList>
+    with SingleTickerProviderStateMixin {
   final _listKey = GlobalKey<AnimatedListState>();
   final _items = <TaskWithProject>[];
+  late final _stretch = AnimationController(
+    vsync: this,
+    upperBound: .04,
+    duration: const Duration(milliseconds: 220),
+  );
+  bool _fitsViewport = false;
+
+  @override
+  void dispose() {
+    _stretch.dispose();
+    super.dispose();
+  }
+
+  bool _onMetrics(ScrollMetricsNotification notification) {
+    if (notification.depth != 0) return false;
+    final fits = notification.metrics.maxScrollExtent <= 0;
+    if (fits != _fitsViewport) {
+      setState(() => _fitsViewport = fits);
+      _stretch.value = 0;
+    }
+    return false;
+  }
+
+  bool _onScroll(ScrollNotification notification) {
+    if (!_fitsViewport || notification.depth != 0) return false;
+    if (notification is OverscrollNotification &&
+        !MediaQuery.disableAnimationsOf(context) &&
+        !MediaQuery.accessibleNavigationOf(context)) {
+      _stretch.stop();
+      final extent = notification.metrics.viewportDimension;
+      if (extent > 0) {
+        _stretch.value =
+            (_stretch.value + notification.overscroll.abs() / extent * .08)
+                .clamp(0, _stretch.upperBound);
+      }
+    } else if (notification is ScrollEndNotification) {
+      _stretch.animateBack(0, curve: Curves.easeOutCubic);
+    }
+    return false;
+  }
 
   @override
   void initState() {
@@ -1141,21 +1182,45 @@ class _TaskListState extends State<_TaskList> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedList(
-      key: _listKey,
-      initialItemCount: _items.length,
-      padding: EdgeInsets.symmetric(
-        vertical: widget.overlayHeight + AppSpacing.sm,
-      ),
-      itemBuilder: (context, index, animation) {
-        return SizeTransition(
-          sizeFactor: animation,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _buildCard(_items[index]),
+    return NotificationListener<ScrollMetricsNotification>(
+      onNotification: _onMetrics,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onScroll,
+        child: ScrollConfiguration(
+          behavior: ScrollConfiguration.of(
+            context,
+          ).copyWith(overscroll: !_fitsViewport),
+          child: AnimatedBuilder(
+            animation: _stretch,
+            builder: (context, child) => Transform.scale(
+              scaleY: 1 + _stretch.value,
+              alignment: Alignment.topCenter,
+              child: child,
+            ),
+            child: AnimatedList(
+              key: _listKey,
+              primary: false,
+              physics: _fitsViewport
+                  ? const AlwaysScrollableScrollPhysics()
+                  : null,
+              initialItemCount: _items.length,
+              padding: EdgeInsets.only(
+                top: widget.overlayHeight + AppSpacing.sm,
+                bottom: AppSpacing.sm,
+              ),
+              itemBuilder: (context, index, animation) {
+                return SizeTransition(
+                  sizeFactor: animation,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _buildCard(_items[index]),
+                  ),
+                );
+              },
+            ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
