@@ -39,6 +39,40 @@ class _DraftPageState extends State<DraftPage> {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets('default navigation excludes Today and Week in both layouts', (
+    tester,
+  ) async {
+    final app = (await tester.runAsync(
+      () => createTestApp(enableObsidian: false),
+    ))!;
+    final destinations = app.ui.screens.map((screen) => screen.id);
+    expect(destinations, isNot(contains('today')));
+    expect(destinations, isNot(contains('planner')));
+    expect(destinations, contains('workspace'));
+    expect(app.navigation.open('today'), isFalse);
+    expect(app.navigation.open('planner'), isFalse);
+    expect(app.ui.panelsFor('today.tasks'), isEmpty);
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MyApp(diContainer: app));
+    await pumpShell(tester);
+    for (final id in ['today', 'planner']) {
+      expect(find.byKey(ValueKey('navigation-rail:$id')), findsNothing);
+    }
+    tester.view.physicalSize = const Size(390, 844);
+    await pumpShell(tester);
+    for (final id in ['today', 'planner']) {
+      expect(find.byKey(ValueKey('navigation-bar:$id')), findsNothing);
+    }
+    expect(
+      find.byKey(const ValueKey('navigation-bar:workspace')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    await disposeTestApp(tester, app);
+  });
+
   testWidgets(
     'registered destination appears in both layouts and retains its draft',
     (tester) async {

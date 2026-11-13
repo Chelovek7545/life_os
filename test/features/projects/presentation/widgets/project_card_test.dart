@@ -97,7 +97,7 @@ void main() {
       await tester.pumpWidget(createWidget());
       await tester.pump();
 
-      expect(find.text('No tasks yet'), findsOneWidget);
+      expect(find.text('Нет задач'), findsOneWidget);
     });
 
     testWidgets('shows task titles', (tester) async {
@@ -108,6 +108,9 @@ void main() {
       await tester.pumpWidget(createWidget());
       await tester.pump();
 
+      expect(find.text('Task A'), findsNothing);
+      await tester.tap(find.text('0 / 2 задач'));
+      await tester.pumpAndSettle();
       expect(find.text('Task A'), findsOneWidget);
       expect(find.text('Task B'), findsOneWidget);
     });
@@ -140,14 +143,14 @@ void main() {
       );
       await tester.pump();
 
-      final moreVert = find.byIcon(Icons.more_vert);
+      final moreVert = find.byIcon(Icons.more_horiz_rounded);
       final gesture = await tester.startGesture(tester.getCenter(moreVert));
       await tester.pump();
       await gesture.up();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      await tester.tap(find.text('Edit').last);
+      await tester.tap(find.text('Редактировать').last);
       await tester.pump();
 
       expect(editRequested, isTrue);
@@ -182,17 +185,48 @@ void main() {
       );
       await tester.pump();
 
-      final moreVert = find.byIcon(Icons.more_vert);
+      final moreVert = find.byIcon(Icons.more_horiz_rounded);
       final gesture = await tester.startGesture(tester.getCenter(moreVert));
       await tester.pump();
       await gesture.up();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      await tester.tap(find.text('Delete').last);
+      await tester.tap(find.text('Удалить').last);
       await tester.pump();
 
       verify(viewModel.deleteProject(project.id)).called(1);
+    });
+
+    testWidgets('task details still allow completing a task', (tester) async {
+      final task = createMockTask(title: 'Finish this task');
+      taskStream.add([task]);
+      when(viewModel.updateTask(any)).thenAnswer((_) async {});
+      await tester.pumpWidget(createWidget());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('0 / 1 задач'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Checkbox));
+      await tester.pumpAndSettle();
+      final updated =
+          verify(viewModel.updateTask(captureAny)).captured.single as Task;
+      expect(updated.id, task.id);
+      expect(updated.status, TaskStatus.done);
+    });
+
+    testWidgets('archives project from menu', (tester) async {
+      when(viewModel.updateProject(any)).thenAnswer((_) async {});
+      await tester.pumpWidget(createWidget());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.more_horiz_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('В архив'));
+      await tester.pumpAndSettle();
+      final updated =
+          verify(viewModel.updateProject(captureAny)).captured.single
+              as Project;
+      expect(updated.id, project.id);
+      expect(updated.isArchived, isTrue);
     });
 
     testWidgets('shows due date', (tester) async {
@@ -230,7 +264,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.textContaining('Due date'), findsOneWidget);
+      expect(find.textContaining('До '), findsOneWidget);
     });
   });
 }

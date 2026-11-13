@@ -247,8 +247,10 @@ class EditProjectCardState extends State<EditProjectCard> {
                     _error!,
                     style: const TextStyle(color: Colors.redAccent),
                   ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: AppSpacing.md,
+                  runSpacing: 8,
                   children: [
                     TextButton(
                       onPressed: _saving ? null : widget.onCancel,
@@ -259,7 +261,6 @@ class EditProjectCardState extends State<EditProjectCard> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.md),
                     ElevatedButton(
                       style: AppButtonStyles.saveButton,
                       onPressed: _saving ? null : _save,

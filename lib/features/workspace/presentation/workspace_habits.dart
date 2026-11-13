@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:habits_plugin/habits_logic.dart';
+import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/features/habits/presentation/todays_habits_panel.dart';
 import 'package:life_os/features/habits/presentation/habits_sheet.dart';
 import 'package:life_os/features/habits/presentation/habits_calendar_panel.dart';
@@ -16,6 +17,7 @@ class WorkspaceHabits extends StatelessWidget {
   @override
   Widget build(BuildContext context) => TodaysHabitsPanel(
     viewModel: model,
+    backgroundColor: AppColors.surfaceContainerLow,
     onEditHabits: () {
       if (isActive() && model.isActive) {
         showAllHabitsSheet(context: context, viewModel: model);

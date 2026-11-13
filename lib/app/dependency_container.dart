@@ -13,10 +13,7 @@ import 'plugins/habits_plugin_adapter.dart';
 import 'plugins/tasks_plugin_adapter.dart';
 import 'plugins/lifegraph_plugin_adapter.dart';
 import 'plugins/resources_plugin_adapter.dart';
-import 'plugins/today_plugin_adapter.dart';
-import 'plugins/planner_plugin_adapter.dart';
 import 'plugins/workspace_plugin_adapter.dart';
-import 'package:today_plugin/today_plugin.dart';
 import 'package:lifegraph_plugin/lifegraph_plugin.dart';
 import 'package:resources_plugin/resources_plugin.dart';
 import 'package:tasks_plugin/tasks_plugin.dart';
@@ -173,12 +170,6 @@ class DependencyContainer {
       ui: ui,
       dependencies: {'graph.storage'},
     );
-    todayPlugin = createTodayPlugin(
-      ui: ui,
-      tasks: tasksRepository,
-      habits: habitsRepository,
-      projects: projectsRepository,
-    );
     localBotService = enableTelegram
         ? LocalBotService(
             settings: AppTelegramSettings(),
@@ -244,13 +235,6 @@ class DependencyContainer {
       ...projectsPlugin.plugins,
       ...habitsPlugin.plugins,
       ...tasksPlugin.plugins,
-      ...todayPlugin.plugins,
-      createPlannerPlugin(
-        ui: ui,
-        tasks: tasksRepository,
-        projects: projectsRepository,
-        habits: habitsRepository,
-      ),
       createWorkspacePlugin(
         ui: ui,
         tasks: tasksRepository,
@@ -301,7 +285,6 @@ class DependencyContainer {
   late final GoalsPlugin goalsPlugin;
   late final LifeGraphPlugin lifeGraphPlugin;
   PulseScreenViewModel get pulseScreenViewModel => lifeGraphPlugin.viewModel;
-  late final TodayPlugin todayPlugin;
   late final TasksPlugin tasksPlugin;
   TasksViewModel get tasksViewModel => tasksPlugin.viewModel;
   late final ProjectsPlugin projectsPlugin;

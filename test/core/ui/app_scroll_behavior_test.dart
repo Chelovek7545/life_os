@@ -57,7 +57,7 @@ void main() {
   for (final axis in Axis.values) {
     for (final reverse in [false, true]) {
       testWidgets(
-        'fade follows $axis edges with reverse=$reverse and reveals the final item',
+        'soft fade follows $axis edges with reverse=$reverse and reveals the final item',
         (tester) async {
           final controller = ScrollController();
           final key = GlobalKey();
@@ -65,7 +65,7 @@ void main() {
           late StateSetter rebuild;
           await tester.pumpWidget(
             MaterialApp(
-              scrollBehavior: const AppScrollBehavior(),
+              scrollBehavior: const AppScrollBehavior(fadeExtent: 56),
               home: Scaffold(
                 body: StatefulBuilder(
                   builder: (context, setState) {
@@ -110,19 +110,19 @@ void main() {
                         ? offset * 200 + 100
                         : 100 * 200 + offset) *
                     4)];
-            final result = [red(1), red(100), red(198)];
+            final result = [red(1), red(100), red(175)];
             image.dispose();
             return result;
           }))!;
           final start = await edges();
           expect(start[reverse ? 2 : 0], 255);
-          expect(start[reverse ? 0 : 2], lessThan(100));
+          expect(start[reverse ? 0 : 2], lessThan(200));
           controller.jumpTo(100);
           await tester.pumpAndSettle();
           final middle = await edges();
           expect(middle[0], lessThan(100));
           expect(middle[1], 255);
-          expect(middle[2], lessThan(100));
+          expect(middle[2], lessThan(200));
           controller.jumpTo(controller.position.maxScrollExtent);
           await tester.pumpAndSettle();
           final end = await edges();

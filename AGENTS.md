@@ -4,7 +4,7 @@
 
 ## Что это за приложение
 
-Life OS — личный органайзер на Flutter/Dart с локальным хранением: задачи, проекты, цели, сферы жизни, привычки и заметки. Основные экраны: Pulse (граф жизни), «Сегодня», Tasks, Projects, Resources. Есть необязательные интеграции Telegram и Obsidian.
+Life OS — личный органайзер на Flutter/Dart с локальным хранением: задачи, проекты, цели, сферы жизни, привычки и заметки. Основные экраны: Pulse (граф жизни), «Пространство», Tasks, Projects, Resources. Вкладки «Сегодня» и «Неделя» не регистрируются и не запускаются в обычной сборке; их компоненты сохранены для переиспользования. Есть необязательные интеграции Telegram и Obsidian.
 
 Стек: Pub workspace, Flutter, Dart `^3.12.0`, Drift/SQLite, RxDart, SharedPreferences, Mockito и Flutter Test. Версия Flutter в CI — `3.44`; зависимости и ограничения сверяй с `pubspec.yaml` и `.github/workflows/flutter-ci.yml`.
 

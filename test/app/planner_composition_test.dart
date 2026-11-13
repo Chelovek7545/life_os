@@ -20,7 +20,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final app = (await tester.runAsync(
-        () => createTestApp(enableObsidian: false),
+        () =>
+            createTestApp(enableObsidian: false, includePlanningScreens: true),
       ))!;
       final monday = getWeekStart(DateTime.now());
       final project = Project.create(name: 'Hierarchy project');
@@ -136,7 +137,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final app = (await tester.runAsync(
-        () => createTestApp(enableObsidian: false),
+        () =>
+            createTestApp(enableObsidian: false, includePlanningScreens: true),
       ))!;
       final monday = getWeekStart(DateTime.now());
       final task = Task.blank().copyWith(
@@ -206,7 +208,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final app = (await tester.runAsync(
-        () => createTestApp(enableObsidian: false),
+        () =>
+            createTestApp(enableObsidian: false, includePlanningScreens: true),
       ))!;
       await tester.pumpWidget(MyApp(diContainer: app));
       app.navigation.open('planner');
@@ -280,7 +283,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final app = (await tester.runAsync(
-        () => createTestApp(enableObsidian: false),
+        () =>
+            createTestApp(enableObsidian: false, includePlanningScreens: true),
       ))!;
       final monday = getWeekStart(DateTime.now());
       final previous = Task.blank().copyWith(
@@ -367,7 +371,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final app = (await tester.runAsync(
-        () => createTestApp(enableObsidian: false),
+        () =>
+            createTestApp(enableObsidian: false, includePlanningScreens: true),
       ))!;
       final monday = getWeekStart(DateTime.now());
       final range = Task.blank().copyWith(
@@ -433,7 +438,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final app = (await tester.runAsync(
-        () => createTestApp(enableObsidian: false),
+        () =>
+            createTestApp(enableObsidian: false, includePlanningScreens: true),
       ))!;
       final monday = getWeekStart(DateTime.now());
       final withoutTime = Task.blank().copyWith(
@@ -522,7 +528,8 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final app = (await tester.runAsync(
-        () => createTestApp(enableObsidian: false),
+        () =>
+            createTestApp(enableObsidian: false, includePlanningScreens: true),
       ))!;
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);

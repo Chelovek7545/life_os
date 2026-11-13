@@ -3,12 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 class AppScrollBehavior extends MaterialScrollBehavior {
-  const AppScrollBehavior({this.fadeColor});
+  const AppScrollBehavior({this.fadeColor, this.fadeExtent = 20})
+    : assert(fadeExtent > 0);
   final Color? fadeColor;
+  final double fadeExtent;
 
   @override
   bool shouldNotify(covariant AppScrollBehavior oldDelegate) =>
-      oldDelegate.fadeColor != fadeColor;
+      oldDelegate.fadeColor != fadeColor ||
+      oldDelegate.fadeExtent != fadeExtent;
 
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) =>
@@ -29,6 +32,7 @@ class AppScrollBehavior extends MaterialScrollBehavior {
       controller: controller,
       direction: details.direction,
       fadeColor: fadeColor,
+      fadeExtent: fadeExtent,
       child: reduceMotion
           ? child
           : StretchingOverscrollIndicator(
@@ -47,17 +51,18 @@ class ScrollEdgeFade extends StatefulWidget {
     required this.direction,
     required this.child,
     this.fadeColor,
-  });
+    this.fadeExtent = 20,
+  }) : assert(fadeExtent > 0);
   final ScrollController controller;
   final AxisDirection direction;
   final Widget child;
   final Color? fadeColor;
+  final double fadeExtent;
   @override
   State<ScrollEdgeFade> createState() => _ScrollEdgeFadeState();
 }
 
 class _ScrollEdgeFadeState extends State<ScrollEdgeFade> {
-  static const _fadeExtent = 20.0;
   double _before = 0;
   double _after = 0;
   bool _queued = false;
@@ -81,6 +86,7 @@ class _ScrollEdgeFadeState extends State<ScrollEdgeFade> {
       _after = 0;
       _queueUpdate();
     }
+    if (oldWidget.fadeExtent != widget.fadeExtent) _queueUpdate();
   }
 
   @override
@@ -115,8 +121,12 @@ class _ScrollEdgeFadeState extends State<ScrollEdgeFade> {
         : (positions.length == 1 ? positions.single : null);
     if (position != null) {
       if (position.hasPixels && position.hasContentDimensions) {
-        before = (position.extentBefore / _fadeExtent).clamp(0, 1).toDouble();
-        after = (position.extentAfter / _fadeExtent).clamp(0, 1).toDouble();
+        before = (position.extentBefore / widget.fadeExtent)
+            .clamp(0, 1)
+            .toDouble();
+        after = (position.extentAfter / widget.fadeExtent)
+            .clamp(0, 1)
+            .toDouble();
       }
     }
     if (before == _before && after == _after) return;
@@ -151,7 +161,7 @@ class _ScrollEdgeFadeState extends State<ScrollEdgeFade> {
                           : constraints.maxWidth;
                       final stop = extent <= 0
                           ? 0.0
-                          : math.min(_fadeExtent / extent, .25);
+                          : math.min(widget.fadeExtent / extent, .25);
                       Color tint(double opacity) =>
                           fadeColor.withValues(alpha: opacity);
                       return DecoratedBox(
@@ -197,7 +207,9 @@ class _ScrollEdgeFadeState extends State<ScrollEdgeFade> {
         blendMode: BlendMode.dstIn,
         shaderCallback: (bounds) {
           final extent = vertical ? bounds.height : bounds.width;
-          final stop = extent <= 0 ? 0.0 : math.min(_fadeExtent / extent, .25);
+          final stop = extent <= 0
+              ? 0.0
+              : math.min(widget.fadeExtent / extent, .25);
           return LinearGradient(
             begin: vertical ? Alignment.topCenter : Alignment.centerLeft,
             end: vertical ? Alignment.bottomCenter : Alignment.centerRight,

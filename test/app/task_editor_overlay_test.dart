@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/app.dart';
-import 'package:life_os/features/planner/presentation/planner_screen.dart';
+import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
 import 'package:life_os/features/tasks/presentation/components/task_form_content.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
 import 'package:life_os/core/ui/collapsible_sheet.dart';
@@ -19,10 +19,10 @@ void main() {
         () => createTestApp(enableObsidian: false),
       ))!;
       await tester.pumpWidget(MyApp(diContainer: app));
-      app.navigation.open('planner');
+      app.navigation.open('pulse');
       await pumpStorage(tester);
       final filter = app.tasksViewModel.currentFilterValue;
-      final initialCalendarRect = tester.getRect(find.byType(PlannerScreen));
+      final initialScreenRect = tester.getRect(find.byType(PulseScreen));
       final create = find.byKey(const ValueKey('task-editor.create'));
       final surface = find.byKey(const ValueKey('task-editor.surface'));
       app.tasksViewModel.showForm();
@@ -41,8 +41,8 @@ void main() {
         isTrue,
       );
       expect(create, findsNothing);
-      expect(app.navigation.selectedId, 'planner');
-      expect(tester.getRect(find.byType(PlannerScreen)), initialCalendarRect);
+      expect(app.navigation.selectedId, 'pulse');
+      expect(tester.getRect(find.byType(PulseScreen)), initialScreenRect);
       final title = find
           .descendant(of: surface, matching: find.byType(TextField))
           .first;
@@ -117,7 +117,6 @@ void main() {
       for (final id in [
         'pulse',
         'tasks',
-        'planner',
         'workspace',
         'projects',
         'resources',

@@ -21,6 +21,7 @@ class TodaysHabitsPanel extends StatefulWidget {
     required this.onOpenCalendar,
     this.onEditHabits,
     this.expand = true,
+    this.backgroundColor = AppColors.surfaceDim,
   });
 
   final HabitsViewModel viewModel;
@@ -29,6 +30,7 @@ class TodaysHabitsPanel extends StatefulWidget {
   final VoidCallback onOpenCalendar;
   final VoidCallback? onEditHabits;
   final bool expand;
+  final Color backgroundColor;
 
   @override
   State<TodaysHabitsPanel> createState() => _TodaysHabitsPanelState();
@@ -44,9 +46,9 @@ class _TodaysHabitsPanelState extends State<TodaysHabitsPanel> {
   @override
   Widget build(BuildContext context) {
     final list = ColoredBox(
-      color: AppColors.surfaceDim,
+      color: widget.backgroundColor,
       child: ScrollConfiguration(
-        behavior: const AppScrollBehavior(fadeColor: AppColors.surfaceDim),
+        behavior: AppScrollBehavior(fadeColor: widget.backgroundColor),
         child: StreamBuilder<HabitsScreenState>(
           stream: widget.viewModel.state,
           initialData: const HabitsLoading(),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:life_os/core/ui/app_scroll_behavior.dart';
 import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:life_os/core/ui/hierarchy/build_note_hierarchy.dart';
 import 'package:notes_api/notes_api.dart';
@@ -20,9 +21,11 @@ class ResourcesScreen extends StatelessWidget {
           .where((note) => note.source == null)
           .toList();
       return Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         child: CustomScrollView(
+          scrollBehavior: const AppScrollBehavior(fadeExtent: 56),
           slivers: [
+            const SliverToBoxAdapter(child: SizedBox(height: 16)),
             SliverToBoxAdapter(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -145,6 +148,7 @@ class ResourcesScreen extends StatelessWidget {
                   );
                 },
               ),
+            const SliverToBoxAdapter(child: SizedBox(height: 8)),
           ],
         ),
       );

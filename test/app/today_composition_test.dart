@@ -25,9 +25,10 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final app = (await tester.runAsync(
-        () => createTestApp(enableObsidian: false),
+        () =>
+            createTestApp(enableObsidian: false, includePlanningScreens: true),
       ))!;
-      final day = app.todayPlugin.selectedDate;
+      final day = DateUtils.dateOnly(DateTime.now());
       final original = DateTime(day.year - 1, 4, 2);
       app.tasksViewModel.updateFilter(
         (old) => old.copyWith(period: DatePeriod.month, anchorDate: original),

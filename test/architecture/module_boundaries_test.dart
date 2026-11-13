@@ -388,32 +388,36 @@ void main() {
     }
     expect(pulse.contains('PluginPanelSlot'), isTrue);
   });
-  test('Today is assembled from public panels outside the generic shell', () {
-    final root = File('lib/app/dependency_container.dart').readAsStringSync();
-    expect(root.contains('...todayPlugin.plugins'), isTrue);
-    final shell = File('lib/main_screen.dart').readAsStringSync();
-    expect(shell.contains('TodayScreen'), isFalse);
-    final adapter = File(
-      'lib/app/plugins/today_plugin_adapter.dart',
-    ).readAsStringSync();
-    for (final name in ['tasks', 'habits', 'projects']) {
-      expect(
-        adapter.contains('package:${name}_plugin/${name}_panels.dart'),
-        isTrue,
-      );
-      final publicEntry = File(
-        'packages/${name}_plugin/lib/${name}_panels.dart',
-      );
-      expect(publicEntry.existsSync(), isTrue);
-      final panel = File(
-        'packages/${name}_plugin/lib/src/${name}_panel.dart',
+  test(
+    'Today panels stay reusable without installing planning screens in the default app',
+    () {
+      final root = File('lib/app/dependency_container.dart').readAsStringSync();
+      expect(root.contains('...todayPlugin.plugins'), isFalse);
+      expect(root.contains('createPlannerPlugin('), isFalse);
+      final shell = File('lib/main_screen.dart').readAsStringSync();
+      expect(shell.contains('TodayScreen'), isFalse);
+      final adapter = File(
+        'lib/app/plugins/today_plugin_adapter.dart',
       ).readAsStringSync();
-      expect(panel.contains('package:life_os/'), isFalse);
-      expect(panel.contains('package:drift/'), isFalse);
-      expect(panel.contains('features/'), isFalse);
-    }
-    expect(adapter.contains('/src/'), isFalse);
-  });
+      for (final name in ['tasks', 'habits', 'projects']) {
+        expect(
+          adapter.contains('package:${name}_plugin/${name}_panels.dart'),
+          isTrue,
+        );
+        final publicEntry = File(
+          'packages/${name}_plugin/lib/${name}_panels.dart',
+        );
+        expect(publicEntry.existsSync(), isTrue);
+        final panel = File(
+          'packages/${name}_plugin/lib/src/${name}_panel.dart',
+        ).readAsStringSync();
+        expect(panel.contains('package:life_os/'), isFalse);
+        expect(panel.contains('package:drift/'), isFalse);
+        expect(panel.contains('features/'), isFalse);
+      }
+      expect(adapter.contains('/src/'), isFalse);
+    },
+  );
   test(
     'tasks plugin owns state, work log lifetimes and graph registrations',
     () {

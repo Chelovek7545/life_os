@@ -8,19 +8,24 @@ import 'package:drift/native.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/app/dependency_container.dart';
+import 'package:plugin_runtime/plugin_runtime.dart';
+import 'package:life_os/app/plugins/today_plugin_adapter.dart';
+import 'package:life_os/app/plugins/planner_plugin_adapter.dart';
 
 Future<DependencyContainer> createTestApp({
   bool enableTelegram = false,
   bool enableObsidian = true,
   bool enableMcp = false,
   bool enableAssistant = false,
+  bool includePlanningScreens = false,
   AssistantBackendFactory? assistantBackendFactory,
   McpServerOptions? mcpOptions,
   Iterable<GraphModule> graphModules = const [],
   Iterable<UiModuleSpec> uiModules = const [],
 }) async {
   SharedPreferences.setMockInitialValues({});
-  final container = DependencyContainer(
+  late final DependencyContainer container;
+  container = DependencyContainer(
     database: AppDatabase(NativeDatabase.memory()),
     enableTelegram: enableTelegram,
     enableObsidian: enableObsidian,
@@ -30,9 +35,50 @@ Future<DependencyContainer> createTestApp({
     mcpOptions: mcpOptions,
     graphModules: graphModules,
     uiModules: uiModules,
+    additionalPlugins: [
+      if (includePlanningScreens) _PlanningScreens(() => container),
+    ],
   );
   await container.init();
   return container;
+}
+
+// Historical composition fixtures are explicitly installed for their tests;
+// the production container does not register or start these screens.
+class _PlanningScreens implements AppPlugin {
+  _PlanningScreens(this.container);
+  final DependencyContainer Function() container;
+  PluginHost? _host;
+  @override
+  String get id => 'test.planning-screens';
+  @override
+  Set<String> get dependencies => const {};
+  @override
+  Future<void> start() async {
+    final app = container();
+    _host = PluginHost([
+      ...createTodayPlugin(
+        ui: app.ui,
+        tasks: app.tasksRepository,
+        habits: app.habitsRepository,
+        projects: app.projectsRepository,
+      ).plugins,
+      createPlannerPlugin(
+        ui: app.ui,
+        tasks: app.tasksRepository,
+        projects: app.projectsRepository,
+        habits: app.habitsRepository,
+      ),
+    ]);
+    await _host!.start();
+  }
+
+  @override
+  Future<void> stop() async {
+    final host = _host;
+    _host = null;
+    await host?.stop();
+  }
 }
 
 Future<void> disposeTestApp(
