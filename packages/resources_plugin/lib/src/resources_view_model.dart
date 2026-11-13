@@ -107,6 +107,24 @@ class ResourcesViewModel extends ChangeNotifier {
   Future<void> refreshVault() =>
       _enqueue(() => _vault?.refresh() ?? Future.value());
   Future<void> flush() => _enqueue(() async {});
+  bool get canCreateMarkdown =>
+      _vault != null && graphMarkdownState.vaultPath.isNotEmpty;
+  bool get canDeleteMarkdown => _vault is MarkdownNoteDeleteApi;
+  Future<void> deleteMarkdownNote(String path) => _enqueue(() {
+    final vault = _vault;
+    if (vault is! MarkdownNoteDeleteApi ||
+        !graphMarkdownState.notes.any((note) => note.absolutePath == path)) {
+      throw StateError('Заметка больше недоступна в папке Notes.');
+    }
+    return (vault as MarkdownNoteDeleteApi).deleteMarkdownNote(path);
+  });
+  Future<VaultNote> createMarkdownNote(String title, String text) =>
+      _enqueue(() {
+        if (!canCreateMarkdown) {
+          throw StateError('Выберите папку заметок в настройках графа.');
+        }
+        return _vault!.createNote(title, text);
+      });
   Future<String> readNoteContent(String path) => _enqueue(() {
     final vault = _vault;
     if (vault == null) throw StateError('Vault plugin is unavailable.');

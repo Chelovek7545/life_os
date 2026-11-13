@@ -5,11 +5,46 @@ import 'package:notes_api/notes_api.dart';
 import 'package:resources_plugin/resources_plugin.dart' show ResourcesViewModel;
 import '../../../support/memory_graph_sources.dart';
 
-class _Library extends MemoryVault implements NotesLibrarySourcesApi {
+class _Library extends MemoryVault
+    implements NotesLibrarySourcesApi, MarkdownNoteDeleteApi {
   @override
   VaultState? obsidianState;
   @override
   VaultState graphMarkdownState = VaultState();
+  @override
+  Future<void> deleteMarkdownNote(String path) async {
+    files.remove(path);
+    graphMarkdownState = VaultState(
+      vaultPath: graphMarkdownState.vaultPath,
+      notes: [
+        for (final note in graphMarkdownState.notes)
+          if (note.absolutePath != path) note,
+      ],
+    );
+    source.emit(
+      VaultState(vaultPath: '/Pulse', notes: graphMarkdownState.notes),
+    );
+  }
+
+  @override
+  Future<VaultNote> createNote(String title, String content) async {
+    final note = VaultNote(
+      absolutePath: '/Pulse/Notes/$title.md',
+      relativePath: '$title.md',
+      title: title,
+      modifiedAt: DateTime(2026, 11, 12),
+      content: content,
+    );
+    await writeContent(note.absolutePath, content);
+    graphMarkdownState = VaultState(
+      vaultPath: '/Pulse/Notes',
+      notes: [...graphMarkdownState.notes, note],
+    );
+    source.emit(
+      VaultState(vaultPath: '/Pulse', notes: graphMarkdownState.notes),
+    );
+    return note;
+  }
 }
 
 VaultNote _note(String path, String title) => VaultNote(
@@ -21,6 +56,86 @@ VaultNote _note(String path, String title) => VaultNote(
 );
 
 void main() {
+  testWidgets(
+    'deleting from the gallery requires confirmation and updates it',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1100, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final note = _note('/Pulse/Notes/To delete.md', 'To delete');
+      final files = _Library()
+        ..graphMarkdownState = VaultState(
+          vaultPath: '/Pulse/Notes',
+          notes: [note],
+        );
+      files.files[note.absolutePath] = 'body';
+      final vm = ResourcesViewModel(notes: MemoryCanvasNotes(), vault: files);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: ResourcesScreen(viewModel: vm)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      Future<void> requestDelete() async {
+        await tester.tap(find.byTooltip('Действия заметки'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Удалить заметку'));
+        await tester.pumpAndSettle();
+      }
+
+      await requestDelete();
+      expect(find.text('Удалить заметку?'), findsOneWidget);
+      await tester.tap(find.text('Отмена'));
+      await tester.pumpAndSettle();
+      expect(files.files[note.absolutePath], 'body');
+      expect(find.text('To delete'), findsOneWidget);
+      await requestDelete();
+      await tester.tap(find.byKey(const ValueKey('markdown-delete-confirm')));
+      await tester.pumpAndSettle();
+      expect(files.files.containsKey(note.absolutePath), isFalse);
+      expect(find.text('To delete'), findsNothing);
+      expect(find.text('Пока нет Markdown-заметок'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await vm.close();
+    },
+  );
+
+  testWidgets('the gallery plus creates a Markdown file in Notes', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1100, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final files = _Library()
+      ..graphMarkdownState = VaultState(vaultPath: '/Pulse/Notes');
+    final notes = MemoryCanvasNotes();
+    final vm = ResourcesViewModel(notes: notes, vault: files);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ResourcesScreen(viewModel: vm)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('markdown-create')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('markdown-note-title')),
+      'Created from gallery',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('markdown-note-text')),
+      '# Body',
+    );
+    await tester.pump();
+    await tester.tap(find.text('Создать .md'));
+    await tester.pumpAndSettle();
+    expect(files.files['/Pulse/Notes/Created from gallery.md'], '# Body');
+    expect(find.text('Created from gallery'), findsOneWidget);
+    expect(vm.getAllNotes(), isEmpty);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
+    await vm.close();
+  });
+
   testWidgets(
     'cached Notes folder Markdown stays readable when its file becomes unavailable',
     (tester) async {
@@ -41,7 +156,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Offline'));
       await tester.pumpAndSettle();
-      final field = tester.widget<TextField>(find.byType(TextField));
+      final field = tester.widget<TextField>(
+        find.byKey(const ValueKey('resource-note-body')),
+      );
       expect(field.controller!.text, 'Body of Offline');
       expect(field.readOnly, isTrue);
       expect(find.text('Сохранить'), findsNothing);
@@ -142,9 +259,16 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      final obsidianPosition = tester.getTopLeft(find.text('Obsidian Vault'));
+      final obsidianPosition = tester.getTopLeft(
+        find
+            .ancestor(
+              of: find.text('Obsidian Vault'),
+              matching: find.byType(Card),
+            )
+            .first,
+      );
       final graphPosition = tester.getTopLeft(
-        find.text('Markdown-заметки графа'),
+        find.byKey(const ValueKey('markdown-gallery')),
       );
       if (width > 840) {
         expect(graphPosition.dy, obsidianPosition.dy);
@@ -161,7 +285,10 @@ void main() {
       await tester.tap(find.text('Graph file'));
       await tester.pumpAndSettle();
       expect(find.widgetWithText(TextField, 'Graph body'), findsOneWidget);
-      await tester.enterText(find.byType(TextField), 'Edited graph file');
+      await tester.enterText(
+        find.byKey(const ValueKey('resource-note-body')),
+        'Edited graph file',
+      );
       await tester.tap(find.text('Сохранить'));
       await tester.pumpAndSettle();
       expect(files.files[graphNote.absolutePath], 'Edited graph file');

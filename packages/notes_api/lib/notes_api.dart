@@ -125,6 +125,12 @@ abstract interface class MarkdownNoteSaveApi {
   Future<String> saveMarkdownCopy(String directory, String title, String text);
 }
 
+/// Deletes a Markdown file inside the currently configured graph Notes folder.
+/// Canvas cards and their cached content are retained.
+abstract interface class MarkdownNoteDeleteApi {
+  Future<void> deleteMarkdownNote(String path);
+}
+
 class NotePathChange {
   const NotePathChange(this.previousPath, this.path);
   final String previousPath;

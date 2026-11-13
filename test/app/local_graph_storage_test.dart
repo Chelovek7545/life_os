@@ -32,6 +32,88 @@ void main() {
     }
     await temporary.delete(recursive: true);
   });
+  test('Resources deletes only current Notes files without Obsidian', () async {
+    app = await createTestApp(enableObsidian: false);
+    final resources = app!.resourcesViewModel;
+    final note = await resources.createMarkdownNote('Delete', 'body');
+    expect(resources.canDeleteMarkdown, isTrue);
+    final outside = File(p.join(temporary.path, 'Outside.md'));
+    await outside.writeAsString('keep');
+    await expectLater(
+      resources.deleteMarkdownNote(outside.path),
+      throwsStateError,
+    );
+    final deletion = resources.deleteMarkdownNote(note.absolutePath);
+    await app!.dispose();
+    app = null;
+    await deletion;
+    expect(await File(note.absolutePath).exists(), isFalse);
+    expect(await outside.readAsString(), 'keep');
+    await expectLater(
+      resources.deleteMarkdownNote(note.absolutePath),
+      throwsStateError,
+    );
+  });
+  test(
+    'existing Notes files expose their content after opening the application',
+    () async {
+      final file = File(
+        p.join(temporary.path, 'Pulse', 'Notes', 'nested', 'Existing.md'),
+      );
+      await file.parent.create(recursive: true);
+      await file.writeAsString('# Existing\nPreview survives reopening');
+      app = await createTestApp(enableObsidian: false);
+      expect(
+        app!.resourcesViewModel.graphMarkdownState.notes.single.content,
+        '# Existing\nPreview survives reopening',
+      );
+      await app!.resourcesViewModel.refreshVault();
+      expect(
+        app!.resourcesViewModel.graphMarkdownState.notes.single.content,
+        '# Existing\nPreview survives reopening',
+      );
+    },
+  );
+  test(
+    'Resources creates only Notes files and finishes accepted creation before shutdown',
+    () async {
+      app = await createTestApp(enableObsidian: false);
+      final resources = app!.resourcesViewModel;
+      final note = await resources.createMarkdownNote(
+        'Library file',
+        '# Markdown body',
+      );
+      expect(
+        note.absolutePath,
+        p.join(temporary.path, 'Pulse', 'Notes', 'Library file.md'),
+      );
+      expect(await File(note.absolutePath).readAsString(), '# Markdown body');
+      expect(
+        resources.graphMarkdownState.notes.single.absolutePath,
+        note.absolutePath,
+      );
+      expect(resources.getAllNotes(), isEmpty);
+      await expectLater(
+        resources.createMarkdownNote('Library file', 'overwrite'),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await File(note.absolutePath).readAsString(), '# Markdown body');
+      final pending = resources.createMarkdownNote(
+        'Accepted',
+        'finish writing',
+      );
+      await app!.dispose();
+      app = null;
+      expect(
+        await File((await pending).absolutePath).readAsString(),
+        'finish writing',
+      );
+      await expectLater(
+        resources.createMarkdownNote('Stale', 'no'),
+        throwsStateError,
+      );
+    },
+  );
   for (final withObsidian in [false, true]) {
     test(
       'renaming preserves live and closed graph links, Obsidian=$withObsidian',

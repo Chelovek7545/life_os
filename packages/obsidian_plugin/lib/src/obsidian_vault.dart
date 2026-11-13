@@ -13,6 +13,7 @@ class ObsidianVault
         VaultCanvasBoardsApi,
         CanvasStorageFoldersApi,
         MarkdownNoteSaveApi,
+        MarkdownNoteDeleteApi,
         MarkdownNoteRenameApi {
   ObsidianVault({Stream<FileSystemEvent> Function(Directory)? watchDirectory})
     : _watchDirectory = watchDirectory ?? ((directory) => directory.watch());
@@ -139,7 +140,11 @@ class ObsidianVault
           }
         }
       }
+      final notesChanged = next.notes != _folders.notes;
       _folders = next;
+      if (notesChanged && _active && root.isNotEmpty) {
+        await _scan(root, _generation);
+      }
     });
   }
 
@@ -280,6 +285,13 @@ class ObsidianVault
               relativePath: p.relative(entity.path, from: root),
               title: p.basenameWithoutExtension(entity.path),
               modifiedAt: (await entity.stat()).modified,
+              content:
+                  p.isWithin(
+                    _folderPath(root, _folders.notes),
+                    entity.absolute.path,
+                  )
+                  ? await entity.readAsString()
+                  : '',
             ),
           );
         } on FileSystemException {
@@ -447,6 +459,51 @@ class ObsidianVault
                 )
               else
                 note,
+          ],
+        ),
+      );
+    });
+  }
+
+  @override
+  Future<void> deleteMarkdownNote(String path) {
+    _checkActive();
+    final root = state.vaultPath;
+    final selection = _vaultSelectionGeneration;
+    final notesFolder = _folderPath(root, _folders.notes);
+    return _enqueue(() async {
+      void checkSelection() {
+        if (root.isEmpty ||
+            selection != _vaultSelectionGeneration ||
+            !p.equals(notesFolder, _folderPath(root, _folders.notes))) {
+          throw StateError('Папка заметок изменена. Обновите библиотеку.');
+        }
+      }
+
+      checkSelection();
+      final target = p.normalize(p.absolute(resolveNotePath(path)));
+      if (!p.isWithin(notesFolder, target) ||
+          p.extension(target).toLowerCase() != '.md' ||
+          await FileSystemEntity.type(target, followLinks: false) !=
+              FileSystemEntityType.file) {
+        throw ArgumentError('Удалять можно только .md файлы из папки Notes.');
+      }
+      final file = File(target);
+      final resolvedFolder = await Directory(
+        notesFolder,
+      ).resolveSymbolicLinks();
+      final resolvedFile = await file.resolveSymbolicLinks();
+      if (!p.isWithin(resolvedFolder, resolvedFile)) {
+        throw ArgumentError('Файл находится за пределами папки Notes.');
+      }
+      checkSelection();
+      await file.delete();
+      _publish(
+        VaultState(
+          vaultPath: state.vaultPath,
+          notes: [
+            for (final note in state.notes)
+              if (!p.equals(note.absolutePath, target)) note,
           ],
         ),
       );

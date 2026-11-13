@@ -3,6 +3,8 @@ import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:life_os/core/ui/hierarchy/build_note_hierarchy.dart';
 import 'package:notes_api/notes_api.dart';
 import 'package:path/path.dart' as p;
+import 'widgets/markdown_notes_panel.dart';
+import 'package:life_os/features/lifegraph/presentation/widgets/markdown_note_dialog.dart';
 import 'package:resources_plugin/resources_plugin.dart' show ResourcesViewModel;
 
 class ResourcesScreen extends StatelessWidget {
@@ -77,8 +79,14 @@ class ResourcesScreen extends StatelessWidget {
                         return Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(child: obsidian),
-                            const SizedBox(width: 16),
+                            SizedBox(
+                              width: (constraints.maxWidth * .26).clamp(
+                                240.0,
+                                300.0,
+                              ),
+                              child: obsidian,
+                            ),
+                            const SizedBox(width: 20),
                             Expanded(child: markdown),
                           ],
                         );
@@ -265,73 +273,27 @@ class _MarkdownNotesPanel extends StatelessWidget {
   final ResourcesViewModel viewModel;
 
   @override
-  Widget build(BuildContext context) {
-    final state = viewModel.graphMarkdownState;
-    final notes = viewModel.markdownNotes.toList()
-      ..sort(
-        (a, b) => p
-            .basename(a.source!.path)
-            .toLowerCase()
-            .compareTo(p.basename(b.source!.path).toLowerCase()),
-      );
-    final Widget content;
-    if (state.isLoading && notes.isEmpty) {
-      content = const Center(child: CircularProgressIndicator());
-    } else {
-      content = Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (state.error != null)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                state.error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ),
-          Expanded(
-            child: notes.isEmpty
-                ? _panelMessage(
-                    'Пока нет Markdown-заметок графа. Создайте .md на канвасе или преобразуйте стикер.',
-                  )
-                : ListView.builder(
-                    itemCount: notes.length,
-                    itemBuilder: (context, index) {
-                      final source = notes[index].source!;
-                      final title = p.basenameWithoutExtension(source.path);
-                      return ListTile(
-                        leading: const Icon(Icons.description_outlined),
-                        title: Text(
-                          title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Text(
-                          source.path,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        onTap: () => _openFileNoteEditor(
-                          context,
-                          viewModel,
-                          title,
-                          source.path,
-                          cachedContent: notes[index].text,
-                        ),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      );
-    }
-    return _NotesPanel(
-      title: 'Markdown-заметки графа',
-      icon: Icons.note_alt_outlined,
-      path: state.vaultPath,
-      child: content,
-    );
-  }
+  Widget build(BuildContext context) => MarkdownNotesPanel(
+    key: ValueKey(viewModel.graphMarkdownState.vaultPath),
+    state: viewModel.graphMarkdownState,
+    onDelete: viewModel.canDeleteMarkdown
+        ? (note) => viewModel.deleteMarkdownNote(note.absolutePath)
+        : null,
+    onOpen: (note) => _openFileNoteEditor(
+      context,
+      viewModel,
+      p.basenameWithoutExtension(note.absolutePath),
+      note.absolutePath,
+      cachedContent: note.content,
+    ),
+    onCreate: viewModel.canCreateMarkdown
+        ? () async {
+            final value = await showMarkdownNoteDialog(context);
+            if (value == null || !context.mounted) return null;
+            return viewModel.createMarkdownNote(value.title, value.text);
+          }
+        : null,
+  );
 }
 
 Future<void> _openFileNoteEditor(
@@ -426,6 +388,7 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
         width: 600,
         height: 400,
         child: TextField(
+          key: const ValueKey('resource-note-body'),
           controller: _controller,
           enabled: !_saving,
           readOnly: widget.readOnly,

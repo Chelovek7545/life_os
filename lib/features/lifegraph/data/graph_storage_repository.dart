@@ -17,6 +17,7 @@ class GraphStorageRepository
         VaultCanvasBoardsApi,
         CanvasStorageFoldersApi,
         MarkdownNoteSaveApi,
+        MarkdownNoteDeleteApi,
         MarkdownNoteRenameApi {
   GraphStorageRepository({
     required this.target,
@@ -429,6 +430,9 @@ class GraphStorageRepository
   @override
   Future<VaultNote> createNote(String title, String text) =>
       _files.createNote(title, text);
+  @override
+  Future<void> deleteMarkdownNote(String path) =>
+      _files.deleteMarkdownNote(path);
   @override
   String canvasNotePath(String path) => _files.canvasNotePath(path);
   @override

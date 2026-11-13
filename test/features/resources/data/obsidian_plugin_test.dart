@@ -27,6 +27,111 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test('deleting Markdown removes only a file inside Notes', () async {
+    final vault = ObsidianVault(watchDirectory: (_) => const Stream.empty());
+    try {
+      await vault.openVault(directory.path);
+      final note = await vault.createNote('Delete me', 'body');
+      final outside = File(p.join(directory.path, 'Outside.md'));
+      await outside.writeAsString('keep');
+      final attachment = File(
+        p.join(p.dirname(note.absolutePath), 'image.png'),
+      );
+      await attachment.writeAsString('keep attachment');
+      final board = File(p.join(directory.path, 'Saved.canvas'));
+      await board.writeAsString('{"file":"Pulse/Notes/Delete me.md"}');
+      for (final path in [outside.path, attachment.path, directory.path]) {
+        await expectLater(vault.deleteMarkdownNote(path), throwsArgumentError);
+      }
+      final changes = vault.watch().firstWhere((state) => state.notes.isEmpty);
+      await vault.deleteMarkdownNote(note.absolutePath);
+      await changes;
+      expect(await File(note.absolutePath).exists(), isFalse);
+      expect(vault.graphMarkdownState.notes, isEmpty);
+      expect(await outside.readAsString(), 'keep');
+      expect(await attachment.readAsString(), 'keep attachment');
+      expect(await board.readAsString(), '{"file":"Pulse/Notes/Delete me.md"}');
+    } finally {
+      await vault.dispose();
+    }
+  });
+
+  test(
+    'deletion rejects a stale folder and finishes before shutdown',
+    () async {
+      final vault = ObsidianVault(watchDirectory: (_) => const Stream.empty());
+      try {
+        await vault.openVault(directory.path);
+        final note = await vault.createNote('Keep', 'body');
+        final switchFolder = vault.configureFolders(
+          const VaultFolders(notes: 'Other'),
+        );
+        final rejected = expectLater(
+          vault.deleteMarkdownNote(note.absolutePath),
+          throwsStateError,
+        );
+        await switchFolder;
+        await rejected;
+        expect(await File(note.absolutePath).exists(), isTrue);
+        final current = await vault.createNote('Delete', 'body');
+        final deletion = vault.deleteMarkdownNote(current.absolutePath);
+        await vault.dispose();
+        await deletion;
+        expect(await File(current.absolutePath).exists(), isFalse);
+        expect(
+          () => vault.deleteMarkdownNote(note.absolutePath),
+          throwsStateError,
+        );
+      } finally {
+        await vault.dispose();
+      }
+    },
+  );
+
+  test(
+    'scanning loads previews only from Notes and refreshes them when the folder changes',
+    () async {
+      final notes = Directory(
+        p.join(directory.path, 'Pulse', 'Notes', 'nested'),
+      );
+      await notes.create(recursive: true);
+      final existing = File(p.join(notes.path, 'Existing.md'));
+      await existing.writeAsString('# Заголовок\nСодержимое для превью');
+      final elsewhere = File(p.join(directory.path, 'Outside.md'));
+      await elsewhere.writeAsString('not eagerly loaded');
+      final custom = Directory(p.join(directory.path, 'Custom'));
+      await custom.create();
+      final customFile = File(p.join(custom.path, 'Other.md'));
+      await customFile.writeAsString('custom preview');
+      final vault = ObsidianVault(watchDirectory: (_) => const Stream.empty());
+      try {
+        await vault.openVault(directory.path);
+        expect(vault.state.error, isNull);
+        expect(
+          vault.graphMarkdownState.notes.single.content,
+          '# Заголовок\nСодержимое для превью',
+        );
+        expect(
+          vault.state.notes
+              .singleWhere((note) => note.absolutePath == elsewhere.path)
+              .content,
+          isEmpty,
+        );
+        await existing.writeAsString('Изменённый текст');
+        await vault.refresh();
+        expect(
+          vault.graphMarkdownState.notes.single.content,
+          'Изменённый текст',
+        );
+        await vault.configureFolders(const VaultFolders(notes: 'Custom'));
+        expect(vault.graphMarkdownState.notes.single.content, 'custom preview');
+        expect(await existing.readAsString(), 'Изменённый текст');
+        expect(await elsewhere.readAsString(), 'not eagerly loaded');
+      } finally {
+        await vault.dispose();
+      }
+    },
+  );
   test(
     'indexes markdown lazily, skips hidden folders and returns immutable snapshots',
     () async {

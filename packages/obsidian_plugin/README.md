@@ -28,6 +28,7 @@ Obsidian управляет только vault. Движок переиспол�
 | `CanvasBoardSession.notePath/resolveNote` | Преобразование путей между Canvas и файловой системой |
 | `saveMarkdownCopy` | Новая копия текста в выбранной абсолютной папке без перезаписи |
 | `renameMarkdownNote` | Переименование .md в прежней папке и обновление основных досок |
+| `deleteMarkdownNote` | Удаление .md из текущей Notes с проверкой пути/поколения; карточки Canvas остаются |
 | `remapNoteReferences`, `resolveNotePath`, `watchNoteRenames` | Обновление ссылок другого текущего корня и разрешение прежних путей/события |
 | `flush`, `stop`, `dispose` | Завершение очереди, остановка watcher-ов и окончательное освобождение потоков |
 
