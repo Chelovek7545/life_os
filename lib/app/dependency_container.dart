@@ -68,7 +68,7 @@ class DependencyContainer {
     ),
     this.enableAssistant = const bool.fromEnvironment(
       'ENABLE_ASSISTANT',
-      defaultValue: true,
+      defaultValue: false,
     ),
     AssistantBackendFactory? assistantBackendFactory,
     McpServerOptions? mcpOptions,

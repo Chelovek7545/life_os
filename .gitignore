@@ -46,6 +46,7 @@ app.*.map.json
 
 # Local inference runtime, models and Python caches
 /.venv-openvino/
+/.venv-openvino-*/
 /.openvino-runtime/
 /models/
 __pycache__/

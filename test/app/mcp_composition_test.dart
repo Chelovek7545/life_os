@@ -1,5 +1,9 @@
 import 'package:agent_bridge/agent_bridge.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:drift/native.dart';
+import 'package:life_os/app/dependency_container.dart';
+import 'package:life_os/core/database/database.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tasks_api/tasks_api.dart';
 import '../features/agents/support/agent_harness.dart';
 import '../support/test_app.dart';
@@ -11,6 +15,43 @@ class _NetworkBinding extends AutomatedTestWidgetsFlutterBinding {
 
 void main() {
   _NetworkBinding();
+  test(
+    'production defaults omit AI chat while MCP remains independently usable',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final app = DependencyContainer(
+        database: AppDatabase(NativeDatabase.memory()),
+        enableTelegram: false,
+        enableObsidian: false,
+        enableMcp: true,
+        mcpOptions: const McpServerOptions(token: token, port: 0),
+        assistantBackendFactory: (_) =>
+            throw StateError('Default app must not start local AI'),
+      );
+      addTearDown(app.dispose);
+      expect(app.enableAssistant, isFalse);
+      await app.init();
+      expect(app.assistantPlugin, isNull);
+      expect(app.plugins.states.containsKey('assistant.chat'), isFalse);
+      expect(
+        app.ui
+            .panelsFor('app.overlays')
+            .any((panel) => panel.id == 'assistant.chat.overlay'),
+        isFalse,
+      );
+      final client = McpClient(app.mcpPlugin!.endpoint!);
+      addTearDown(client.close);
+      await client.initialize();
+      final created = await client.tool('tasks_create', {
+        'title': 'MCP без AI-чата',
+      });
+      expect(created['result']['isError'], isFalse);
+      final found = await client.tool('tasks_list', {
+        'query': 'MCP без AI-чата',
+      });
+      expect(found['result']['structuredContent']['total'], 1);
+    },
+  );
   test('MCP is opt-in and does not register a listener by default', () async {
     final app = await createTestApp(enableObsidian: false);
     addTearDown(app.dispose);
