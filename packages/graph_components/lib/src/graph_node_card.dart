@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:graph_api/graph_api.dart';
 import 'package:graph_ui/graph_ui.dart';
 import 'component_spec.dart';
@@ -52,6 +53,8 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
         children: [
           GestureDetector(
             behavior: HitTestBehavior.opaque,
+            onTap: widget.state.select,
+            dragStartBehavior: DragStartBehavior.down,
             onDoubleTap: (s.hasChildren || s.collapsed)
                 ? s.toggleCollapse
                 : null,

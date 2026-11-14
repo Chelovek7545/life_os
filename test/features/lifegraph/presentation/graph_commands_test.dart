@@ -2,6 +2,7 @@ import 'package:life_os/app/dependency_container.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:graph_canvas/graph_canvas.dart' as canvas;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:graph_api/graph_api.dart';
 import 'package:spheres_api/spheres_api.dart';
@@ -41,6 +42,70 @@ void main() {
       );
       return id;
     }
+
+    test(
+      'selection deletes overlapping subtrees once and preserves other branches',
+      () async {
+        final goal = await create(sphere.id, 'goal');
+        final project = await create(goal, 'project');
+        final task = await create(project, 'task');
+        final child = await create(task, 'subTask');
+        final keep = await create(goal, 'project');
+        await vm.createNote();
+        final note = vm.notes.single.id;
+        await vm.createNote();
+        final keepNote = vm.notes.last.id;
+        final delete = vm.deletionForSelection(
+          nodeIds: {project, task},
+          noteIds: {note},
+        );
+        await delete(false);
+        expect(await app.projectsRepository.getProjectById(project), isNull);
+        expect(await app.tasksRepository.getById(task), isNull);
+        expect(await app.tasksRepository.getById(child), isNull);
+        expect(await app.projectsRepository.getProjectById(keep), isNotNull);
+        expect(vm.notes.map((n) => n.id), [keepNote]);
+        await vm.flush();
+        expect(
+          (await app.graphNotesRepository.loadNotes(
+            sphere.id,
+          ))!.map((n) => n.id),
+          [keepNote],
+        );
+      },
+    );
+
+    test(
+      'selection keepChildren deletes chosen parent and child but preserves unselected descendants',
+      () async {
+        final goal = await create(sphere.id, 'goal');
+        final project = await create(goal, 'project');
+        final task = await create(project, 'task');
+        final child = await create(task, 'subTask');
+        await vm.deletionForSelection(nodeIds: {project, task}, noteIds: {})(
+          true,
+        );
+        expect(await app.projectsRepository.getProjectById(project), isNull);
+        expect(await app.tasksRepository.getById(task), isNull);
+        expect(await app.tasksRepository.getById(child), isNotNull);
+        expect(await app.goalsRepository.getGoal(goal), isNotNull);
+      },
+    );
+
+    test(
+      'selection deletion is revoked after switching away and back',
+      () async {
+        await vm.createNote();
+        final note = vm.notes.single.id;
+        final delete = vm.deletionForSelection(nodeIds: {}, noteIds: {note});
+        final other = Sphere.create(name: 'Other');
+        await app.spheresRepository.addSphere(other);
+        await vm.switchSphere(other.id);
+        await vm.switchSphere(sphere.id);
+        await expectLater(delete(true), throwsStateError);
+        expect(vm.notes.single.id, note);
+      },
+    );
 
     test(
       'creates each built-in kind, keeps schedule values and routes subtree deletion',
@@ -154,6 +219,85 @@ void main() {
       },
     );
   });
+
+  testWidgets(
+    'selection context menu confirms deletion of nodes and stickers',
+    (tester) async {
+      final app = (await tester.runAsync(
+        () => createTestApp(enableObsidian: false),
+      ))!;
+      final sphere = Sphere.create(name: 'Root');
+      late LifeGraphViewModel vm;
+      late String project, task, note;
+      await tester.runAsync(() async {
+        await app.spheresRepository.addSphere(sphere);
+        vm = await app.pulseScreenViewModel.openGraph(sphere.id);
+        await vm.graphStream.firstWhere((nodes) => nodes.isNotEmpty);
+      });
+      Future<String> create(String parent, String kind) async {
+        final id = await vm.createChild(
+          parent,
+          GraphNodeDraft(kind: kind, title: kind),
+        );
+        await vm.graphStream.firstWhere(
+          (nodes) => nodes.any((n) => n.id == id),
+        );
+        return id;
+      }
+
+      await tester.runAsync(() async {
+        final goal = await create(sphere.id, 'goal');
+        project = await create(goal, 'project');
+        task = await create(project, 'task');
+        await vm.createNote();
+        note = vm.notes.single.id;
+      });
+      await tester.pumpWidget(
+        MaterialApp(home: LifeGraphScreen(viewModel: vm)),
+      );
+      await tester.pumpAndSettle();
+      Future<void> openMenu() async {
+        tester
+            .widget<canvas.GraphView>(find.byType(canvas.GraphView))
+            .onSelectionContextMenu!(
+          canvas.GraphSelection(nodeIds: {project}, noteIds: {note}),
+          const Offset(250, 250),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Удалить выбранные (2)'));
+        await tester.pumpAndSettle();
+      }
+
+      await openMenu();
+      await tester.tap(find.text('Отмена'));
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        expect(await app.projectsRepository.getProjectById(project), isNotNull);
+      });
+      expect(vm.notes.single.id, note);
+      await openMenu();
+      await tester.tap(find.text('Удалить всё поддерево'));
+      for (
+        var i = 0;
+        i < 100 && find.text('Удалить объекты (2)?').evaluate().isNotEmpty;
+        i++
+      ) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 2)),
+        );
+        await tester.pump(const Duration(milliseconds: 20));
+      }
+      expect(find.text('Удалить объекты (2)?'), findsNothing);
+      await tester.runAsync(() async {
+        expect(await app.projectsRepository.getProjectById(project), isNull);
+        expect(await app.tasksRepository.getById(task), isNull);
+      });
+      await tester.pumpAndSettle();
+      expect(vm.notes, isEmpty);
+      expect(tester.takeException(), isNull);
+      await disposeTestApp(tester, app);
+    },
+  );
 
   test(
     'switching graphs waits for accepted writes and stores coordinates in the original scope',

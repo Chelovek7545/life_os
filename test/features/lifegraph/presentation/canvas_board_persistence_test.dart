@@ -68,6 +68,37 @@ void main() {
           as Map<String, dynamic>;
 
   test(
+    'deleting selected stickers saves the board and keeps original Markdown',
+    () async {
+      final vm = await open();
+      final path = await vm.createMarkdownNote(
+        title: 'Keep file',
+        text: 'original body',
+      );
+      final linked = vm.notes.single.id;
+      await vm.createNote();
+      final sticker = vm.notes.last.id;
+      await vm.deletionForSelection(nodeIds: {}, noteIds: {linked, sticker})(
+        true,
+      );
+      await vm.flush();
+      expect(vm.notes, isEmpty);
+      expect(await File(path).readAsString(), 'original body');
+      final document = await read(vm);
+      expect(
+        (document['nodes'] as List).any(
+          (n) => n['id'] == linked || n['id'] == sticker,
+        ),
+        isFalse,
+      );
+      await vm.dispose();
+      final reopened = await open();
+      expect(reopened.notes, isEmpty);
+      expect(await File(path).readAsString(), 'original body');
+    },
+  );
+
+  test(
     'migration captures layout and notes, reopen imports negative coordinates and unknown content',
     () async {
       await app.graphPositionsRepository.savePositions(sphere.id, {

@@ -587,7 +587,72 @@ class LifeGraphViewModel {
     String id, {
     required bool keepChildren,
     bool Function()? isAvailable,
-  }) => _enqueue(() async {
+  }) => _enqueue(
+    () => _deleteNodeNow(id, keepChildren: keepChildren),
+    isAvailable: isAvailable,
+  );
+
+  /// Captures the originating board so a delayed menu cannot delete another scope.
+  Future<void> Function(bool keepChildren) deletionForSelection({
+    required Set<String> nodeIds,
+    required Set<String> noteIds,
+  }) {
+    final scope = _scope();
+    final generation = _scopeGeneration;
+    final selectedNodes = Set<String>.of(nodeIds);
+    final selectedNotes = Set<String>.of(noteIds);
+    return (keepChildren) => _enqueue(
+      () async {
+        final nodes = [
+          for (final n in _domainNodes)
+            if (selectedNodes.contains(n.id)) n,
+        ];
+        if (nodes.length != selectedNodes.length ||
+            nodes.any((n) => !commands.canDelete(n.kind)) ||
+            selectedNotes.any((id) => !notes.any((n) => n.id == id))) {
+          throw StateError(
+            'Часть выбранных объектов больше недоступна. Выделите их заново.',
+          );
+        }
+        final depths = _depthsOf(_domainNodes);
+        final targets =
+            nodes.where((node) {
+              if (keepChildren) return true;
+              var parent = node.parentId;
+              final seen = <String>{};
+              while (parent != null && seen.add(parent)) {
+                if (selectedNodes.contains(parent)) return false;
+                parent = _domainNodes
+                    .where((n) => n.id == parent)
+                    .firstOrNull
+                    ?.parentId;
+              }
+              return true;
+            }).toList()..sort(
+              (a, b) => (depths[b.id] ?? 0).compareTo(depths[a.id] ?? 0),
+            );
+        for (final node in targets.where((n) => n.id != scope.rootId)) {
+          await _deleteNodeNow(node.id, keepChildren: keepChildren);
+        }
+        if (selectedNotes.isNotEmpty) {
+          _notesSubject.add(
+            notes.where((n) => !selectedNotes.contains(n.id)).toList(),
+          );
+          await _scheduleSaveNotes();
+          await _flush();
+        }
+        if (targets.any((n) => n.id == scope.rootId)) {
+          await _deleteNodeNow(scope.rootId, keepChildren: keepChildren);
+        }
+      },
+      isAvailable: () =>
+          !_disposed &&
+          generation == _scopeGeneration &&
+          scope.rootId == _currentSphereId,
+    );
+  }
+
+  Future<void> _deleteNodeNow(String id, {required bool keepChildren}) async {
     if (_currentSphereId == null) return;
     final scope = _scope();
     final node = _domainNode(id).toData();
@@ -610,7 +675,7 @@ class LifeGraphViewModel {
       _removePositions(removed);
       await _flush();
     }
-  }, isAvailable: isAvailable);
+  }
 
   void _removePositions(Iterable<String> ids) {
     for (final id in ids) {

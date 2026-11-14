@@ -196,6 +196,8 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           children: [
             Positioned.fill(
               child: graph.GraphView(
+                key: ValueKey(sphereId),
+                onSelectionContextMenu: _showSelectionMenu,
                 nodes: widget.viewModel.graphStream,
                 notes: widget.viewModel.notesStream,
                 onAction: _onAction,
@@ -218,7 +220,9 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                             await model.renameNote(state.note.id, title);
                           }
                         : null,
-                    onContextMenu: (position) => _showNoteMenu(state, position),
+                    onContextMenu: state.selected && state.selectionCount > 1
+                        ? state.onSelectionContextMenu
+                        : (position) => _showNoteMenu(state, position),
                   );
                 },
                 doubleTapCreatesRoot: false,
@@ -464,6 +468,72 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         ).showSnackBar(SnackBar(content: Text('$error')));
       }
     }
+  }
+
+  Future<void> _showSelectionMenu(
+    graph.GraphSelection selection,
+    Offset position,
+  ) async {
+    final model = widget.viewModel;
+    final delete = model.deletionForSelection(
+      nodeIds: selection.nodeIds,
+      noteIds: selection.noteIds,
+    );
+    final canDelete = selection.nodeIds.every((id) {
+      final node = model.nodeById(id);
+      return node != null && model.commands.canDelete(node.kind);
+    });
+    if (!canDelete) return;
+    final palette = AppGraphThemes.dark;
+    final overlay =
+        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final point = overlay.globalToLocal(position);
+    final confirmed = await showMenu<bool>(
+      context: context,
+      position: RelativeRect.fromSize(
+        Rect.fromLTWH(point.dx, point.dy, 0, 0),
+        overlay.size,
+      ),
+      color: palette.surface,
+      surfaceTintColor: Colors.transparent,
+      constraints: const BoxConstraints(minWidth: 240, maxWidth: 320),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: palette.border),
+      ),
+      items: [
+        PopupMenuItem(
+          value: true,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.delete_outline, color: palette.textDim, size: 18),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  selection.length == 1
+                      ? 'Удалить объект'
+                      : 'Удалить выбранные (${selection.length})',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: palette.text, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (confirmed != true || !mounted) return;
+    final hasNodes = selection.nodeIds.isNotEmpty;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _SelectionDeleteDialog(
+        count: selection.length,
+        hasNodes: hasNodes,
+        onDelete: delete,
+      ),
+    );
   }
 
   Future<void> _showNoteMenu(graph.NoteState state, Offset position) async {
@@ -888,4 +958,69 @@ class _SaveBadge extends StatelessWidget {
       },
     );
   }
+}
+
+class _SelectionDeleteDialog extends StatefulWidget {
+  const _SelectionDeleteDialog({
+    required this.count,
+    required this.hasNodes,
+    required this.onDelete,
+  });
+  final int count;
+  final bool hasNodes;
+  final Future<void> Function(bool keepChildren) onDelete;
+  @override
+  State<_SelectionDeleteDialog> createState() => _SelectionDeleteDialogState();
+}
+
+class _SelectionDeleteDialogState extends State<_SelectionDeleteDialog> {
+  bool _deleting = false;
+  String? _error;
+  Future<void> _delete(bool keepChildren) async {
+    if (_deleting) return;
+    setState(() {
+      _deleting = true;
+      _error = null;
+    });
+    try {
+      await widget.onDelete(keepChildren);
+      if (mounted) Navigator.pop(context);
+    } catch (error) {
+      if (mounted)
+        setState(() => _error = 'Не удалось завершить удаление: $error');
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_deleting,
+    child: AlertDialog(
+      title: Text('Удалить объекты (${widget.count})?'),
+      content: Text(
+        _error ??
+            (widget.hasNodes
+                ? 'Выбранные сущности будут удалены из приложения. Что сделать с дочерними объектами? Стикеры удаляются только с доски, файлы .md сохраняются.'
+                : 'Стикеры будут удалены с доски. Связанные файлы .md сохраняются.'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _deleting ? null : () => Navigator.pop(context),
+          child: const Text('Отмена'),
+        ),
+        if (widget.hasNodes)
+          TextButton(
+            onPressed: _deleting ? null : () => _delete(false),
+            child: const Text('Удалить всё поддерево'),
+          ),
+        FilledButton(
+          onPressed: _deleting ? null : () => _delete(true),
+          child: Text(
+            widget.hasNodes ? 'Сохранить детей (скрыть)' : 'Удалить с доски',
+          ),
+        ),
+      ],
+    ),
+  );
 }

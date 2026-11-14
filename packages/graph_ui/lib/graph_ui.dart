@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:graph_api/graph_api.dart';
 import 'package:plugin_runtime/plugin_runtime.dart';
 import 'src/editors.dart';
@@ -217,6 +218,7 @@ class GraphNodeView extends StatelessWidget {
         onDoubleTap: (interaction.hasChildren || interaction.collapsed)
             ? interaction.toggleCollapse
             : null,
+        dragStartBehavior: DragStartBehavior.down,
         onPanStart: interaction.dragStart,
         onPanUpdate: interaction.dragUpdate,
         onPanEnd: interaction.dragEnd,
