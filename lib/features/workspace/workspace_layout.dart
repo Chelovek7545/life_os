@@ -47,12 +47,30 @@ sealed class WorkspaceNode {
 }
 
 class WorkspacePane extends WorkspaceNode {
-  const WorkspacePane(super.id, this.editorId);
+  const WorkspacePane(
+    super.id,
+    this.editorId, {
+    this.projectIds,
+    this.showUnassigned = true,
+    this.dateFrom,
+    this.dateTo,
+  });
   final String editorId;
+  final List<String>? projectIds;
+  final bool showUnassigned;
+  final DateTime? dateFrom;
+  final DateTime? dateTo;
   @override
   Iterable<WorkspacePane> get panes => [this];
   @override
-  Map<String, Object> toJson() => {'id': id, 'editor': editorId};
+  Map<String, Object> toJson() => {
+    'id': id,
+    'editor': editorId,
+    'projectIds': ?projectIds,
+    if (!showUnassigned) 'showUnassigned': false,
+    'dateFrom': ?dateFrom?.toIso8601String().split('T').first,
+    'dateTo': ?dateTo?.toIso8601String().split('T').first,
+  };
 }
 
 class WorkspaceSplit extends WorkspaceNode {
@@ -114,7 +132,44 @@ class WorkspaceLayout {
           if (editor is! String || !editorIds.contains(editor)) {
             throw const FormatException('Unknown workspace editor');
           }
-          return WorkspacePane(id, editor);
+          final projectIds = value['projectIds'];
+          final showUnassigned = value['showUnassigned'] ?? true;
+          DateTime? readDate(Object? raw) {
+            if (raw == null) return null;
+            if (raw is! String ||
+                !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(raw)) {
+              throw const FormatException('Invalid workspace date');
+            }
+            final date = DateTime.tryParse(raw);
+            if (date == null ||
+                date.toIso8601String().split('T').first != raw) {
+              throw const FormatException('Invalid workspace date');
+            }
+            return date;
+          }
+
+          final dateFrom = readDate(value['dateFrom']);
+          final dateTo = readDate(value['dateTo']);
+          if ((dateFrom == null) != (dateTo == null) ||
+              (dateFrom != null && dateTo!.isBefore(dateFrom))) {
+            throw const FormatException('Invalid workspace date range');
+          }
+          if ((projectIds != null &&
+                  (projectIds is! List ||
+                      projectIds.any((id) => id is! String || id.isEmpty))) ||
+              showUnassigned is! bool) {
+            throw const FormatException('Invalid project selection');
+          }
+          return WorkspacePane(
+            id,
+            editor,
+            projectIds: projectIds == null
+                ? null
+                : List<String>.unmodifiable(projectIds as List),
+            showUnassigned: showUnassigned,
+            dateFrom: dateFrom,
+            dateTo: dateTo,
+          );
         }
         final axis = value['axis'];
         final ratio = value['ratio'];

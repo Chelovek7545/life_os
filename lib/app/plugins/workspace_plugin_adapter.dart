@@ -12,6 +12,7 @@ import 'package:habits_plugin/habits_logic.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/features/workspace/presentation/workspace_habits.dart';
+import 'package:life_os/features/workspace/presentation/workspace_project_tasks.dart';
 import 'package:lifegraph_plugin/lifegraph_plugin.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
@@ -57,6 +58,31 @@ AppPlugin createWorkspacePlugin({
           return WorkspaceScreen(
             controller: controller,
             editors: [
+              WorkspaceEditor(
+                id: 'projectTasks',
+                label: 'Задачи по проектам',
+                icon: Icons.view_column_outlined,
+                builder: (_, id) => !active()
+                    ? const SizedBox.shrink()
+                    : WorkspaceProjectTasks(
+                        key: ValueKey('workspace-project-tasks:$id'),
+                        model: lifecycle.models[id]!,
+                        pane: controller.layout.root.find(id)! as WorkspacePane,
+                        onSelectionChanged: (projects, unassigned) {
+                          if (active()) {
+                            controller.selectProjects(id, projects, unassigned);
+                          }
+                        },
+                        onOpenTask: open,
+                        onDatesChanged: (from, to) {
+                          if (active()) {
+                            controller.selectProjectTaskDates(id, from, to);
+                          }
+                        },
+                        isActive: active,
+                        workLogs: workLogs?.call(),
+                      ),
+              ),
               WorkspaceEditor(
                 id: 'tasks',
                 label: 'Задачи',
@@ -241,6 +267,7 @@ class _WorkspaceLifecycle implements AppPlugin {
     final preferences = await SharedPreferences.getInstance();
     pulseModel = pulse();
     const editors = {
+      'projectTasks',
       'tasks',
       'calendar',
       'hierarchy',

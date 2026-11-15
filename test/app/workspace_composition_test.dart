@@ -51,6 +51,7 @@ void main() {
       controller.setEditing(true);
       expect(screen.editors.map((editor) => editor.id).toSet(), {
         'tasks',
+        'projectTasks',
         'calendar',
         'hierarchy',
         'habits',
@@ -152,7 +153,13 @@ void main() {
       tester.view.physicalSize = const Size(390, 844);
       await pumpStorage(tester);
       expect(find.byType(AppBar), findsNothing);
-      for (final editor in ['hierarchy', 'habits', 'stats', 'spheres']) {
+      for (final editor in [
+        'hierarchy',
+        'habits',
+        'stats',
+        'spheres',
+        'projectTasks',
+      ]) {
         controller.changeEditor(controller.selectedId, editor);
         await pumpStorage(tester);
         expect(tester.takeException(), isNull, reason: editor);

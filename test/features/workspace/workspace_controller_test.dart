@@ -4,6 +4,150 @@ import 'package:life_os/features/workspace/workspace_controller.dart';
 import 'package:life_os/features/workspace/workspace_layout.dart';
 
 void main() {
+  test(
+    'project date ranges persist, isolate panes and preserve project selections',
+    () async {
+      String? saved;
+      final controller = WorkspaceController(
+        editorIds: const {'tasks', 'calendar', 'projectTasks'},
+        save: (value) async {
+          saved = value;
+        },
+        onSaveError: (_, _) {},
+      )..setEditing(true);
+      final id = controller.selectedId;
+      controller.changeEditor(id, 'projectTasks');
+      controller.selectProjectTaskDates(
+        id,
+        DateTime(2026, 11, 14, 23),
+        DateTime(2026, 11, 16, 7),
+      );
+      controller.selectProjects(id, ['a'], false);
+      controller.split(id, WorkspaceAxis.vertical);
+      final other = controller.selectedId;
+      controller.setEditing(false);
+      controller.selectProjectTaskDates(
+        other,
+        DateTime(2026, 12, 1),
+        DateTime(2026, 12, 1),
+      );
+      final before = controller.layout.encode();
+      controller.selectProjectTaskDates(
+        id,
+        DateTime(2026, 11, 20),
+        DateTime(2026, 11, 19),
+      );
+      controller.selectProjectTaskDates(id, null, DateTime(2026, 11, 19));
+      expect(controller.layout.encode(), before);
+      controller.setEditing(true);
+      controller.changeEditor(id, 'calendar');
+      controller.changeEditor(id, 'projectTasks');
+      await controller.flush();
+      final layout = WorkspaceLayout.decode(saved!, controller.editorIds)!;
+      final pane = layout.root.find(id) as WorkspacePane;
+      expect(pane.projectIds, ['a']);
+      expect(pane.showUnassigned, isFalse);
+      expect(pane.dateFrom, DateTime(2026, 11, 14));
+      expect(pane.dateTo, DateTime(2026, 11, 16));
+      expect(
+        (layout.root.find(other) as WorkspacePane).dateFrom,
+        DateTime(2026, 12, 1),
+      );
+      controller.selectProjectTaskDates(id, null, null);
+      expect(
+        (controller.layout.root.find(id) as WorkspacePane).dateFrom,
+        isNull,
+      );
+      await controller.close();
+      final closed = controller.layout.encode();
+      controller.selectProjectTaskDates(id, DateTime(2026), DateTime(2026));
+      expect(controller.layout.encode(), closed);
+      controller.dispose();
+    },
+  );
+
+  test(
+    'project selections persist independently and survive editor changes',
+    () async {
+      final writes = <String>[];
+      final controller = WorkspaceController(
+        editorIds: const {'tasks', 'calendar', 'projectTasks'},
+        save: (value) async {
+          writes.add(value);
+        },
+        onSaveError: (_, _) {},
+      )..setEditing(true);
+      final id = controller.selectedId;
+      controller.changeEditor(id, 'projectTasks');
+      controller.selectProjects(id, ['project-a'], false);
+      controller.split(id, WorkspaceAxis.vertical);
+      final otherId = controller.selectedId;
+      controller.setEditing(false);
+      controller.selectProjects(otherId, [], true);
+      expect((controller.layout.root.find(id) as WorkspacePane).projectIds, [
+        'project-a',
+      ]);
+      expect(
+        (controller.layout.root.find(otherId) as WorkspacePane).projectIds,
+        isEmpty,
+      );
+      controller.setEditing(true);
+      controller.changeEditor(id, 'tasks');
+      controller.changeEditor(id, 'projectTasks');
+      await controller.flush();
+      final restored = WorkspaceLayout.decode(
+        writes.last,
+        controller.editorIds,
+      )!;
+      final pane = restored.root.find(id) as WorkspacePane;
+      expect(pane.projectIds, ['project-a']);
+      expect(pane.showUnassigned, isFalse);
+      expect(
+        (restored.root.find(otherId) as WorkspacePane).showUnassigned,
+        isTrue,
+      );
+      controller.selectProjects(id, null, true);
+      await controller.close();
+      final before = controller.layout.encode();
+      controller.selectProjects(id, [], false);
+      expect(controller.layout.encode(), before);
+      expect(
+        (controller.layout.root.find(id) as WorkspacePane).projectIds,
+        isNull,
+      );
+      controller.dispose();
+    },
+  );
+
+  test(
+    'old layouts use all projects and malformed selections are rejected',
+    () {
+      const editors = {'tasks'};
+      WorkspaceLayout? decode(String options) => WorkspaceLayout.decode(
+        '{"version":1,"root":{"id":"pane","editor":"tasks"$options}}',
+        editors,
+      );
+      final pane = decode('')!.root as WorkspacePane;
+      expect(pane.projectIds, isNull);
+      expect(pane.showUnassigned, isTrue);
+      expect(pane.dateFrom, isNull);
+      expect(pane.dateTo, isNull);
+      for (final options in [
+        ',"projectIds":42',
+        ',"projectIds":[1]',
+        ',"projectIds":[""]',
+        ',"showUnassigned":"true"',
+        ',"dateFrom":"2026-11-14"',
+        ',"dateTo":"2026-11-14"',
+        ',"dateFrom":"2026-11-15","dateTo":"2026-11-14"',
+        ',"dateFrom":14,"dateTo":"2026-11-14"',
+        ',"dateFrom":"2026-02-31","dateTo":"2026-03-04"',
+      ]) {
+        expect(decode(options), isNull);
+      }
+    },
+  );
+
   WorkspaceController create({Future<void> Function(String)? save}) =>
       WorkspaceController(
         editorIds: const {'tasks', 'calendar'},

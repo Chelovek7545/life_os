@@ -46,7 +46,67 @@ class WorkspaceController extends ChangeNotifier {
   void changeEditor(String id, String editor) {
     if (!_active || !_isEditing || !editorIds.contains(editor)) return;
     if (!layout.root.panes.any((pane) => pane.id == id)) return;
-    _commit(layout.root.replace(id, WorkspacePane(id, editor)));
+    final pane = layout.root.find(id) as WorkspacePane;
+    _commit(
+      layout.root.replace(
+        id,
+        WorkspacePane(
+          id,
+          editor,
+          projectIds: pane.projectIds,
+          showUnassigned: pane.showUnassigned,
+          dateFrom: pane.dateFrom,
+          dateTo: pane.dateTo,
+        ),
+      ),
+    );
+  }
+
+  void selectProjects(
+    String id,
+    List<String>? projectIds,
+    bool showUnassigned,
+  ) {
+    if (!_active) return;
+    final pane = layout.root.find(id);
+    if (pane is! WorkspacePane || pane.editorId != 'projectTasks') return;
+    _commit(
+      layout.root.replace(
+        id,
+        WorkspacePane(
+          id,
+          pane.editorId,
+          projectIds: projectIds == null ? null : List.unmodifiable(projectIds),
+          showUnassigned: showUnassigned,
+          dateFrom: pane.dateFrom,
+          dateTo: pane.dateTo,
+        ),
+      ),
+    );
+  }
+
+  void selectProjectTaskDates(String id, DateTime? from, DateTime? to) {
+    if (!_active || (from == null) != (to == null)) return;
+    final pane = layout.root.find(id);
+    if (pane is! WorkspacePane || pane.editorId != 'projectTasks') return;
+    final start = from == null
+        ? null
+        : DateTime(from.year, from.month, from.day);
+    final end = to == null ? null : DateTime(to.year, to.month, to.day);
+    if (start != null && end!.isBefore(start)) return;
+    _commit(
+      layout.root.replace(
+        id,
+        WorkspacePane(
+          id,
+          pane.editorId,
+          projectIds: pane.projectIds,
+          showUnassigned: pane.showUnassigned,
+          dateFrom: start,
+          dateTo: end,
+        ),
+      ),
+    );
   }
 
   void split(String id, WorkspaceAxis axis) {
@@ -58,7 +118,14 @@ class WorkspaceController extends ChangeNotifier {
     final matches = layout.root.panes.where((pane) => pane.id == id);
     if (matches.isEmpty) return;
     final pane = matches.single;
-    final added = WorkspacePane(const Uuid().v4(), pane.editorId);
+    final added = WorkspacePane(
+      const Uuid().v4(),
+      pane.editorId,
+      projectIds: pane.projectIds,
+      showUnassigned: pane.showUnassigned,
+      dateFrom: pane.dateFrom,
+      dateTo: pane.dateTo,
+    );
     _selectedId = added.id;
     _maximizedId = null;
     _commit(
