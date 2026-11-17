@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
+import 'task_mutation_journal.dart';
 
 part 'work_logs_dao.g.dart';
 
@@ -10,7 +11,24 @@ class WorkLogsDaoAccessor {
 @DriftAccessor(tables: [WorkLogs, Tasks])
 class WorkLogsDao extends DatabaseAccessor<AppDatabase>
     with _$WorkLogsDaoMixin {
-  WorkLogsDao(AppDatabase db) : super(db);
+  WorkLogsDao(AppDatabase db, {this.journal}) : super(db);
+  final TaskMutationJournal? journal;
+
+  Future<T> _track<T>(
+    String id,
+    Future<T> Function() write, {
+    String? expectedRevision,
+    bool requireExpected = false,
+    bool createOnly = false,
+  }) =>
+      journal?.trackWorkLog(
+        id,
+        write,
+        expectedRevision: expectedRevision,
+        requireExpected: requireExpected,
+        createOnly: createOnly,
+      ) ??
+      transaction(write);
 
   Future<List<WorkLogModel>> getWorkLogsForTask(String taskId) {
     return (select(workLogs)..where((tbl) => tbl.taskId.equals(taskId))).get();
@@ -63,14 +81,37 @@ class WorkLogsDao extends DatabaseAccessor<AppDatabase>
   }
 
   Future<int> insertWorkLog(WorkLogsCompanion entry) {
-    return into(workLogs).insert(entry);
+    return _track(
+      entry.id.value,
+      () => into(workLogs).insert(entry),
+      createOnly: true,
+    );
   }
 
-  Future<bool> updateWorkLog(WorkLogsCompanion entry) {
-    return update(workLogs).replace(entry);
+  Future<bool> updateWorkLog(
+    WorkLogsCompanion entry, {
+    String? expectedRevision,
+  }) {
+    return transaction(() async {
+      final previous = await getById(entry.id.value);
+      if (previous == null) return false;
+      return _track(
+        entry.id.value,
+        () => update(workLogs).replace(entry),
+        expectedRevision: expectedRevision,
+        requireExpected: true,
+      );
+    });
   }
 
   Future<int> deleteWorkLog(String id) {
-    return (delete(workLogs)..where((tbl) => tbl.id.equals(id))).go();
+    return transaction(() async {
+      final previous = await getById(id);
+      if (previous == null) return 0;
+      return _track(
+        id,
+        () => (delete(workLogs)..where((tbl) => tbl.id.equals(id))).go(),
+      );
+    });
   }
 }

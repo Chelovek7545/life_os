@@ -1,7 +1,6 @@
 import 'package:core_contracts/core_contracts.dart' show StorageException;
 import 'package:tasks_api/tasks_api.dart'
     show TasksApi, Task, TaskCompletionCommands;
-import 'package:life_os/features/tasks/data/extensions/tag_model_extension.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 
@@ -31,12 +30,7 @@ class TasksRepository implements TasksApi, TaskCompletionCommands {
 
   @override
   Future<List<Task>> getAllTasks() async {
-    final tasksWithTags = await _dao.getAllTasksWithTags();
-    return tasksWithTags.entries.map((entry) {
-      return entry.key.toDomain(
-        tags: entry.value.map((e) => e.toDomain()).toList(),
-      );
-    }).toList();
+    return _dao.getAllDomainTasks();
   }
 
   @override
@@ -45,6 +39,7 @@ class TasksRepository implements TasksApi, TaskCompletionCommands {
       await _dao.insertTaskWithTags(
         task.toDrift(),
         task.tags.map((e) => e.name).toList(),
+        tagSnapshots: task.tags,
       );
     } catch (error) {
       throw StorageException('Failed to save task.', error);
@@ -60,7 +55,12 @@ class TasksRepository implements TasksApi, TaskCompletionCommands {
       final tagNames = task.tags.map((tag) => tag.name).toList();
 
       // Вызываем наш обновленный метод из DAO
-      await _dao.updateTaskWithTags(companion, tagNames);
+      await _dao.updateTaskWithTags(
+        companion,
+        tagNames,
+        expectedRevision: task.storageRevision,
+        tagSnapshots: task.tags,
+      );
     } catch (error) {
       throw StorageException('Failed to update task.', error);
     }

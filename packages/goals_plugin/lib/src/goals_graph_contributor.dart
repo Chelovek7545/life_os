@@ -19,6 +19,10 @@ class GoalsGraphContributor implements GraphContributor {
               title: goal.name,
               subtitle: goal.description,
               color: goal.color,
+              attributes: {
+                if (goal.storageRevision != null)
+                  'storageRevision': goal.storageRevision,
+              },
               parentId: goal.sphereId,
             ),
         ],

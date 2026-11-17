@@ -2,8 +2,44 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'sync logic entry remains independent of native transport and Flutter',
+    () {
+      final pending = [
+        File('packages/sync_plugin/lib/sync_logic.dart').absolute,
+      ];
+      final visited = <String>{};
+      final directives = RegExp(r'''(?:import|export)\s+['"]([^'"]+)['"]''');
+      while (pending.isNotEmpty) {
+        final file = pending.removeLast();
+        if (!visited.add(file.path)) continue;
+        final source = file.readAsStringSync();
+        for (final forbidden in [
+          'dart:io',
+          'dart:ui',
+          'package:flutter/',
+          'package:drift/',
+          'sync_native.dart',
+        ]) {
+          expect(source.contains(forbidden), isFalse, reason: file.path);
+        }
+        for (final directive in directives.allMatches(source)) {
+          final uri = directive.group(1)!;
+          if (!uri.contains(':')) {
+            pending.add(File.fromUri(file.uri.resolve(uri)));
+          }
+        }
+      }
+    },
+  );
   test('pure packages and Telegram cannot depend on app internals', () {
     const forbidden = {
+      'sync_plugin': [
+        'dart:ui',
+        'package:flutter/',
+        'package:life_os/',
+        'package:drift/',
+      ],
       'agent_bridge': [
         'dart:ui',
         'package:flutter/',

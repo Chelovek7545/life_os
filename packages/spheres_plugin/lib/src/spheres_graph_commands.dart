@@ -10,6 +10,11 @@ GraphNodeCommands spheresGraphCommands(
   update: (request) async {
     final existing = await spheres.getSphere(request.current.id);
     if (existing == null) return;
+    if (existing.storageRevision != null &&
+        request.current.attributes['storageRevision'] !=
+            existing.storageRevision) {
+      throw StateError('Node changed; reload before saving.');
+    }
     await spheres.updateSphere(
       existing.copyWith(
         name: request.updated.title,

@@ -43,6 +43,11 @@ GraphNodeCommands _commands(
     update: (request) async {
       final existing = await tasks.getById(request.current.id);
       if (existing == null) return;
+      if (existing.storageRevision != null &&
+          request.current.attributes['storageRevision'] !=
+              existing.storageRevision) {
+        throw StateError('Node changed; reload before saving.');
+      }
       final status = request.updated.attributes['taskStatus'];
       await tasks.updateTask(
         existing.copyWith(

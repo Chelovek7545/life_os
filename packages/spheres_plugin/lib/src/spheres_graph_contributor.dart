@@ -18,6 +18,10 @@ class SpheresGraphContributor implements GraphContributor {
                 kind: kind,
                 title: sphere.name,
                 color: sphere.color,
+                attributes: {
+                  if (sphere.storageRevision != null)
+                    'storageRevision': sphere.storageRevision,
+                },
               ),
         ],
       );

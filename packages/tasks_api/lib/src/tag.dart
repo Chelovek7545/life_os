@@ -2,14 +2,21 @@ class Tag {
   final int id;
   final String name;
   final int colorHex;
+  final String? syncId;
 
-  const Tag({required this.id, required this.name, required this.colorHex});
+  const Tag({
+    required this.id,
+    required this.name,
+    required this.colorHex,
+    this.syncId,
+  });
 
   Tag copyWith({int? id, String? name, int? colorHex}) {
     return Tag(
       id: id ?? this.id,
       name: name ?? this.name,
       colorHex: colorHex ?? this.colorHex,
+      syncId: syncId,
     );
   }
 

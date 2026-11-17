@@ -8,6 +8,16 @@ class WorkLogsRepository implements WorkLogsApi {
   WorkLogsRepository(this._workLogsDao);
 
   final WorkLogsDao _workLogsDao;
+  Future<WorkLog> _observe(WorkLog log) async => _workLogsDao.journal == null
+      ? log
+      : await _workLogsDao.journal!.observeWorkLog(log);
+  Future<List<WorkLog>> _observeAll(List<WorkLogModel> models) async {
+    final logs = models.map((m) => m.toDomain()).toList();
+    return _workLogsDao.journal == null
+        ? logs
+        : _workLogsDao.journal!.observeWorkLogs(logs);
+  }
+
   void _validate(WorkLog log) {
     if (log.startedAt != null &&
         log.endedAt != null &&
@@ -19,7 +29,7 @@ class WorkLogsRepository implements WorkLogsApi {
   @override
   Future<List<WorkLog>> getWorkLogsForTask(String taskId) async {
     final models = await _workLogsDao.getWorkLogsForTask(taskId);
-    return models.map((m) => m.toDomain()).toList();
+    return _observeAll(models);
   }
 
   @override
@@ -41,18 +51,18 @@ class WorkLogsRepository implements WorkLogsApi {
       status: status,
       search: search,
     );
-    return models.map((m) => m.toDomain()).toList();
+    return _observeAll(models);
   }
 
   @override
-  Future<WorkLog?> getById(String id) async =>
-      (await _workLogsDao.getById(id))?.toDomain();
+  Future<WorkLog?> getById(String id) async {
+    final row = await _workLogsDao.getById(id);
+    return row == null ? null : _observe(row.toDomain());
+  }
 
   @override
   Stream<List<WorkLog>> watchWorkLogsForTask(String taskId) {
-    return _workLogsDao
-        .watchWorkLogsForTask(taskId)
-        .map((models) => models.map((m) => m.toDomain()).toList());
+    return _workLogsDao.watchWorkLogsForTask(taskId).asyncMap(_observeAll);
   }
 
   @override
@@ -74,6 +84,7 @@ class WorkLogsRepository implements WorkLogsApi {
         startedAt: Value(workLog.startedAt),
         endedAt: Value(workLog.endedAt),
       ),
+      expectedRevision: workLog.storageRevision,
     );
   }
 

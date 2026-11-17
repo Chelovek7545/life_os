@@ -10,6 +10,7 @@ class Goal {
   final DateTime? dueDate;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? storageRevision;
 
   Goal({
     required this.id,
@@ -20,6 +21,7 @@ class Goal {
     this.dueDate,
     required this.createdAt,
     required this.updatedAt,
+    this.storageRevision,
   });
 
   factory Goal.create({
@@ -54,6 +56,7 @@ class Goal {
   }) {
     return Goal(
       id: id ?? this.id,
+      storageRevision: storageRevision,
       name: name ?? this.name,
       description: description ?? this.description,
       color: color ?? this.color,

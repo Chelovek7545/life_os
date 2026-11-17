@@ -5,6 +5,7 @@ import 'package:tasks_api/tasks_api.dart' show TaskStatus;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io';
+import 'sync_tables.dart';
 
 part 'database.g.dart';
 
@@ -101,6 +102,7 @@ class Spheres extends Table {
 @DataClassName('TagModel')
 class Tags extends Table {
   IntColumn get id => integer().autoIncrement()();
+  TextColumn get syncId => text().nullable()();
   TextColumn get name => text().withLength(min: 1, max: 20)();
   IntColumn get colorHex => integer()(); // Цвет тега
 }
@@ -157,6 +159,9 @@ class HabitEntries extends Table {
     Habits,
     HabitEntries,
     WorkLogs,
+    SyncIdentities,
+    SyncRevisions,
+    SyncCursors,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -170,7 +175,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration {
@@ -180,8 +185,18 @@ class AppDatabase extends _$AppDatabase {
       },
       onCreate: (Migrator m) async {
         await m.createAll();
+        await customStatement('CREATE UNIQUE INDEX tags_sync_id_unique ON tags(sync_id)');
       },
       onUpgrade: (Migrator m, int from, int to) async {
+        if (from < 12) {
+          await m.addColumn(tags, tags.syncId);
+          await customStatement('CREATE UNIQUE INDEX tags_sync_id_unique ON tags(sync_id)');
+        }
+        if (from < 11) {
+          await m.createTable(syncIdentities);
+          await m.createTable(syncRevisions);
+          await m.createTable(syncCursors);
+        }
         if (from <= 2) {
           await m.database.customStatement(
             'DROP TABLE IF EXISTS dashboard_widgets',

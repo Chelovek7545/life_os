@@ -13,7 +13,6 @@ import '../../../test_helpers.dart';
 import 'projects_repository_test.mocks.dart';
 
 @GenerateMocks([ProjectsDao])
-
 void main() {
   late MockProjectsDao mockDao;
   late ProjectsRepository repository;
@@ -21,6 +20,7 @@ void main() {
   setUp(() {
     mockDao = MockProjectsDao();
     repository = ProjectsRepository(mockDao);
+    when(mockDao.journal).thenReturn(null);
   });
 
   group('ProjectsRepository', () {
@@ -69,8 +69,9 @@ void main() {
           isArchived: false,
           dueDate: null,
         );
-        when(mockDao.getProjectById('proj-1'))
-            .thenAnswer((_) async => daoModel);
+        when(
+          mockDao.getProjectById('proj-1'),
+        ).thenAnswer((_) async => daoModel);
 
         final result = await repository.getProjectById('proj-1');
 
@@ -138,10 +139,14 @@ void main() {
       });
 
       test('reports a failed delete', () async {
-        when(mockDao.deleteProject(any))
-            .thenAnswer((_) => Future.error(Exception('db error')));
+        when(
+          mockDao.deleteProject(any),
+        ).thenAnswer((_) => Future.error(Exception('db error')));
 
-        await expectLater(repository.deleteProject('proj-1'), throwsA(isA<StorageException>()));
+        await expectLater(
+          repository.deleteProject('proj-1'),
+          throwsA(isA<StorageException>()),
+        );
 
         verify(mockDao.deleteProject(any)).called(1);
       });

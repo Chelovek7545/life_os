@@ -13,6 +13,7 @@ class Project {
   final bool isArchived;
   final String? goalId;
   final String? parentProejectId;
+  final String? storageRevision;
 
   Project({
     required this.id,
@@ -27,6 +28,7 @@ class Project {
     this.goalId,
     this.parentProejectId,
     this.isArchived = false,
+    this.storageRevision,
   });
 
   // Для создания нового проекта
@@ -66,6 +68,7 @@ class Project {
   }) {
     return Project(
       id: id ?? this.id,
+      storageRevision: storageRevision,
       name: name ?? this.name,
       description: description ?? this.description,
       color: color ?? this.color,

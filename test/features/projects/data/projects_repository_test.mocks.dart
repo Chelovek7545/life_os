@@ -4,15 +4,15 @@
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
 
-import 'dart:async' as _i6;
+import 'dart:async' as _i7;
 
 import 'package:drift/drift.dart' as _i3;
 import 'package:drift/src/runtime/executor/stream_queries.dart' as _i4;
 import 'package:life_os/core/database/database.dart' as _i2;
 import 'package:life_os/features/projects/data/projects_dao.dart' as _i5;
 import 'package:mockito/mockito.dart' as _i1;
-import 'package:mockito/src/dummies.dart' as _i7;
-import 'package:projects_api/projects_api.dart' as _i8;
+import 'package:mockito/src/dummies.dart' as _i8;
+import 'package:projects_api/projects_api.dart' as _i6;
 
 // ignore_for_file: type=lint
 // ignore_for_file: avoid_redundant_argument_values
@@ -75,57 +75,62 @@ class _FakeProjectsDaoManager_7 extends _i1.SmartFake
     : super(parent, parentInvocation);
 }
 
-class _FakeFuture_8<T1> extends _i1.SmartFake implements _i6.Future<T1> {
-  _FakeFuture_8(Object parent, Invocation parentInvocation)
+class _FakeProject_8 extends _i1.SmartFake implements _i6.Project {
+  _FakeProject_8(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeInsertStatement_9<T1 extends _i3.Table, D1> extends _i1.SmartFake
+class _FakeFuture_9<T1> extends _i1.SmartFake implements _i7.Future<T1> {
+  _FakeFuture_9(Object parent, Invocation parentInvocation)
+    : super(parent, parentInvocation);
+}
+
+class _FakeInsertStatement_10<T1 extends _i3.Table, D1> extends _i1.SmartFake
     implements _i3.InsertStatement<T1, D1> {
-  _FakeInsertStatement_9(Object parent, Invocation parentInvocation)
+  _FakeInsertStatement_10(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeUpdateStatement_10<T extends _i3.Table, D> extends _i1.SmartFake
+class _FakeUpdateStatement_11<T extends _i3.Table, D> extends _i1.SmartFake
     implements _i3.UpdateStatement<T, D> {
-  _FakeUpdateStatement_10(Object parent, Invocation parentInvocation)
+  _FakeUpdateStatement_11(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeSimpleSelectStatement_11<T1 extends _i3.HasResultSet, D>
+class _FakeSimpleSelectStatement_12<T1 extends _i3.HasResultSet, D>
     extends _i1.SmartFake
     implements _i3.SimpleSelectStatement<T1, D> {
-  _FakeSimpleSelectStatement_11(Object parent, Invocation parentInvocation)
+  _FakeSimpleSelectStatement_12(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeJoinedSelectStatement_12<FirstT extends _i3.HasResultSet, FirstD>
+class _FakeJoinedSelectStatement_13<FirstT extends _i3.HasResultSet, FirstD>
     extends _i1.SmartFake
     implements _i3.JoinedSelectStatement<FirstT, FirstD> {
-  _FakeJoinedSelectStatement_12(Object parent, Invocation parentInvocation)
+  _FakeJoinedSelectStatement_13(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeBaseSelectStatement_13<Row> extends _i1.SmartFake
+class _FakeBaseSelectStatement_14<Row> extends _i1.SmartFake
     implements _i3.BaseSelectStatement<Row> {
-  _FakeBaseSelectStatement_13(Object parent, Invocation parentInvocation)
+  _FakeBaseSelectStatement_14(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeDeleteStatement_14<T1 extends _i3.Table, D1> extends _i1.SmartFake
+class _FakeDeleteStatement_15<T1 extends _i3.Table, D1> extends _i1.SmartFake
     implements _i3.DeleteStatement<T1, D1> {
-  _FakeDeleteStatement_14(Object parent, Invocation parentInvocation)
+  _FakeDeleteStatement_15(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeSelectable_15<T> extends _i1.SmartFake implements _i3.Selectable<T> {
-  _FakeSelectable_15(Object parent, Invocation parentInvocation)
+class _FakeSelectable_16<T> extends _i1.SmartFake implements _i3.Selectable<T> {
+  _FakeSelectable_16(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
-class _FakeGenerationContext_16 extends _i1.SmartFake
+class _FakeGenerationContext_17 extends _i1.SmartFake
     implements _i3.GenerationContext {
-  _FakeGenerationContext_16(Object parent, Invocation parentInvocation)
+  _FakeGenerationContext_17(Object parent, Invocation parentInvocation)
     : super(parent, parentInvocation);
 }
 
@@ -174,7 +179,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
   _i3.SqlTypes get typeMapping =>
       (super.noSuchMethod(
             Invocation.getter(#typeMapping),
-            returnValue: _i7.dummyValue<_i3.SqlTypes>(
+            returnValue: _i8.dummyValue<_i3.SqlTypes>(
               this,
               Invocation.getter(#typeMapping),
             ),
@@ -237,98 +242,108 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
           as _i5.ProjectsDaoManager);
 
   @override
-  _i6.Future<void> createProject(_i2.ProjectsCompanion? project) =>
+  _i7.Future<_i6.Project> observeProject(_i6.Project? p) =>
+      (super.noSuchMethod(
+            Invocation.method(#observeProject, [p]),
+            returnValue: _i7.Future<_i6.Project>.value(
+              _FakeProject_8(this, Invocation.method(#observeProject, [p])),
+            ),
+          )
+          as _i7.Future<_i6.Project>);
+
+  @override
+  _i7.Future<void> createProject(_i2.ProjectsCompanion? project) =>
       (super.noSuchMethod(
             Invocation.method(#createProject, [project]),
-            returnValue: _i6.Future<void>.value(),
-            returnValueForMissingStub: _i6.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i6.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i6.Future<List<_i8.Project>> getAllProjects() =>
+  _i7.Future<List<_i6.Project>> getAllProjects() =>
       (super.noSuchMethod(
             Invocation.method(#getAllProjects, []),
-            returnValue: _i6.Future<List<_i8.Project>>.value(<_i8.Project>[]),
+            returnValue: _i7.Future<List<_i6.Project>>.value(<_i6.Project>[]),
           )
-          as _i6.Future<List<_i8.Project>>);
+          as _i7.Future<List<_i6.Project>>);
 
   @override
-  _i6.Future<_i2.ProjectModel?> getProjectById(String? id) =>
+  _i7.Future<_i2.ProjectModel?> getProjectById(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#getProjectById, [id]),
-            returnValue: _i6.Future<_i2.ProjectModel?>.value(),
+            returnValue: _i7.Future<_i2.ProjectModel?>.value(),
           )
-          as _i6.Future<_i2.ProjectModel?>);
+          as _i7.Future<_i2.ProjectModel?>);
 
   @override
-  _i6.Stream<List<_i8.Project>> watchAllProjects() =>
+  _i7.Stream<List<_i6.Project>> watchAllProjects() =>
       (super.noSuchMethod(
             Invocation.method(#watchAllProjects, []),
-            returnValue: _i6.Stream<List<_i8.Project>>.empty(),
+            returnValue: _i7.Stream<List<_i6.Project>>.empty(),
           )
-          as _i6.Stream<List<_i8.Project>>);
+          as _i7.Stream<List<_i6.Project>>);
 
   @override
-  _i6.Future<void> updateProject(_i8.Project? project) =>
+  _i7.Future<void> updateProject(_i6.Project? project) =>
       (super.noSuchMethod(
             Invocation.method(#updateProject, [project]),
-            returnValue: _i6.Future<void>.value(),
-            returnValueForMissingStub: _i6.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i6.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i6.Future<void> updateProjectName(String? id, String? newName) =>
+  _i7.Future<void> updateProjectName(String? id, String? newName) =>
       (super.noSuchMethod(
             Invocation.method(#updateProjectName, [id, newName]),
-            returnValue: _i6.Future<void>.value(),
-            returnValueForMissingStub: _i6.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i6.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i6.Future<void> archiveProject(String? id) =>
+  _i7.Future<void> archiveProject(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#archiveProject, [id]),
-            returnValue: _i6.Future<void>.value(),
-            returnValueForMissingStub: _i6.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i6.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i6.Future<void> unarchiveProject(String? id) =>
+  _i7.Future<void> unarchiveProject(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#unarchiveProject, [id]),
-            returnValue: _i6.Future<void>.value(),
-            returnValueForMissingStub: _i6.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i6.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i6.Future<void> deleteProject(String? id) =>
+  _i7.Future<void> deleteProject(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#deleteProject, [id]),
-            returnValue: _i6.Future<void>.value(),
-            returnValueForMissingStub: _i6.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i6.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i6.Stream<T> createStream<T extends Object>(
+  _i7.Stream<T> createStream<T extends Object>(
     _i4.QueryStreamFetcher<T>? stmt,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#createStream, [stmt]),
-            returnValue: _i6.Stream<T>.empty(),
+            returnValue: _i7.Stream<T>.empty(),
           )
-          as _i6.Stream<T>);
+          as _i7.Stream<T>);
 
   @override
   T alias<T, D>(_i3.ResultSetImplementation<T, D>? table, String? alias) =>
       (super.noSuchMethod(
             Invocation.method(#alias, [table, alias]),
-            returnValue: _i7.dummyValue<T>(
+            returnValue: _i8.dummyValue<T>(
               this,
               Invocation.method(#alias, [table, alias]),
             ),
@@ -349,32 +364,32 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
   );
 
   @override
-  _i6.Stream<Set<_i3.TableUpdate>> tableUpdates([
+  _i7.Stream<Set<_i3.TableUpdate>> tableUpdates([
     _i3.TableUpdateQuery? query = const _i3.TableUpdateQuery.any(),
   ]) =>
       (super.noSuchMethod(
             Invocation.method(#tableUpdates, [query]),
-            returnValue: _i6.Stream<Set<_i3.TableUpdate>>.empty(),
+            returnValue: _i7.Stream<Set<_i3.TableUpdate>>.empty(),
           )
-          as _i6.Stream<Set<_i3.TableUpdate>>);
+          as _i7.Stream<Set<_i3.TableUpdate>>);
 
   @override
-  _i6.Future<T> doWhenOpened<T>(
-    _i6.FutureOr<T> Function(_i3.QueryExecutor)? fn,
+  _i7.Future<T> doWhenOpened<T>(
+    _i7.FutureOr<T> Function(_i3.QueryExecutor)? fn,
   ) =>
       (super.noSuchMethod(
             Invocation.method(#doWhenOpened, [fn]),
             returnValue:
-                _i7.ifNotNull(
-                  _i7.dummyValueOrNull<T>(
+                _i8.ifNotNull(
+                  _i8.dummyValueOrNull<T>(
                     this,
                     Invocation.method(#doWhenOpened, [fn]),
                   ),
-                  (T v) => _i6.Future<T>.value(v),
+                  (T v) => _i7.Future<T>.value(v),
                 ) ??
-                _FakeFuture_8<T>(this, Invocation.method(#doWhenOpened, [fn])),
+                _FakeFuture_9<T>(this, Invocation.method(#doWhenOpened, [fn])),
           )
-          as _i6.Future<T>);
+          as _i7.Future<T>);
 
   @override
   _i3.InsertStatement<T, D> into<T extends _i3.Table, D>(
@@ -382,7 +397,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
   ) =>
       (super.noSuchMethod(
             Invocation.method(#into, [table]),
-            returnValue: _FakeInsertStatement_9<T, D>(
+            returnValue: _FakeInsertStatement_10<T, D>(
               this,
               Invocation.method(#into, [table]),
             ),
@@ -395,7 +410,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
   ) =>
       (super.noSuchMethod(
             Invocation.method(#update, [table]),
-            returnValue: _FakeUpdateStatement_10<Tbl, R>(
+            returnValue: _FakeUpdateStatement_11<Tbl, R>(
               this,
               Invocation.method(#update, [table]),
             ),
@@ -409,7 +424,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
   }) =>
       (super.noSuchMethod(
             Invocation.method(#select, [table], {#distinct: distinct}),
-            returnValue: _FakeSimpleSelectStatement_11<T, R>(
+            returnValue: _FakeSimpleSelectStatement_12<T, R>(
               this,
               Invocation.method(#select, [table], {#distinct: distinct}),
             ),
@@ -423,7 +438,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
   }) =>
       (super.noSuchMethod(
             Invocation.method(#selectOnly, [table], {#distinct: distinct}),
-            returnValue: _FakeJoinedSelectStatement_12<T, R>(
+            returnValue: _FakeJoinedSelectStatement_13<T, R>(
               this,
               Invocation.method(#selectOnly, [table], {#distinct: distinct}),
             ),
@@ -436,7 +451,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
   ) =>
       (super.noSuchMethod(
             Invocation.method(#selectExpressions, [columns]),
-            returnValue: _FakeBaseSelectStatement_13<_i3.TypedResult>(
+            returnValue: _FakeBaseSelectStatement_14<_i3.TypedResult>(
               this,
               Invocation.method(#selectExpressions, [columns]),
             ),
@@ -449,7 +464,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
   ) =>
       (super.noSuchMethod(
             Invocation.method(#delete, [table]),
-            returnValue: _FakeDeleteStatement_14<T, D>(
+            returnValue: _FakeDeleteStatement_15<T, D>(
               this,
               Invocation.method(#delete, [table]),
             ),
@@ -457,7 +472,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
           as _i3.DeleteStatement<T, D>);
 
   @override
-  _i6.Future<int> customUpdate(
+  _i7.Future<int> customUpdate(
     String? query, {
     List<_i3.Variable<Object>>? variables = const [],
     Set<_i3.ResultSetImplementation<dynamic, dynamic>>? updates,
@@ -473,12 +488,12 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
                 #updateKind: updateKind,
               },
             ),
-            returnValue: _i6.Future<int>.value(0),
+            returnValue: _i7.Future<int>.value(0),
           )
-          as _i6.Future<int>);
+          as _i7.Future<int>);
 
   @override
-  _i6.Future<int> customInsert(
+  _i7.Future<int> customInsert(
     String? query, {
     List<_i3.Variable<Object>>? variables = const [],
     Set<_i3.ResultSetImplementation<dynamic, dynamic>>? updates,
@@ -489,12 +504,12 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
               [query],
               {#variables: variables, #updates: updates},
             ),
-            returnValue: _i6.Future<int>.value(0),
+            returnValue: _i7.Future<int>.value(0),
           )
-          as _i6.Future<int>);
+          as _i7.Future<int>);
 
   @override
-  _i6.Future<List<_i3.QueryRow>> customWriteReturning(
+  _i7.Future<List<_i3.QueryRow>> customWriteReturning(
     String? query, {
     List<_i3.Variable<Object>>? variables = const [],
     Set<_i3.ResultSetImplementation<dynamic, dynamic>>? updates,
@@ -510,9 +525,9 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
                 #updateKind: updateKind,
               },
             ),
-            returnValue: _i6.Future<List<_i3.QueryRow>>.value(<_i3.QueryRow>[]),
+            returnValue: _i7.Future<List<_i3.QueryRow>>.value(<_i3.QueryRow>[]),
           )
-          as _i6.Future<List<_i3.QueryRow>>);
+          as _i7.Future<List<_i3.QueryRow>>);
 
   @override
   _i3.Selectable<_i3.QueryRow> customSelect(
@@ -526,7 +541,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
               [query],
               {#variables: variables, #readsFrom: readsFrom},
             ),
-            returnValue: _FakeSelectable_15<_i3.QueryRow>(
+            returnValue: _FakeSelectable_16<_i3.QueryRow>(
               this,
               Invocation.method(
                 #customSelect,
@@ -549,7 +564,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
               [query],
               {#variables: variables, #readsFrom: readsFrom},
             ),
-            returnValue: _FakeSelectable_15<_i3.QueryRow>(
+            returnValue: _FakeSelectable_16<_i3.QueryRow>(
               this,
               Invocation.method(
                 #customSelectQuery,
@@ -561,17 +576,17 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
           as _i3.Selectable<_i3.QueryRow>);
 
   @override
-  _i6.Future<void> customStatement(String? statement, [List<dynamic>? args]) =>
+  _i7.Future<void> customStatement(String? statement, [List<dynamic>? args]) =>
       (super.noSuchMethod(
             Invocation.method(#customStatement, [statement, args]),
-            returnValue: _i6.Future<void>.value(),
-            returnValueForMissingStub: _i6.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i6.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i6.Future<T> transaction<T>(
-    _i6.Future<T> Function()? action, {
+  _i7.Future<T> transaction<T>(
+    _i7.Future<T> Function()? action, {
     bool? requireNew = false,
   }) =>
       (super.noSuchMethod(
@@ -581,8 +596,8 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
               {#requireNew: requireNew},
             ),
             returnValue:
-                _i7.ifNotNull(
-                  _i7.dummyValueOrNull<T>(
+                _i8.ifNotNull(
+                  _i8.dummyValueOrNull<T>(
                     this,
                     Invocation.method(
                       #transaction,
@@ -590,9 +605,9 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
                       {#requireNew: requireNew},
                     ),
                   ),
-                  (T v) => _i6.Future<T>.value(v),
+                  (T v) => _i7.Future<T>.value(v),
                 ) ??
-                _FakeFuture_8<T>(
+                _FakeFuture_9<T>(
                   this,
                   Invocation.method(
                     #transaction,
@@ -601,39 +616,39 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
                   ),
                 ),
           )
-          as _i6.Future<T>);
+          as _i7.Future<T>);
 
   @override
-  _i6.Future<T> exclusively<T>(_i6.Future<T> Function()? action) =>
+  _i7.Future<T> exclusively<T>(_i7.Future<T> Function()? action) =>
       (super.noSuchMethod(
             Invocation.method(#exclusively, [action]),
             returnValue:
-                _i7.ifNotNull(
-                  _i7.dummyValueOrNull<T>(
+                _i8.ifNotNull(
+                  _i8.dummyValueOrNull<T>(
                     this,
                     Invocation.method(#exclusively, [action]),
                   ),
-                  (T v) => _i6.Future<T>.value(v),
+                  (T v) => _i7.Future<T>.value(v),
                 ) ??
-                _FakeFuture_8<T>(
+                _FakeFuture_9<T>(
                   this,
                   Invocation.method(#exclusively, [action]),
                 ),
           )
-          as _i6.Future<T>);
+          as _i7.Future<T>);
 
   @override
-  _i6.Future<void> batch(_i6.FutureOr<void> Function(_i3.Batch)? runInBatch) =>
+  _i7.Future<void> batch(_i7.FutureOr<void> Function(_i3.Batch)? runInBatch) =>
       (super.noSuchMethod(
             Invocation.method(#batch, [runInBatch]),
-            returnValue: _i6.Future<void>.value(),
-            returnValueForMissingStub: _i6.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i6.Future<void>);
+          as _i7.Future<void>);
 
   @override
-  _i6.Future<T> runWithInterceptor<T>(
-    _i6.Future<T> Function()? action, {
+  _i7.Future<T> runWithInterceptor<T>(
+    _i7.Future<T> Function()? action, {
     required _i3.QueryInterceptor? interceptor,
   }) =>
       (super.noSuchMethod(
@@ -643,8 +658,8 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
               {#interceptor: interceptor},
             ),
             returnValue:
-                _i7.ifNotNull(
-                  _i7.dummyValueOrNull<T>(
+                _i8.ifNotNull(
+                  _i8.dummyValueOrNull<T>(
                     this,
                     Invocation.method(
                       #runWithInterceptor,
@@ -652,9 +667,9 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
                       {#interceptor: interceptor},
                     ),
                   ),
-                  (T v) => _i6.Future<T>.value(v),
+                  (T v) => _i7.Future<T>.value(v),
                 ) ??
-                _FakeFuture_8<T>(
+                _FakeFuture_9<T>(
                   this,
                   Invocation.method(
                     #runWithInterceptor,
@@ -663,7 +678,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
                   ),
                 ),
           )
-          as _i6.Future<T>);
+          as _i7.Future<T>);
 
   @override
   _i3.GenerationContext $write(
@@ -677,7 +692,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
               [component],
               {#hasMultipleTables: hasMultipleTables, #startIndex: startIndex},
             ),
-            returnValue: _FakeGenerationContext_16(
+            returnValue: _FakeGenerationContext_17(
               this,
               Invocation.method(
                 #$write,
@@ -703,7 +718,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
               [table, insertable],
               {#startIndex: startIndex},
             ),
-            returnValue: _FakeGenerationContext_16(
+            returnValue: _FakeGenerationContext_17(
               this,
               Invocation.method(
                 #$writeInsertable,
@@ -726,7 +741,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
               [table, insertable],
               {#startIndex: startIndex},
             ),
-            returnValue: _FakeGenerationContext_16(
+            returnValue: _FakeGenerationContext_17(
               this,
               Invocation.method(
                 #$writeUpdateInsertable,
@@ -741,7 +756,7 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
   String $expandVar(int? start, int? amount) =>
       (super.noSuchMethod(
             Invocation.method(#$expandVar, [start, amount]),
-            returnValue: _i7.dummyValue<String>(
+            returnValue: _i8.dummyValue<String>(
               this,
               Invocation.method(#$expandVar, [start, amount]),
             ),
@@ -749,11 +764,11 @@ class MockProjectsDao extends _i1.Mock implements _i5.ProjectsDao {
           as String);
 
   @override
-  _i6.Future<void> close() =>
+  _i7.Future<void> close() =>
       (super.noSuchMethod(
             Invocation.method(#close, []),
-            returnValue: _i6.Future<void>.value(),
-            returnValueForMissingStub: _i6.Future<void>.value(),
+            returnValue: _i7.Future<void>.value(),
+            returnValueForMissingStub: _i7.Future<void>.value(),
           )
-          as _i6.Future<void>);
+          as _i7.Future<void>);
 }

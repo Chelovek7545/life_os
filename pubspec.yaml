@@ -9,6 +9,7 @@ environment:
 
 
 workspace:
+  - packages/sync_plugin
   - packages/agent_bridge
   - packages/graph_components
   - packages/goals_plugin
@@ -35,6 +36,8 @@ workspace:
   - packages/plugin_ui
 
 dependencies:
+  flutter_secure_storage: ^11.2.0
+  sync_plugin: ^0.1.0
   agent_bridge: ^0.1.0
   graph_components: ^0.1.0
   goals_plugin: ^0.1.0

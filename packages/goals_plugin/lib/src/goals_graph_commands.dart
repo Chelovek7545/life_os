@@ -21,6 +21,11 @@ GraphNodeCommands goalsGraphCommands(
   update: (request) async {
     final existing = await goals.getGoal(request.current.id);
     if (existing == null) return;
+    if (existing.storageRevision != null &&
+        request.current.attributes['storageRevision'] !=
+            existing.storageRevision) {
+      throw StateError('Node changed; reload before saving.');
+    }
     await goals.updateGoal(
       existing.copyWith(
         name: request.updated.title,

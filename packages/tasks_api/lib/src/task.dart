@@ -25,6 +25,7 @@ class Task {
     this.space,
     this.spaceId,
     this.priority = 0,
+    this.storageRevision,
   });
 
   final String id;
@@ -47,6 +48,9 @@ class Task {
   final int timerSeconds;
   final double effortWeight;
   final List<Tag> tags;
+
+  /// Opaque storage token captured when this snapshot was read.
+  final String? storageRevision;
 
   bool get isCompleted => status == TaskStatus.done;
 
@@ -113,6 +117,7 @@ class Task {
       timerSeconds: timerSeconds ?? this.timerSeconds,
       effortWeight: effortWeight ?? this.effortWeight,
       tags: tags ?? this.tags,
+      storageRevision: storageRevision,
     );
   }
 }

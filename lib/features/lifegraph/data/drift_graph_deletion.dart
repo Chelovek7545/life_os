@@ -2,13 +2,25 @@ import '../domain/graph_deletion.dart';
 import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNodeType;
+import 'package:life_os/features/tasks/data/task_mutation_journal.dart';
 
 class DriftGraphDeletion implements GraphDeletion {
-  DriftGraphDeletion(this.database);
+  DriftGraphDeletion(this.database, {this.journal});
   final AppDatabase database;
+  final TaskMutationJournal? journal;
 
   @override
   Future<Set<String>> delete(
+    GraphNodeType type,
+    String id, {
+    required bool keepChildren,
+  }) => journal == null
+      ? _delete(type, id, keepChildren: keepChildren)
+      : journal!.trackGraph(
+          () => _delete(type, id, keepChildren: keepChildren),
+        );
+
+  Future<Set<String>> _delete(
     GraphNodeType type,
     String id, {
     required bool keepChildren,

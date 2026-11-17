@@ -7,6 +7,7 @@ class Sphere {
   final String color;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? storageRevision;
 
   Sphere({
     required this.id,
@@ -14,6 +15,7 @@ class Sphere {
     required this.color,
     required this.createdAt,
     required this.updatedAt,
+    this.storageRevision,
   });
 
   factory Sphere.create({required String name, String color = '#4A90D9'}) {
@@ -36,6 +38,7 @@ class Sphere {
   }) {
     return Sphere(
       id: id ?? this.id,
+      storageRevision: storageRevision,
       name: name ?? this.name,
       color: color ?? this.color,
       createdAt: createdAt ?? this.createdAt,

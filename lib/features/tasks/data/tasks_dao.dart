@@ -3,65 +3,116 @@ import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/extensions/tag_model_extension.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 
-import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus;
+import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus, Tag;
+import 'task_mutation_journal.dart';
 
 part 'tasks_dao.g.dart';
 
 @DriftAccessor(tables: [Tasks, Tags, TaskTagEntries])
 class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
-  TasksDao(super.db);
+  TasksDao(super.db, {this.journal});
+  final TaskMutationJournal? journal;
+
+  Future<T> _mutate<T>(
+    String id,
+    Future<T> Function() write, {
+    String? expectedRevision,
+    bool requireExpected = false,
+    bool createOnly = false,
+  }) =>
+      journal?.trackTask(
+        id,
+        write,
+        expectedRevision: expectedRevision,
+        requireExpected: requireExpected,
+        createOnly: createOnly,
+      ) ??
+      transaction(write);
+
+  Future<Task> _observe(Task task) async =>
+      journal == null ? task : await journal!.observe(task);
+
+  Future<List<Task>> _observeAll(Iterable<Task> tasks) async {
+    final items = tasks.toList();
+    return journal == null ? items : journal!.observeTasks(items);
+  }
 
   Future<Task?> completeTask(String id) => transaction(() async {
-    final current = await getById(id);
-    if (current == null) return null;
-    if (current.status != TaskStatus.done) {
-      await (update(tasks)..where((row) => row.id.equals(id))).write(
-        TasksCompanion(
-          status: const Value(TaskStatus.done),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
-    }
+    await _mutate<void>(id, () async {
+      final current = await getById(id);
+      if (current == null) return;
+      if (current.status != TaskStatus.done) {
+        await (update(tasks)..where((row) => row.id.equals(id))).write(
+          TasksCompanion(
+            status: const Value(TaskStatus.done),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+      }
+    });
     return getTaskWithTags(id);
   });
 
   // =============== CREATE ===============
 
   Future<int> insert(TasksCompanion task) {
-    return into(tasks).insert(task);
+    return _mutate(
+      task.id.value,
+      () => into(tasks).insert(task),
+      createOnly: true,
+    );
   }
 
   Future<void> insertTaskWithTags(
     TasksCompanion taskCompanion,
-    List<String> tagNames,
-  ) async {
-    await transaction(() async {
+    List<String> tagNames, {
+    List<Tag>? tagSnapshots,
+  }) async {
+    await _mutate(taskCompanion.id.value, () async {
       await into(tasks).insertOnConflictUpdate(taskCompanion);
 
       // Вызываем общий метод, передавая имена тегов
-      await _syncTaskTags(taskCompanion.id.value, tagNames);
-    });
+      await _syncTaskTags(taskCompanion.id.value, tagNames, tagSnapshots);
+    }, createOnly: true);
   }
 
   //Заполняет таблицу taskTagEntries
-  Future<void> _syncTaskTags(String taskId, List<String> tagNames) async {
+  Future<void> _syncTaskTags(
+    String taskId,
+    List<String> tagNames,
+    List<Tag>? snapshots,
+  ) async {
     await (delete(taskTagEntries)..where((t) => t.taskId.equals(taskId))).go();
 
     if (tagNames.isEmpty) return;
 
     final List<int> finalTagIds = [];
 
-    for (final name in tagNames.toSet()) {
-      final existingTag = await (select(
-        tags,
-      )..where((t) => t.name.equals(name))).getSingleOrNull();
+    final requested =
+        snapshots ??
+        tagNames
+            .toSet()
+            .map((name) => Tag(id: 0, name: name, colorHex: 0xFF9E9E9E))
+            .toList();
+    for (final tag in requested) {
+      final name = tag.name;
+      final existingTag =
+          await (select(tags)..where(
+                (t) => tag.syncId == null
+                    ? t.name.equals(name)
+                    : t.syncId.equals(tag.syncId!),
+              ))
+              .getSingleOrNull();
+      if (tag.syncId != null && existingTag == null) {
+        throw StateError('Tag changed; reload the task before saving.');
+      }
 
       if (existingTag != null) {
         finalTagIds.add(existingTag.id);
       } else {
         final newTagId = await into(
           tags,
-        ).insert(TagsCompanion.insert(name: name, colorHex: 0xFF9E9E9E));
+        ).insert(TagsCompanion.insert(name: name, colorHex: tag.colorHex));
         finalTagIds.add(newTagId);
       }
     }
@@ -70,6 +121,7 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
       batch.insertAll(
         taskTagEntries,
         finalTagIds
+            .toSet()
             .map(
               (tagId) =>
                   TaskTagEntriesCompanion.insert(taskId: taskId, tagId: tagId),
@@ -116,7 +168,9 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
     final row = await getById(id);
     if (row == null) return null;
     final taskTags = await getTagsForTask(id);
-    return row.toDomain(tags: taskTags.map((tag) => tag.toDomain()).toList());
+    return _observe(
+      row.toDomain(tags: taskTags.map((tag) => tag.toDomain()).toList()),
+    );
   });
 
   Future<List<TagModel>> getTagsForTask(String id) async {
@@ -138,7 +192,7 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
     ]);
 
     // 2. Вызываем watch() вместо get(), чтобы получить поток (Stream)
-    return query.watch().map((rows) {
+    return query.watch().asyncMap((rows) async {
       // Внутри .map(...) мы трансформируем каждую новую порцию данных от БД
 
       final Map<TaskModel, List<TagModel>> grouped = {};
@@ -155,11 +209,13 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
       }
 
       // 3. Переводим сгруппированную мапу в список доменных моделей Task через маппер
-      return grouped.entries.map((entry) {
-        return entry.key.toDomain(
-          tags: entry.value.map((e) => e.toDomain()).toList(),
-        );
-      }).toList();
+      return _observeAll(
+        grouped.entries.map((entry) {
+          return entry.key.toDomain(
+            tags: entry.value.map((e) => e.toDomain()).toList(),
+          );
+        }),
+      );
     });
   }
 
@@ -169,7 +225,7 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
       leftOuterJoin(tags, tags.id.equalsExp(taskTagEntries.tagId)),
     ])..where(tasks.projectId.equals(projectId));
 
-    return query.watch().map((rows) {
+    return query.watch().asyncMap((rows) async {
       final Map<TaskModel, List<TagModel>> grouped = {};
 
       for (final row in rows) {
@@ -182,11 +238,13 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
         }
       }
 
-      return grouped.entries.map((entry) {
-        return entry.key.toDomain(
-          tags: entry.value.map((e) => e.toDomain()).toList(),
-        );
-      }).toList();
+      return _observeAll(
+        grouped.entries.map((entry) {
+          return entry.key.toDomain(
+            tags: entry.value.map((e) => e.toDomain()).toList(),
+          );
+        }),
+      );
     });
   }
 
@@ -194,28 +252,49 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
 
   Future<bool> updateTaskWithTags(
     TasksCompanion taskCompanion,
-    List<String> tagNames,
-  ) async {
+    List<String> tagNames, {
+    String? expectedRevision,
+    List<Tag>? tagSnapshots,
+  }) async {
     // if (!taskCompanion.id.isPresent) {
     //   throw ArgumentError('Для обновления задачи необходим ID');
     // }
     final String taskId = taskCompanion.id.value;
 
-    return transaction(() async {
-      final bool isTaskUpdated = await update(tasks).replace(taskCompanion);
-      if (!isTaskUpdated) return false;
+    return _mutate(
+      taskId,
+      () async {
+        final bool isTaskUpdated = await update(tasks).replace(taskCompanion);
+        if (!isTaskUpdated) return false;
 
-      // Вызываем тот же метод синхронизации по именам
-      await _syncTaskTags(taskId, tagNames);
+        // Вызываем тот же метод синхронизации по именам
+        await _syncTaskTags(taskId, tagNames, tagSnapshots);
 
-      return true;
-    });
+        return true;
+      },
+      expectedRevision: expectedRevision,
+      requireExpected: true,
+    );
   }
 
   // =============== DELETE ===============
 
   /// Удалить задачу
   Future<void> deleteTask(String id) async {
-    await (delete(tasks)..where((t) => t.id.equals(id))).go();
+    await _mutate(
+      id,
+      () => (delete(tasks)..where((t) => t.id.equals(id))).go(),
+    );
   }
+
+  Future<List<Task>> getAllDomainTasks() => transaction(() async {
+    final grouped = await getAllTasksWithTags();
+    return _observeAll(
+      grouped.entries.map(
+        (entry) => entry.key.toDomain(
+          tags: entry.value.map((tag) => tag.toDomain()).toList(),
+        ),
+      ),
+    );
+  });
 }

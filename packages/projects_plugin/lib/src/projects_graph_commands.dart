@@ -29,6 +29,11 @@ GraphNodeCommands projectsGraphCommands(
   update: (request) async {
     final existing = await projects.getProjectById(request.current.id);
     if (existing == null) return;
+    if (existing.storageRevision != null &&
+        request.current.attributes['storageRevision'] !=
+            existing.storageRevision) {
+      throw StateError('Node changed; reload before saving.');
+    }
     await projects.updateProject(
       existing.copyWith(
         name: request.updated.title,

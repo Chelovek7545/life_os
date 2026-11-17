@@ -1,126 +1,117 @@
 import 'package:drift/drift.dart';
 import 'package:projects_api/projects_api.dart';
 import 'package:life_os/core/database/database.dart';
+import 'package:life_os/features/tasks/data/task_mutation_journal.dart';
+import 'package:sync_plugin/sync_logic.dart';
 import 'extensions/project_model_extension.dart';
-
 part 'projects_dao.g.dart';
 
 @DriftAccessor(tables: [Projects])
 class ProjectsDao extends DatabaseAccessor<AppDatabase>
     with _$ProjectsDaoMixin {
-  ProjectsDao(super.db);
-
-  // =============== CREATE ===============
+  ProjectsDao(super.db, {this.journal});
+  final TaskMutationJournal? journal;
+  Future<T> _write<T>(
+    String id,
+    Future<T> Function() write, {
+    String? expectedRevision,
+    bool requireExpected = false,
+    bool createOnly = false,
+  }) =>
+      journal?.trackEntity(
+        'project',
+        id,
+        write,
+        expectedRevision: expectedRevision,
+        requireExpected: requireExpected,
+        createOnly: createOnly,
+      ) ??
+      transaction(write);
+  Future<Project> observeProject(Project p) async =>
+      (await _observeAll([p])).single;
+  Future<List<Project>> _observeAll(List<Project> projects) async {
+    if (journal == null || projects.isEmpty) return projects;
+    final payloads = {
+      for (final p in projects)
+        'project/${p.id}': HierarchySyncCodec.project(p),
+    };
+    final versions = await journal!.observedRevisions(payloads);
+    return [
+      for (final p in projects)
+        HierarchySyncCodec.decodeProject(
+          payloads['project/${p.id}']!,
+          storageRevision: versions['project/${p.id}'],
+        ),
+    ];
+  }
 
   Future<void> createProject(ProjectsCompanion project) async {
-    await into(projects).insert(project);
-  }
-
-  // =============== READ ===============
-
-  Future<List<Project>> getAllProjects() async {
-    final dataList = await select(projects).get();
-    return dataList.map((data) => data.toDomain()).toList();
-  }
-
-  // Future<List<Project>> getActiveProjects() async {
-  //   final dataList = await (select(projects)
-  //     ..where((p) => p.isArchived.equals(false))
-  //     ..orderBy([(p) => OrderingTerm(expression: p.name)]))
-  //     .get();
-  //   return dataList.map((data) => Project.fromDrift(data)).toList();
-  // }
-
-  Future<ProjectModel?> getProjectById(String id) async {
-    try {
-      final data = await (select(
-        projects,
-      )..where((p) => p.id.equals(id))).getSingle();
-      return data;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // Future<List<Project>> searchProjects(String query) async {
-  //   final dataList = await (select(projects)
-  //     ..where((p) => p.name.like('%$query%'))
-  //   ).get();
-  //   return dataList.map((data) => data.toDomain()).toList();
-  // }
-
-  Stream<List<Project>> watchAllProjects() {
-    return (select(projects)).watch().map(
-      (dataList) => dataList.map((data) => data.toDomain()).toList(),
+    await _write(
+      project.id.value,
+      () => into(projects).insert(project),
+      createOnly: true,
     );
   }
 
-  // Stream<List<Project>> watchActiveProjects() {
-  //   return (select(projects)..where((p) => p.isArchived.equals(false)))
-  //     .watch()
-  //     .map((dataList) => dataList.map((data) => data.toDomain()).toList());
-  // }
-
-  // =============== UPDATE ===============
-
+  Future<List<Project>> getAllProjects() async => _observeAll(
+    (await select(projects).get()).map((r) => r.toDomain()).toList(),
+  );
+  Future<ProjectModel?> getProjectById(String id) =>
+      (select(projects)..where((p) => p.id.equals(id))).getSingleOrNull();
+  Stream<List<Project>> watchAllProjects() => select(projects).watch().asyncMap(
+    (rows) => _observeAll(rows.map((r) => r.toDomain()).toList()),
+  );
   Future<void> updateProject(Project project) async {
-    await update(
-      projects,
-    ).replace(project.copyWith(updatedAt: DateTime.now()).toDrift());
+    await _write(
+      project.id,
+      () => update(
+        projects,
+      ).replace(project.copyWith(updatedAt: DateTime.now()).toDrift()),
+      expectedRevision: project.storageRevision,
+      requireExpected: true,
+    );
   }
 
   Future<void> updateProjectName(String id, String newName) async {
-    await (update(projects)..where((p) => p.id.equals(id))).write(
-      ProjectsCompanion(name: Value(newName), updatedAt: Value(DateTime.now())),
+    await _write(
+      id,
+      () => (update(projects)..where((p) => p.id.equals(id))).write(
+        ProjectsCompanion(
+          name: Value(newName),
+          updatedAt: Value(DateTime.now()),
+        ),
+      ),
     );
   }
 
   Future<void> archiveProject(String id) async {
-    await (update(projects)..where((p) => p.id.equals(id))).write(
-      ProjectsCompanion(
-        isArchived: const Value(true),
-        updatedAt: Value(DateTime.now()),
+    await _write(
+      id,
+      () => (update(projects)..where((p) => p.id.equals(id))).write(
+        ProjectsCompanion(
+          isArchived: const Value(true),
+          updatedAt: Value(DateTime.now()),
+        ),
       ),
     );
   }
 
   Future<void> unarchiveProject(String id) async {
-    await (update(projects)..where((p) => p.id.equals(id))).write(
-      ProjectsCompanion(
-        isArchived: const Value(false),
-        updatedAt: Value(DateTime.now()),
+    await _write(
+      id,
+      () => (update(projects)..where((p) => p.id.equals(id))).write(
+        ProjectsCompanion(
+          isArchived: const Value(false),
+          updatedAt: Value(DateTime.now()),
+        ),
       ),
     );
   }
 
-  // =============== DELETE ===============
-
   Future<void> deleteProject(String id) async {
-    await (delete(projects)..where((p) => p.id.equals(id))).go();
+    await _write(
+      id,
+      () => (delete(projects)..where((p) => p.id.equals(id))).go(),
+    );
   }
-
-  // Future<void> deleteAllArchived() async {
-  //   await (delete(projects)..where((p) => p.isArchived.equals(true))).go();
-  // }
-
-  // =============== STATS ===============
-
-  // Future<int> getProjectTaskCount(String projectId) async {
-  //   final count = await (selectOnly(tasks)
-  //     ..addColumns([tasks.id.count()])
-  //     ..where(tasks.projectId.equals(projectId))
-  //   ).getSingle();
-  //   return count.read(tasks.id.count()) ?? 0;
-  // }
-
-  // Future<Map<Project, int>> getProjectsWithTaskCount() async {
-  //   final projects = await getActiveProjects();
-  //   final Map<Project, int> result = {};
-
-  //   for (var project in projects) {
-  //     result[project] = await getProjectTaskCount(project.id);
-  //   }
-
-  //   return result;
-  // }
 }

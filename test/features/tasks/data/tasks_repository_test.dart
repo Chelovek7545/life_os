@@ -13,7 +13,6 @@ import '../../../test_helpers.dart';
 import 'tasks_repository_test.mocks.dart';
 
 @GenerateMocks([TasksDao])
-
 void main() {
   late MockTasksDao mockDao;
   late TasksRepository repository;
@@ -73,8 +72,9 @@ void main() {
           priority: 0,
           effortWeight: 1.5,
         );
-        when(mockDao.getTaskWithTags('task-1'))
-            .thenAnswer((_) async => daoModel.toDomain());
+        when(
+          mockDao.getTaskWithTags('task-1'),
+        ).thenAnswer((_) async => daoModel.toDomain());
 
         final result = await repository.getById('task-1');
 
@@ -90,17 +90,33 @@ void main() {
     group('addTask', () {
       test('delegates to dao.insertTaskWithTags', () async {
         final task = createMockTask(tags: [createMockTag(id: 1, name: 'dev')]);
-        when(mockDao.insertTaskWithTags(any, any)).thenAnswer((_) async => {});
+        when(
+          mockDao.insertTaskWithTags(
+            any,
+            any,
+            tagSnapshots: anyNamed('tagSnapshots'),
+          ),
+        ).thenAnswer((_) async => {});
 
         await repository.addTask(task);
 
-        verify(mockDao.insertTaskWithTags(any, any)).called(1);
+        verify(
+          mockDao.insertTaskWithTags(
+            any,
+            any,
+            tagSnapshots: anyNamed('tagSnapshots'),
+          ),
+        ).called(1);
       });
 
       test('throws StorageException on dao error', () async {
         final task = createMockTask();
         when(
-          mockDao.insertTaskWithTags(any, any),
+          mockDao.insertTaskWithTags(
+            any,
+            any,
+            tagSnapshots: anyNamed('tagSnapshots'),
+          ),
         ).thenAnswer((_) => Future.error(Exception('db error')));
 
         await expectLater(
@@ -114,18 +130,32 @@ void main() {
       test('delegates to dao.updateTaskWithTags', () async {
         final task = createMockTask(tags: [createMockTag(id: 1, name: 'dev')]);
         when(
-          mockDao.updateTaskWithTags(any, any),
+          mockDao.updateTaskWithTags(
+            any,
+            any,
+            tagSnapshots: anyNamed('tagSnapshots'),
+          ),
         ).thenAnswer((_) async => true);
 
         await repository.updateTask(task);
 
-        verify(mockDao.updateTaskWithTags(any, any)).called(1);
+        verify(
+          mockDao.updateTaskWithTags(
+            any,
+            any,
+            tagSnapshots: anyNamed('tagSnapshots'),
+          ),
+        ).called(1);
       });
 
       test('throws StorageException on dao error', () async {
         final task = createMockTask();
         when(
-          mockDao.updateTaskWithTags(any, any),
+          mockDao.updateTaskWithTags(
+            any,
+            any,
+            tagSnapshots: anyNamed('tagSnapshots'),
+          ),
         ).thenAnswer((_) => Future.error(Exception('db error')));
 
         await expectLater(

@@ -14,8 +14,12 @@ class ProjectsRepository implements ProjectsApi {
   Future<List<Project>> getAllProjects() => _dao.getAllProjects();
 
   @override
-  Future<Project?> getProjectById(String id) =>
-      _dao.getProjectById(id).then((v) => v?.toDomain());
+  Future<Project?> getProjectById(String id) async {
+    final row = await _dao.getProjectById(id);
+    if (row == null) return null;
+    final project = row.toDomain();
+    return _dao.journal == null ? project : _dao.observeProject(project);
+  }
 
   @override
   Future<void> addProject(Project project) async {

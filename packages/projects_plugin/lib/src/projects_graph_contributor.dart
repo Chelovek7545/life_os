@@ -18,6 +18,10 @@ class ProjectsGraphContributor implements GraphContributor {
               title: project.name,
               subtitle: project.description,
               color: project.color,
+              attributes: {
+                if (project.storageRevision != null)
+                  'storageRevision': project.storageRevision,
+              },
               parentId: project.parentProejectId ?? project.goalId,
             ),
         ],

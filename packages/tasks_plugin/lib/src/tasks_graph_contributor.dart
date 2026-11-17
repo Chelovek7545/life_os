@@ -22,7 +22,11 @@ class TasksGraphContributor implements GraphContributor {
           color: '#CCC2DC',
           parentId: task.parentTaskId ?? task.projectId,
           inheritParentColor: task.parentTaskId == null,
-          attributes: {'taskStatus': task.status.name},
+          attributes: {
+            'taskStatus': task.status.name,
+            if (task.storageRevision != null)
+              'storageRevision': task.storageRevision,
+          },
         ),
     ],
   );

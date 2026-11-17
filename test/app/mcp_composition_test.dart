@@ -1,4 +1,5 @@
 import 'package:agent_bridge/agent_bridge.dart';
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/native.dart';
 import 'package:life_os/app/dependency_container.dart';
@@ -15,6 +16,70 @@ class _NetworkBinding extends AutomatedTestWidgetsFlutterBinding {
 
 void main() {
   _NetworkBinding();
+  test(
+    'enrolled database keeps journaling after restart without bootstrap option',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final dir = await Directory.systemTemp.createTemp(
+        'life_os_journal_restart_',
+      );
+      addTearDown(() => dir.delete(recursive: true));
+      final file = File('${dir.path}${Platform.pathSeparator}test.sqlite');
+      final first = DependencyContainer(
+        database: AppDatabase(NativeDatabase(file)),
+        experimentalSyncDatasetId: 'dataset',
+        enableTelegram: false,
+        enableObsidian: false,
+      );
+      final task = Task.blank();
+      try {
+        await first.init();
+        await first.tasksRepository.addTask(task);
+      } finally {
+        await first.dispose();
+      }
+      final second = DependencyContainer(
+        database: AppDatabase(NativeDatabase(file)),
+        enableTelegram: false,
+        enableObsidian: false,
+      );
+      addTearDown(second.dispose);
+      await second.init();
+      final loaded = (await second.tasksRepository.getById(task.id))!;
+      await second.tasksRepository.updateTask(
+        loaded.copyWith(title: 'After restart'),
+      );
+      expect((await second.taskSyncStore.readFeed()).entries, hasLength(2));
+      expect(second.plugins.states.containsKey('sync.local'), isFalse);
+    },
+  );
+  test(
+    'experimental task journal captures real MCP create and completion without a sync listener',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final app = DependencyContainer(
+        database: AppDatabase(NativeDatabase.memory()),
+        experimentalSyncDatasetId: 'dataset',
+        enableTelegram: false,
+        enableObsidian: false,
+        enableMcp: true,
+        mcpOptions: const McpServerOptions(token: token, port: 0),
+      );
+      addTearDown(app.dispose);
+      await app.init();
+      final client = McpClient(app.mcpPlugin!.endpoint!);
+      addTearDown(client.close);
+      await client.initialize();
+      await client.tool('tasks_create', {'title': 'Journal through MCP'});
+      final task = (await app.tasksRepository.getAllTasks()).single;
+      await client.tool('tasks_complete', {'id': task.id});
+      expect((await app.tasksRepository.getById(task.id))!.isCompleted, isTrue);
+      final entries = (await app.taskSyncStore.readFeed()).entries;
+      expect(entries, hasLength(2));
+      expect(entries.last.revision.parents, [entries.first.revision.id]);
+      expect(app.plugins.states.containsKey('sync.local'), isFalse);
+    },
+  );
   test(
     'production defaults omit AI chat while MCP remains independently usable',
     () async {

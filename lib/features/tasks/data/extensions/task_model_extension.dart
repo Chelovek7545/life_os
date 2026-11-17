@@ -4,7 +4,7 @@ import 'package:tasks_api/tasks_api.dart' show Tag, Task;
 
 /// Extension для преобразования Drift модели в domain модель
 extension TaskDataToDomain on TaskModel {
-  Task toDomain({List<Tag>? tags}) {
+  Task toDomain({List<Tag>? tags, String? storageRevision}) {
     return Task(
       id: id,
       title: title,
@@ -23,6 +23,7 @@ extension TaskDataToDomain on TaskModel {
       timerSeconds: timerSeconds,
       effortWeight: effortWeight,
       tags: tags ?? const [],
+      storageRevision: storageRevision,
     );
   }
 }

@@ -10,6 +10,7 @@ class WorkLog {
     required this.description,
     this.startedAt,
     this.endedAt,
+    this.storageRevision,
   });
 
   final String id;
@@ -19,6 +20,7 @@ class WorkLog {
   final String description;
   final DateTime? startedAt;
   final DateTime? endedAt;
+  final String? storageRevision;
   Duration? get duration =>
       startedAt != null && endedAt != null && endedAt!.isAfter(startedAt!)
       ? endedAt!.difference(startedAt!)
@@ -51,6 +53,7 @@ class WorkLog {
       description: description ?? this.description,
       startedAt: startedAt == null ? this.startedAt : startedAt.value,
       endedAt: endedAt == null ? this.endedAt : endedAt.value,
+      storageRevision: storageRevision,
     );
   }
 }

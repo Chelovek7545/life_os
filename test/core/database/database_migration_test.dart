@@ -3,11 +3,111 @@ import 'package:drift/native.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/core/database/database.dart';
+import 'package:life_os/features/sync/data/drift_sync_store.dart';
 import 'package:tasks_api/tasks_api.dart';
 
 void main() {
+  Future<void> removeSyncSchema(AppDatabase db) async {
+    await db.customStatement('DROP INDEX tags_sync_id_unique');
+    await db.customStatement('ALTER TABLE tags DROP COLUMN sync_id');
+    for (final name in ['sync_cursors', 'sync_revisions', 'sync_identities']) {
+      await db.customStatement('DROP TABLE $name');
+    }
+  }
+
   late Directory directory;
   late File file;
+  test(
+    'v11 migration adds portable tag IDs without rewriting immutable revisions',
+    () async {
+      final old = AppDatabase(NativeDatabase(file));
+      final store = DriftSyncStore(old);
+      await store.initialize('dataset');
+      final task = Task.blank();
+      await store.saveTask(task, expectedHeads: {});
+      final body = (await old.select(old.syncRevisions).getSingle()).body;
+      await old
+          .into(old.tags)
+          .insert(
+            TagsCompanion.insert(
+              id: const Value(42),
+              name: 'Legacy',
+              colorHex: 123,
+            ),
+          );
+      await old.customStatement('DROP INDEX tags_sync_id_unique');
+      await old.customStatement('ALTER TABLE tags DROP COLUMN sync_id');
+      await old.customStatement('PRAGMA user_version = 11');
+      await old.close();
+      final upgraded = AppDatabase(NativeDatabase(file));
+      try {
+        final legacy = await upgraded.select(upgraded.tags).getSingle();
+        expect(legacy.id, 42);
+        expect(legacy.syncId, isNull);
+        await DriftSyncStore(upgraded).initialize('dataset');
+        final tag = await upgraded.select(upgraded.tags).getSingle();
+        expect(tag.id, 42);
+        expect(tag.name, 'Legacy');
+        expect(tag.colorHex, 123);
+        expect(tag.syncId, isNotNull);
+        final revisions = await upgraded.select(upgraded.syncRevisions).get();
+        expect(revisions.first.body, body);
+        expect(revisions, hasLength(2));
+        expect(
+          (await upgraded.select(upgraded.tasks).getSingle()).updatedAt,
+          task.updatedAt,
+        );
+      } finally {
+        await upgraded.close();
+      }
+    },
+  );
+  test(
+    'v10 upgrade preserves tasks and explicitly bootstraps stable revisions',
+    () async {
+      final old = AppDatabase(NativeDatabase(file));
+      final date = DateTime(2026, 10, 1);
+      await old
+          .into(old.tasks)
+          .insert(
+            TasksCompanion.insert(
+              id: 'legacy',
+              title: 'Existing',
+              description: 'Keep',
+              status: TaskStatus.open,
+              createdAt: date,
+              updatedAt: date,
+            ),
+          );
+      await removeSyncSchema(old);
+      await old.customStatement('PRAGMA user_version = 10');
+      await old.close();
+      final upgraded = AppDatabase(NativeDatabase(file));
+      try {
+        expect(
+          (await upgraded.select(upgraded.tasks).getSingle()).updatedAt,
+          date,
+        );
+        expect(await upgraded.select(upgraded.syncRevisions).get(), isEmpty);
+        final store = DriftSyncStore(upgraded);
+        await store.initialize('dataset');
+        final first = (await store.readFeed()).entries.single.revision;
+        await store.initialize('dataset');
+        expect((await store.readFeed()).entries.single.revision.id, first.id);
+        expect(first.entityId, 'legacy');
+        expect(
+          (await upgraded.select(upgraded.tasks).getSingle()).updatedAt,
+          date,
+        );
+        expect(
+          await upgraded.customSelect('PRAGMA foreign_key_check').get(),
+          isEmpty,
+        );
+      } finally {
+        await upgraded.close();
+      }
+    },
+  );
   test(
     'upgrading v9 preserves legacy work logs and supports optional intervals',
     () async {
@@ -42,6 +142,7 @@ void main() {
       await previous.customStatement(
         'ALTER TABLE work_logs DROP COLUMN ended_at',
       );
+      await removeSyncSchema(previous);
       await previous.customStatement('PRAGMA user_version = 9');
       await previous.close();
       final upgraded = AppDatabase(NativeDatabase(file));
@@ -102,6 +203,7 @@ void main() {
         );
     // v8 has the same tables as v9 except for the newly introduced work_logs.
     await previous.customStatement('DROP TABLE work_logs');
+    await removeSyncSchema(previous);
     await previous.customStatement('PRAGMA user_version = 8');
     await previous.close();
     final upgraded = AppDatabase(NativeDatabase(file));

@@ -281,10 +281,15 @@ class MockTasksDao extends _i1.Mock implements _i5.TasksDao {
   @override
   _i6.Future<void> insertTaskWithTags(
     _i2.TasksCompanion? taskCompanion,
-    List<String>? tagNames,
-  ) =>
+    List<String>? tagNames, {
+    List<_i8.Tag>? tagSnapshots,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#insertTaskWithTags, [taskCompanion, tagNames]),
+            Invocation.method(
+              #insertTaskWithTags,
+              [taskCompanion, tagNames],
+              {#tagSnapshots: tagSnapshots},
+            ),
             returnValue: _i6.Future<void>.value(),
             returnValueForMissingStub: _i6.Future<void>.value(),
           )
@@ -362,10 +367,19 @@ class MockTasksDao extends _i1.Mock implements _i5.TasksDao {
   @override
   _i6.Future<bool> updateTaskWithTags(
     _i2.TasksCompanion? taskCompanion,
-    List<String>? tagNames,
-  ) =>
+    List<String>? tagNames, {
+    String? expectedRevision,
+    List<_i8.Tag>? tagSnapshots,
+  }) =>
       (super.noSuchMethod(
-            Invocation.method(#updateTaskWithTags, [taskCompanion, tagNames]),
+            Invocation.method(
+              #updateTaskWithTags,
+              [taskCompanion, tagNames],
+              {
+                #expectedRevision: expectedRevision,
+                #tagSnapshots: tagSnapshots,
+              },
+            ),
             returnValue: _i6.Future<bool>.value(false),
           )
           as _i6.Future<bool>);
@@ -378,6 +392,14 @@ class MockTasksDao extends _i1.Mock implements _i5.TasksDao {
             returnValueForMissingStub: _i6.Future<void>.value(),
           )
           as _i6.Future<void>);
+
+  @override
+  _i6.Future<List<_i8.Task>> getAllDomainTasks() =>
+      (super.noSuchMethod(
+            Invocation.method(#getAllDomainTasks, []),
+            returnValue: _i6.Future<List<_i8.Task>>.value(<_i8.Task>[]),
+          )
+          as _i6.Future<List<_i8.Task>>);
 
   @override
   _i6.Stream<T> createStream<T extends Object>(

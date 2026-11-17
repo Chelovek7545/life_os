@@ -1,4 +1,10 @@
 import 'package:graph_api/graph_api.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:sync_plugin/sync_logic.dart';
+import 'package:sync_plugin/sync_native.dart';
+import 'package:life_os/features/sync/data/secure_sync_secrets.dart';
+import 'plugins/sync_plugin_adapter.dart';
+import 'package:life_os/features/sync/data/drift_sync_store.dart';
 import 'package:agent_bridge/agent_bridge.dart';
 import 'package:agent_bridge/local_assistant.dart';
 import 'plugins/assistant_plugin_adapter.dart';
@@ -51,6 +57,13 @@ import 'package:life_os/features/tasks/data/work_logs_repository.dart';
 class DependencyContainer {
   DependencyContainer({
     AppDatabase? database,
+    this.experimentalSyncDatasetId,
+    this.enableSync = const bool.fromEnvironment(
+      'ENABLE_SYNC',
+      defaultValue: false,
+    ),
+    SyncSecretStore? syncSecrets,
+    LanSyncOptions syncOptions = const LanSyncOptions(),
     this.enableTelegram = const bool.fromEnvironment(
       'ENABLE_TELEGRAM',
       defaultValue: true,
@@ -74,12 +87,15 @@ class DependencyContainer {
     Iterable<UiModuleSpec> uiModules = const [],
   }) : database = database ?? AppDatabase() {
     final extraGraphModules = List<GraphModule>.of(graphModules);
-    tasksDAO = TasksDao(this.database);
-    projectsDao = ProjectsDao(this.database);
-    spheresDao = SpheresDao(this.database);
-    goalsDao = GoalsDao(this.database);
+    // Enrollment is persistent: omitting the bootstrap option on restart must
+    // not silently disable the journal of an already enrolled database.
+    taskSyncStore = DriftSyncStore(this.database);
+    tasksDAO = TasksDao(this.database, journal: taskSyncStore);
+    projectsDao = ProjectsDao(this.database, journal: taskSyncStore);
+    spheresDao = SpheresDao(this.database, journal: taskSyncStore);
+    goalsDao = GoalsDao(this.database, journal: taskSyncStore);
     habitsDao = HabitsDao(this.database);
-    workLogsDao = WorkLogsDao(this.database);
+    workLogsDao = WorkLogsDao(this.database, journal: taskSyncStore);
     tasksRepository = TasksRepository(tasksDAO);
     mcpPlugin = enableMcp
         ? McpServerPlugin(
@@ -96,6 +112,14 @@ class DependencyContainer {
     obsidianRepository = enableObsidian ? ObsidianVault() : null;
     ui = PluginUiRegistry();
     navigation = PluginNavigationController(ui);
+    syncPlugin = enableSync && !kIsWeb
+        ? LanSyncService(
+            deviceName: localSyncDeviceName(),
+            data: taskSyncStore,
+            secrets: syncSecrets ?? SecureSyncSecrets(),
+            options: syncOptions,
+          )
+        : null;
     graphPositionsRepository = GraphPositionsRepository();
     graphNotesRepository = GraphNotesRepository();
     graphStorageRepository = GraphStorageRepository(
@@ -120,11 +144,12 @@ class DependencyContainer {
       presentations: graphPresentations,
       editors: graphEditors,
       commands: graphCommands,
-      delete: (request) => DriftGraphDeletion(this.database).delete(
-        GraphNodeType.sphere,
-        request.node.id,
-        keepChildren: request.keepChildren,
-      ),
+      delete: (request) =>
+          DriftGraphDeletion(this.database, journal: taskSyncStore).delete(
+            GraphNodeType.sphere,
+            request.node.id,
+            keepChildren: request.keepChildren,
+          ),
     );
     goalsPlugin = createGoalsPlugin(
       goals: goalsRepository,
@@ -132,11 +157,12 @@ class DependencyContainer {
       presentations: graphPresentations,
       editors: graphEditors,
       commands: graphCommands,
-      delete: (request) => DriftGraphDeletion(this.database).delete(
-        GraphNodeType.goal,
-        request.node.id,
-        keepChildren: request.keepChildren,
-      ),
+      delete: (request) =>
+          DriftGraphDeletion(this.database, journal: taskSyncStore).delete(
+            GraphNodeType.goal,
+            request.node.id,
+            keepChildren: request.keepChildren,
+          ),
     );
     lifeGraphPlugin = createLifeGraphPlugin(
       spheres: spheresRepository,
@@ -186,11 +212,12 @@ class DependencyContainer {
       editors: graphEditors,
       commands: graphCommands,
       ui: ui,
-      delete: (request) => DriftGraphDeletion(this.database).delete(
-        GraphNodeType.project,
-        request.node.id,
-        keepChildren: request.keepChildren,
-      ),
+      delete: (request) =>
+          DriftGraphDeletion(this.database, journal: taskSyncStore).delete(
+            GraphNodeType.project,
+            request.node.id,
+            keepChildren: request.keepChildren,
+          ),
     );
     tasksPlugin = createTasksPlugin(
       tasks: tasksRepository,
@@ -201,11 +228,12 @@ class DependencyContainer {
       presentations: graphPresentations,
       editors: graphEditors,
       commands: graphCommands,
-      delete: (request) => DriftGraphDeletion(this.database).delete(
-        GraphNodeType.task,
-        request.node.id,
-        keepChildren: request.keepChildren,
-      ),
+      delete: (request) =>
+          DriftGraphDeletion(this.database, journal: taskSyncStore).delete(
+            GraphNodeType.task,
+            request.node.id,
+            keepChildren: request.keepChildren,
+          ),
     );
     assistantPlugin = enableAssistant
         ? AssistantPlugin(
@@ -246,11 +274,16 @@ class DependencyContainer {
       for (final module in uiModules) registerUiModule(module, ui),
       ...additionalPlugins,
       ?mcpPlugin,
+      if (syncPlugin != null) registerSyncUi(syncPlugin!, syncPlugin!, ui),
       ?assistantPlugin,
     ]);
   }
 
   final AppDatabase database;
+  final String? experimentalSyncDatasetId;
+  final bool enableSync;
+  late final LanSyncService? syncPlugin;
+  late final DriftSyncStore taskSyncStore;
   final bool enableTelegram;
   final bool enableObsidian;
   final bool enableMcp;
@@ -305,6 +338,9 @@ class DependencyContainer {
   }
 
   Future<void> _initialize() async {
+    if (experimentalSyncDatasetId != null) {
+      await taskSyncStore.initialize(experimentalSyncDatasetId!);
+    }
     await graphNotesRepository.init();
     await plugins.start();
   }

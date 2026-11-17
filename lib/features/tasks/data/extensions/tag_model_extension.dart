@@ -5,7 +5,7 @@ import 'package:tasks_api/tasks_api.dart' show Tag;
 /// Extension для преобразования Drift TagModel -> domain Tag
 extension TagDataToDomain on TagModel {
   Tag toDomain() {
-    return Tag(id: id, name: name, colorHex: colorHex);
+    return Tag(id: id, name: name, colorHex: colorHex, syncId: syncId);
   }
 }
 
