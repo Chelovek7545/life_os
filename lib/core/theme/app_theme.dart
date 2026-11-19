@@ -1,18 +1,18 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:graph_components/graph_components.dart';
+import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'app_colors.dart';
 
-
-
-const _white = Color(0xFFFAFAFA);   // zinc-50
-const _dark = Color(0xFF18181B);    // zinc-900
-const _muted = Color(0xFFA1A1AA);   // zinc-400
-const _track = Color(0xFF27272A);   // zinc-800
-const _border = Color(0x1FFFFFFF);  // white 12%
-const _fill = Color(0x0FFFFFFF);    // white 6%  — "стекло"
+const _white = Color(0xFFFAFAFA); // zinc-50
+const _dark = Color(0xFF18181B); // zinc-900
+const _muted = Color(0xFFA1A1AA); // zinc-400
+const _track = Color(0xFF27272A); // zinc-800
+const _border = Color(0x1FFFFFFF); // white 12%
+const _fill = Color(0x0FFFFFFF); // white 6%  — "стекло"
 const _popover = Color(0xF218181B); // zinc-900 95%
 
 final _shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(10));
@@ -52,7 +52,11 @@ final shadGlassTheme = ThemeData(
     scrolledUnderElevation: 0,
     centerTitle: false,
     foregroundColor: _white,
-    titleTextStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: _white),
+    titleTextStyle: TextStyle(
+      fontSize: 16,
+      fontWeight: FontWeight.w600,
+      color: _white,
+    ),
   ),
 
   // Cards — стеклянные: полупрозрачные + граница
@@ -79,7 +83,11 @@ final shadGlassTheme = ThemeData(
     overlayShape: RoundSliderOverlayShape(overlayRadius: 18),
     trackShape: RoundedRectSliderTrackShape(),
     valueIndicatorColor: _white,
-    valueIndicatorTextStyle: TextStyle(color: _dark, fontSize: 12, fontWeight: FontWeight.w600),
+    valueIndicatorTextStyle: TextStyle(
+      color: _dark,
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+    ),
     showValueIndicator: ShowValueIndicator.onlyForDiscrete,
   ),
 
@@ -163,7 +171,10 @@ final shadGlassTheme = ThemeData(
     enabledBorder: _fieldBorder,
     focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
-      borderSide: const BorderSide(color: Color(0xFFD4D4D8), width: 1.5), // ring
+      borderSide: const BorderSide(
+        color: Color(0xFFD4D4D8),
+        width: 1.5,
+      ), // ring
     ),
     errorBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(10),
@@ -178,16 +189,20 @@ final shadGlassTheme = ThemeData(
   // Switch / Checkbox / Radio
   switchTheme: SwitchThemeData(
     thumbColor: WidgetStateProperty.resolveWith(
-        (s) => s.contains(WidgetState.selected) ? _dark : _white),
+      (s) => s.contains(WidgetState.selected) ? _dark : _white,
+    ),
     trackColor: WidgetStateProperty.resolveWith(
-        (s) => s.contains(WidgetState.selected) ? _white : const Color(0xFF3F3F46)),
+      (s) =>
+          s.contains(WidgetState.selected) ? _white : const Color(0xFF3F3F46),
+    ),
     trackOutlineColor: WidgetStateProperty.all(_border),
     trackOutlineWidth: WidgetStateProperty.all(1),
     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
   ),
   checkboxTheme: CheckboxThemeData(
     fillColor: WidgetStateProperty.resolveWith(
-        (s) => s.contains(WidgetState.selected) ? _white : Colors.transparent),
+      (s) => s.contains(WidgetState.selected) ? _white : Colors.transparent,
+    ),
     checkColor: WidgetStateProperty.all(_dark),
     side: const BorderSide(color: Color(0xFF52525B), width: 1.5),
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
@@ -195,7 +210,9 @@ final shadGlassTheme = ThemeData(
   ),
   radioTheme: RadioThemeData(
     fillColor: WidgetStateProperty.resolveWith(
-        (s) => s.contains(WidgetState.selected) ? _white : const Color(0xFF52525B)),
+      (s) =>
+          s.contains(WidgetState.selected) ? _white : const Color(0xFF52525B),
+    ),
     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
   ),
 
@@ -214,8 +231,14 @@ final shadGlassTheme = ThemeData(
     labelColor: _white,
     unselectedLabelColor: _muted,
     labelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-    unselectedLabelStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-    indicator: BoxDecoration(color: const Color(0x1AFFFFFF), borderRadius: BorderRadius.circular(8)),
+    unselectedLabelStyle: const TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+    ),
+    indicator: BoxDecoration(
+      color: const Color(0x1AFFFFFF),
+      borderRadius: BorderRadius.circular(8),
+    ),
     indicatorSize: TabBarIndicatorSize.tab,
     dividerColor: Colors.transparent,
     dividerHeight: 0,
@@ -225,12 +248,18 @@ final shadGlassTheme = ThemeData(
   segmentedButtonTheme: SegmentedButtonThemeData(
     style: ButtonStyle(
       backgroundColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.selected) ? const Color(0x29FFFFFF) : Colors.transparent),
+        (s) => s.contains(WidgetState.selected)
+            ? const Color(0x29FFFFFF)
+            : Colors.transparent,
+      ),
       foregroundColor: WidgetStateProperty.resolveWith(
-          (s) => s.contains(WidgetState.selected) ? _white : _muted),
+        (s) => s.contains(WidgetState.selected) ? _white : _muted,
+      ),
       side: WidgetStateProperty.all(const BorderSide(color: _border)),
       shape: WidgetStateProperty.all(_shape),
-      textStyle: WidgetStateProperty.all(const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+      textStyle: WidgetStateProperty.all(
+        const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+      ),
       minimumSize: WidgetStateProperty.all(const Size(0, 36)),
     ),
   ),
@@ -250,7 +279,9 @@ final shadGlassTheme = ThemeData(
     modalBackgroundColor: _popover,
     surfaceTintColor: Colors.transparent,
     elevation: 0,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
   ),
   snackBarTheme: SnackBarThemeData(
     backgroundColor: _popover,
@@ -278,10 +309,12 @@ final shadGlassTheme = ThemeData(
     menuStyle: MenuStyle(
       backgroundColor: WidgetStateProperty.all(_popover),
       elevation: WidgetStateProperty.all(8),
-      shape: WidgetStateProperty.all(RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: _border),
-      )),
+      shape: WidgetStateProperty.all(
+        RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: _border),
+        ),
+      ),
     ),
   ),
   tooltipTheme: TooltipThemeData(
@@ -302,18 +335,35 @@ final shadGlassTheme = ThemeData(
     elevation: 0,
     indicatorColor: _border,
     iconTheme: WidgetStateProperty.resolveWith(
-        (s) => IconThemeData(size: 22, color: s.contains(WidgetState.selected) ? _white : _muted)),
+      (s) => IconThemeData(
+        size: 22,
+        color: s.contains(WidgetState.selected) ? _white : _muted,
+      ),
+    ),
     labelTextStyle: WidgetStateProperty.resolveWith(
-        (s) => TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: s.contains(WidgetState.selected) ? _white : _muted)),
+      (s) => TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        color: s.contains(WidgetState.selected) ? _white : _muted,
+      ),
+    ),
   ),
   listTileTheme: const ListTileThemeData(
     iconColor: _muted,
     textColor: _white,
-    titleTextStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: _white),
+    titleTextStyle: TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w500,
+      color: _white,
+    ),
     subtitleTextStyle: TextStyle(fontSize: 12, color: _muted),
     contentPadding: EdgeInsets.symmetric(horizontal: 12),
   ),
-  dividerTheme: const DividerThemeData(color: Color(0x14FFFFFF), thickness: 1, space: 24),
+  dividerTheme: const DividerThemeData(
+    color: Color(0x14FFFFFF),
+    thickness: 1,
+    space: 24,
+  ),
   progressIndicatorTheme: ProgressIndicatorThemeData(
     color: _white,
     linearTrackColor: _track,
@@ -327,6 +377,30 @@ final shadGlassTheme = ThemeData(
     thumbColor: WidgetStateProperty.all(const Color(0x33FFFFFF)),
   ),
 );
+
+final textTheme = GoogleFonts.interTextTheme()
+    .apply(bodyColor: AppColors.onSurface, displayColor: AppColors.onSurface)
+    .copyWith(
+      titleLarge: GoogleFonts.inter(
+        fontSize: 20,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.4,
+        color: AppColors.onSurface,
+      ),
+      titleMedium: GoogleFonts.inter(
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+        letterSpacing: -0.2,
+        color: AppColors.onSurface,
+      ),
+      bodyMedium: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
+      bodySmall: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurface),
+      labelLarge: GoogleFonts.inter(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        color: AppColors.onSurface,
+      ),
+    );
 
 class AppTheme {
   static ThemeData get darkTheme {
@@ -343,31 +417,45 @@ class AppTheme {
           borderGlass: AppColors.borderGlass,
         ),
       ],
-        checkboxTheme: CheckboxThemeData(
-    fillColor: WidgetStateProperty.resolveWith(
-        (s) => s.contains(WidgetState.selected) ? _white : Colors.transparent),
-    checkColor: WidgetStateProperty.all(_dark),
-    side: const BorderSide(color: Color(0xFF52525B), width: 1.5),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
-    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-  ),
-  radioTheme: RadioThemeData(
-    fillColor: WidgetStateProperty.resolveWith(
-        (s) => s.contains(WidgetState.selected) ? _white : const Color(0xFF52525B)),
-    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-  ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? _white : Colors.transparent,
+        ),
+        checkColor: WidgetStateProperty.all(_dark),
+        side: const BorderSide(color: Color(0xFF52525B), width: 1.5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected)
+              ? _white
+              : const Color(0xFF52525B),
+        ),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
 
-  // Chips / Tabs / Segmented
-  chipTheme: ChipThemeData(
-    backgroundColor: _fill,
-    selectedColor: const Color(0x29FFFFFF),
-    side: const BorderSide(color: _border),
-    shape: const StadiumBorder(),
-    labelStyle: const TextStyle(fontSize: 13, color: _white),
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-    elevation: 0,
-    pressElevation: 0,
-  ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.surfaceGlass,
+        selectedColor: const Color(0x29FFFFFF),
+        side: BorderSide(color: AppColors.borderGlass),
+        shape: StadiumBorder(),
+        labelStyle: textTheme.labelLarge,
+
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      ),
+
+      // Chips / Tabs / Segmented
+      // chipTheme: ChipThemeData(
+      //   backgroundColor: _fill,
+      //   selectedColor: const Color(0x29FFFFFF),
+      //   side: const BorderSide(color: _border),
+      //   shape: const StadiumBorder(),
+      //   labelStyle: const TextStyle(fontSize: 13, color: _white),
+      //   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      //   elevation: 0,
+      //   pressElevation: 0,
+      // ),
 
       //Чтобы были одинаковые отступы и т.д
       visualDensity: VisualDensity.standard,
@@ -401,7 +489,13 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.inputGlass,
-        contentPadding: const EdgeInsets.all(24),
+
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 18,
+        ),
+
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: AppColors.inputBorderGlass),
@@ -447,6 +541,98 @@ class AppTheme {
         bodyMedium: AppTypography.bodyMd,
         bodySmall: AppTypography.bodySm,
         labelMedium: AppTypography.codeLabel,
+      ),
+
+      //NEWWWW
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md + 4),
+          side: BorderSide(color: AppColors.borderGlass),
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.fixed,
+        closeIconColor: AppColors.onSurface,
+        backgroundColor: AppColors.surfaceContainer,
+        showCloseIcon: true,
+        contentTextStyle: textTheme.bodyMedium,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadiusGeometry.circular(AppRadius.md),
+          side: BorderSide(color: AppColors.borderGlass),
+        ),
+      ),
+      tooltipTheme: TooltipThemeData(
+        decoration: BoxDecoration(
+          color: AppColors.onSurface,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        textStyle: TextStyle(color: AppColors.surfaceContainer, fontSize: 12),
+      ),
+
+      // progressIndicatorTheme: ProgressIndicatorThemeData(
+      //   color: primary,
+      //   linearTrackColor: fg.withValues(alpha: 0.12),
+      // ),
+
+      // Кнопки: filled = primary, elevated = secondary, outlined = outline, text = ghost
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.surfaceBright,
+          foregroundColor: AppColors.onBackground,
+          disabledBackgroundColor: _dark.withValues(alpha: .6) ,
+          disabledForegroundColor: _white.withValues(alpha: .3),
+          overlayColor: AppColors.onSurfaceVariant.withValues(alpha: .08),
+          elevation: 0,
+          minimumSize: const Size(64, 40),
+          padding: _btnPad,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.full),
+            side: BorderSide(width: 1, color: AppColors.inputBorderGlass),
+          ),
+          textStyle: _btnText,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ),
+      // elevatedButtonTheme: ElevatedButtonThemeData(
+      //   style: ElevatedButton.styleFrom(
+      //     backgroundColor: _track,
+      //     foregroundColor: _white,
+      //     elevation: 0,
+      //     shadowColor: Colors.transparent,
+      //     overlayColor: Colors.white10,
+      //     minimumSize: const Size(64, 40),
+      //     padding: _btnPad,
+      //     shape: _shape,
+      //     textStyle: _btnText,
+      //     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      //   ),
+      // ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _white,
+          overlayColor: Colors.white10,
+          side: const BorderSide(color: _border),
+          minimumSize: const Size(64, 40),
+          padding: _btnPad,
+          shape: StadiumBorder(),
+          textStyle: _btnText,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ),
+
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: _white,
+          overlayColor: AppColors.primary,
+          minimumSize: const Size(0, 36),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          shape: StadiumBorder(),
+          textStyle: _btnText,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
       ),
     );
   }

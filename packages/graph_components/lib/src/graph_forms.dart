@@ -68,7 +68,7 @@ class _GraphNodeEditDialogState extends State<GraphNodeEditDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    backgroundColor: GraphComponentPalette.of(context).surfaceContainer,
+    //backgroundColor: GraphComponentPalette.of(context).surfaceContainer,
     title: Text(widget.spec.editTitle),
     content: SizedBox(
       width: 320,

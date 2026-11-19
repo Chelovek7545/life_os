@@ -1,3 +1,4 @@
+import 'package:life_os/core/theme/app_theme_by_claude.dart';
 import 'package:plugin_ui/plugin_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:life_os/app/dependency_container.dart';

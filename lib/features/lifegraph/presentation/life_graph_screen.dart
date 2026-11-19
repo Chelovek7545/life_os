@@ -16,6 +16,7 @@ import 'package:spheres_api/spheres_api.dart';
 import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:notes_api/notes_api.dart';
 import 'widgets/markdown_note_dialog.dart';
+import 'widgets/graph_note_creation_dialog.dart';
 import 'widgets/graph_note_context_menu.dart';
 import 'widgets/graph_directory_picker.dart';
 
@@ -373,49 +374,21 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       );
 
   Future<void> _showCreateNoteOptions(BuildContext context) async {
-    final choice = await showDialog<int>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceContainer,
-        title: const Text('Добавить заметку'),
-        content: const Text('Выберите способ создания заметки на графе:'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 0),
-            child: const Text('Пустой стикер'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, 1),
-            child: const Text('Из Obsidian'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, 3),
-            child: const Text('Из Markdown-хранилища'),
-          ),
-          FilledButton(
-            onPressed: widget.viewModel.canCreateMarkdown
-                ? () => Navigator.pop(ctx, 2)
-                : null,
-            child: const Text('Создать .md'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Отмена'),
-          ),
-        ],
-      ),
+    final choice = await showGraphNoteCreationDialog(
+      context,
+      canCreateMarkdown: widget.viewModel.canCreateMarkdown,
     );
 
     if (choice == null) return;
     if (!context.mounted) return;
 
-    if (choice == 0) {
+    if (choice == GraphNoteCreation.sticker) {
       widget.viewModel.createNote();
-    } else if (choice == 1) {
+    } else if (choice == GraphNoteCreation.obsidian) {
       _showVaultNotePicker(context, markdown: false);
-    } else if (choice == 3) {
+    } else if (choice == GraphNoteCreation.markdownLibrary) {
       _showVaultNotePicker(context, markdown: true);
-    } else if (choice == 2) {
+    } else if (choice == GraphNoteCreation.markdownFile) {
       final value = await showMarkdownNoteDialog(context);
       if (value == null || !mounted) return;
       try {

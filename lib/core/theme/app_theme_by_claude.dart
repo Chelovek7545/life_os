@@ -75,13 +75,24 @@ class AppThemeNew {
         .apply(bodyColor: fg, displayColor: fg)
         .copyWith(
           titleLarge: GoogleFonts.inter(
-              fontSize: 20, fontWeight: FontWeight.w600, letterSpacing: -0.4, color: fg),
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.4,
+            color: fg,
+          ),
           titleMedium: GoogleFonts.inter(
-              fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: -0.2, color: fg),
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.2,
+            color: fg,
+          ),
           bodyMedium: GoogleFonts.inter(fontSize: 14, color: fg),
           bodySmall: GoogleFonts.inter(fontSize: 12, color: muted),
           labelLarge: GoogleFonts.inter(
-              fontSize: 14, fontWeight: FontWeight.w500, color: fg),
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: fg,
+          ),
         );
 
     return ThemeData(
@@ -150,8 +161,10 @@ class AppThemeNew {
         filled: true,
         fillColor: glass,
         isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 12,
+        ),
         hintStyle: TextStyle(color: muted, fontSize: 14),
         border: inputBorder(glassBorder),
         enabledBorder: inputBorder(glassBorder),
@@ -167,8 +180,10 @@ class AppThemeNew {
           filled: true,
           fillColor: glass,
           isDense: true,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
           border: inputBorder(glassBorder),
           enabledBorder: inputBorder(glassBorder),
           focusedBorder: inputBorder(fg.withValues(alpha: 0.5), 1.5),
@@ -178,10 +193,12 @@ class AppThemeNew {
           surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
           elevation: const WidgetStatePropertyAll(0),
           padding: const WidgetStatePropertyAll(EdgeInsets.all(4)),
-          shape: WidgetStatePropertyAll(RoundedRectangleBorder(
-            borderRadius: radius,
-            side: BorderSide(color: glassBorder),
-          )),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: radius,
+              side: BorderSide(color: glassBorder),
+            ),
+          ),
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(
@@ -198,25 +215,32 @@ class AppThemeNew {
       // ---- Switch / Checkbox / Radio / Slider ----
       switchTheme: SwitchThemeData(
         trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
-        trackColor: WidgetStateProperty.resolveWith((s) =>
-            s.contains(WidgetState.selected)
-                ? primary
-                : (isDark ? const Color(0xFF3F3F46) : const Color(0xFFD4D4D8))),
-        thumbColor: WidgetStateProperty.resolveWith((s) =>
-            s.contains(WidgetState.selected) ? onPrimary : fg.withValues(alpha: 0.9)),
+        trackColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected)
+              ? primary
+              : (isDark ? const Color(0xFF3F3F46) : const Color(0xFFD4D4D8)),
+        ),
+        thumbColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected)
+              ? onPrimary
+              : fg.withValues(alpha: 0.9),
+        ),
         thumbIcon: const WidgetStatePropertyAll(null),
         trackOutlineWidth: const WidgetStatePropertyAll(0),
       ),
       checkboxTheme: CheckboxThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
         side: BorderSide(color: muted, width: 1),
-        fillColor: WidgetStateProperty.resolveWith((s) =>
-            s.contains(WidgetState.selected) ? primary : Colors.transparent),
+        fillColor: WidgetStateProperty.resolveWith(
+          (s) =>
+              s.contains(WidgetState.selected) ? primary : Colors.transparent,
+        ),
         checkColor: WidgetStatePropertyAll(onPrimary),
       ),
       radioTheme: RadioThemeData(
-        fillColor: WidgetStateProperty.resolveWith((s) =>
-            s.contains(WidgetState.selected) ? primary : muted),
+        fillColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected) ? primary : muted,
+        ),
       ),
       sliderTheme: SliderThemeData(
         trackHeight: 6,
@@ -257,8 +281,11 @@ class AppThemeNew {
         ),
       ),
       tooltipTheme: TooltipThemeData(
-        decoration: BoxDecoration(color: primary, borderRadius: BorderRadius.circular(6)),
-        textStyle: TextStyle(color: onPrimary, fontSize: 12),
+        decoration: BoxDecoration(
+          color: primary,
+          borderRadius: BorderRadius.circular(6),
+        ),
+       // textStyle: TextStyle(color: onPrimary, fontSize: 12),
       ),
 
       // ---- Navigation / chips ----
@@ -268,12 +295,17 @@ class AppThemeNew {
         indicatorColor: fg.withValues(alpha: 0.1),
         elevation: 0,
         labelTextStyle: WidgetStatePropertyAll(
-            GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500, color: fg)),
+          GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: fg,
+          ),
+        ),
         iconTheme: WidgetStatePropertyAll(IconThemeData(color: fg, size: 22)),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: glass,
-        selectedColor: primary,
+        selectedColor: glass,
         side: BorderSide(color: glassBorder),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         labelStyle: textTheme.labelLarge,
@@ -341,18 +373,23 @@ class GlassBackground extends StatelessWidget {
     return Stack(
       children: [
         Positioned.fill(
-          child: ColoredBox(
-              color: isDark ? AppColors.dBg : AppColors.lBg),
+          child: ColoredBox(color: isDark ? AppColors.dBg : AppColors.lBg),
         ),
         Positioned(
           top: -120,
           left: -80,
-          child: _Blob(AppColors.accentA.withValues(alpha: isDark ? 0.35 : 0.30), 320),
+          child: _Blob(
+            AppColors.accentA.withValues(alpha: isDark ? 0.35 : 0.30),
+            320,
+          ),
         ),
         Positioned(
           bottom: -140,
           right: -100,
-          child: _Blob(AppColors.accentB.withValues(alpha: isDark ? 0.25 : 0.22), 340),
+          child: _Blob(
+            AppColors.accentB.withValues(alpha: isDark ? 0.25 : 0.22),
+            340,
+          ),
         ),
         Positioned.fill(
           child: BackdropFilter(
@@ -373,10 +410,10 @@ class _Blob extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-      );
+    width: size,
+    height: size,
+    decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+  );
 }
 
 /* ---------- Usage ----------
