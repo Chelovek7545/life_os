@@ -67,6 +67,20 @@ class MemoryTasks implements TasksApi {
     items[id] = current.copyWith(status: status, updatedAt: DateTime.now());
   });
   @override
+  Future<void> moveTaskUnder(String id, String parentId) => _write(id, () {
+    final task = items[id];
+    if (task == null || task.parentTaskId == parentId) return;
+    final visited = {id};
+    String? ancestorId = parentId;
+    while (ancestorId != null) {
+      if (!visited.add(ancestorId)) throw StateError('Task parent cycle');
+      final ancestor = items[ancestorId];
+      if (ancestor == null) throw StateError('Missing task parent');
+      ancestorId = ancestor.parentTaskId;
+    }
+    items[id] = task.copyWith(parentTaskId: Wrapped(parentId));
+  });
+  @override
   Future<void> deleteTask(String id) => _write(id, () => items.remove(id));
 }
 

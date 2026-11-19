@@ -13,6 +13,8 @@ import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/fixed_fade_mask.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/ui/task_card.dart';
+import 'package:life_os/core/ui/task_drag.dart';
+import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:tasks_api/tasks_api.dart' show Task;
 
@@ -114,9 +116,6 @@ class TimelineBody extends StatefulWidget {
     this.taskFormProjects,
     this.onSubmitNewTask,
     this.onExternalDrop,
-    this.isOverUnscheduled,
-    this.onEventToUnscheduled,
-    this.onHoverUnscheduled,
   });
 
   final List<TaskEvent> events;
@@ -142,9 +141,6 @@ class TimelineBody extends StatefulWidget {
   final void Function(Task task) onToggleTask;
   final void Function(Task task, DateTime startsAt, DateTime endsAt)?
   onExternalDrop;
-  final bool Function(Offset globalPosition)? isOverUnscheduled;
-  final void Function(Task task)? onEventToUnscheduled;
-  final void Function(bool hovering)? onHoverUnscheduled;
 
   @override
   State<TimelineBody> createState() => _TimelineBodyState();
@@ -157,17 +153,14 @@ class _TimelineBodyState extends State<TimelineBody>
   int _panelMaxCount = 0;
   double? _panelHeight;
   double _panelMaxHeight = 360;
-  DateTime? _panelDragOrigin;
   final _dayPanelKey = GlobalKey();
   DateTime? _hoveredPanelDay;
   bool get _showPanelDropTargets =>
-      (_draggingId != null ||
-          (_dropTask != null && _panelDragOrigin == null)) &&
-      widget.onEventToDay != null;
+      _dropTask != null &&
+      (widget.onEventToDay != null || widget.onDayTaskMoved != null);
   bool get _showPanelContents => _panelExpanded || _showPanelDropTargets;
 
   DateTime? _panelDropDayAt(Offset global) {
-    if (!_showPanelDropTargets) return null;
     final box = _dayPanelKey.currentContext?.findRenderObject();
     if (box is! RenderBox || !box.hasSize) return null;
     final local = box.globalToLocal(global);
@@ -234,22 +227,19 @@ class _TimelineBodyState extends State<TimelineBody>
     Widget column(DateTime day, double width) => SizedBox(
       key: ValueKey(('timeline.panel-day', _dateOnly(day))),
       width: width,
-      child: DragTarget<Task>(
-        onWillAcceptWithDetails: (_) =>
-            _panelDragOrigin != null && widget.onDayTaskMoved != null,
-        onAcceptWithDetails: (details) {
-          final source = _panelDragOrigin;
-          if (source != null && !_isSameDay(source, day)) {
-            widget.onDayTaskMoved?.call(details.data, source, day);
-          }
-        },
-        builder: (context, candidates, rejected) => ColoredBox(
-          color:
-              candidates.isEmpty &&
-                  !(_hoveredPanelDay != null &&
-                      _isSameDay(day, _hoveredPanelDay!))
-              ? Colors.transparent
-              : AppColors.primary.withValues(alpha: .12),
+      child: DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          border: DateUtils.isSameDay(day, _hoveredPanelDay)
+              ? Border.all(color: AppColors.primary)
+              : null,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: ColoredBox(
+          color: DateUtils.isSameDay(day, _hoveredPanelDay)
+              ? taskDropFill(Colors.transparent)
+              : Colors.transparent,
           child: ListView.builder(
             primary: false,
             padding: const EdgeInsets.all(4),
@@ -257,31 +247,11 @@ class _TimelineBodyState extends State<TimelineBody>
             itemBuilder: (context, index) {
               final task = _dateOnlyTasksFor(day)[index];
               return Padding(
+                key: ValueKey(task.id),
                 padding: const EdgeInsets.only(bottom: 4),
-                child: LongPressDraggable<Task>(
-                  data: task,
-                  onDragStarted: () => _panelDragOrigin = _dateOnly(day),
-                  onDragEnd: (_) => _panelDragOrigin = null,
-                  dragAnchorStrategy: pointerDragAnchorStrategy,
-                  feedback: Material(
-                    color: AppColors.surfaceContainerHigh,
-                    borderRadius: BorderRadius.circular(8),
-                    child: SizedBox(
-                      width: 200,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text(
-                          task.title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  ),
-                  childWhenDragging: Opacity(
-                    opacity: .35,
-                    child: _dateOnlyCard(task),
-                  ),
+                child: TaskDraggable(
+                  task: task,
+                  sourceDay: _dateOnly(day),
                   child: _dateOnlyCard(task),
                 ),
               );
@@ -532,16 +502,11 @@ class _TimelineBodyState extends State<TimelineBody>
   double? _zoomFocalLocalDy;
 
   // Drag & Resize State
-  String? _draggingId;
-  double _dragStartDy = 0;
-  double _dragStartDx = 0;
-  int _dragStartMinutes = 0;
   String? _resizingId;
   double _resizeStartDy = 0;
   int _resizeStartDuration = 0;
   int? _ghostStart;
   int? _ghostDuration;
-  int _ghostDayOffset = 0;
 
   // Layout Tracking (Для правильного ресайза)
   double _lastColumnWidth = 0;
@@ -558,20 +523,10 @@ class _TimelineBodyState extends State<TimelineBody>
   bool _syncingHeaderScroll = false;
   double _lastDayViewWidth = 0;
 
-  // Drag & Drop из списка Unscheduled
-  Task? _dropTask;
-  int? _dropMinutes;
-  int _dropDurationMinutes = 60;
-  int _dropDayIndex = 0;
+  TaskDrag? _dropTask;
+  ({DateTime day, int? minutes, int dayIndex, int duration})? _dropTarget;
 
-  // Реверс: drag события в список Unscheduled
-  bool _hoveringUnscheduled = false;
-
-  void _updateUnscheduledHover(bool hovering) {
-    if (_hoveringUnscheduled == hovering) return;
-    _hoveringUnscheduled = hovering;
-    widget.onHoverUnscheduled?.call(hovering);
-  }
+  bool get _movingTimedEvent => identical(_dropTask?.sourceTimeline, this);
 
   void _handleHeaderWeekChange(DateTime date) {
     _pendingHeaderWeekChange = true;
@@ -707,147 +662,203 @@ class _TimelineBodyState extends State<TimelineBody>
     });
   }
 
-  // --- Drag & Drop из списка Unscheduled ---
-
-  ({int minutes, int dayIndex})? _dropFromGlobal(Offset globalPosition) {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null) return null;
-    final local = box.globalToLocal(globalPosition);
-    final isWeek = widget.weekStart != null;
-
-    final verticalOffset = _verticalController.hasClients
-        ? _verticalController.offset
-        : 0.0;
-    final topPad = _gridTopPadding;
-    final dyFromGridTop = local.dy - topPad + verticalOffset;
-    final minutes = _snapToGrid(
-      (dyFromGridTop / _hourHeight * 60).round(),
-    ).clamp(_startHour * 60, _endHour * 60).toInt();
-
-    if (isWeek) {
-      final horizontalOffset = _horizontalController.hasClients
-          ? _horizontalController.offset
-          : 0.0;
-      final xInContent = local.dx - _leftLabelWidth + horizontalOffset;
-      final dayIndex = (xInContent / _lastColumnWidth)
-          .floor()
-          .clamp(0, _weekTotalDays - 1)
-          .toInt();
-      return (minutes: minutes, dayIndex: dayIndex);
+  TaskEvent? _localEvent(TaskDrag drag) {
+    if (!identical(drag.sourceTimeline, this)) return null;
+    for (final event in widget.events) {
+      if (event.task.id == drag.task.id) return event;
     }
-    return (minutes: minutes, dayIndex: 0);
+    return null;
   }
 
-  int _dropDurationFor(Task task) {
-    if (task.startsAt != null && task.endsAt != null) {
-      return task.duration.inMinutes.clamp(_minDurationMinutes, _totalMinutes);
+  bool _canMoveDayTask(Task task) =>
+      isCalendarRange(task) || (task.startsAt?.isDateOnly ?? false);
+
+  ({DateTime day, int? minutes, int dayIndex, int duration})? _targetFor(
+    DragTargetDetails<TaskDrag> details,
+  ) {
+    if (_isSelecting ||
+        _showDraftForm ||
+        _resizingId != null ||
+        _pinching ||
+        _panZooming ||
+        _widthPinching ||
+        _widthPanZooming) {
+      return null;
     }
-    return 60;
+    final drag = details.data;
+    final task = drag.task;
+    final pointer = drag.pointerAt(details.offset);
+    final panelDay = _panelDropDayAt(pointer);
+    final sourceDay = drag.sourceDay ?? task.startsAt;
+    if (panelDay != null) {
+      if (_canMoveDayTask(task)) {
+        if (widget.onDayTaskMoved == null ||
+            DateUtils.isSameDay(sourceDay, panelDay)) {
+          return null;
+        }
+      } else if (widget.onEventToDay == null) {
+        return null;
+      }
+      return (day: panelDay, minutes: null, dayIndex: 0, duration: 0);
+    }
+
+    final event = _localEvent(drag);
+    if (event == null &&
+        (widget.onExternalDrop == null ||
+            (isCalendarRange(task) && task.startsAt!.isDateOnly))) {
+      return null;
+    }
+    final box = context.findRenderObject();
+    if (box is! RenderBox || !box.hasSize) return null;
+    final local = box.globalToLocal(pointer);
+    if (!(Offset.zero & box.size).contains(local) ||
+        local.dx < _leftLabelWidth ||
+        local.dy < widget.topPadding) {
+      return null;
+    }
+    final y = local.dy - _gridTopPadding + _verticalController.offset;
+    if (y < 0 || y >= _totalHeight) return null;
+
+    final week = widget.weekStart;
+    var index = 0;
+    var day = _dateOnly(widget.anchorDate ?? DateTime.now());
+    if (week != null) {
+      if (_lastColumnWidth <= 0) return null;
+      final x = local.dx - _leftLabelWidth + _horizontalController.offset;
+      index = (x / _lastColumnWidth).floor();
+      if (index < 0 || index >= _weekTotalDays) return null;
+      final firstDay = _visibleStart(week);
+      if (event?.date case final eventDate?) {
+        final delta = (pointer.dx - drag.startPosition.dx) / _lastColumnWidth;
+        final shift = delta.abs() > .7 ? delta.round() : 0;
+        index = _clampInt(
+          _daysBetween(firstDay, eventDate) + shift,
+          0,
+          _weekTotalDays - 1,
+        );
+      }
+      day = _addDays(firstDay, index);
+    }
+    final duration =
+        event?.durationMinutes ??
+        (task.startsAt != null && task.endsAt != null
+            ? math.max(_minDurationMinutes, task.duration.inMinutes)
+            : 60);
+    final rawMinutes = event == null
+        ? y / _hourHeight * 60
+        : event.startMinutes +
+              (pointer.dy - drag.startPosition.dy) / _hourHeight * 60;
+    final minutes = _clampInt(
+      _snapToGrid(rawMinutes.round()),
+      _startHour * 60,
+      math.max(_startHour * 60, _endHour * 60 - duration),
+    );
+    return (day: day, minutes: minutes, dayIndex: index, duration: duration);
   }
 
-  void _onExternalDropMove(DragTargetDetails<Task> details) {
-    final drop = _dropFromGlobal(details.offset);
-    if (drop == null) return;
-    final panelDay = _panelDropDayAt(details.offset);
-    final minutes = panelDay == null ? drop.minutes : null;
-    final duration = _dropDurationFor(details.data);
-    if (_dropTask?.id == details.data.id &&
-        _dropMinutes == minutes &&
-        _hoveredPanelDay == panelDay &&
-        _dropDayIndex == drop.dayIndex &&
-        _dropDurationMinutes == duration) {
-      return;
-    }
+  void _previewDrop(DragTargetDetails<TaskDrag> details) {
+    if (!_canAcceptDrag(details.data)) return;
+    final target = _targetFor(details);
+    if (identical(_dropTask, details.data) && _dropTarget == target) return;
     setState(() {
       _dropTask = details.data;
-      _dropMinutes = minutes;
-      _hoveredPanelDay = panelDay;
-      _dropDayIndex = drop.dayIndex;
-      _dropDurationMinutes = duration;
+      _dropTarget = target;
+      _hoveredPanelDay = target != null && target.minutes == null
+          ? target.day
+          : null;
     });
   }
 
-  void _onExternalDropAccept(DragTargetDetails<Task> details) {
-    final panelDay = _panelDropDayAt(details.offset);
-    final drop = _dropFromGlobal(details.offset);
-    final task = details.data;
-    _clearExternalDrop();
+  bool _canAcceptDrag(TaskDrag drag) =>
+      !_isSelecting &&
+      !_showDraftForm &&
+      (widget.onEventToDay != null ||
+          widget.onDayTaskMoved != null ||
+          widget.onExternalDrop != null ||
+          _localEvent(drag) != null);
 
-    if (panelDay != null) {
-      widget.onEventToDay?.call(task, panelDay);
+  void _acceptDrop(DragTargetDetails<TaskDrag> details) {
+    final target = _targetFor(details);
+    _clearDrop(details.data);
+    if (target == null) return;
+    final drag = details.data;
+    final task = drag.task;
+    final day = target.day;
+    final minutes = target.minutes;
+    if (minutes == null) {
+      if (_canMoveDayTask(task)) {
+        widget.onDayTaskMoved?.call(
+          task,
+          (drag.sourceDay ?? task.startsAt)!,
+          day,
+        );
+      } else {
+        widget.onEventToDay?.call(task, day);
+      }
       return;
     }
 
-    //Раньше здесь был if (drop == null || task.startsAt != null) return;
-    if (drop == null) return;
-
-    final isWeek = widget.weekStart != null;
-    final day = isWeek
-        ? _addDays(_visibleStart(widget.weekStart!), drop.dayIndex)
-        : _dateOnly(widget.anchorDate ?? DateTime.now());
-
-    final durationMinutes = _dropDurationFor(task);
-    final maxStart = _endHour * 60 - durationMinutes;
-    final startMinutes = drop.minutes
-        .clamp(_startHour * 60, math.max(_startHour * 60, maxStart))
-        .toInt();
+    final event = _localEvent(drag);
+    if (event != null) {
+      final newDate =
+          widget.weekStart != null && !DateUtils.isSameDay(event.date, day)
+          ? day
+          : null;
+      if (newDate != null || minutes != event.startMinutes) {
+        widget.onEventChanged(
+          task,
+          startMinutes: minutes,
+          durationMinutes: target.duration,
+          newDate: newDate,
+        );
+      }
+      return;
+    }
 
     final start = DateTime(
       day.year,
       day.month,
       day.day,
-      startMinutes ~/ 60,
-      startMinutes % 60,
+      minutes ~/ 60,
+      minutes % 60,
     );
     widget.onExternalDrop?.call(
       task,
       start,
-      start.add(Duration(minutes: durationMinutes)),
+      start.add(Duration(minutes: target.duration)),
     );
   }
 
-  void _clearExternalDrop() {
-    if (_dropMinutes == null && _dropTask == null) return;
+  void _clearDrop(TaskDrag? drag) {
+    if (_dropTask == null || !identical(_dropTask, drag)) return;
     setState(() {
       _dropTask = null;
-      _dropMinutes = null;
+      _dropTarget = null;
       _hoveredPanelDay = null;
-      _dropDurationMinutes = 60;
-      _dropDayIndex = 0;
     });
   }
 
-  bool _onExternalDropWillAccept(DragTargetDetails<Task> details) {
-    if (_isSelecting ||
-        _showDraftForm ||
-        (_panelDragOrigin != null && isCalendarRange(details.data))) {
-      return false;
-    }
-    // Reveal even an empty/collapsed day panel as soon as a task enters.
-    _onExternalDropMove(details);
-    return true;
-  }
-
   Widget _buildDropGhost() {
-    final minutes = _dropMinutes;
-    if (minutes == null) return const SizedBox.shrink();
+    final target = _dropTarget;
+    final minutes = target?.minutes;
+    if (target == null || minutes == null) return const SizedBox.shrink();
     final top = (minutes - _startHour * 60) / 60 * _hourHeight;
     final height = math.max(
       30.0,
-      _dropDurationMinutes / 60 * _hourHeight + 4.0,
+      math.min(_totalHeight - top, target.duration / 60 * _hourHeight + 4.0),
     );
     final double left;
     final double width;
     if (widget.weekStart != null) {
       final colW = _lastColumnWidth;
-      left = _dropDayIndex * colW + 3;
+      left = target.dayIndex * colW + 3;
       width = math.max(0.0, colW - 6);
     } else {
       left = _leftLabelWidth + 12;
       width = math.max(0.0, _lastDayViewWidth - 4);
     }
     final start = TimeOfDay(hour: (minutes ~/ 60) % 24, minute: minutes % 60);
-    final endMinutes = minutes + _dropDurationMinutes;
+    final endMinutes = minutes + target.duration;
     final end = TimeOfDay(
       hour: (endMinutes ~/ 60) % 24,
       minute: endMinutes % 60,
@@ -860,9 +871,9 @@ class _TimelineBodyState extends State<TimelineBody>
       child: IgnorePointer(
         child: Container(
           decoration: BoxDecoration(
-            color: _orange.withValues(alpha: 0.14),
+            color: taskDropFill(Colors.transparent),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: _orange.withValues(alpha: 0.8)),
+            border: Border.all(color: AppColors.primary),
           ),
           child: Padding(
             padding: const EdgeInsets.all(4),
@@ -876,9 +887,9 @@ class _TimelineBodyState extends State<TimelineBody>
                     '${_formatTime(start)} – ${_formatTime(end)}',
                     style: const TextStyle(color: Colors.white70, fontSize: 11),
                   ),
-                  if (_dropTask != null)
+                  if (_dropTask != null && height >= 40)
                     Text(
-                      _dropTask!.title,
+                      _dropTask!.task.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -994,7 +1005,7 @@ class _TimelineBodyState extends State<TimelineBody>
   }
 
   bool get _isInteracting =>
-      _draggingId != null ||
+      _movingTimedEvent ||
       _resizingId != null ||
       _pinching ||
       _panZooming ||
@@ -1010,17 +1021,6 @@ class _TimelineBodyState extends State<TimelineBody>
   // Анимация зума ширины
   double _zoomFromWidthScale = 1.0;
   double _zoomTargetWidthScale = 1.0;
-
-  void _cancelDrag() {
-    setState(() {
-      _draggingId = null;
-      _hoveredPanelDay = null;
-      _ghostStart = null;
-      _ghostDuration = null;
-      _ghostDayOffset = 0;
-    });
-    _updateUnscheduledHover(false);
-  }
 
   void _cancelResize() {
     setState(() {
@@ -1403,7 +1403,7 @@ class _TimelineBodyState extends State<TimelineBody>
     if (!_pinchPointers.containsKey(event.pointer)) return;
     _pinchPointers[event.pointer] = event.position;
     if (_pinchPointers.length < 2 || _pinchStartDistance <= 0) return;
-    if (_draggingId != null || _resizingId != null) return;
+    if (_movingTimedEvent || _resizingId != null) return;
 
     final positions = _pinchPointers.values.toList();
     final scale = (positions[0] - positions[1]).distance / _pinchStartDistance;
@@ -1486,113 +1486,6 @@ class _TimelineBodyState extends State<TimelineBody>
     // Только высота
     _applyHourHeight(_hourHeight * factor, focalLocalDy: focalLocalDy);
   } // --- Drag & Resize Handlers ---
-
-  void _onDragStart(TaskEvent event, LongPressStartDetails details) {
-    // Не начинаем drag если уже идёт pinch, pan-zoom или width-zoom
-    if (_pinching || _panZooming || _widthPinching || _widthPanZooming) return;
-    if (_pinchPointers.length > 1 || _widthPinchPointers.length > 1) return;
-
-    HapticFeedback.lightImpact();
-    setState(() {
-      _draggingId = event.task.id;
-      _dragStartDy = details.globalPosition.dy;
-      _dragStartDx = details.globalPosition.dx;
-      _dragStartMinutes = event.startMinutes;
-      _ghostStart = event.startMinutes;
-      _ghostDuration = event.durationMinutes;
-      _ghostDayOffset = 0;
-    });
-  }
-
-  void _onDragUpdate(TaskEvent event, LongPressMoveUpdateDetails details) {
-    // Если начался pinch/pan-zoom во время drag — отменяем drag
-    if (_pinching ||
-        _panZooming ||
-        _widthPinching ||
-        _widthPanZooming ||
-        _pinchPointers.length > 1 ||
-        _widthPinchPointers.length > 1) {
-      _cancelDrag();
-      return;
-    }
-
-    final dyDelta = details.globalPosition.dy - _dragStartDy;
-    final minutesDelta = (dyDelta / _hourHeight * 60.0).round();
-    final minStart = _startHour * 60;
-    final maxStart = _endHour * 60 - event.durationMinutes;
-    final newStart = _clampInt(
-      _snapToGrid(_dragStartMinutes + minutesDelta),
-      minStart,
-      math.max(minStart, maxStart),
-    );
-
-    var dayOffset = 0;
-    if (widget.weekStart != null &&
-        event.date != null &&
-        _lastColumnWidth > 0) {
-      final dxDelta = details.globalPosition.dx - _dragStartDx;
-      final rawOffset = dxDelta / _lastColumnWidth;
-      final roundedOffset = rawOffset >= 0
-          ? rawOffset.floorToDouble()
-          : rawOffset.ceilToDouble();
-      final finalOffset = rawOffset.abs() > 0.7
-          ? rawOffset.roundToDouble()
-          : roundedOffset;
-
-      final visibleStart = _visibleStart(widget.weekStart!);
-      final visibleEnd = _visibleEnd(widget.weekStart!);
-      final originalDay = _dateOnly(event.date!);
-      var targetDay = _addDays(originalDay, finalOffset.toInt());
-      if (targetDay.isBefore(visibleStart)) targetDay = visibleStart;
-      if (targetDay.isAfter(visibleEnd)) targetDay = visibleEnd;
-      dayOffset = _daysBetween(originalDay, targetDay);
-    }
-
-    setState(() {
-      _ghostStart = newStart;
-      _ghostDayOffset = dayOffset;
-      _hoveredPanelDay = _panelDropDayAt(details.globalPosition);
-    });
-
-    final hovering =
-        widget.isOverUnscheduled?.call(details.globalPosition) ?? false;
-    _updateUnscheduledHover(hovering);
-  }
-
-  void _onDragEnd(TaskEvent event, LongPressEndDetails details) {
-    final panelDay = _panelDropDayAt(details.globalPosition);
-    final isHoveringUnscheduled =
-        widget.isOverUnscheduled?.call(details.globalPosition) ?? false;
-    if (panelDay != null && _ghostStart != null) {
-      widget.onEventToDay?.call(event.task, panelDay);
-    } else if (isHoveringUnscheduled && _ghostStart != null) {
-      widget.onEventToUnscheduled?.call(event.task);
-    } else if (_ghostStart != null) {
-      final date = event.date;
-      if (date != null && _ghostDayOffset != 0) {
-        widget.onEventChanged(
-          event.task,
-          startMinutes: _ghostStart,
-          durationMinutes: _ghostDuration,
-          newDate: _addDays(_dateOnly(date), _ghostDayOffset),
-        );
-      } else {
-        widget.onEventChanged(
-          event.task,
-          startMinutes: _ghostStart,
-          durationMinutes: _ghostDuration,
-        );
-      }
-    }
-    setState(() {
-      _draggingId = null;
-      _hoveredPanelDay = null;
-      _ghostStart = null;
-      _ghostDuration = null;
-      _ghostDayOffset = 0;
-    });
-    _updateUnscheduledHover(false);
-  }
 
   void _onResizeStart(TaskEvent event, DragStartDetails details) {
     if (_pinching || _panZooming || _widthPinching || _widthPanZooming) return;
@@ -1704,43 +1597,23 @@ class _TimelineBodyState extends State<TimelineBody>
             : 1200.0;
         final isWeekMode = widget.weekStart != null;
 
-        final displayEvents = widget.events
-            .map((event) {
-              final isInteracting =
-                  event.task.id == _draggingId || event.task.id == _resizingId;
-              if (!isInteracting) return event;
-
-              // УДАЛИТЕ ЭТОТ БЛОК:
-              // DateTime? displayDate = event.date;
-              // if (event.date != null && _draggingId == event.task.id && _ghostDayOffset != 0) {
-              //   displayDate = _addDays(event.date!, _ghostDayOffset);
-              // }
-
-              return event.copyWith(
-                startMinutes: _ghostStart ?? event.startMinutes,
-                durationMinutes: _ghostDuration ?? event.durationMinutes,
-                // date больше не передаём - используем оригинальный
-              );
-            })
-            .toList(growable: false);
-
-        if (isWeekMode) {
-          return DragTarget<Task>(
-            onWillAcceptWithDetails: _onExternalDropWillAccept,
-            onMove: _onExternalDropMove,
-            onLeave: (data) => _clearExternalDrop(),
-            onAcceptWithDetails: _onExternalDropAccept,
-            builder: (context, candidateData, rejectedData) =>
-                _buildWeekView(displayEvents, maxWidth),
-          );
-        }
-        return DragTarget<Task>(
-          onWillAcceptWithDetails: _onExternalDropWillAccept,
-          onMove: _onExternalDropMove,
-          onLeave: (data) => _clearExternalDrop(),
-          onAcceptWithDetails: _onExternalDropAccept,
-          builder: (context, candidateData, rejectedData) =>
-              _buildDayView(displayEvents, maxWidth),
+        final displayEvents = [
+          for (final event in widget.events)
+            event.task.id == _resizingId
+                ? event.copyWith(
+                    startMinutes: _ghostStart ?? event.startMinutes,
+                    durationMinutes: _ghostDuration ?? event.durationMinutes,
+                  )
+                : event,
+        ];
+        return DragTarget<TaskDrag>(
+          onWillAcceptWithDetails: (details) => _canAcceptDrag(details.data),
+          onMove: _previewDrop,
+          onLeave: _clearDrop,
+          onAcceptWithDetails: _acceptDrop,
+          builder: (context, candidates, _) => isWeekMode
+              ? _buildWeekView(displayEvents, maxWidth)
+              : _buildDayView(displayEvents, maxWidth),
         );
       },
     );
@@ -2156,19 +2029,13 @@ class _TimelineBodyState extends State<TimelineBody>
     double availableWidth, {
     double? weekColumnWidth,
   }) {
-    final isDragging = _draggingId == event.task.id;
     final isResizing = _resizingId == event.task.id;
-    final isInteracting = isDragging || isResizing;
-    final snappedBack =
-        isDragging && (_hoveringUnscheduled || _hoveredPanelDay != null);
-
-    final displayStart = isInteracting && !snappedBack
+    final displayStart = isResizing
         ? (_ghostStart ?? event.startMinutes)
         : event.startMinutes;
-    final displayDuration = isInteracting && !snappedBack
+    final displayDuration = isResizing
         ? (_ghostDuration ?? event.durationMinutes)
         : event.durationMinutes;
-
     final top = (displayStart - _startHour * 60) / 60 * _hourHeight;
     final visualHeight = math.max(
       30.0,
@@ -2185,31 +2052,17 @@ class _TimelineBodyState extends State<TimelineBody>
       if (date == null) return const SizedBox.shrink();
 
       final visibleStart = _visibleStart(widget.weekStart!);
-      final baseDayIndex = _daysBetween(visibleStart, date);
-      final dayIndex = isDragging && !snappedBack
-          ? baseDayIndex + _ghostDayOffset
-          : baseDayIndex;
-
-      if (dayIndex < 0 || dayIndex >= _weekTotalDays)
+      final dayIndex = _daysBetween(visibleStart, date);
+      if (dayIndex < 0 || dayIndex >= _weekTotalDays) {
         return const SizedBox.shrink();
-
+      }
       final innerLeft = dayIndex * weekColumnWidth + 3;
       final innerWidth = math.max(0.0, weekColumnWidth - 6);
-
-      if (isDragging) {
-        eventLeft = innerLeft + 1;
-        eventWidth = math.max(18.0, innerWidth - 2);
-      } else {
-        eventWidth = math.max(18.0, innerWidth * layout.widthFactor - 2);
-        eventLeft = innerLeft + innerWidth * layout.leftFactor + 1;
-      }
+      eventWidth = math.max(18.0, innerWidth * layout.widthFactor - 2);
+      eventLeft = innerLeft + innerWidth * layout.leftFactor + 1;
     } else {
-      eventWidth = isDragging
-          ? availableWidth
-          : math.max(0.0, availableWidth * layout.widthFactor - 4);
-      eventLeft = isDragging
-          ? _leftLabelWidth + 12
-          : _leftLabelWidth + 12 + availableWidth * layout.leftFactor + 2;
+      eventWidth = math.max(0.0, availableWidth * layout.widthFactor - 4);
+      eventLeft = _leftLabelWidth + 12 + availableWidth * layout.leftFactor + 2;
     }
 
     return Positioned(
@@ -2218,23 +2071,25 @@ class _TimelineBodyState extends State<TimelineBody>
       left: eventLeft,
       width: eventWidth,
       height: visualHeight,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 120),
-        opacity: isDragging ? (snappedBack ? 0.35 : 0.8) : 1.0,
+      child: TaskDraggable(
+        task: event.task,
+        sourceTimeline: this,
+        enabled:
+            _resizingId == null &&
+            !_pinching &&
+            !_panZooming &&
+            !_widthPinching &&
+            !_widthPanZooming,
         child: _EventTile(
           event: event,
           height: visualHeight,
-          isDragging: isDragging,
           isResizing: isResizing,
-          onDragStart: (d) => _onDragStart(event, d),
-          onDragUpdate: (d) => _onDragUpdate(event, d),
-          onDragEnd: (d) => _onDragEnd(event, d),
           onResizeStart: (d) => _onResizeStart(event, d),
           onResizeUpdate: (d) => _onResizeUpdate(event, d),
           onResizeEnd: (d) => _onResizeEnd(event, d),
           onToggleTask: () => widget.onToggleTask(event.task),
-          ghostStart: isInteracting ? _ghostStart : null,
-          ghostDuration: isInteracting ? _ghostDuration : null,
+          ghostStart: isResizing ? _ghostStart : null,
+          ghostDuration: isResizing ? _ghostDuration : null,
         ),
       ),
     );
@@ -2247,11 +2102,7 @@ class _EventTile extends StatelessWidget {
   const _EventTile({
     required this.event,
     required this.height,
-    required this.isDragging,
     required this.isResizing,
-    required this.onDragStart,
-    required this.onDragUpdate,
-    required this.onDragEnd,
     required this.onResizeStart,
     required this.onResizeUpdate,
     required this.onResizeEnd,
@@ -2262,11 +2113,7 @@ class _EventTile extends StatelessWidget {
 
   final TaskEvent event;
   final double height;
-  final bool isDragging;
   final bool isResizing;
-  final ValueChanged<LongPressStartDetails> onDragStart;
-  final ValueChanged<LongPressMoveUpdateDetails> onDragUpdate;
-  final ValueChanged<LongPressEndDetails> onDragEnd;
   final ValueChanged<DragStartDetails> onResizeStart;
   final ValueChanged<DragUpdateDetails> onResizeUpdate;
   final ValueChanged<DragEndDetails> onResizeEnd;
@@ -2280,7 +2127,7 @@ class _EventTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = event.accentColor;
-    final isInteracting = isDragging || isResizing;
+    final isInteracting = isResizing;
     final start = ghostStart == null
         ? event.startTime
         : _minutesToTime(ghostStart!);
@@ -2298,127 +2145,118 @@ class _EventTile extends StatelessWidget {
 
     return Stack(
       children: [
-        GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onLongPressStart: onDragStart,
-          onLongPressMoveUpdate: onDragUpdate,
-          onLongPressEnd: onDragEnd,
-          child: ClipRRect(
-            borderRadius: borderRadius,
-            child: Container(
-              color: AppColors.surfaceContainerLow,
+        ClipRRect(
+          borderRadius: borderRadius,
+          child: Container(
+            color: AppColors.surfaceContainerLow,
 
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                padding: const EdgeInsets.fromLTRB(20, 2, 10, 2),
-                decoration: BoxDecoration(
-                  borderRadius: borderRadius,
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      if (event.isCompleted)
-                        Colors.white.withOpacity(0.05)
-                      else
-                        accent.withOpacity(0.22),
-                      Colors.white.withOpacity(0.06),
-                      Colors.black.withOpacity(0.01),
-                    ],
-                  ),
-                  border: Border.all(
-                    color: isInteracting
-                        ? accent.withOpacity(0.95)
-                        : Colors.white.withOpacity(
-                            event.isCompleted ? 0.08 : 0.14,
-                          ),
-                    width: isInteracting ? 1.5 : 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(
-                        isInteracting ? 0.35 : 0.18,
-                      ),
-                      blurRadius: isInteracting ? 22 : 10,
-                      offset: const Offset(0, 8),
-                    ),
-                    if (isInteracting)
-                      BoxShadow(
-                        color: accent.withOpacity(0.25),
-                        blurRadius: 18,
-                      ),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              padding: const EdgeInsets.fromLTRB(20, 2, 10, 2),
+              decoration: BoxDecoration(
+                borderRadius: borderRadius,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    if (event.isCompleted)
+                      Colors.white.withOpacity(0.05)
+                    else
+                      accent.withOpacity(0.22),
+                    Colors.white.withOpacity(0.06),
+                    Colors.black.withOpacity(0.01),
                   ],
                 ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final showTitle = height > 34 && constraints.maxWidth > 40;
-                    final showTime = height > 54 && constraints.maxWidth > 70;
-                    final showDragHandle =
-                        height > 36 && constraints.maxWidth > 88;
-
-                    return Row(
-                      children: [
-                        CheckDot(
-                          isCompleted: event.isCompleted,
-                          onCheckChanged: onToggleTask,
-                          isSelected: false,
-                          isOverdue: false,
+                border: Border.all(
+                  color: isInteracting
+                      ? accent.withOpacity(0.95)
+                      : Colors.white.withOpacity(
+                          event.isCompleted ? 0.08 : 0.14,
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (showTitle)
-                                Text(
-                                  event.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    decoration: event.isCompleted
-                                        ? TextDecoration.lineThrough
-                                        : TextDecoration.none,
-                                    decorationColor: accent.withOpacity(0.8),
-                                    decorationThickness: 1.6,
-                                    color: event.isCompleted
-                                        ? Colors.white.withOpacity(0.65)
-                                        : Colors.white,
-                                    fontWeight: event.isCompleted
-                                        ? FontWeight.w400
-                                        : FontWeight.w600,
-                                    fontSize: 13.5,
-                                  ),
-                                ),
-                              if (showTime) ...[
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${_formatTime(start)} - ${_formatTime(end)}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: Colors.white.withOpacity(
-                                      isInteracting ? 0.8 : 0.55,
-                                    ),
-                                    fontSize: 11.5,
-                                    fontWeight: isInteracting
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        if (showDragHandle)
-                          const Icon(
-                            Icons.drag_indicator,
-                            color: Colors.white24,
-                            size: 16,
-                          ),
-                      ],
-                    );
-                  },
+                  width: isInteracting ? 1.5 : 1,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(
+                      isInteracting ? 0.35 : 0.18,
+                    ),
+                    blurRadius: isInteracting ? 22 : 10,
+                    offset: const Offset(0, 8),
+                  ),
+                  if (isInteracting)
+                    BoxShadow(color: accent.withOpacity(0.25), blurRadius: 18),
+                ],
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final showTitle = height > 34 && constraints.maxWidth > 40;
+                  final showTime = height > 54 && constraints.maxWidth > 70;
+                  final showDragHandle =
+                      height > 36 && constraints.maxWidth > 88;
+
+                  return Row(
+                    children: [
+                      CheckDot(
+                        isCompleted: event.isCompleted,
+                        onCheckChanged: onToggleTask,
+                        isSelected: false,
+                        isOverdue: false,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (showTitle)
+                              Text(
+                                event.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  decoration: event.isCompleted
+                                      ? TextDecoration.lineThrough
+                                      : TextDecoration.none,
+                                  decorationColor: accent.withOpacity(0.8),
+                                  decorationThickness: 1.6,
+                                  color: event.isCompleted
+                                      ? Colors.white.withOpacity(0.65)
+                                      : Colors.white,
+                                  fontWeight: event.isCompleted
+                                      ? FontWeight.w400
+                                      : FontWeight.w600,
+                                  fontSize: 13.5,
+                                ),
+                              ),
+                            if (showTime) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                '${_formatTime(start)} - ${_formatTime(end)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(
+                                    isInteracting ? 0.8 : 0.55,
+                                  ),
+                                  fontSize: 11.5,
+                                  fontWeight: isInteracting
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (showDragHandle)
+                        const Icon(
+                          Icons.drag_indicator,
+                          color: Colors.white24,
+                          size: 16,
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
           ),

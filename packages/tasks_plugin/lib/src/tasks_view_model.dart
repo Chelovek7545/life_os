@@ -298,10 +298,13 @@ class TasksViewModel {
       ),
     );
   });
-  Future<void> scheduleTask(String id, DateTime startsAt, DateTime endsAt) =>
+  Future<void> scheduleTask(String id, DateTime? startsAt, DateTime? endsAt) =>
       _enqueue(() async {
         final current = await _repository.getById(id);
-        if (current == null) return;
+        if (current == null ||
+            (current.startsAt == startsAt && current.endsAt == endsAt)) {
+          return;
+        }
         await _repository.updateTask(
           current.copyWith(
             startsAt: Wrapped(startsAt),
@@ -366,6 +369,9 @@ class TasksViewModel {
       ),
     );
   });
+
+  Future<void> moveTaskUnder(String id, String parentId) =>
+      _enqueue(() => _repository.moveTaskUnder(id, parentId));
 
   Future<void> rescheduleTask(
     String id, {

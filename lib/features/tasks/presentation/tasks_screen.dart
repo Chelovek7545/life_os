@@ -11,12 +11,12 @@ import 'package:life_os/core/ui/empty_placeholder.dart';
 import 'package:life_os/core/ui/fixed_fade_mask.dart';
 import 'package:life_os/core/ui/glassPopUpMenuButton.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
-import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
-import 'package:life_os/core/ui/hierarchy/build_hierarchy_tree.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/core/ui/segmented_pill_controller.dart';
 import 'package:life_os/core/ui/resizable_panel.dart';
 import 'package:life_os/core/ui/task_card.dart';
+import 'package:life_os/core/ui/task_drag.dart';
+import 'components/task_hierarchy.dart';
 import 'package:life_os/core/ui/task_work_logs.dart';
 import 'package:life_os/core/ui/app_scroll_behavior.dart';
 import 'package:life_os/core/utils/color_format.dart';
@@ -58,7 +58,6 @@ const double _kTimelineTopPadding = 60.0 + _kDateHeaderHeight;
 const double _kWeekTimelineTopPadding =
     _kTimelineTopPadding - _kDateHeaderHeight;
 const double _kWideBreakpoint = 760.0;
-const _kUnscheduledHoverColor = Color(0xFFFFB59C);
 
 class TasksScreen extends StatefulWidget {
   const TasksScreen({
@@ -88,36 +87,22 @@ class TasksScreenState extends State<TasksScreen> {
   bool _kanbanMode = false;
   bool _showUnscheduledOverlay = false;
   bool _draggingFromOverlay = false;
-  bool _hoveringUnscheduled = false;
-  final GlobalKey _unscheduledOverlayKey = GlobalKey();
   bool _showHierarchyOverlay = false;
-  bool _draggingFromHierarchy = false;
 
-  bool _isOverUnscheduled(Offset globalPosition) {
-    final box =
-        _unscheduledOverlayKey.currentContext?.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return false;
-    final local = box.globalToLocal(globalPosition);
-    return local.dx >= 0 &&
-        local.dy >= 0 &&
-        local.dx <= box.size.width &&
-        local.dy <= box.size.height;
+  void _setDraggingFromOverlay(bool dragging) {
+    if (mounted) setState(() => _draggingFromOverlay = dragging);
   }
 
-  void _onHoverUnscheduled(bool hovering) {
-    if (_hoveringUnscheduled == hovering) return;
-    setState(() => _hoveringUnscheduled = hovering);
-  }
-
-  Future<void> _unscheduleTask(Task task) async {
-    await widget.viewModel.updateTask(
-      task.copyWith(startsAt: Wrapped(null), endsAt: Wrapped(null)),
-    );
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
+  Future<void> _runTaskDrop(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось перенести задачу')),
+        );
+      }
+    }
   }
 
   void _toggleUnscheduledOverlay() {
@@ -134,64 +119,42 @@ class TasksScreenState extends State<TasksScreen> {
     });
   }
 
-  Widget _buildUnscheduledOverlay(
-    double overlayHeight,
-    DateTime today,
-    double overlayWidth,
-  ) {
-    if (!_showUnscheduledOverlay) {
-      return const SizedBox.shrink();
-    }
-    return StreamBuilder<TaskScreenState>(
-      stream: widget.viewModel.state,
-      initialData: const TasksLoading(),
-      builder: (context, snapshot) {
-        final state = snapshot.data ?? const TasksLoading();
-        final unscheduledTasks =
-            state.maybeWhen(
-              loaded: (_, _, _, _, unscheduled) => unscheduled,
-              orElse: () => const <TaskWithProject>[],
-            ) ??
-            const <TaskWithProject>[];
-        if (unscheduledTasks.isEmpty) {
-          return const SizedBox.shrink();
-        }
-        return Positioned(
-          key: _unscheduledOverlayKey,
-          top: AppSpacing.sm + _kHeaderHeight + AppSpacing.sm,
-          left: 8,
-          width: overlayWidth,
-          child: IgnorePointer(
-            ignoring: _draggingFromOverlay,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
+  Widget _buildUnscheduledOverlay(DateTime today, double overlayWidth) {
+    if (!_showUnscheduledOverlay) return const SizedBox.shrink();
+    return Positioned(
+      top: AppSpacing.sm + _kHeaderHeight + AppSpacing.sm,
+      left: 8,
+      width: overlayWidth,
+      child: IgnorePointer(
+        ignoring: _draggingFromOverlay,
+        child: DragTarget<TaskDrag>(
+          key: const ValueKey('tasks.unscheduled'),
+          onWillAcceptWithDetails: (details) =>
+              details.data.task.startsAt != null,
+          onAcceptWithDetails: (details) => _runTaskDrop(
+            () =>
+                widget.viewModel.scheduleTask(details.data.task.id, null, null),
+          ),
+          builder: (context, candidates, _) {
+            final hovering = candidates.isNotEmpty;
+            return DecoratedBox(
+              position: DecorationPosition.foreground,
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AppRadius.lg + 2),
-                border: _hoveringUnscheduled
-                    ? Border.all(color: _kUnscheduledHoverColor, width: 2)
-                    : null,
-                boxShadow: _hoveringUnscheduled
-                    ? [
-                        BoxShadow(
-                          color: _kUnscheduledHoverColor.withValues(alpha: 0.4),
-                          blurRadius: 20,
-                          spreadRadius: -6,
-                        ),
-                      ]
-                    : null,
-              ),
-              child: Material(
-                elevation: 8,
                 borderRadius: BorderRadius.circular(AppRadius.lg),
-                color: Colors.transparent,
-                child: GlassPanel(
-                  padding: EdgeInsets.zero,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 400),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Padding(
+                border: hovering ? Border.all(color: AppColors.primary) : null,
+              ),
+              child: GlassPanel(
+                padding: EdgeInsets.zero,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 400),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ColoredBox(
+                        color: hovering
+                            ? taskDropFill(Colors.transparent)
+                            : Colors.transparent,
+                        child: Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 12,
@@ -199,72 +162,71 @@ class TasksScreenState extends State<TasksScreen> {
                           child: Row(
                             children: [
                               Text(
-                                _hoveringUnscheduled
-                                    ? 'Drop to unschedule'
-                                    : 'Unscheduled',
+                                hovering ? 'Drop to unschedule' : 'Unscheduled',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 16,
-                                  color: _hoveringUnscheduled
-                                      ? _kUnscheduledHoverColor
-                                      : null,
+                                  color: hovering ? AppColors.primary : null,
                                 ),
                               ),
                               const Spacer(),
                               IconButton(
                                 icon: const Icon(Icons.close),
-                                onPressed: () => setState(
-                                  () => _showUnscheduledOverlay = false,
-                                ),
+                                onPressed: _toggleUnscheduledOverlay,
                               ),
                             ],
                           ),
                         ),
-                        const Divider(height: 1),
-                        Flexible(
-                          child: ListView(
-                            shrinkWrap: true,
-                            padding: const EdgeInsets.all(8),
-                            children: unscheduledTasks
-                                .map(
-                                  (item) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 8),
-                                    child: LongPressDraggable<Task>(
-                                      data: item.task,
-                                      hapticFeedbackOnStart: true,
-                                      onDragStarted: () => setState(
-                                        () => _draggingFromOverlay = true,
-                                      ),
-                                      onDraggableCanceled: (_, __) => setState(
-                                        () => _draggingFromOverlay = false,
-                                      ),
-                                      onDragEnd: (_) => setState(
-                                        () => _draggingFromOverlay = false,
-                                      ),
-                                      feedback: _buildDragFeedback(item),
-                                      childWhenDragging: Opacity(
-                                        opacity: 0.35,
-                                        child: _buildUnscheduledCard(
-                                          item,
-                                          today,
-                                        ),
-                                      ),
-                                      child: _buildUnscheduledCard(item, today),
-                                    ),
+                      ),
+                      const Divider(height: 1),
+                      Flexible(
+                        child: StreamBuilder<TaskScreenState>(
+                          stream: widget.viewModel.state,
+                          builder: (context, snapshot) {
+                            final items =
+                                snapshot.data?.maybeWhen(
+                                  loaded: (_, _, _, _, unscheduled) =>
+                                      unscheduled,
+                                  orElse: () => null,
+                                ) ??
+                                const <TaskWithProject>[];
+                            if (items.isEmpty) {
+                              return const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: Text('No tasks'),
+                              );
+                            }
+                            return ListView.builder(
+                              shrinkWrap: true,
+                              padding: const EdgeInsets.all(8),
+                              itemCount: items.length,
+                              itemBuilder: (context, index) {
+                                final item = items[index];
+                                return Padding(
+                                  key: ValueKey(item.task.id),
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: TaskDraggable(
+                                    task: item.task,
+                                    onDragStarted: () =>
+                                        _setDraggingFromOverlay(true),
+                                    onDragEnd: () =>
+                                        _setDraggingFromOverlay(false),
+                                    child: _buildUnscheduledCard(item, today),
                                   ),
-                                )
-                                .toList(),
-                          ),
+                                );
+                              },
+                            );
+                          },
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ),
-          ),
-        );
-      },
+            );
+          },
+        ),
+      ),
     );
   }
 
@@ -287,71 +249,7 @@ class TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  Widget _buildDragFeedback(TaskWithProject item) {
-    final accent = item.project != null
-        ? parseHexColor(item.project!.color)
-        : AppColors.primary;
-    return Material(
-      elevation: 8,
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: Container(
-        width: 220,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.surface.withValues(alpha: 0.92),
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: accent, width: 2),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.drag_indicator, size: 20, color: Colors.white54),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.task.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.bodyMd.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: accent,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Text(
-                        'Drop on calendar',
-                        style: TextStyle(color: Colors.white54, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHierarchyOverlay(
-    double overlayHeight,
-    DateTime today,
-    double overlayWidth,
-  ) {
+  Widget _buildHierarchyOverlay(double overlayWidth) {
     if (!_showHierarchyOverlay) {
       return const SizedBox.shrink();
     }
@@ -359,51 +257,48 @@ class TasksScreenState extends State<TasksScreen> {
       top: AppSpacing.sm + _kHeaderHeight + AppSpacing.sm,
       left: 8,
       width: overlayWidth,
-      child: IgnorePointer(
-        ignoring: _draggingFromHierarchy,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.lg + 2),
-          ),
-          child: Material(
-            elevation: 8,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            color: Colors.transparent,
-            child: GlassPanel(
-              padding: EdgeInsets.zero,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 400),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      child: Row(
-                        children: [
-                          const Text(
-                            'Hierarchy',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const Spacer(),
-                          IconButton(
-                            icon: const Icon(Icons.close),
-                            onPressed: () =>
-                                setState(() => _showHierarchyOverlay = false),
-                          ),
-                        ],
-                      ),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.lg + 2),
+        ),
+        child: Material(
+          elevation: 8,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          color: Colors.transparent,
+          child: GlassPanel(
+            padding: EdgeInsets.zero,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 400),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
                     ),
-                    const Divider(height: 1),
-                    Flexible(child: _buildHierarchyContent()),
-                  ],
-                ),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Hierarchy',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () =>
+                              setState(() => _showHierarchyOverlay = false),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Flexible(child: _buildHierarchyContent()),
+                ],
               ),
             ),
           ),
@@ -423,80 +318,15 @@ class TasksScreenState extends State<TasksScreen> {
           initialData: const [],
           builder: (context, taskSnapshot) {
             final tasks = taskSnapshot.data ?? const <Task>[];
-            return HierarchyColumn(
+            return TaskHierarchy(
               height: 500,
-              nodes: buildHierarchyTree(projects, tasks),
-              draggableBuilder: _buildDraggableHierarchyNode,
+              tasks: tasks,
+              projects: projects,
+              onMoveUnder: widget.viewModel.moveTaskUnder,
             );
           },
         );
       },
-    );
-  }
-
-  Widget _buildDraggableHierarchyNode(HierarchyNode node, Widget child) {
-    final task = node.data;
-    if (task is! Task) return child;
-    return LongPressDraggable<Task>(
-      data: task,
-      hapticFeedbackOnStart: true,
-      onDragStarted: () => setState(() => _draggingFromHierarchy = true),
-      onDragEnd: (_) => setState(() => _draggingFromHierarchy = false),
-      onDraggableCanceled: (_, __) =>
-          setState(() => _draggingFromHierarchy = false),
-      feedback: _buildHierarchyDragFeedback(task),
-      childWhenDragging: Opacity(opacity: 0.35, child: child),
-      child: child,
-    );
-  }
-
-  Widget _buildHierarchyDragFeedback(Task task) {
-    return Material(
-      elevation: 8,
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: Container(
-        width: 220,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.surface.withValues(alpha: 0.92),
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: AppColors.primary, width: 2),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.drag_indicator, size: 20, color: Colors.white54),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    task.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.bodyMd.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const Row(
-                    children: [
-                      Icon(Icons.event, size: 10, color: Colors.white54),
-                      SizedBox(width: 4),
-                      Text(
-                        'Drop on calendar',
-                        style: TextStyle(color: Colors.white54, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -594,13 +424,10 @@ class TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  Widget _buildEventBody(bool isWide, DateTime anchorDate) => TaskCalendar(
+  Widget _buildEventBody(bool isWide) => TaskCalendar(
     viewModel: widget.viewModel,
     isWeek: isWide,
     topPadding: isWide ? _kWeekTimelineTopPadding : _kTimelineTopPadding,
-    isOverUnscheduled: _isOverUnscheduled,
-    onEventToUnscheduled: _unscheduleTask,
-    onHoverUnscheduled: _onHoverUnscheduled,
   );
 
   Widget _buildWeekTasks(
@@ -613,17 +440,12 @@ class TasksScreenState extends State<TasksScreen> {
     overlayHeight: overlayHeight,
     anchorDate: widget.viewModel.currentFilterValue.anchorDate,
     horizontal: _weekHorizontal,
-    onMove: (task, source, target) async {
-      try {
-        await widget.viewModel.moveTaskToDay(task.id, source, target);
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Не удалось перенести задачу')),
-          );
-        }
-      }
-    },
+    onMove: (drag, target) => _runTaskDrop(() {
+      final source = drag.sourceDay ?? drag.task.startsAt;
+      return source == null
+          ? widget.viewModel.makeTaskDateOnly(drag.task.id, target)
+          : widget.viewModel.moveTaskToDay(drag.task.id, source, target);
+    }),
     onToggleTask: widget.viewModel.toggleTask,
     onEditTask: _openTaskEditor,
     onToggleSelection: widget.viewModel.toggleTaskSelection,
@@ -884,10 +706,7 @@ class TasksScreenState extends State<TasksScreen> {
             child: FixedVerticalFadeMask(
               topFade: 100,
               child: _isEventMode
-                  ? _buildEventBody(
-                      isWide,
-                      widget.viewModel.currentFilterValue.anchorDate,
-                    )
+                  ? _buildEventBody(isWide)
                   : _buildTaskBody(overlayHeight, today),
             ),
           ),
@@ -900,15 +719,12 @@ class TasksScreenState extends State<TasksScreen> {
           isWide,
         ),
         _buildUnscheduledOverlay(
-          overlayHeight,
           today,
           MediaQuery.sizeOf(context).width > 400
               ? 400
               : MediaQuery.sizeOf(context).width,
         ),
         _buildHierarchyOverlay(
-          overlayHeight,
-          today,
           MediaQuery.sizeOf(context).width > 400
               ? 400
               : MediaQuery.sizeOf(context).width,
@@ -959,21 +775,12 @@ class TasksScreenState extends State<TasksScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       child: _isEventMode && isWide
-                          ? _buildEventBody(
-                              isWide,
-                              widget.viewModel.currentFilterValue.anchorDate,
-                            )
+                          ? _buildEventBody(isWide)
                           : FixedVerticalFadeMask(
                               topFade: 100,
                               bottomFade: 10,
                               child: _isEventMode
-                                  ? _buildEventBody(
-                                      isWide,
-                                      widget
-                                          .viewModel
-                                          .currentFilterValue
-                                          .anchorDate,
-                                    )
+                                  ? _buildEventBody(isWide)
                                   : _buildTaskBody(overlayHeight, today),
                             ),
                     ),
@@ -986,15 +793,10 @@ class TasksScreenState extends State<TasksScreen> {
                     isWide,
                   ),
                   _buildUnscheduledOverlay(
-                    overlayHeight,
                     today,
                     leftWidth > 400 ? 400 : leftWidth,
                   ),
-                  _buildHierarchyOverlay(
-                    overlayHeight,
-                    today,
-                    leftWidth > 400 ? 400 : leftWidth,
-                  ),
+                  _buildHierarchyOverlay(leftWidth > 400 ? 400 : leftWidth),
                   if (isFormVisible && leftWidth <= 330)
                     _buildTaskForm(context, isFormVisible, 310),
                 ],
@@ -1225,33 +1027,29 @@ class _TaskListState extends State<_TaskList>
   }
 
   Widget _buildCard(TaskWithProject item) {
-    return TaskCard(
-      key: ValueKey(item.task.id),
-      workLogs: widget.workLogs,
+    return TaskDraggable(
       task: item.task,
-      indicator: _taskRangeIndicator(item.task),
-      leftBorderColor: item.project != null
-          ? parseHexColor(item.project!.color)
-          : null,
-      isOverdue: item.task.dueDate?.isBefore(widget.today) ?? false,
-      onCheckChanged: () => widget.onToggleTask(item.task),
-      onTap: () => widget.onEditTask(item),
-      onDelete: () => widget.onDeleteTask(item.task.id),
-      projectTitle: item.project?.name,
-      isSelected: widget.selectedIds.contains(item.task.id),
-      onSelected: () => widget.onToggleSelection(item.task),
-      //onTap: () {},
+      child: TaskCard(
+        key: ValueKey(item.task.id),
+        workLogs: widget.workLogs,
+        task: item.task,
+        indicator: _taskRangeIndicator(item.task),
+        leftBorderColor: item.project != null
+            ? parseHexColor(item.project!.color)
+            : null,
+        isOverdue: item.task.dueDate?.isBefore(widget.today) ?? false,
+        onCheckChanged: () => widget.onToggleTask(item.task),
+        onTap: () => widget.onEditTask(item),
+        onDelete: () => widget.onDeleteTask(item.task.id),
+        projectTitle: item.project?.name,
+        isSelected: widget.selectedIds.contains(item.task.id),
+        onSelected: () => widget.onToggleSelection(item.task),
+      ),
     );
   }
 }
 
 //Week view
-class _WeekTaskDrag {
-  const _WeekTaskDrag(this.task, this.sourceDay);
-  final Task task;
-  final DateTime sourceDay;
-}
-
 class _WeekTasksList extends StatefulWidget {
   const _WeekTasksList({
     required this.items,
@@ -1271,7 +1069,7 @@ class _WeekTasksList extends StatefulWidget {
   final double overlayHeight;
   final DateTime anchorDate;
   final bool horizontal;
-  final void Function(Task, DateTime, DateTime) onMove;
+  final void Function(TaskDrag, DateTime) onMove;
   final ValueChanged<Task> onToggleTask;
   final ValueChanged<TaskWithProject> onEditTask;
   final ValueChanged<Task> onToggleSelection;
@@ -1382,7 +1180,7 @@ class _WeekDaySection extends StatelessWidget {
   final bool horizontal;
   final List<TaskWithProject> items;
   final Set<String> selectedIds;
-  final void Function(Task, DateTime, DateTime) onMove;
+  final void Function(TaskDrag, DateTime) onMove;
   final ValueChanged<Task> onToggleTask;
   final ValueChanged<TaskWithProject> onEditTask;
   final ValueChanged<Task> onToggleSelection;
@@ -1415,9 +1213,10 @@ class _WeekDaySection extends StatelessWidget {
           padding: EdgeInsets.only(
             bottom: horizontal ? _horizontalTaskSpacing : AppSpacing.sm,
           ),
-          child: LongPressDraggable<_WeekTaskDrag>(
+          child: TaskDraggable(
             key: ValueKey(('week.task', date, item.task.id)),
-            data: _WeekTaskDrag(item.task, date),
+            task: item.task,
+            sourceDay: date,
             feedback: Material(
               key: ValueKey(('week.feedback', date, item.task.id)),
               color: Colors.transparent,
@@ -1433,7 +1232,6 @@ class _WeekDaySection extends StatelessWidget {
                 ),
               ),
             ),
-            childWhenDragging: Opacity(opacity: .4, child: card()),
             child: card(),
           ),
         );
@@ -1442,18 +1240,16 @@ class _WeekDaySection extends StatelessWidget {
   );
 
   @override
-  Widget build(BuildContext context) => DragTarget<_WeekTaskDrag>(
+  Widget build(BuildContext context) => DragTarget<TaskDrag>(
     key: ValueKey(('week.day', date)),
-    onWillAcceptWithDetails: (details) =>
-        !DateUtils.isSameDay(details.data.sourceDay, date),
-    onAcceptWithDetails: (details) =>
-        onMove(details.data.task, details.data.sourceDay, date),
+    onWillAcceptWithDetails: (details) => !DateUtils.isSameDay(
+      details.data.sourceDay ?? details.data.task.startsAt,
+      date,
+    ),
+    onAcceptWithDetails: (details) => onMove(details.data, date),
     builder: (context, candidates, _) {
       final color = candidates.isNotEmpty
-          ? Color.alphaBlend(
-              AppColors.primary.withValues(alpha: .12),
-              AppColors.surfaceContainerLow,
-            )
+          ? taskDropFill(AppColors.surfaceContainerLow)
           : AppColors.surfaceContainerLow;
       final header = Padding(
         padding: EdgeInsets.only(
@@ -1514,32 +1310,34 @@ class _WeekDaySection extends StatelessWidget {
               : null,
         ),
         child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: horizontal ? 6 : 8, 
-          //vertical: 16
+          padding: EdgeInsets.symmetric(
+            horizontal: horizontal ? 6 : 8,
+            //vertical: 16
           ),
           child: Stack(
             children: [
-              
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-              SizedBox(height: 8,),
-                  if (!horizontal)
-              header,
+                  SizedBox(height: 8),
+                  if (!horizontal) header,
                   if (horizontal)
                     Expanded(
                       child: ClipRect(
                         child: ScrollConfiguration(
                           behavior: AppScrollBehavior(fadeColor: color),
                           child: items.isEmpty
-                              ? Align(alignment: Alignment.topLeft, child: empty)
+                              ? Align(
+                                  alignment: Alignment.topLeft,
+                                  child: empty,
+                                )
                               : ListView.builder(
                                   padding: const EdgeInsets.symmetric(
                                     vertical: _horizontalTaskSpacing + 24,
-                                    
                                   ),
                                   itemCount: items.length,
-                                  itemBuilder: (_, index) => _card(items[index]),
+                                  itemBuilder: (_, index) =>
+                                      _card(items[index]),
                                 ),
                         ),
                       ),
@@ -1550,9 +1348,7 @@ class _WeekDaySection extends StatelessWidget {
                     ...items.map(_card),
                 ],
               ),
-              if (horizontal)
-              header,
-
+              if (horizontal) header,
             ],
           ),
         ),

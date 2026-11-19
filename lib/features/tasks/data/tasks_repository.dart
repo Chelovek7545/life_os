@@ -19,6 +19,15 @@ class TasksRepository implements TasksApi, TaskCompletionCommands {
   }
 
   @override
+  Future<void> moveTaskUnder(String id, String parentId) async {
+    try {
+      await _dao.moveTaskUnder(id, parentId);
+    } catch (error) {
+      throw StorageException('Failed to change task parent.', error);
+    }
+  }
+
+  @override
   Future<Task?> completeTask(String id) async {
     try {
       return await _dao.completeTask(id);

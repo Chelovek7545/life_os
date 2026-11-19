@@ -14,6 +14,12 @@ A personal life management app built with Flutter. Life OS brings your tasks, pr
 - **Life Spheres** — organize everything by areas of your life
 - **Dark theme** — carefully crafted dark UI with custom typography (Inter, Space Grotesk, JetBrains Mono)
 
+### Task drag and drop
+
+Long-press a task and drag it to a highlighted day, time slot, status column,
+parent task, or the Unscheduled panel. The destination determines what changes.
+[Task drag-and-drop guide (Russian)](docs/task-drag-and-drop.md).
+
 ### Graph view
 
 - Move/collapse business cards and edit them through registered module forms.

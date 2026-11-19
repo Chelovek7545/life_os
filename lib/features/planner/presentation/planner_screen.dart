@@ -64,6 +64,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
               habits: widget.habits,
               isActive: widget.isActive,
               onOpenTask: onOpenTask ?? widget.onOpenTask,
+              onMoveUnder: widget.tasks.moveTaskUnder,
             );
           },
         ),

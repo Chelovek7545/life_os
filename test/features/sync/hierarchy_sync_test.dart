@@ -239,6 +239,39 @@ void main() {
   });
 
   test(
+    'moving a task under another task journals only the moved task',
+    () async {
+      final data = await seed();
+      final task = Task.blank().copyWith(
+        title: 'Move this branch',
+        projectId: Wrapped(data.project.id),
+        tags: [const Tag(id: 0, name: 'Focus', colorHex: 0xFF112233)],
+      );
+      await tasks.addTask(task);
+      final before = (await a.readFeed()).entries.length;
+      final tags = (await tasks.getById(
+        task.id,
+      ))!.tags.map((tag) => tag.syncId);
+
+      await tasks.moveTaskUnder(task.id, data.child.id);
+      await tasks.moveTaskUnder(task.id, data.child.id);
+      await expectLater(
+        tasks.moveTaskUnder(data.root.id, task.id),
+        throwsA(isA<StorageException>()),
+      );
+      final revisions = (await a.readFeed()).entries.skip(before);
+      expect(revisions.map((entry) => entry.revision.entityId), [task.id]);
+
+      await engine.exchange(a, b);
+      final moved = (await otherTasks.getById(task.id))!;
+      expect(moved.parentTaskId, data.child.id);
+      expect(moved.projectId, data.project.id);
+      expect(moved.tags.map((tag) => tag.syncId), tags);
+      expect((await b.state()).pending, isEmpty);
+    },
+  );
+
+  test(
     'full dependency chain converges while local tag integers differ',
     () async {
       await b.saveEntity(

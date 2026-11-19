@@ -46,6 +46,15 @@ class MockTasksRepository extends _i1.Mock implements _i2.TasksRepository {
           as _i3.Future<void>);
 
   @override
+  _i3.Future<void> moveTaskUnder(String? id, String? parentId) =>
+      (super.noSuchMethod(
+            Invocation.method(#moveTaskUnder, [id, parentId]),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
   _i3.Future<_i4.Task?> completeTask(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#completeTask, [id]),

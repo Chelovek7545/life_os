@@ -5,6 +5,7 @@ import 'package:tasks_plugin/tasks_logic.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/ui/task_card.dart';
+import 'package:life_os/core/ui/task_drag.dart';
 import 'package:life_os/core/ui/app_scroll_behavior.dart';
 import 'package:life_os/core/ui/task_work_logs.dart';
 import 'package:life_os/core/utils/color_format.dart';
@@ -50,22 +51,19 @@ class TaskKanbanBoard extends StatelessWidget {
                 if (entry.key != columns.keys.first) const SizedBox(width: 12),
                 SizedBox(
                   width: width,
-                  child: DragTarget<Task>(
+                  child: DragTarget<TaskDrag>(
                     key: ValueKey(('kanban.column', entry.key)),
                     onWillAcceptWithDetails: (details) =>
-                        details.data.status != entry.key,
+                        details.data.task.status != entry.key,
                     onAcceptWithDetails: (details) =>
-                        onMove(details.data, entry.key),
+                        onMove(details.data.task, entry.key),
                     builder: (context, candidates, _) {
                       final tasks = items
                           .where((item) => item.task.status == entry.key)
                           .toList();
                       final columnColor = candidates.isEmpty
                           ? AppColors.surfaceContainerLow
-                          : Color.alphaBlend(
-                              entry.key.color.withValues(alpha: .12),
-                              AppColors.surfaceContainerLow,
-                            );
+                          : taskDropFill(AppColors.surfaceContainerLow);
                       return DecoratedBox(
                         decoration: BoxDecoration(
                           color: columnColor,
@@ -73,7 +71,7 @@ class TaskKanbanBoard extends StatelessWidget {
                           border: Border.all(
                             color: candidates.isEmpty
                                 ? AppColors.borderGlass
-                                : entry.key.color,
+                                : AppColors.primary,
                           ),
                         ),
                         child: ClipRRect(
@@ -164,34 +162,27 @@ class TaskKanbanBoard extends StatelessWidget {
                                           child: TaskWorkLogsBuilder(
                                             taskId: item.task.id,
                                             repository: workLogs,
-                                            builder: (footer) =>
-                                                LongPressDraggable<Task>(
-                                                  key: ValueKey((
-                                                    'kanban.task',
-                                                    item.task.id,
-                                                  )),
-                                                  data: item.task,
-                                                  feedback: Material(
-                                                    key: ValueKey((
-                                                      'kanban.feedback',
-                                                      item.task.id,
-                                                    )),
-                                                    color: Colors.transparent,
-                                                    child: SizedBox(
-                                                      width: width - 16,
-                                                      child: highlightedCard(
-                                                        footer,
-                                                      ),
-                                                    ),
+                                            builder: (footer) => TaskDraggable(
+                                              key: ValueKey((
+                                                'kanban.task',
+                                                item.task.id,
+                                              )),
+                                              task: item.task,
+                                              feedback: Material(
+                                                key: ValueKey((
+                                                  'kanban.feedback',
+                                                  item.task.id,
+                                                )),
+                                                color: Colors.transparent,
+                                                child: SizedBox(
+                                                  width: width - 16,
+                                                  child: highlightedCard(
+                                                    footer,
                                                   ),
-                                                  childWhenDragging: Opacity(
-                                                    opacity: .45,
-                                                    child: highlightedCard(
-                                                      footer,
-                                                    ),
-                                                  ),
-                                                  child: card(footer),
                                                 ),
+                                              ),
+                                              child: card(footer),
+                                            ),
                                           ),
                                         );
                                       },

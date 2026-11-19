@@ -58,6 +58,32 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
     return getTaskWithTags(id);
   });
 
+  Future<void> moveTaskUnder(String id, String parentId) => _mutate(
+    id,
+    () async {
+      final task = await getById(id);
+      if (task == null || task.parentTaskId == parentId) return;
+
+      final visited = {id};
+      String? ancestorId = parentId;
+      while (ancestorId != null) {
+        if (!visited.add(ancestorId)) {
+          throw StateError('Moving this task would create a cycle.');
+        }
+        final ancestor = await getById(ancestorId);
+        if (ancestor == null) throw StateError('Task parent no longer exists.');
+        ancestorId = ancestor.parentTaskId;
+      }
+
+      await (update(tasks)..where((row) => row.id.equals(id))).write(
+        TasksCompanion(
+          parentTaskId: Value(parentId),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+    },
+  );
+
   // =============== CREATE ===============
 
   Future<int> insert(TasksCompanion task) {

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
-import 'package:life_os/core/ui/hierarchy/build_hierarchy_tree.dart';
+import 'package:life_os/features/tasks/presentation/components/task_hierarchy.dart';
 import 'package:habits_plugin/habits_logic.dart';
 import 'package:projects_api/projects_api.dart';
 import 'package:tasks_api/tasks_api.dart';
@@ -13,12 +12,14 @@ class PlannerSidebar extends StatefulWidget {
     required this.projects,
     required this.habits,
     required this.onOpenTask,
+    required this.onMoveUnder,
     required this.isActive,
   });
   final List<Task> tasks;
   final List<Project> projects;
   final HabitsViewModel habits;
   final ValueChanged<Task> onOpenTask;
+  final Future<void> Function(String id, String parentId) onMoveUnder;
   final bool Function() isActive;
   @override
   State<PlannerSidebar> createState() => _PlannerSidebarState();
@@ -202,43 +203,14 @@ class _PlannerSidebarState extends State<PlannerSidebar> {
   );
 
   Widget _tree() => LayoutBuilder(
-    builder: (context, constraints) => HierarchyColumn(
+    builder: (context, constraints) => TaskHierarchy(
       height: constraints.maxHeight,
-      nodes: buildHierarchyTree(
-        widget.projects,
-        widget.tasks
-            .where((task) => !_hideCompleted || !task.isCompleted)
-            .toList(),
-      ),
-      onNodeTap: (node) {
-        if (node.data case final Task task) widget.onOpenTask(task);
-      },
-      draggableBuilder: (node, child) {
-        final task = node.data;
-        if (task is! Task) return child;
-        return LongPressDraggable<Task>(
-          data: task,
-          dragAnchorStrategy: pointerDragAnchorStrategy,
-          maxSimultaneousDrags: widget.isActive() ? 1 : 0,
-          feedback: Material(
-            color: AppColors.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(12),
-            child: SizedBox(
-              width: 220,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  task.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ),
-          ),
-          childWhenDragging: Opacity(opacity: .35, child: child),
-          child: child,
-        );
-      },
+      tasks: widget.tasks,
+      projects: widget.projects,
+      hideCompleted: _hideCompleted,
+      onOpenTask: widget.onOpenTask,
+      onMoveUnder: widget.onMoveUnder,
+      isActive: widget.isActive,
     ),
   );
   Widget _surface({

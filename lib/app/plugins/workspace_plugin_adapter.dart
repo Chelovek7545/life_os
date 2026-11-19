@@ -10,6 +10,7 @@ import 'package:tasks_plugin/tasks_panels.dart';
 import 'package:habits_api/habits_api.dart';
 import 'package:habits_plugin/habits_logic.dart';
 import 'package:life_os/core/ui/task_card.dart';
+import 'package:life_os/core/ui/task_drag.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/features/workspace/presentation/workspace_habits.dart';
 import 'package:life_os/features/workspace/presentation/workspace_project_tasks.dart';
@@ -96,22 +97,26 @@ AppPlugin createWorkspacePlugin({
                           onOpenTask: open,
                           taskBuilder: (_, item, onToggle, onOpen) => Padding(
                             padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: TaskCard(
-                              workLogs: workLogs?.call(),
-                              key: ValueKey('workspace-task:${item.task.id}'),
+                            child: TaskDraggable(
                               task: item.task,
-                              projectTitle: item.project?.name,
-                              leftBorderColor: item.project == null
-                                  ? null
-                                  : parseHexColor(item.project!.color),
-                              isSelected: false,
-                              isOverdue:
-                                  item.task.dueDate?.isBefore(
-                                    DateUtils.dateOnly(DateTime.now()),
-                                  ) ??
-                                  false,
-                              onCheckChanged: onToggle,
-                              onTap: onOpen,
+                              enabled: active(),
+                              child: TaskCard(
+                                workLogs: workLogs?.call(),
+                                key: ValueKey('workspace-task:${item.task.id}'),
+                                task: item.task,
+                                projectTitle: item.project?.name,
+                                leftBorderColor: item.project == null
+                                    ? null
+                                    : parseHexColor(item.project!.color),
+                                isSelected: false,
+                                isOverdue:
+                                    item.task.dueDate?.isBefore(
+                                      DateUtils.dateOnly(DateTime.now()),
+                                    ) ??
+                                    false,
+                                onCheckChanged: onToggle,
+                                onTap: onOpen,
+                              ),
                             ),
                           ),
                         ),

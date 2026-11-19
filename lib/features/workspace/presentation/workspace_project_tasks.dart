@@ -6,6 +6,7 @@ import 'package:tasks_plugin/tasks_logic.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/ui/app_scroll_behavior.dart';
 import 'package:life_os/core/ui/task_card.dart';
+import 'package:life_os/core/ui/task_drag.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import '../workspace_layout.dart';
@@ -263,25 +264,29 @@ class _WorkspaceProjectTasksState extends State<WorkspaceProjectTasks> {
                         final task = tasks[index];
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 8),
-                          child: TaskCard(
-                            key: ValueKey('project-task:${task.id}'),
+                          child: TaskDraggable(
                             task: task,
-                            isSelected: false,
-                            projectTitle: project?.name,
-                            leftBorderColor: color,
-                            workLogs: widget.workLogs,
-                            isOverdue:
-                                !task.isCompleted &&
-                                (task.dueDate?.isBefore(
-                                      DateUtils.dateOnly(DateTime.now()),
-                                    ) ??
-                                    false),
-                            onTap: () {
-                              if (widget.isActive()) widget.onOpenTask(task);
-                            },
-                            onCheckChanged: _pending.contains(task.id)
-                                ? null
-                                : () => _toggle(task),
+                            enabled: widget.isActive(),
+                            child: TaskCard(
+                              key: ValueKey('project-task:${task.id}'),
+                              task: task,
+                              isSelected: false,
+                              projectTitle: project?.name,
+                              leftBorderColor: color,
+                              workLogs: widget.workLogs,
+                              isOverdue:
+                                  !task.isCompleted &&
+                                  (task.dueDate?.isBefore(
+                                        DateUtils.dateOnly(DateTime.now()),
+                                      ) ??
+                                      false),
+                              onTap: () {
+                                if (widget.isActive()) widget.onOpenTask(task);
+                              },
+                              onCheckChanged: _pending.contains(task.id)
+                                  ? null
+                                  : () => _toggle(task),
+                            ),
                           ),
                         );
                       },

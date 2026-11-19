@@ -13,17 +13,11 @@ class TaskCalendar extends StatefulWidget {
     required this.viewModel,
     required this.isWeek,
     required this.topPadding,
-    this.isOverUnscheduled,
-    this.onEventToUnscheduled,
-    this.onHoverUnscheduled,
     this.onOpenTask,
   });
   final TasksViewModel viewModel;
   final bool isWeek;
   final double topPadding;
-  final bool Function(Offset)? isOverUnscheduled;
-  final ValueChanged<Task>? onEventToUnscheduled;
-  final ValueChanged<bool>? onHoverUnscheduled;
   final ValueChanged<Task>? onOpenTask;
 
   @override
@@ -143,9 +137,6 @@ class _TaskCalendarState extends State<TaskCalendar> {
             _run(context, () => widget.viewModel.toggleTask(task)),
         taskFormProjects: widget.viewModel.watchProjects(),
         onSubmitNewTask: widget.viewModel.addTask,
-        isOverUnscheduled: widget.isOverUnscheduled,
-        onEventToUnscheduled: widget.onEventToUnscheduled,
-        onHoverUnscheduled: widget.onHoverUnscheduled,
       );
     },
   );

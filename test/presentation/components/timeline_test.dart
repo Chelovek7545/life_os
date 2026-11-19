@@ -6,6 +6,7 @@ import 'package:life_os/features/tasks/presentation/components/mini_task_form.da
 import 'package:life_os/features/tasks/presentation/components/timeline.dart';
 import 'package:life_os/features/tasks/presentation/components/calendar_task_hint.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
+import 'package:life_os/core/ui/task_drag.dart';
 
 import '../../test_helpers.dart';
 
@@ -977,7 +978,7 @@ void main() {
         expect(find.byIcon(Icons.drag_indicator), findsNothing);
       });
 
-      testWidgets('drag ending over unscheduled panel unschedules the task', (
+      testWidgets('timed events can drop on a sibling task target', (
         tester,
       ) async {
         tester.view.physicalSize = const Size(1600, 4200);
@@ -994,24 +995,36 @@ void main() {
 
         Task? unscheduled;
         var eventChangedCalls = 0;
-        var hoverCalls = 0;
-        bool? lastHover;
+        const target = ValueKey('external-task-target');
 
         await tester.pumpWidget(
           createTestWidget(
-            child: TimelineBody(
-              events: [event],
-              topPadding: 60,
-              onEventChanged: (t, {startMinutes, durationMinutes, newDate}) {
-                eventChangedCalls++;
-              },
-              onToggleTask: (_) {},
-              isOverUnscheduled: (_) => true,
-              onEventToUnscheduled: (t) => unscheduled = t,
-              onHoverUnscheduled: (hovering) {
-                hoverCalls++;
-                lastHover = hovering;
-              },
+            child: Stack(
+              children: [
+                TimelineBody(
+                  events: [event],
+                  topPadding: 60,
+                  onEventChanged:
+                      (_, {startMinutes, durationMinutes, newDate}) {
+                        eventChangedCalls++;
+                      },
+                  onToggleTask: (_) {},
+                ),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  child: DragTarget<TaskDrag>(
+                    key: target,
+                    onAcceptWithDetails: (details) =>
+                        unscheduled = details.data.task,
+                    builder: (_, candidates, _) => SizedBox(
+                      width: 250,
+                      height: 100,
+                      child: Text(candidates.isEmpty ? 'Empty' : 'Accept task'),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -1021,18 +1034,18 @@ void main() {
         // plus topPadding 60 → global ~1322.
         final gesture = await tester.startGesture(const Offset(300, 1340));
         await tester.pump(const Duration(milliseconds: 600));
-        await gesture.moveBy(const Offset(0, 100));
+        await gesture.moveTo(tester.getCenter(find.byKey(target)));
         await tester.pump(const Duration(milliseconds: 50));
+        expect(find.text('Accept task'), findsOneWidget);
         await gesture.up();
         await tester.pump(const Duration(milliseconds: 100));
 
         expect(unscheduled, same(task));
         expect(eventChangedCalls, 0);
-        expect(hoverCalls, greaterThan(0));
-        expect(lastHover, isFalse);
+        expect(find.text('Empty'), findsOneWidget);
       });
 
-      testWidgets('drag ending outside unscheduled panel moves the event', (
+      testWidgets('drag ending in the time grid moves the event', (
         tester,
       ) async {
         tester.view.physicalSize = const Size(1600, 4200);
@@ -1048,7 +1061,6 @@ void main() {
         );
 
         int? movedStartMinutes;
-        Task? unscheduled;
         await tester.pumpWidget(
           createTestWidget(
             child: TimelineBody(
@@ -1058,8 +1070,6 @@ void main() {
                 movedStartMinutes = startMinutes;
               },
               onToggleTask: (_) {},
-              isOverUnscheduled: (_) => false,
-              onEventToUnscheduled: (t) => unscheduled = t,
             ),
           ),
         );
@@ -1072,7 +1082,6 @@ void main() {
         await gesture.up();
         await tester.pump(const Duration(milliseconds: 100));
 
-        expect(unscheduled, isNull);
         expect(movedStartMinutes, isNotNull);
       });
     });

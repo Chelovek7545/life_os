@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:tasks_api/tasks_api.dart';
 import 'package:tasks_plugin/tasks_logic.dart';
 import 'package:projects_api/projects_api.dart';
-import 'package:life_os/core/ui/hierarchy/build_hierarchy_tree.dart';
-import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
+import 'package:life_os/features/tasks/presentation/components/task_hierarchy.dart';
 
 class WorkspaceHierarchy extends StatefulWidget {
   const WorkspaceHierarchy({
@@ -35,33 +34,13 @@ class _WorkspaceHierarchyState extends State<WorkspaceHierarchy> {
           return const Center(child: CircularProgressIndicator());
         }
         return LayoutBuilder(
-          builder: (context, constraints) => HierarchyColumn(
-            nodes: buildHierarchyTree(projects.data!, tasks.data!),
+          builder: (context, constraints) => TaskHierarchy(
+            tasks: tasks.data!,
+            projects: projects.data!,
             height: constraints.maxHeight,
-            onNodeTap: (node) {
-              if (widget.isActive() && node.data is Task) {
-                widget.onOpenTask(node.data as Task);
-              }
-            },
-            draggableBuilder: (node, child) {
-              final task = node.data;
-              if (task is! Task) return child;
-              return LongPressDraggable<Task>(
-                data: task,
-                maxSimultaneousDrags: widget.isActive() ? 1 : 0,
-                feedback: Material(
-                  child: SizedBox(
-                    width: 220,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(task.title),
-                    ),
-                  ),
-                ),
-                childWhenDragging: Opacity(opacity: .35, child: child),
-                child: child,
-              );
-            },
+            onOpenTask: widget.onOpenTask,
+            onMoveUnder: widget.model.moveTaskUnder,
+            isActive: widget.isActive,
           ),
         );
       },
