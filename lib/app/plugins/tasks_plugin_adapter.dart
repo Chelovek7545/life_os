@@ -12,29 +12,26 @@ import 'package:life_os/features/tasks/presentation/tasks_graph_components.dart'
 import 'package:life_os/features/tasks/presentation/components/pulse_quick_task.dart';
 import 'package:lifegraph_plugin/lifegraph_plugin.dart' show PulsePanelSlots;
 
-UiModuleSpec pulseQuickTaskModule(
-  TasksViewModel Function() tasks,
-  PluginUiRegistry registry,
-) => UiModuleSpec(
-  id: 'tasks.quick-input',
-  dependencies: {'tasks.core', 'lifegraph.screen'},
-  panels: [
-    PluginPanelContribution(
-      id: 'tasks.quick-input.pulse',
-      slot: PulsePanelSlots.toolbar,
-      order: -10,
-      builder: (_, panel) {
-        final model = tasks();
-        return PulseQuickTaskAction(
-          addTask: model.addTask,
-          isActive: () => panel.isActive && model.isActive,
-          onSaved: (count) =>
-              registry.notify(PluginNotice('Добавлено задач: $count')),
-        );
-      },
-    ),
-  ],
-);
+UiModuleSpec pulseQuickTaskModule(TasksViewModel Function() tasks) =>
+    UiModuleSpec(
+      id: 'tasks.quick-input',
+      dependencies: {'tasks.core', 'lifegraph.screen'},
+      panels: [
+        PluginPanelContribution(
+          id: 'tasks.quick-input.pulse',
+          slot: PulsePanelSlots.toolbar,
+          order: -10,
+          builder: (_, panel) {
+            final model = tasks();
+            return PulseQuickTaskAction(
+              addTask: model.addTask,
+              isActive: () => panel.isActive && model.isActive,
+              watchProjects: model.watchProjects,
+            );
+          },
+        ),
+      ],
+    );
 
 TasksPlugin createTasksPlugin({
   required TasksApi tasks,

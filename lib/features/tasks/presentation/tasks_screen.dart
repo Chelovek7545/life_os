@@ -1491,7 +1491,7 @@ class _WeekDaySection extends StatelessWidget {
         ),
       );
       final empty = Padding(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.fromLTRB(8, 36, 8, 8),
         child: Text(
           'No tasks',
           style: AppTypography.bodySm.copyWith(

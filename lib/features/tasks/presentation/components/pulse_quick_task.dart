@@ -1,11 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_button_styles.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
+import 'package:life_os/core/ui/app_notifiacations.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
+import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/smart_task_input.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:tasks_api/tasks_api.dart';
 
 class PulseQuickTaskAction extends StatefulWidget {
@@ -13,12 +18,12 @@ class PulseQuickTaskAction extends StatefulWidget {
     super.key,
     required this.addTask,
     required this.isActive,
-    required this.onSaved,
+    required this.watchProjects,
   });
 
   final Future<void> Function(Task) addTask;
   final bool Function() isActive;
-  final ValueChanged<int> onSaved;
+  final Stream<List<Project>> Function() watchProjects;
 
   @override
   State<PulseQuickTaskAction> createState() => _PulseQuickTaskActionState();
@@ -37,11 +42,17 @@ class _PulseQuickTaskActionState extends State<PulseQuickTaskAction> {
       builder: (_) => _QuickTaskNote(
         initialText: _draft,
         addTask: widget.addTask,
+        watchProjects: widget.watchProjects,
         isActive: () => mounted && isActive(),
         onDraftChanged: (text) => _draft = text,
       ),
     );
-    if (saved != null && mounted && isActive()) widget.onSaved(saved);
+    if (saved != null && mounted && isActive()) {
+      AppNotification.showSuccess(
+        context,
+        saved == 1 ? 'Задача создана' : 'Добавлено задач: $saved',
+      );
+    }
   }
 
   @override
@@ -77,22 +88,25 @@ class _QuickTaskNote extends StatefulWidget {
     required this.addTask,
     required this.isActive,
     required this.onDraftChanged,
+    required this.watchProjects,
   });
 
   final String initialText;
   final Future<void> Function(Task) addTask;
   final bool Function() isActive;
   final ValueChanged<String> onDraftChanged;
+  final Stream<List<Project>> Function() watchProjects;
 
   @override
   State<_QuickTaskNote> createState() => _QuickTaskNoteState();
 }
 
 class _QuickTaskNoteState extends State<_QuickTaskNote> {
-  late final TextEditingController _controller;
+  late final _QuickNoteController _controller;
   final _textFocus = FocusNode();
-  late List<QuickTaskDraft> _drafts;
-  late bool _showTextInput;
+  late final StreamSubscription<List<Project>> _projectSubscription;
+  List<Project>? _projects;
+  bool _projectsFailed = false;
   bool _saving = false;
   bool _editingField = false;
   String? _error;
@@ -100,14 +114,32 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
   @override
   void initState() {
     super.initState();
-    final text = widget.initialText;
-    _controller = TextEditingController(text: text);
-    _drafts = parseQuickTasks(text, DateTime.now());
-    _showTextInput = _drafts.isEmpty;
+    _controller = _QuickNoteController(
+      widget.initialText,
+      edit: _edit,
+      canEdit: () => !_saving,
+    );
+    _projectSubscription = widget.watchProjects().listen(
+      (projects) {
+        if (!mounted) return;
+        setState(() {
+          _projects = projects;
+          _projectsFailed = false;
+        });
+      },
+      onError: (Object _) {
+        if (!mounted) return;
+        setState(() {
+          _projects = null;
+          _projectsFailed = true;
+        });
+      },
+    );
   }
 
   @override
   void dispose() {
+    unawaited(_projectSubscription.cancel());
     _textFocus.dispose();
     _controller.dispose();
     super.dispose();
@@ -115,19 +147,7 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
 
   void _onChanged(String text) {
     widget.onDraftChanged(text);
-    setState(() {
-      _drafts = parseQuickTasks(text, DateTime.now());
-      _error = null;
-    });
-  }
-
-  void _toggleTextInput() {
-    setState(() => _showTextInput = !_showTextInput);
-    if (_showTextInput) {
-      _textFocus.requestFocus();
-    } else {
-      _textFocus.unfocus();
-    }
+    setState(() => _error = null);
   }
 
   void _setText(String text) {
@@ -139,8 +159,9 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
   }
 
   Future<void> _save() async {
-    final drafts = _drafts;
-    if (_saving || drafts.isEmpty || drafts.any((d) => d.issues.isNotEmpty)) {
+    final drafts = _controller.drafts;
+    final assignments = drafts.map(_resolveProject).toList();
+    if (!_canSave(drafts, assignments)) {
       return;
     }
     setState(() {
@@ -149,7 +170,7 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
     });
     var saved = 0;
     try {
-      for (final draft in drafts) {
+      for (final (index, draft) in drafts.indexed) {
         if (!mounted || !widget.isActive()) {
           throw StateError('Quick task panel closed.');
         }
@@ -160,6 +181,7 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
             endsAt: Wrapped(draft.endsAt),
             dueDate: Wrapped(draft.deadline),
             priority: draft.priority,
+            projectId: Wrapped(assignments[index].project?.id),
           ),
         );
         saved++;
@@ -180,7 +202,11 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
     Navigator.pop(context, saved);
   }
 
-  Future<void> _edit(QuickTaskDraft draft, QuickTaskField field) async {
+  Future<void> _edit(
+    QuickTaskDraft draft,
+    QuickTaskField field,
+    BuildContext anchor,
+  ) async {
     if (_saving || _editingField || !widget.isActive()) return;
     final original = _controller.text;
     _editingField = true;
@@ -201,17 +227,20 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
           ),
         ),
         QuickTaskField.priority => _editPriority(),
+        QuickTaskField.project => _editProject(draft, anchor),
       };
     } finally {
       _editingField = false;
     }
-    if (!mounted ||
-        value == null ||
-        _controller.text != original ||
-        !widget.isActive()) {
+    if (!mounted || !widget.isActive()) return;
+    _textFocus.requestFocus();
+    if (value == null || _controller.text != original) {
       return;
     }
-    _setText(draft.replaceField(original, field, value));
+    final updated = draft.replaceField(original, field, value);
+    _setText(
+      updated.isEmpty || updated.trimRight() != updated ? updated : '$updated ',
+    );
   }
 
   Future<String?> _editDate(DateTime? initial, {bool deadline = false}) async {
@@ -249,13 +278,159 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
     ),
   );
 
+  ({Project? project, String? issue}) _resolveProject(QuickTaskDraft draft) {
+    final name = draft.projectName;
+    if (name == null || name.isEmpty) return (project: null, issue: null);
+    final projects = _projects;
+    if (projects == null) {
+      return (
+        project: null,
+        issue: _projectsFailed
+            ? 'Не удалось загрузить проекты.'
+            : 'Загружаем проекты…',
+      );
+    }
+    final id = draft.projectId;
+    final key = _projectKey(name);
+    final matches = projects
+        .where(
+          (project) =>
+              _projectKey(project.name) == key &&
+              (id == null || project.id == id),
+        )
+        .take(2)
+        .toList();
+    return switch (matches) {
+      [final project] => (project: project, issue: null),
+      [] => (
+        project: null,
+        issue: 'Проект «$name» не найден. Выберите проект.',
+      ),
+      _ => (
+        project: null,
+        issue: 'У нескольких проектов название «$name». Выберите нужный.',
+      ),
+    };
+  }
+
+  bool _canSave(
+    List<QuickTaskDraft> drafts,
+    List<({Project? project, String? issue})> assignments,
+  ) =>
+      !_saving &&
+      drafts.isNotEmpty &&
+      drafts.every((draft) => draft.issues.isEmpty) &&
+      assignments.every((assignment) => assignment.issue == null);
+
+  Future<String?> _editProject(QuickTaskDraft draft, BuildContext anchor) {
+    final overlay =
+        Navigator.of(anchor).overlay!.context.findRenderObject()! as RenderBox;
+    final chip = anchor.findRenderObject()! as RenderBox;
+    RelativeRect menuPosition() {
+      final origin = chip.localToGlobal(
+        Offset(0, chip.size.height + AppSpacing.xs),
+        ancestor: overlay,
+      );
+      return RelativeRect.fromRect(
+        origin & Size(chip.size.width, 0),
+        Offset.zero & overlay.size,
+      );
+    }
+
+    var position = menuPosition();
+    final projects = [...?_projects]
+      ..sort((a, b) => _projectKey(a.name).compareTo(_projectKey(b.name)));
+    final byId = {for (final project in projects) project.id: project};
+    final nameCounts = <String, int>{};
+    for (final project in projects) {
+      nameCounts.update(
+        _projectKey(project.name),
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    final selected = _resolveProject(draft).project;
+    PopupMenuItem<String> projectItem(Project project) {
+      final sameName = nameCounts[_projectKey(project.name)]! > 1;
+      final details = [
+        if (byId[project.parentProejectId] case final parent?) parent.name,
+        if (sameName) project.id.split('-').first,
+      ];
+      final reference = sameName ? ' @${project.id}' : '';
+      return PopupMenuItem<String>(
+        key: ValueKey(('pulse.quick-task.project', project.id)),
+        value: 'проект: ${quoteQuickTaskTitle(project.name)}$reference',
+        child: ListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          leading: Icon(
+            Icons.folder_outlined,
+            color: parseHexColor(project.color),
+          ),
+          title: Text(project.name),
+          subtitle: details.isEmpty ? null : Text(details.join(' · ')),
+          trailing: selected?.id == project.id
+              ? const Icon(
+                  Icons.check_rounded,
+                  color: AppColors.primary,
+                  size: 18,
+                )
+              : null,
+        ),
+      );
+    }
+
+    return showMenu<String>(
+      context: anchor,
+      positionBuilder: (_, _) {
+        if (chip.attached && chip.hasSize && overlay.attached) {
+          position = menuPosition();
+        }
+        return position;
+      },
+      constraints: const BoxConstraints(
+        minWidth: 236,
+        maxWidth: 340,
+        maxHeight: 420,
+      ),
+      items: [
+        PopupMenuItem<String>(
+          value: '',
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            leading: const Icon(Icons.remove_circle_outline),
+            title: const Text('Без проекта'),
+            trailing: draft.projectName == null
+                ? const Icon(
+                    Icons.check_rounded,
+                    color: AppColors.primary,
+                    size: 18,
+                  )
+                : null,
+          ),
+        ),
+        if (projects.isEmpty)
+          PopupMenuItem<String>(
+            enabled: false,
+            child: Text(
+              _projectsFailed
+                  ? 'Не удалось загрузить проекты.'
+                  : _projects == null
+                  ? 'Загружаем проекты…'
+                  : 'Пока нет проектов.',
+            ),
+          ),
+        ...projects.map(projectItem),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final drafts = _drafts;
-    final enabled =
-        !_saving &&
-        drafts.isNotEmpty &&
-        drafts.every((draft) => draft.issues.isEmpty);
+    final drafts = _controller.drafts;
+    final assignments = drafts.map(_resolveProject).toList();
+    final enabled = _canSave(drafts, assignments);
     return PopScope(
       canPop: !_saving,
       child: Dialog(
@@ -303,7 +478,7 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
                       ),
                     ],
                   ),
-                  _composer(enabled),
+                  _composer(enabled, drafts.length),
                   if (_error case final error?)
                     Text(
                       error,
@@ -330,10 +505,14 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
                         ),
                       ],
                     ),
-                    for (final draft in drafts)
+                    for (final (index, draft) in drafts.indexed)
                       _QuickTaskPreview(
                         draft: draft,
-                        edit: _saving ? null : (field) => _edit(draft, field),
+                        projectName: assignments[index].project?.name,
+                        projectIssue: assignments[index].issue,
+                        edit: _saving
+                            ? null
+                            : (field, anchor) => _edit(draft, field, anchor),
                       ),
                   ],
                 ],
@@ -345,7 +524,7 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
     );
   }
 
-  Widget _composer(bool enabled) => GlassPanel(
+  Widget _composer(bool enabled, int count) => GlassPanel(
     hasBlur: false,
     borderRadius: AppRadius.xl,
     padding: const EdgeInsets.all(AppSpacing.md),
@@ -353,63 +532,46 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: AppSpacing.sm,
       children: [
-        if (_drafts.isNotEmpty)
-          _FormattedQuickNote(
-            text: _controller.text,
-            drafts: _drafts,
-            edit: _saving ? null : _edit,
-          ),
-        if (_showTextInput || _drafts.isEmpty)
-          TextField(
-            key: const ValueKey('pulse.quick-task.input'),
-            autofocus: true,
-            focusNode: _textFocus,
-            readOnly: _saving,
-            controller: _controller,
-            onChanged: _onChanged,
-            minLines: 2,
-            maxLines: 7,
-            keyboardType: TextInputType.multiline,
-            textCapitalization: TextCapitalization.sentences,
-            textInputAction: TextInputAction.newline,
-            cursorColor: AppColors.primaryContainer,
-            style: AppTypography.bodyMd,
-            decoration: InputDecoration(
-              hintText:
-                  'Завтра в 7 утра сделать дз, а с 8 до 9 в понедельник — уборка в доме',
-              labelText: _drafts.isEmpty ? null : 'Текст заметки',
-              hintStyle: AppTypography.bodySm.copyWith(
-                color: AppColors.onSurfaceVariant.withValues(alpha: .65),
-              ),
-              filled: true,
-              fillColor: AppColors.surfaceContainerLow,
-              contentPadding: const EdgeInsets.all(AppSpacing.md),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                borderSide: BorderSide.none,
-              ),
+        TextField(
+          key: const ValueKey('pulse.quick-task.input'),
+          autofocus: true,
+          focusNode: _textFocus,
+          readOnly: _saving,
+          controller: _controller,
+          onChanged: _onChanged,
+          minLines: 2,
+          maxLines: null,
+          keyboardType: TextInputType.multiline,
+          textCapitalization: TextCapitalization.sentences,
+          textInputAction: TextInputAction.newline,
+          spellCheckConfiguration: const SpellCheckConfiguration.disabled(),
+          cursorColor: AppColors.primaryContainer,
+          style: AppTypography.bodyMd,
+          strutStyle: const StrutStyle(forceStrutHeight: false),
+          decoration: InputDecoration(
+            hintText: 'Завтра в 7 утра сделать дз, проект: Учёба',
+            hintStyle: AppTypography.bodySm.copyWith(
+              color: AppColors.onSurfaceVariant.withValues(alpha: .65),
+            ),
+            filled: true,
+            fillColor: AppColors.surfaceContainerLow,
+            contentPadding: const EdgeInsets.all(AppSpacing.md),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              borderSide: BorderSide.none,
             ),
           ),
+        ),
         Wrap(
           spacing: AppSpacing.md,
           runSpacing: AppSpacing.sm,
           crossAxisAlignment: WrapCrossAlignment.center,
           alignment: WrapAlignment.spaceBetween,
           children: [
-            if (_drafts.isEmpty)
-              Text(
-                'Новая строка — новая задача',
-                style: AppTypography.bodySm.copyWith(fontSize: 12),
-              )
-            else
-              TextButton.icon(
-                onPressed: _saving ? null : _toggleTextInput,
-                icon: Icon(
-                  _showTextInput ? Icons.check_rounded : Icons.edit_outlined,
-                  size: 17,
-                ),
-                label: Text(_showTextInput ? 'Готово' : 'Редактировать текст'),
-              ),
+            Text(
+              'Плашки появляются после пробела. Новая строка — новая задача.',
+              style: AppTypography.bodySm.copyWith(fontSize: 12),
+            ),
             FilledButton.icon(
               key: const ValueKey('pulse.quick-task.save'),
               onPressed: enabled ? _save : null,
@@ -420,9 +582,7 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.arrow_forward_rounded, size: 18),
-              label: Text(
-                _drafts.length == 1 ? 'Добавить задачу' : 'Добавить задачи',
-              ),
+              label: Text(count == 1 ? 'Добавить задачу' : 'Добавить задачи'),
             ),
           ],
         ),
@@ -431,83 +591,147 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
   );
 }
 
-class _FormattedQuickNote extends StatelessWidget {
-  const _FormattedQuickNote({
-    required this.text,
-    required this.drafts,
-    required this.edit,
-  });
+class _QuickNoteController extends TextEditingController {
+  _QuickNoteController(String text, {required this.edit, required this.canEdit})
+    : super(text: text);
 
-  final String text;
-  final List<QuickTaskDraft> drafts;
-  final void Function(QuickTaskDraft, QuickTaskField)? edit;
+  final void Function(QuickTaskDraft, QuickTaskField, BuildContext) edit;
+  final bool Function() canEdit;
+  String? _parsedText;
+  List<QuickTaskDraft> _drafts = const [];
+  List<QuickTaskDraft> _completed = const [];
 
+  static final _delimiter = RegExp(r'[\s,;]');
   static final _preposition = RegExp(
     r'^(?:на|в|во|с)[ \t]+',
     caseSensitive: false,
   );
+  static final _unfinishedTitle = RegExp(
+    r'(?:^|[ \t])(?:в|во|на|с|до|по|а|затем|потом|дедлайн|приоритет|проект)$',
+    caseSensitive: false,
+  );
+
+  List<QuickTaskDraft> get drafts {
+    if (_parsedText != text) {
+      final now = DateTime.now();
+      _parsedText = text;
+      _drafts = parseQuickTasks(text, now);
+      final boundary = text.lastIndexOf(_delimiter) + 1;
+      _completed = boundary == text.length
+          ? _drafts
+          : parseQuickTasks(text.substring(0, boundary), now);
+    }
+    return _drafts;
+  }
 
   @override
-  Widget build(BuildContext context) {
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final live = {for (final draft in drafts) draft.start: draft};
     final content = <InlineSpan>[];
+    final composing = withComposing && value.isComposingRangeValid
+        ? value.composing
+        : TextRange.empty;
+
+    void appendText(int start, int end) {
+      if (start == end) return;
+      if (composing.isCollapsed ||
+          composing.end <= start ||
+          composing.start >= end) {
+        content.add(TextSpan(text: text.substring(start, end)));
+        return;
+      }
+      final from = composing.start.clamp(start, end);
+      final to = composing.end.clamp(start, end);
+      content
+        ..add(TextSpan(text: text.substring(start, from)))
+        ..add(
+          TextSpan(
+            text: text.substring(from, to),
+            style: const TextStyle(decoration: TextDecoration.underline),
+          ),
+        )
+        ..add(TextSpan(text: text.substring(to, end)));
+    }
+
+    bool inside(int offset, int start, int end) =>
+        offset > start && offset < end;
+
     var offset = 0;
-    for (final draft in drafts) {
-      final startMinute = draft.startMinute;
+    for (final completed in _completed) {
+      final draft = live[completed.start];
+      if (draft == null) continue;
+      final liveSpans = {for (final span in draft.spans) span.start: span};
+      final startMinute = completed.startMinute;
       final hasSingleTitle =
-          draft.spans
+          completed.spans
               .where((span) => span.field == QuickTaskField.title)
               .length ==
           1;
-      for (final span in draft.spans) {
+      for (final span in completed.spans) {
+        final current = liveSpans[span.start];
+        if (current == null ||
+            current.field != span.field ||
+            current.end < span.end) {
+          continue;
+        }
         final raw = text.substring(span.start, span.end);
-        final prefixLength =
-            span.field == QuickTaskField.date ||
-                span.field == QuickTaskField.time
-            ? _preposition.matchAsPrefix(raw)?.end ?? 0
-            : 0;
+        final start =
+            span.start +
+            (span.field == QuickTaskField.date ||
+                    span.field == QuickTaskField.time
+                ? _preposition.matchAsPrefix(raw)?.end ?? 0
+                : 0);
+        final unfinished = span.field == QuickTaskField.title
+            ? _unfinishedTitle.firstMatch(raw)
+            : null;
+        final end = unfinished == null
+            ? span.end
+            : span.start + unfinished.start;
+        if (end <= start ||
+            inside(selection.baseOffset, start, end) ||
+            inside(selection.extentOffset, start, end) ||
+            (!composing.isCollapsed &&
+                composing.start < end &&
+                composing.end > start)) {
+          continue;
+        }
         final label = switch (span.field) {
-          QuickTaskField.title when hasSingleTitle => draft.title,
+          QuickTaskField.title when hasSingleTitle && unfinished == null =>
+            completed.title,
           QuickTaskField.time
-              when startMinute != null && draft.issues.isEmpty =>
-            _clockRangeLabel(startMinute, draft.endMinute),
-          _ => raw.substring(prefixLength),
+              when startMinute != null && completed.issues.isEmpty =>
+            _clockRangeLabel(startMinute, completed.endMinute),
+          QuickTaskField.project
+              when completed.projectName?.isNotEmpty ?? false =>
+            completed.projectName!,
+          _ => text.substring(start, end),
         };
+        appendText(offset, start);
         content
-          ..add(
-            TextSpan(text: text.substring(offset, span.start + prefixLength)),
-          )
           ..add(
             WidgetSpan(
               alignment: PlaceholderAlignment.middle,
               child: _InlineQuickParameter(
                 field: span.field,
                 label: label,
-                onPressed: edit == null ? null : () => edit!(draft, span.field),
+                onPressed: canEdit()
+                    ? (anchor) => edit(draft, span.field, anchor)
+                    : null,
               ),
             ),
-          );
-        offset = span.end;
+          )
+          // WidgetSpan occupies one UTF-16 offset. Keep the remaining offsets
+          // so the caret and native editing actions address the source text.
+          ..add(TextSpan(text: '\u2060' * (end - start - 1)));
+        offset = end;
       }
     }
-    content.add(TextSpan(text: text.substring(offset)));
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.borderGlass),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md,
-          vertical: AppSpacing.sm,
-        ),
-        child: Text.rich(
-          key: const ValueKey('pulse.quick-task.formatted'),
-          TextSpan(children: content),
-          style: AppTypography.bodyMd,
-        ),
-      ),
-    );
+    appendText(offset, text.length);
+    return TextSpan(style: style, children: content);
   }
 }
 
@@ -520,7 +744,7 @@ class _InlineQuickParameter extends StatelessWidget {
 
   final QuickTaskField field;
   final String label;
-  final VoidCallback? onPressed;
+  final ValueChanged<BuildContext>? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -533,6 +757,7 @@ class _InlineQuickParameter extends StatelessWidget {
         'Изменить дедлайн',
       ),
       QuickTaskField.priority => (Icons.flag_outlined, 'Изменить приоритет'),
+      QuickTaskField.project => (Icons.folder_outlined, 'Изменить проект'),
     };
     final accent = field == QuickTaskField.title
         ? AppColors.primaryContainer
@@ -540,7 +765,7 @@ class _InlineQuickParameter extends StatelessWidget {
     return Semantics(
       hint: hint,
       child: ActionChip(
-        onPressed: onPressed,
+        onPressed: onPressed == null ? null : () => onPressed!(context),
         backgroundColor: AppColors.primaryContainer.withValues(alpha: .16),
         side: BorderSide(color: AppColors.primary.withValues(alpha: .42)),
         shape: RoundedRectangleBorder(
@@ -579,6 +804,8 @@ class _InlineQuickParameter extends StatelessWidget {
 
 const _priorityLabels = ['Низкий', 'Обычный', 'Высокий'];
 
+String _projectKey(String name) => name.trim().toLowerCase();
+
 String _clockLabel(int minute) =>
     '${(minute ~/ 60).toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')}';
 
@@ -587,10 +814,17 @@ String _clockRangeLabel(int start, int? end) => end == null
     : '${_clockLabel(start)}–${_clockLabel(end)}';
 
 class _QuickTaskPreview extends StatelessWidget {
-  const _QuickTaskPreview({required this.draft, required this.edit});
+  const _QuickTaskPreview({
+    required this.draft,
+    required this.edit,
+    required this.projectName,
+    required this.projectIssue,
+  });
 
   final QuickTaskDraft draft;
-  final ValueChanged<QuickTaskField>? edit;
+  final void Function(QuickTaskField, BuildContext)? edit;
+  final String? projectName;
+  final String? projectIssue;
 
   @override
   Widget build(BuildContext context) {
@@ -602,7 +836,7 @@ class _QuickTaskPreview extends StatelessWidget {
       hasBlur: false,
       padding: const EdgeInsets.fromLTRB(12, 8, 8, 12),
       borderRadius: AppRadius.lg,
-      borderColor: draft.issues.isEmpty
+      borderColor: draft.issues.isEmpty && projectIssue == null
           ? null
           : AppColors.tertiary.withValues(alpha: .45),
       child: Column(
@@ -628,7 +862,7 @@ class _QuickTaskPreview extends StatelessWidget {
                 tooltip: 'Изменить название',
                 onPressed: edit == null
                     ? null
-                    : () => edit!(QuickTaskField.title),
+                    : () => edit!(QuickTaskField.title, context),
                 icon: const Icon(Icons.edit_outlined, size: 18),
               ),
             ],
@@ -663,9 +897,14 @@ class _QuickTaskPreview extends StatelessWidget {
                 Icons.flag_outlined,
                 _priorityLabels[draft.priority],
               ),
+              _chip(
+                QuickTaskField.project,
+                Icons.folder_outlined,
+                projectName ?? draft.projectName ?? 'Проект',
+              ),
             ],
           ),
-          for (final issue in draft.issues)
+          for (final issue in [...draft.issues, ?projectIssue])
             Padding(
               padding: const EdgeInsets.only(top: AppSpacing.xs),
               child: Text(
@@ -678,16 +917,21 @@ class _QuickTaskPreview extends StatelessWidget {
     );
   }
 
-  Widget _chip(QuickTaskField field, IconData icon, String label) => ActionChip(
-    avatar: Icon(icon, size: 16, color: AppColors.primary),
-    label: Text(label, overflow: TextOverflow.ellipsis),
-    labelStyle: AppTypography.codeLabel.copyWith(letterSpacing: 0, height: 1.2),
-    backgroundColor: AppColors.surfaceContainerHigh.withValues(alpha: .45),
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(AppRadius.md),
+  Widget _chip(QuickTaskField field, IconData icon, String label) => Builder(
+    builder: (context) => ActionChip(
+      avatar: Icon(icon, size: 16, color: AppColors.primary),
+      label: Text(label, overflow: TextOverflow.ellipsis),
+      labelStyle: AppTypography.codeLabel.copyWith(
+        letterSpacing: 0,
+        height: 1.2,
+      ),
+      backgroundColor: AppColors.surfaceContainerHigh.withValues(alpha: .45),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      side: BorderSide(color: AppColors.borderGlass),
+      onPressed: edit == null ? null : () => edit!(field, context),
     ),
-    side: BorderSide(color: AppColors.borderGlass),
-    onPressed: edit == null ? null : () => edit!(field),
   );
 }
 

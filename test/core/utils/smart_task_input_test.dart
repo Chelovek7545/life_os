@@ -91,4 +91,32 @@ void main() {
     expect(cleaning.title, 'уборка');
     expect(cleaning.startsAt, isNull);
   });
+
+  test('reads explicit project names and quoted separators per task', () {
+    const input =
+        'Завтра сделать дз, проект: Учёба; '
+        'Позвонить, проект «Курсы; завтра», приоритет высокий\n'
+        'Подготовить проект дома';
+    final [homework, call, ordinary] = parseQuickTasks(input, now);
+    expect(homework.title, 'сделать дз');
+    expect(homework.projectName, 'Учёба');
+    expect(call.title, 'Позвонить');
+    expect(call.projectName, 'Курсы; завтра');
+    expect(call.priority, 2);
+    expect(call.day, isNull);
+    expect(ordinary.projectName, isNull);
+    expect(ordinary.title, 'Подготовить проект дома');
+    final updated = homework.replaceField(
+      input,
+      QuickTaskField.project,
+      'проект: "Курсы; завтра" @some-project-id',
+    );
+    final assigned = parseQuickTasks(updated, now).first;
+    expect(assigned.projectName, 'Курсы; завтра');
+    expect(assigned.projectId, 'some-project-id');
+    expect(
+      parseQuickTasks('Сделать дз, проект:', now).single.issues,
+      contains('Укажите название проекта.'),
+    );
+  });
 }

@@ -1,4 +1,4 @@
-enum QuickTaskField { title, date, time, deadline, priority }
+enum QuickTaskField { title, date, time, deadline, priority, project }
 
 typedef QuickTaskSpan = ({QuickTaskField field, int start, int end});
 
@@ -13,6 +13,8 @@ class QuickTaskDraft {
     required this.endMinute,
     required this.deadline,
     required this.priority,
+    required this.projectName,
+    required this.projectId,
     required this.spans,
     required this.issues,
   });
@@ -25,6 +27,8 @@ class QuickTaskDraft {
   final int? endMinute;
   final DateTime? deadline;
   final int priority;
+  final String? projectName;
+  final String? projectId;
   final List<QuickTaskSpan> spans;
   final List<String> issues;
   final int? _connectorStart;
@@ -85,6 +89,13 @@ const _range =
     '$_clock'
     r'[ \t]*(?:до|по|[-–—])[ \t]*'
     '$_clock';
+const _literalTitle = r'"(?:\\[^\r\n]|[^"\\\r\n])*"';
+const _angleTitle = r'«[^»\r\n]*»';
+const _unquotedProject = r'[\p{L}\p{N}](?:[\p{L}\p{N}_.-]*[\p{L}\p{N}])?';
+const _project =
+    r'проект(?:(?:[ \t]*:[ \t]*|[ \t]+(?=["«]))'
+    '(?<projectName>$_literalTitle|$_angleTitle|$_unquotedProject)'
+    r'(?:[ \t]+@(?<projectId>[\w-]+))?|[ \t]*:)';
 const _fieldPattern =
     r'(?<![\p{L}\p{N}_#])'
     r'(?:(?<deadline>дедлайн[ \t]*:?[ \t]+(?:до[ \t]+)?'
@@ -94,16 +105,16 @@ const _fieldPattern =
     '$_clock)'
     r'|(?<date>(?:(?:на|в|во)[ \t]+)?'
     '$_date)'
-    r'|(?<priority>приоритет[ \t]*:?[ \t]+(?:высокий|обычный|средний|низкий)))'
+    r'|(?<priority>приоритет[ \t]*:?[ \t]+(?:высокий|обычный|средний|низкий))'
+    '|(?<project>$_project))'
     r'(?![\p{L}\p{N}_]|[.:]\d)';
-const _literalTitle = r'"(?:\\[^\r\n]|[^"\\\r\n])*"';
 final _fields = RegExp(
   '(?<literal>$_literalTitle)|$_fieldPattern',
   caseSensitive: false,
   unicode: true,
 );
 final _separator = RegExp(
-  '(?<literal>$_literalTitle)|'
+  '(?<literal>$_literalTitle|$_angleTitle)|'
   r'[\r\n;]+|(?<connector>(?:[ \t]*,[ \t]*|[ \t]+)(?:а|затем|потом)[ \t]+'
   '(?=$_fieldPattern))',
   caseSensitive: false,
@@ -161,6 +172,8 @@ QuickTaskDraft? _parseDraft(
   DateTime? deadline;
   int? startMinute;
   int? endMinute;
+  String? projectName;
+  String? projectId;
   var priority = 0;
   var cursor = 0;
 
@@ -229,6 +242,19 @@ QuickTaskDraft? _parseDraft(
           'обычный' || 'средний' => 1,
           _ => 0,
         };
+      case QuickTaskField.project:
+        final name = match.namedGroup('projectName') ?? '';
+        projectName = switch (name.isEmpty ? null : name[0]) {
+          '"' =>
+            name
+                .substring(1, name.length - 1)
+                .replaceAllMapped(_escape, (m) => m.group(1)!),
+          '«' => name.substring(1, name.length - 1),
+          _ => name,
+        };
+        projectName = projectName.trim();
+        projectId = match.namedGroup('projectId');
+        if (projectName.isEmpty) issues.add('Укажите название проекта.');
     }
   }
   readTitle(clause.length);
@@ -244,6 +270,8 @@ QuickTaskDraft? _parseDraft(
     endMinute: endMinute,
     deadline: deadline,
     priority: priority,
+    projectName: projectName,
+    projectId: projectId,
     spans: List.unmodifiable(spans),
     issues: List.unmodifiable(issues),
   );
