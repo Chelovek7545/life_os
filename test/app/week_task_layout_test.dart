@@ -11,7 +11,7 @@ void main() {
   testWidgets(
     'week switches layout and moves timed, date-only and spanning tasks without losing their schedule',
     (tester) async {
-      tester.view.physicalSize = const Size(2000, 1200);
+      tester.view.physicalSize = const Size(1440, 900);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final app = (await tester.runAsync(
@@ -21,6 +21,7 @@ void main() {
       final tue = DateTime(2026, 11, 10);
       final wed = DateTime(2026, 11, 11);
       final thu = DateTime(2026, 11, 12);
+      final sun = DateTime(2026, 11, 15);
       final timed = Task.blank().copyWith(
         title: 'Timed Monday',
         startsAt: Wrapped(mon.copyWith(hour: 9)),
@@ -31,7 +32,10 @@ void main() {
         startsAt: Wrapped(mon.startOfDay),
       );
       final range = Task.blank().copyWith(
-        title: 'Range Monday Tuesday',
+        title:
+            'Long task title spanning multiple days and several lines in '
+            'the regular task card with extra details at the end',
+        dueDate: Wrapped(DateTime(2026, 11, 29)),
         startsAt: Wrapped(mon.copyWith(hour: 12)),
         endsAt: Wrapped(tue.copyWith(hour: 13)),
       );
@@ -91,6 +95,7 @@ void main() {
         ))!.endsAt,
         tue.copyWith(hour: 10),
       );
+      final regularHeight = tester.getSize(card(range, mon)).height;
       await tester.tap(find.byKey(const ValueKey('tasks.week-layout')));
       await tester.pumpAndSettle();
       expect(
@@ -102,13 +107,27 @@ void main() {
         tester.getTopLeft(day(tue)).dx,
         greaterThan(tester.getTopLeft(day(mon)).dx),
       );
-      await tester.tap(
-        find.descendant(
-          of: card(dated, mon),
-          matching: find.byKey(const ValueKey('task.worklogs.toggle')),
-        ),
+      final horizontal = find.byKey(const ValueKey('tasks.week.horizontal'));
+      expect(
+        tester.getRect(day(sun)).right,
+        lessThanOrEqualTo(tester.getRect(horizontal).right + .01),
       );
+      expect(tester.getSize(card(range, mon)).height, lessThan(regularHeight));
+      final title = find.descendant(
+        of: card(range, mon),
+        matching: find.text(range.title),
+      );
+      expect(tester.widget<Text>(title).maxLines, 2);
+      final logsToggle = find.descendant(
+        of: card(dated, mon),
+        matching: find.byKey(const ValueKey('task.worklogs.toggle')),
+      );
+      expect(find.text('Ворклоги · 1'), findsOneWidget);
+      expect(tester.getSize(logsToggle).height, lessThan(30));
+      expect(find.text('История задачи'), findsNothing);
+      await tester.tap(logsToggle);
       await tester.pumpAndSettle();
+      expect(find.text('История задачи'), findsOneWidget);
       await move(dated, mon, wed);
       expect(
         (await tester.runAsync(
@@ -127,10 +146,9 @@ void main() {
       expect(card(range, thu), findsOneWidget);
       tester.view.physicalSize = const Size(390, 844);
       await tester.pumpAndSettle();
-      final horizontal = find.byKey(const ValueKey('tasks.week.horizontal'));
       await tester.drag(horizontal, const Offset(-2000, 0));
       await tester.pumpAndSettle();
-      expect(day(DateTime(2026, 11, 15)).hitTestable(), findsOneWidget);
+      expect(day(sun).hitTestable(), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('tasks.week-layout')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('tasks.week.vertical')), findsOneWidget);

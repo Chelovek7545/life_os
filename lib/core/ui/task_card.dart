@@ -83,6 +83,7 @@ class TaskCard extends StatefulWidget {
   final Widget? indicator;
   final WorkLogsApi? workLogs;
   final Widget? footer;
+  final bool compact;
 
   const TaskCard({
     super.key,
@@ -99,6 +100,7 @@ class TaskCard extends StatefulWidget {
     this.indicator,
     this.workLogs,
     this.footer,
+    this.compact = false,
   });
 
   @override
@@ -149,10 +151,105 @@ class _TaskCardState extends State<TaskCard>
       return TaskWorkLogsBuilder(
         taskId: widget.task.id,
         repository: widget.workLogs,
+        compact: widget.compact,
         builder: _buildCard,
       );
     }
     return _buildCard(widget.footer);
+  }
+
+  Widget _buildCompactHeader() {
+    final dueDate = widget.task.dueDate;
+    final projectTitle = widget.projectTitle;
+    final indicator = widget.indicator;
+    final metadataColor = widget.isOverdue
+        ? AppColors.primaryContainer
+        : AppColors.onSurfaceVariant;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onTap,
+      onDoubleTap: widget.onSelected,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              CheckDot(
+                isCompleted: widget.task.isCompleted,
+                isOverdue: widget.isOverdue,
+                isSelected: widget.isSelected,
+                onCheckChanged: () => widget.onCheckChanged?.call(),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  widget.task.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.bodyMd.copyWith(
+                    fontSize: 14,
+                    height: 1.3,
+                    fontWeight: FontWeight.w600,
+                    color: widget.isOverdue
+                        ? AppColors.primaryContainer
+                        : Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(
+                Icons.drag_indicator,
+                size: 16,
+                color: AppColors.onSurfaceVariant.withValues(alpha: 0.4),
+              ),
+            ],
+          ),
+          if (indicator != null || dueDate != null || projectTitle != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: Row(
+                children: [
+                  if (indicator != null) ...[
+                    indicator,
+                    const SizedBox(width: 4),
+                  ],
+                  if (dueDate != null) ...[
+                    Icon(Icons.schedule, size: 12, color: metadataColor),
+                    const SizedBox(width: 4),
+                  ],
+                  Expanded(
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          if (dueDate != null)
+                            TextSpan(
+                              text: formatDate(dueDate),
+                              style: AppTypography.codeLabel.copyWith(
+                                fontSize: 10,
+                                color: metadataColor,
+                              ),
+                            ),
+                          if (dueDate != null && projectTitle != null)
+                            const TextSpan(text: ' · '),
+                          if (projectTitle != null)
+                            TextSpan(text: projectTitle),
+                        ],
+                      ),
+                      style: AppTypography.bodySm.copyWith(
+                        fontSize: 11,
+                        height: 1.25,
+                        color: AppColors.onSurfaceVariant.withValues(alpha: .8),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _buildCard(Widget? footer) {
@@ -192,150 +289,163 @@ class _TaskCardState extends State<TaskCard>
                       ? AppColors.primaryContainer
                       : null,
                   child: Container(
-                    padding: EdgeInsets.all(footer == null ? 22 : 14),
+                    padding: widget.compact
+                        ? const EdgeInsets.fromLTRB(11, 10, 8, 10)
+                        : EdgeInsets.all(footer == null ? 22 : 14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Padding(
-                          padding: EdgeInsets.all(footer == null ? 0 : 8),
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: widget.onTap,
-                            onDoubleTap: widget.onSelected,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                CheckDot(
-                                  isCompleted: widget.task.isCompleted,
-                                  isOverdue: widget.isOverdue,
-                                  isSelected: widget.isSelected,
-                                  onCheckChanged: () =>
-                                      widget.onCheckChanged?.call(),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        widget.task.title,
-                                        style: AppTypography.bodyMd.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                          color: widget.isOverdue
-                                              ? AppColors.primaryContainer
-                                              : Colors.white,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      if (widget.projectTitle != null)
+                        if (widget.compact)
+                          _buildCompactHeader()
+                        else
+                          Padding(
+                            padding: EdgeInsets.all(footer == null ? 0 : 8),
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: widget.onTap,
+                              onDoubleTap: widget.onSelected,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  CheckDot(
+                                    isCompleted: widget.task.isCompleted,
+                                    isOverdue: widget.isOverdue,
+                                    isSelected: widget.isSelected,
+                                    onCheckChanged: () =>
+                                        widget.onCheckChanged?.call(),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
                                         Text(
-                                          widget.projectTitle!,
-                                          style: AppTypography.bodySm.copyWith(
-                                            color: AppColors.onSurfaceVariant
-                                                .withValues(alpha: 0.7),
+                                          widget.task.title,
+                                          style: AppTypography.bodyMd.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                            color: widget.isOverdue
+                                                ? AppColors.primaryContainer
+                                                : Colors.white,
                                           ),
                                         ),
-                                      const SizedBox(height: 8),
-                                      if (widget.task.dueDate != null)
-                                        Row(
-                                          children: [
-                                            Icon(
-                                              Icons.schedule,
-                                              size: 12,
-                                              color: widget.isOverdue
-                                                  ? AppColors.primaryContainer
-                                                  : AppColors.onSurfaceVariant,
-                                            ),
-                                            const SizedBox(width: 4),
+                                        const SizedBox(height: 4),
+                                        if (widget.projectTitle != null)
+                                          Text(
+                                            widget.projectTitle!,
+                                            style: AppTypography.bodySm
+                                                .copyWith(
+                                                  color: AppColors
+                                                      .onSurfaceVariant
+                                                      .withValues(alpha: 0.7),
+                                                ),
+                                          ),
+                                        const SizedBox(height: 8),
+                                        if (widget.task.dueDate != null)
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.schedule,
+                                                size: 12,
+                                                color: widget.isOverdue
+                                                    ? AppColors.primaryContainer
+                                                    : AppColors
+                                                          .onSurfaceVariant,
+                                              ),
+                                              const SizedBox(width: 4),
 
-                                            Text(
-                                              formatDate(widget.task.dueDate!),
-                                              style: AppTypography.codeLabel
-                                                  .copyWith(
+                                              Text(
+                                                formatDate(
+                                                  widget.task.dueDate!,
+                                                ),
+                                                style: AppTypography.codeLabel
+                                                    .copyWith(
+                                                      color: widget.isOverdue
+                                                          ? AppColors
+                                                                .primaryContainer
+                                                          : AppColors
+                                                                .onSurfaceVariant,
+                                                    ),
+                                              ),
+                                              if (widget
+                                                  .task
+                                                  .tags
+                                                  .isNotEmpty) ...[
+                                                const SizedBox(width: 12),
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 2,
+                                                      ),
+                                                  decoration: BoxDecoration(
                                                     color: widget.isOverdue
                                                         ? AppColors
                                                               .primaryContainer
+                                                              .withValues(
+                                                                alpha: 0.2,
+                                                              )
                                                         : AppColors
-                                                              .onSurfaceVariant,
-                                                  ),
-                                            ),
-                                            if (widget
-                                                .task
-                                                .tags
-                                                .isNotEmpty) ...[
-                                              const SizedBox(width: 12),
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 2,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: widget.isOverdue
-                                                      ? AppColors
-                                                            .primaryContainer
-                                                            .withValues(
-                                                              alpha: 0.2,
-                                                            )
-                                                      : AppColors.surfaceGlass,
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                ),
-                                                child: Wrap(
-                                                  spacing: 12,
-                                                  runSpacing: 8,
-                                                  children: widget.task.tags
-                                                      .map(
-                                                        (link) => SemanticTag(
-                                                          label: link.name,
-                                                          accentColor:
-                                                              Colors.black,
+                                                              .surfaceGlass,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                          4,
                                                         ),
-                                                      )
-                                                      .toList(),
+                                                  ),
+                                                  child: Wrap(
+                                                    spacing: 12,
+                                                    runSpacing: 8,
+                                                    children: widget.task.tags
+                                                        .map(
+                                                          (link) => SemanticTag(
+                                                            label: link.name,
+                                                            accentColor:
+                                                                Colors.black,
+                                                          ),
+                                                        )
+                                                        .toList(),
+                                                  ),
                                                 ),
-                                              ),
+                                              ],
                                             ],
-                                          ],
-                                        ),
-                                    ],
+                                          ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                if (widget.indicator != null) ...[
-                                  widget.indicator!,
-                                  const SizedBox(width: 8),
+                                  if (widget.indicator != null) ...[
+                                    widget.indicator!,
+                                    const SizedBox(width: 8),
+                                  ],
+                                  GestureDetector(
+                                    onTap: widget.onTap,
+                                    child: Icon(
+                                      Icons.drag_indicator,
+                                      color: AppColors.onSurfaceVariant
+                                          .withValues(alpha: 0.4),
+                                    ),
+                                  ),
                                 ],
-                                GestureDetector(
-                                  onTap: widget.onTap,
-                                  child: Icon(
-                                    Icons.drag_indicator,
-                                    color: AppColors.onSurfaceVariant
-                                        .withValues(alpha: 0.4),
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           ),
-                        ),
                         ?footer,
                       ],
                     ),
                   ),
                 ),
                 Positioned(
-                  left: 4,
-                  top: 14,
-                  bottom: 14,
+                  left: widget.compact ? 3 : 4,
+                  top: widget.compact ? 8 : 14,
+                  bottom: widget.compact ? 8 : 14,
                   child: Container(
-                    width: 7,
+                    width: widget.compact ? 3 : 7,
                     decoration: BoxDecoration(
                       boxShadow: [
                         BoxShadow(
                           color:
                               widget.leftBorderColor ??
                               AppColors.onSurfaceVariant,
-                          blurRadius: 13,
+                          blurRadius: widget.compact ? 8 : 13,
                           spreadRadius: -2,
                           offset: Offset(3, 0),
                         ),

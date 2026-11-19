@@ -31,7 +31,7 @@ import 'package:life_os/features/tasks/presentation/components/task_calendar.dar
 import 'package:life_os/features/tasks/presentation/components/calendar_task_hint.dart';
 import 'package:life_os/features/tasks/presentation/components/task_kanban_board.dart';
 
-Widget? _taskRangeIndicator(Task task) {
+Widget? _taskRangeIndicator(Task task, {double size = 18}) {
   final start = task.startsAt;
   final end = task.endsAt;
   if (start == null ||
@@ -42,9 +42,9 @@ Widget? _taskRangeIndicator(Task task) {
   }
   return CalendarTaskHint(
     message: 'Период: ${formatDate(start)} — ${formatDate(end)}',
-    child: const Icon(
+    child: Icon(
       Icons.date_range_outlined,
-      size: 18,
+      size: size,
       color: AppColors.primary,
     ),
   );
@@ -1333,14 +1333,15 @@ class _WeekTasksListState extends State<_WeekTasksList> {
         itemBuilder: (_, index) => section(days[index]),
       );
     }
+    const gap = AppSpacing.sm;
+    const minDayWidth = 160.0;
     return Padding(
-      padding: EdgeInsets.only(top: overlayHeight + AppSpacing.md, bottom: 8),
+      padding: EdgeInsets.only(top: overlayHeight + AppSpacing.sm, bottom: 8),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final width = ((constraints.maxWidth - 72) / 7).clamp(
-            260.0,
-            double.infinity,
-          );
+          final gapsWidth = gap * (days.length - 1);
+          final width = ((constraints.maxWidth - gapsWidth) / days.length)
+              .clamp(minDayWidth, double.infinity);
           return SingleChildScrollView(
             key: const ValueKey('tasks.week.horizontal'),
             scrollDirection: Axis.horizontal,
@@ -1348,7 +1349,7 @@ class _WeekTasksListState extends State<_WeekTasksList> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 for (var i = 0; i < days.length; i++) ...[
-                  if (i != 0) const SizedBox(width: 12),
+                  if (i != 0) const SizedBox(width: gap),
                   SizedBox(width: width, child: section(days[i])),
                 ],
               ],
@@ -1361,6 +1362,8 @@ class _WeekTasksListState extends State<_WeekTasksList> {
 }
 
 class _WeekDaySection extends StatelessWidget {
+  static const _horizontalTaskSpacing = 6.0;
+
   const _WeekDaySection({
     required this.date,
     required this.isToday,
@@ -1390,12 +1393,14 @@ class _WeekDaySection extends StatelessWidget {
     builder: (_, constraints) => TaskWorkLogsBuilder(
       taskId: item.task.id,
       repository: workLogs,
+      compact: horizontal,
       builder: (footer) {
         Widget card() => TaskCard(
           key: ValueKey(item.task.id),
+          compact: horizontal,
           footer: footer,
           task: item.task,
-          indicator: _taskRangeIndicator(item.task),
+          indicator: _taskRangeIndicator(item.task, size: horizontal ? 13 : 18),
           leftBorderColor: item.project == null
               ? null
               : parseHexColor(item.project!.color),
@@ -1407,7 +1412,9 @@ class _WeekDaySection extends StatelessWidget {
           onSelected: () => onToggleSelection(item.task),
         );
         return Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          padding: EdgeInsets.only(
+            bottom: horizontal ? _horizontalTaskSpacing : AppSpacing.sm,
+          ),
           child: LongPressDraggable<_WeekTaskDrag>(
             key: ValueKey(('week.task', date, item.task.id)),
             data: _WeekTaskDrag(item.task, date),
@@ -1450,15 +1457,16 @@ class _WeekDaySection extends StatelessWidget {
           : AppColors.surfaceContainerLow;
       final header = Padding(
         padding: EdgeInsets.only(
-          top: horizontal ? 12 : AppSpacing.xl,
+          top: horizontal ? AppSpacing.lg : AppSpacing.xl,
+          left: 4,
           bottom: AppSpacing.xs,
         ),
         child: Row(
           children: [
             if (isToday) ...[
-              const Icon(
+              Icon(
                 Icons.circle,
-                size: 8,
+                size: horizontal ? 6 : 8,
                 color: AppColors.primaryContainer,
               ),
               const SizedBox(width: 8),
@@ -1470,6 +1478,7 @@ class _WeekDaySection extends StatelessWidget {
                 child: Text(
                   '${getWeekDayName(date.weekday)} ${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}',
                   style: AppTypography.headlineLgMobile.copyWith(
+                    fontSize: horizontal ? 16 : null,
                     color: isToday
                         ? AppColors.primaryContainer
                         : AppColors.primary,
@@ -1505,30 +1514,45 @@ class _WeekDaySection extends StatelessWidget {
               : null,
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          padding: EdgeInsets.symmetric(horizontal: horizontal ? 6 : 8, 
+          //vertical: 16
+          ),
+          child: Stack(
             children: [
+              
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+              SizedBox(height: 8,),
+                  if (!horizontal)
               header,
+                  if (horizontal)
+                    Expanded(
+                      child: ClipRect(
+                        child: ScrollConfiguration(
+                          behavior: AppScrollBehavior(fadeColor: color),
+                          child: items.isEmpty
+                              ? Align(alignment: Alignment.topLeft, child: empty)
+                              : ListView.builder(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: _horizontalTaskSpacing + 24,
+                                    
+                                  ),
+                                  itemCount: items.length,
+                                  itemBuilder: (_, index) => _card(items[index]),
+                                ),
+                        ),
+                      ),
+                    )
+                  else if (items.isEmpty)
+                    empty
+                  else
+                    ...items.map(_card),
+                ],
+              ),
               if (horizontal)
-                Expanded(
-                  child: ClipRect(
-                    child: ScrollConfiguration(
-                      behavior: AppScrollBehavior(fadeColor: color),
-                      child: items.isEmpty
-                          ? Align(alignment: Alignment.topLeft, child: empty)
-                          : ListView.builder(
-                              padding: const EdgeInsets.only(top: 8),
-                              itemCount: items.length,
-                              itemBuilder: (_, index) => _card(items[index]),
-                            ),
-                    ),
-                  ),
-                )
-              else if (items.isEmpty)
-                empty
-              else
-                ...items.map(_card),
+              header,
+
             ],
           ),
         ),

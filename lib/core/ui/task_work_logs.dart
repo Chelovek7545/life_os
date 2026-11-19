@@ -11,10 +11,12 @@ class TaskWorkLogsBuilder extends StatefulWidget {
     required this.taskId,
     required this.repository,
     required this.builder,
+    this.compact = false,
   });
   final String taskId;
   final WorkLogsApi? repository;
   final Widget Function(Widget? footer) builder;
+  final bool compact;
   @override
   State<TaskWorkLogsBuilder> createState() => _TaskWorkLogsBuilderState();
 }
@@ -60,6 +62,7 @@ class _TaskWorkLogsBuilderState extends State<TaskWorkLogsBuilder> {
               ? null
               : _WorkLogPanel(
                   logs: logs,
+                  dense: widget.compact,
                   expanded: _expanded,
                   shown: _shown,
                   onToggle: () => setState(() => _expanded = !_expanded),
@@ -91,12 +94,14 @@ Duration workLogTimeOnDay(WorkLog log, DateTime day) {
 class _WorkLogPanel extends StatelessWidget {
   const _WorkLogPanel({
     required this.logs,
+    required this.dense,
     required this.expanded,
     required this.shown,
     required this.onToggle,
     required this.onMore,
   });
   final List<WorkLog> logs;
+  final bool dense;
   final bool expanded;
   final int shown;
   final VoidCallback onToggle;
@@ -151,6 +156,26 @@ class _WorkLogPanel extends StatelessWidget {
       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
       maxLines: 1,
     );
+    if (dense) {
+      return Padding(
+        key: ValueKey(('worklog.row', log.id)),
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(child: date),
+                if (log.duration != null) Flexible(child: duration),
+              ],
+            ),
+            if (interval != null) time,
+            const SizedBox(height: 3),
+            title,
+          ],
+        ),
+      );
+    }
     return SizedBox(
       key: ValueKey(('worklog.row', log.id)),
       height: wide
@@ -230,6 +255,29 @@ class _WorkLogPanel extends StatelessWidget {
     );
   }
 
+  Widget _compactSummary(bool timed, Duration total) => Semantics(
+    label: timed ? 'Ворклоги' : null,
+    child: Row(
+      children: [
+        const Icon(Icons.access_time, size: 13, color: AppColors.primary),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            timed ? workLogDurationLabel(total) : 'Ворклоги · ${logs.length}',
+            style: const TextStyle(fontSize: 11, color: AppColors.onSurface),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        Icon(
+          expanded ? Icons.expand_less : Icons.expand_more,
+          size: 17,
+          color: AppColors.onSurfaceVariant,
+        ),
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -237,12 +285,12 @@ class _WorkLogPanel extends StatelessWidget {
       Duration.zero,
       (sum, log) => sum + (log.duration ?? Duration.zero),
     );
-    final today = logs.fold(
+    late final today = logs.fold(
       Duration.zero,
       (sum, log) => sum + workLogTimeOnDay(log, now),
     );
     final timed = logs.any((log) => log.duration != null);
-    final activity = [
+    late final activity = [
       for (var i = 6; i >= 0; i--)
         logs
             .fold(
@@ -256,7 +304,7 @@ class _WorkLogPanel extends StatelessWidget {
             )
             .inSeconds,
     ];
-    final maxSeconds = math.max(1, activity.reduce(math.max));
+    late final maxSeconds = math.max(1, activity.reduce(math.max));
     Widget bars() => SizedBox(
       height: 23,
       child: Row(
@@ -304,9 +352,24 @@ class _WorkLogPanel extends StatelessWidget {
       'Сегодня: ${today == Duration.zero ? '0 мин' : workLogDurationLabel(today)}',
       style: const TextStyle(fontSize: 11, color: AppColors.onSurfaceVariant),
     );
+    Widget narrowActivity() => Row(
+      children: [
+        bars(),
+        const SizedBox(width: 8),
+        Expanded(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: todayLabel(),
+          ),
+        ),
+      ],
+    );
     return Container(
       key: const ValueKey('task.worklogs'),
-      margin: const EdgeInsets.fromLTRB(40, 8, 4, 4),
+      margin: dense
+          ? const EdgeInsets.only(top: 7)
+          : const EdgeInsets.fromLTRB(40, 8, 4, 4),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final wide = constraints.maxWidth >= 460;
@@ -320,92 +383,89 @@ class _WorkLogPanel extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppRadius.full),
                 onTap: onToggle,
                 child: Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: dense
+                      ? const EdgeInsets.symmetric(horizontal: 6, vertical: 3)
+                      : const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(AppRadius.full),
                     color: Colors.white.withValues(alpha: .05),
                     border: Border.all(color: AppColors.borderGlass),
                   ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          if (tight)
-                            Expanded(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: badge(),
-                              ),
-                            )
-                          else
-                            badge(),
-                          if (!tight) ...[
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: totalLabel(),
-                              ),
+                  child: dense
+                      ? _compactSummary(timed, total)
+                      : Column(
+                          children: [
+                            Row(
+                              children: [
+                                if (tight)
+                                  Expanded(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: badge(),
+                                    ),
+                                  )
+                                else
+                                  badge(),
+                                if (!tight) ...[
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: totalLabel(),
+                                    ),
+                                  ),
+                                ],
+                                if (wide && timed) ...[
+                                  const SizedBox(width: 12),
+                                  bars(),
+                                  const SizedBox(width: 16),
+                                  Flexible(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: todayLabel(),
+                                    ),
+                                  ),
+                                ],
+                                Icon(
+                                  expanded
+                                      ? Icons.expand_less
+                                      : Icons.expand_more,
+                                  size: 21,
+                                  color: AppColors.onSurfaceVariant,
+                                ),
+                              ],
                             ),
-                          ],
-                          if (wide && timed) ...[
-                            const SizedBox(width: 12),
-                            bars(),
-                            const SizedBox(width: 16),
-                            Flexible(
-                              child: FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: todayLabel(),
-                              ),
-                            ),
-                          ],
-                          Icon(
-                            expanded ? Icons.expand_less : Icons.expand_more,
-                            size: 21,
-                            color: AppColors.onSurfaceVariant,
-                          ),
-                        ],
-                      ),
-                      if (tight)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: totalLabel(),
-                            ),
-                          ),
-                        ),
-                      if (!wide && timed)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Row(
-                            children: [
-                              bars(),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  alignment: Alignment.centerRight,
-                                  child: todayLabel(),
+                            if (tight)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: totalLabel(),
+                                  ),
                                 ),
                               ),
-                            ],
-                          ),
+                            if (!wide && timed)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: narrowActivity(),
+                              ),
+                          ],
                         ),
-                    ],
-                  ),
                 ),
               ),
               if (expanded)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                  padding: dense
+                      ? const EdgeInsets.fromLTRB(4, 4, 4, 0)
+                      : const EdgeInsets.fromLTRB(12, 4, 12, 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (dense && timed) narrowActivity(),
                       for (final log in logs.take(shown))
                         _entry(log, now, wide, compact),
                       if (logs.length > shown)
