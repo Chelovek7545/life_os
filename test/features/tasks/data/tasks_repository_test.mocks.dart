@@ -263,6 +263,15 @@ class MockTasksDao extends _i1.Mock implements _i5.TasksDao {
           as _i5.TasksDaoManager);
 
   @override
+  _i6.Future<void> setTaskStatus(String? id, _i8.TaskStatus? status) =>
+      (super.noSuchMethod(
+            Invocation.method(#setTaskStatus, [id, status]),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
   _i6.Future<_i8.Task?> completeTask(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#completeTask, [id]),

@@ -281,13 +281,7 @@ class TasksViewModel {
   Future<void> updateTask(Task task) =>
       _enqueue(() => _repository.updateTask(task));
   Future<void> setTaskStatus(String id, TaskStatus status) =>
-      _enqueue(() async {
-        final current = await _repository.getById(id);
-        if (current == null || current.status == status) return;
-        await _repository.updateTask(
-          current.copyWith(status: status, updatedAt: DateTime.now()),
-        );
-      });
+      _enqueue(() => _repository.setTaskStatus(id, status));
   Future<void> updateTaskFromEditor(Task draft) => _enqueue(() async {
     final current = await _repository.getById(draft.id);
     if (current == null) return;
@@ -405,16 +399,10 @@ class TasksViewModel {
     );
   });
 
-  Future<void> toggleTask(Task task) => _enqueue(() async {
-    final current = await _repository.getById(task.id);
-    if (current == null) return;
-    await _repository.updateTask(
-      current.copyWith(
-        status: task.isCompleted ? TaskStatus.inProgress : TaskStatus.done,
-        updatedAt: DateTime.now(),
-      ),
-    );
-  });
+  Future<void> toggleTask(Task task) => setTaskStatus(
+    task.id,
+    task.isCompleted ? TaskStatus.inProgress : TaskStatus.done,
+  );
   Future<void> deleteTask(String id) =>
       _enqueue(() => _repository.deleteTask(id));
   Future<void> deleteSelectedTask() {
@@ -430,9 +418,7 @@ class TasksViewModel {
     final targets = selectedTasks;
     return _enqueue(() async {
       for (final task in targets) {
-        await _repository.updateTask(
-          task.copyWith(status: TaskStatus.done, updatedAt: DateTime.now()),
-        );
+        await _repository.setTaskStatus(task.id, TaskStatus.done);
       }
     });
   }

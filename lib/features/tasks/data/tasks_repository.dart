@@ -1,6 +1,6 @@
 import 'package:core_contracts/core_contracts.dart' show StorageException;
 import 'package:tasks_api/tasks_api.dart'
-    show TasksApi, Task, TaskCompletionCommands;
+    show TasksApi, Task, TaskStatus, TaskCompletionCommands;
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 
@@ -8,6 +8,15 @@ class TasksRepository implements TasksApi, TaskCompletionCommands {
   TasksRepository(this._dao);
 
   final TasksDao _dao;
+
+  @override
+  Future<void> setTaskStatus(String id, TaskStatus status) async {
+    try {
+      await _dao.setTaskStatus(id, status);
+    } catch (error) {
+      throw StorageException('Failed to change task status.', error);
+    }
+  }
 
   @override
   Future<Task?> completeTask(String id) async {

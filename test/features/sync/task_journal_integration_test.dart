@@ -147,6 +147,7 @@ void main() {
     for (final action in [
       () => repo.updateTask(conflicted),
       () => repo.completeTask(original.id),
+      () => repo.setTaskStatus(original.id, TaskStatus.inProgress),
       () => repo.deleteTask(original.id),
     ]) {
       await expectLater(action(), throwsA(isA<StorageException>()));

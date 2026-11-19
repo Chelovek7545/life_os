@@ -162,6 +162,7 @@ class HabitEntries extends Table {
     SyncIdentities,
     SyncRevisions,
     SyncCursors,
+    SyncEntityHeads,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -175,7 +176,19 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
+
+  Future<void> _createSyncProjectionTriggers() async {
+    for (final event in ['INSERT', 'UPDATE', 'DELETE']) {
+      await customStatement('''
+        CREATE TRIGGER sync_entity_heads_after_${event.toLowerCase()}
+        AFTER $event ON sync_revisions
+        BEGIN
+          DELETE FROM sync_entity_heads WHERE entity_key = '';
+        END
+      ''');
+    }
+  }
 
   @override
   MigrationStrategy get migration {
@@ -185,6 +198,7 @@ class AppDatabase extends _$AppDatabase {
       },
       onCreate: (Migrator m) async {
         await m.createAll();
+        await _createSyncProjectionTriggers();
         await customStatement('CREATE UNIQUE INDEX tags_sync_id_unique ON tags(sync_id)');
       },
       onUpgrade: (Migrator m, int from, int to) async {
@@ -196,6 +210,10 @@ class AppDatabase extends _$AppDatabase {
           await m.createTable(syncIdentities);
           await m.createTable(syncRevisions);
           await m.createTable(syncCursors);
+        }
+        if (from < 13) {
+          await m.createTable(syncEntityHeads);
+          await _createSyncProjectionTriggers();
         }
         if (from <= 2) {
           await m.database.customStatement(
@@ -270,11 +288,6 @@ LazyDatabase _openConnection() {
     final dbFolder = await getApplicationDocumentsDirectory();
     final file = File(p.join(dbFolder.path, 'tasks.sqlite'));
 
-    // //ТОЛЬКО В РАЗРАБОТКЕ
-    // if (await file.exists()) {
-    //   await file.delete();
-    // }
-
-    return NativeDatabase(file);
+    return NativeDatabase.createInBackground(file);
   });
 }

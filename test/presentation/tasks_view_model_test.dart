@@ -408,18 +408,19 @@ void main() {
           ),
         );
         taskStream.add([task1, task2]);
-        when(mockRepository.updateTask(any)).thenAnswer((_) async => {});
+        when(mockRepository.setTaskStatus(any, any)).thenAnswer((_) async {});
         viewModel.toggleTaskSelection(task1.task);
         viewModel.toggleTaskSelection(task2.task);
 
         await viewModel.markSelectedAsDone();
 
-        verify(mockRepository.updateTask(
-          argThat(predicate<Task>((t) => t.id == task1.task.id && t.status == TaskStatus.done)),
-        )).called(1);
-        verify(mockRepository.updateTask(
-          argThat(predicate<Task>((t) => t.id == task2.task.id && t.status == TaskStatus.done)),
-        )).called(1);
+        verify(
+          mockRepository.setTaskStatus(task1.task.id, TaskStatus.done),
+        ).called(1);
+        verify(
+          mockRepository.setTaskStatus(task2.task.id, TaskStatus.done),
+        ).called(1);
+        verifyNever(mockRepository.updateTask(any));
       });
     });
 
@@ -468,18 +469,15 @@ void main() {
         verify(mockRepository.updateTask(task)).called(1);
       });
 
-      test('toggleTask toggles status and calls updateTask', () async {
+      test('toggleTask uses a narrow status command', () async {
         final task = createMockTask(status: TaskStatus.open);
-        when(mockRepository.getById(task.id)).thenAnswer((_) async => task);
-        when(mockRepository.updateTask(any)).thenAnswer((_) async => {});
+        when(mockRepository.setTaskStatus(any, any)).thenAnswer((_) async {});
 
         await viewModel.toggleTask(task);
 
-        verify(
-          mockRepository.updateTask(
-            argThat(predicate<Task>((t) => t.status == TaskStatus.done)),
-          ),
-        ).called(1);
+        verify(mockRepository.setTaskStatus(task.id, TaskStatus.done)).called(1);
+        verifyNever(mockRepository.getById(any));
+        verifyNever(mockRepository.updateTask(any));
       });
 
       test('deleteTask delegates to repository', () async {

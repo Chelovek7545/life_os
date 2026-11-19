@@ -57,7 +57,7 @@ void main() {
   );
 
   test(
-    'hierarchy, project task and work log lists share one projection per read',
+    'hierarchy, project task and work log lists use the persisted projection',
     () async {
       final db = AppDatabase(NativeDatabase.memory());
       addTearDown(db.close);
@@ -100,7 +100,7 @@ void main() {
         final items = await read();
         expect(items, hasLength(20));
         expect(items.every((item) => token(item) != null), isTrue);
-        expect(store.projections, 1);
+        expect(store.projections, 0);
       }
 
       await check(sphereDao.getAllSpheres, (s) => s.storageRevision);
@@ -145,43 +145,40 @@ void main() {
     },
   );
 
-  test(
-    'a task list rebuild reads the causal projection once, not per row',
-    () async {
-      final db = AppDatabase(NativeDatabase.memory());
-      addTearDown(db.close);
-      final tasks = List.generate(
-        200,
-        (i) => Task.blank().copyWith(title: 'Task $i'),
-      );
-      await db.batch(
-        (batch) => batch.insertAll(db.tasks, tasks.map((t) => t.toDrift())),
-      );
-      final store = _CountingStore(db);
-      await store.initialize('scaling');
-      final repo = TasksRepository(TasksDao(db, journal: store));
-      final elapsed = Stopwatch()..start();
-      final loaded = await repo.getAllTasks();
-      final listBuilds = store.projections;
-      store.projections = 0;
-      final streamed = await repo.watchTasks().first;
-      final streamBuilds = store.projections;
-      // ignore: avoid_print
-      print(
-        'SYNC READ: ${elapsed.elapsedMilliseconds}ms; '
-        'list=$listBuilds, stream=$streamBuilds projections for ${tasks.length} tasks',
-      );
-      expect(loaded, hasLength(tasks.length));
-      expect(streamed.every((task) => task.storageRevision != null), isTrue);
-      expect(listBuilds, lessThanOrEqualTo(1));
-      expect(streamBuilds, lessThanOrEqualTo(1));
-      final stale = loaded.first;
-      await repo.completeTask(stale.id);
-      expect(
-        await store.observe(stale),
-        isA<Task>().having((t) => t.storageRevision, 'stale token', isNull),
-      );
-      expect((await repo.getById(stale.id))!.status, TaskStatus.done);
-    },
-  );
+  test('task list reads do not rebuild the causal graph', () async {
+    final db = AppDatabase(NativeDatabase.memory());
+    addTearDown(db.close);
+    final tasks = List.generate(
+      200,
+      (i) => Task.blank().copyWith(title: 'Task $i'),
+    );
+    await db.batch(
+      (batch) => batch.insertAll(db.tasks, tasks.map((t) => t.toDrift())),
+    );
+    final store = _CountingStore(db);
+    await store.initialize('scaling');
+    final repo = TasksRepository(TasksDao(db, journal: store));
+    final elapsed = Stopwatch()..start();
+    final loaded = await repo.getAllTasks();
+    final listBuilds = store.projections;
+    store.projections = 0;
+    final streamed = await repo.watchTasks().first;
+    final streamBuilds = store.projections;
+    // ignore: avoid_print
+    print(
+      'SYNC READ: ${elapsed.elapsedMilliseconds}ms; '
+      'list=$listBuilds, stream=$streamBuilds projections for ${tasks.length} tasks',
+    );
+    expect(loaded, hasLength(tasks.length));
+    expect(streamed.every((task) => task.storageRevision != null), isTrue);
+    expect(listBuilds, 0);
+    expect(streamBuilds, 0);
+    final stale = loaded.first;
+    await repo.completeTask(stale.id);
+    expect(
+      await store.observe(stale),
+      isA<Task>().having((t) => t.storageRevision, 'stale token', isNull),
+    );
+    expect((await repo.getById(stale.id))!.status, TaskStatus.done);
+  });
 }

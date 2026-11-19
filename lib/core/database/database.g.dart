@@ -5251,6 +5251,334 @@ class SyncCursorsCompanion extends UpdateCompanion<SyncCursor> {
   }
 }
 
+class $SyncEntityHeadsTable extends SyncEntityHeads
+    with TableInfo<$SyncEntityHeadsTable, SyncEntityHeadRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncEntityHeadsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _entityKeyMeta = const VerificationMeta(
+    'entityKey',
+  );
+  @override
+  late final GeneratedColumn<String> entityKey = GeneratedColumn<String>(
+    'entity_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _revisionIdMeta = const VerificationMeta(
+    'revisionId',
+  );
+  @override
+  late final GeneratedColumn<String> revisionId = GeneratedColumn<String>(
+    'revision_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _payloadMeta = const VerificationMeta(
+    'payload',
+  );
+  @override
+  late final GeneratedColumn<String> payload = GeneratedColumn<String>(
+    'payload',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _blockedMeta = const VerificationMeta(
+    'blocked',
+  );
+  @override
+  late final GeneratedColumn<bool> blocked = GeneratedColumn<bool>(
+    'blocked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("blocked" IN (0, 1))',
+    ),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    entityKey,
+    revisionId,
+    payload,
+    blocked,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_entity_heads';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncEntityHeadRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('entity_key')) {
+      context.handle(
+        _entityKeyMeta,
+        entityKey.isAcceptableOrUnknown(data['entity_key']!, _entityKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_entityKeyMeta);
+    }
+    if (data.containsKey('revision_id')) {
+      context.handle(
+        _revisionIdMeta,
+        revisionId.isAcceptableOrUnknown(data['revision_id']!, _revisionIdMeta),
+      );
+    }
+    if (data.containsKey('payload')) {
+      context.handle(
+        _payloadMeta,
+        payload.isAcceptableOrUnknown(data['payload']!, _payloadMeta),
+      );
+    }
+    if (data.containsKey('blocked')) {
+      context.handle(
+        _blockedMeta,
+        blocked.isAcceptableOrUnknown(data['blocked']!, _blockedMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_blockedMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {entityKey};
+  @override
+  SyncEntityHeadRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncEntityHeadRow(
+      entityKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}entity_key'],
+      )!,
+      revisionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}revision_id'],
+      ),
+      payload: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload'],
+      ),
+      blocked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}blocked'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncEntityHeadsTable createAlias(String alias) {
+    return $SyncEntityHeadsTable(attachedDatabase, alias);
+  }
+}
+
+class SyncEntityHeadRow extends DataClass
+    implements Insertable<SyncEntityHeadRow> {
+  final String entityKey;
+  final String? revisionId;
+  final String? payload;
+  final bool blocked;
+  const SyncEntityHeadRow({
+    required this.entityKey,
+    this.revisionId,
+    this.payload,
+    required this.blocked,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['entity_key'] = Variable<String>(entityKey);
+    if (!nullToAbsent || revisionId != null) {
+      map['revision_id'] = Variable<String>(revisionId);
+    }
+    if (!nullToAbsent || payload != null) {
+      map['payload'] = Variable<String>(payload);
+    }
+    map['blocked'] = Variable<bool>(blocked);
+    return map;
+  }
+
+  SyncEntityHeadsCompanion toCompanion(bool nullToAbsent) {
+    return SyncEntityHeadsCompanion(
+      entityKey: Value(entityKey),
+      revisionId: revisionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(revisionId),
+      payload: payload == null && nullToAbsent
+          ? const Value.absent()
+          : Value(payload),
+      blocked: Value(blocked),
+    );
+  }
+
+  factory SyncEntityHeadRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncEntityHeadRow(
+      entityKey: serializer.fromJson<String>(json['entityKey']),
+      revisionId: serializer.fromJson<String?>(json['revisionId']),
+      payload: serializer.fromJson<String?>(json['payload']),
+      blocked: serializer.fromJson<bool>(json['blocked']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'entityKey': serializer.toJson<String>(entityKey),
+      'revisionId': serializer.toJson<String?>(revisionId),
+      'payload': serializer.toJson<String?>(payload),
+      'blocked': serializer.toJson<bool>(blocked),
+    };
+  }
+
+  SyncEntityHeadRow copyWith({
+    String? entityKey,
+    Value<String?> revisionId = const Value.absent(),
+    Value<String?> payload = const Value.absent(),
+    bool? blocked,
+  }) => SyncEntityHeadRow(
+    entityKey: entityKey ?? this.entityKey,
+    revisionId: revisionId.present ? revisionId.value : this.revisionId,
+    payload: payload.present ? payload.value : this.payload,
+    blocked: blocked ?? this.blocked,
+  );
+  SyncEntityHeadRow copyWithCompanion(SyncEntityHeadsCompanion data) {
+    return SyncEntityHeadRow(
+      entityKey: data.entityKey.present ? data.entityKey.value : this.entityKey,
+      revisionId: data.revisionId.present
+          ? data.revisionId.value
+          : this.revisionId,
+      payload: data.payload.present ? data.payload.value : this.payload,
+      blocked: data.blocked.present ? data.blocked.value : this.blocked,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncEntityHeadRow(')
+          ..write('entityKey: $entityKey, ')
+          ..write('revisionId: $revisionId, ')
+          ..write('payload: $payload, ')
+          ..write('blocked: $blocked')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(entityKey, revisionId, payload, blocked);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncEntityHeadRow &&
+          other.entityKey == this.entityKey &&
+          other.revisionId == this.revisionId &&
+          other.payload == this.payload &&
+          other.blocked == this.blocked);
+}
+
+class SyncEntityHeadsCompanion extends UpdateCompanion<SyncEntityHeadRow> {
+  final Value<String> entityKey;
+  final Value<String?> revisionId;
+  final Value<String?> payload;
+  final Value<bool> blocked;
+  final Value<int> rowid;
+  const SyncEntityHeadsCompanion({
+    this.entityKey = const Value.absent(),
+    this.revisionId = const Value.absent(),
+    this.payload = const Value.absent(),
+    this.blocked = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncEntityHeadsCompanion.insert({
+    required String entityKey,
+    this.revisionId = const Value.absent(),
+    this.payload = const Value.absent(),
+    required bool blocked,
+    this.rowid = const Value.absent(),
+  }) : entityKey = Value(entityKey),
+       blocked = Value(blocked);
+  static Insertable<SyncEntityHeadRow> custom({
+    Expression<String>? entityKey,
+    Expression<String>? revisionId,
+    Expression<String>? payload,
+    Expression<bool>? blocked,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (entityKey != null) 'entity_key': entityKey,
+      if (revisionId != null) 'revision_id': revisionId,
+      if (payload != null) 'payload': payload,
+      if (blocked != null) 'blocked': blocked,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncEntityHeadsCompanion copyWith({
+    Value<String>? entityKey,
+    Value<String?>? revisionId,
+    Value<String?>? payload,
+    Value<bool>? blocked,
+    Value<int>? rowid,
+  }) {
+    return SyncEntityHeadsCompanion(
+      entityKey: entityKey ?? this.entityKey,
+      revisionId: revisionId ?? this.revisionId,
+      payload: payload ?? this.payload,
+      blocked: blocked ?? this.blocked,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (entityKey.present) {
+      map['entity_key'] = Variable<String>(entityKey.value);
+    }
+    if (revisionId.present) {
+      map['revision_id'] = Variable<String>(revisionId.value);
+    }
+    if (payload.present) {
+      map['payload'] = Variable<String>(payload.value);
+    }
+    if (blocked.present) {
+      map['blocked'] = Variable<bool>(blocked.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncEntityHeadsCompanion(')
+          ..write('entityKey: $entityKey, ')
+          ..write('revisionId: $revisionId, ')
+          ..write('payload: $payload, ')
+          ..write('blocked: $blocked, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5266,6 +5594,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SyncIdentitiesTable syncIdentities = $SyncIdentitiesTable(this);
   late final $SyncRevisionsTable syncRevisions = $SyncRevisionsTable(this);
   late final $SyncCursorsTable syncCursors = $SyncCursorsTable(this);
+  late final $SyncEntityHeadsTable syncEntityHeads = $SyncEntityHeadsTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -5283,6 +5614,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     syncIdentities,
     syncRevisions,
     syncCursors,
+    syncEntityHeads,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -8904,6 +9236,195 @@ typedef $$SyncCursorsTableProcessedTableManager =
       SyncCursor,
       PrefetchHooks Function()
     >;
+typedef $$SyncEntityHeadsTableCreateCompanionBuilder =
+    SyncEntityHeadsCompanion Function({
+      required String entityKey,
+      Value<String?> revisionId,
+      Value<String?> payload,
+      required bool blocked,
+      Value<int> rowid,
+    });
+typedef $$SyncEntityHeadsTableUpdateCompanionBuilder =
+    SyncEntityHeadsCompanion Function({
+      Value<String> entityKey,
+      Value<String?> revisionId,
+      Value<String?> payload,
+      Value<bool> blocked,
+      Value<int> rowid,
+    });
+
+class $$SyncEntityHeadsTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncEntityHeadsTable> {
+  $$SyncEntityHeadsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get entityKey => $composableBuilder(
+    column: $table.entityKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get revisionId => $composableBuilder(
+    column: $table.revisionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get blocked => $composableBuilder(
+    column: $table.blocked,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncEntityHeadsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncEntityHeadsTable> {
+  $$SyncEntityHeadsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get entityKey => $composableBuilder(
+    column: $table.entityKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get revisionId => $composableBuilder(
+    column: $table.revisionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get blocked => $composableBuilder(
+    column: $table.blocked,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncEntityHeadsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncEntityHeadsTable> {
+  $$SyncEntityHeadsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get entityKey =>
+      $composableBuilder(column: $table.entityKey, builder: (column) => column);
+
+  GeneratedColumn<String> get revisionId => $composableBuilder(
+    column: $table.revisionId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get payload =>
+      $composableBuilder(column: $table.payload, builder: (column) => column);
+
+  GeneratedColumn<bool> get blocked =>
+      $composableBuilder(column: $table.blocked, builder: (column) => column);
+}
+
+class $$SyncEntityHeadsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncEntityHeadsTable,
+          SyncEntityHeadRow,
+          $$SyncEntityHeadsTableFilterComposer,
+          $$SyncEntityHeadsTableOrderingComposer,
+          $$SyncEntityHeadsTableAnnotationComposer,
+          $$SyncEntityHeadsTableCreateCompanionBuilder,
+          $$SyncEntityHeadsTableUpdateCompanionBuilder,
+          (
+            SyncEntityHeadRow,
+            BaseReferences<
+              _$AppDatabase,
+              $SyncEntityHeadsTable,
+              SyncEntityHeadRow
+            >,
+          ),
+          SyncEntityHeadRow,
+          PrefetchHooks Function()
+        > {
+  $$SyncEntityHeadsTableTableManager(
+    _$AppDatabase db,
+    $SyncEntityHeadsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncEntityHeadsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncEntityHeadsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncEntityHeadsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> entityKey = const Value.absent(),
+                Value<String?> revisionId = const Value.absent(),
+                Value<String?> payload = const Value.absent(),
+                Value<bool> blocked = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncEntityHeadsCompanion(
+                entityKey: entityKey,
+                revisionId: revisionId,
+                payload: payload,
+                blocked: blocked,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String entityKey,
+                Value<String?> revisionId = const Value.absent(),
+                Value<String?> payload = const Value.absent(),
+                required bool blocked,
+                Value<int> rowid = const Value.absent(),
+              }) => SyncEntityHeadsCompanion.insert(
+                entityKey: entityKey,
+                revisionId: revisionId,
+                payload: payload,
+                blocked: blocked,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncEntityHeadsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncEntityHeadsTable,
+      SyncEntityHeadRow,
+      $$SyncEntityHeadsTableFilterComposer,
+      $$SyncEntityHeadsTableOrderingComposer,
+      $$SyncEntityHeadsTableAnnotationComposer,
+      $$SyncEntityHeadsTableCreateCompanionBuilder,
+      $$SyncEntityHeadsTableUpdateCompanionBuilder,
+      (
+        SyncEntityHeadRow,
+        BaseReferences<_$AppDatabase, $SyncEntityHeadsTable, SyncEntityHeadRow>,
+      ),
+      SyncEntityHeadRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -8931,4 +9452,6 @@ class $AppDatabaseManager {
       $$SyncRevisionsTableTableManager(_db, _db.syncRevisions);
   $$SyncCursorsTableTableManager get syncCursors =>
       $$SyncCursorsTableTableManager(_db, _db.syncCursors);
+  $$SyncEntityHeadsTableTableManager get syncEntityHeads =>
+      $$SyncEntityHeadsTableTableManager(_db, _db.syncEntityHeads);
 }

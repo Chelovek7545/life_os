@@ -61,6 +61,12 @@ class MemoryTasks implements TasksApi {
   Future<void> updateTask(Task task) =>
       _write(task.id, () => items[task.id] = task);
   @override
+  Future<void> setTaskStatus(String id, TaskStatus status) => _write(id, () {
+    final current = items[id];
+    if (current == null || current.status == status) return;
+    items[id] = current.copyWith(status: status, updatedAt: DateTime.now());
+  });
+  @override
   Future<void> deleteTask(String id) => _write(id, () => items.remove(id));
 }
 
@@ -143,6 +149,11 @@ class MemoryWorkLogs implements WorkLogsApi {
   Future<void> addWorkLog(WorkLog log) => _write(() => items[log.id] = log);
   @override
   Future<void> updateWorkLog(WorkLog log) => _write(() => items[log.id] = log);
+  @override
+  Future<void> setWorkLogStatus(String id, int status) => _write(() {
+    final current = items[id];
+    if (current != null) items[id] = current.copyWith(status: status);
+  });
   @override
   Future<void> deleteWorkLog(String id) => _write(() => items.remove(id));
 }

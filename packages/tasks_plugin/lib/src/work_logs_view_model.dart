@@ -70,6 +70,11 @@ class WorkLogsViewModel extends ChangeNotifier {
     await _repository.deleteWorkLog(id);
   }
 
+  Future<void> setWorkLogStatus(String id, int status) async {
+    if (_disposed) throw StateError('Work logs model is closed.');
+    await _repository.setWorkLogStatus(id, status);
+  }
+
   @override
   void dispose() {
     if (_disposed) return;

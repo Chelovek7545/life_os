@@ -37,19 +37,24 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
     return journal == null ? items : journal!.observeTasks(items);
   }
 
+  Future<void> setTaskStatus(String id, TaskStatus status) {
+    Future<void> write() async {
+      await (update(tasks)..where(
+            (row) => row.id.equals(id) & row.status.equalsValue(status).not(),
+          ))
+          .write(
+            TasksCompanion(
+              status: Value(status),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
+    }
+
+    return journal?.trackStatus('task', id, write) ?? transaction(write);
+  }
+
   Future<Task?> completeTask(String id) => transaction(() async {
-    await _mutate<void>(id, () async {
-      final current = await getById(id);
-      if (current == null) return;
-      if (current.status != TaskStatus.done) {
-        await (update(tasks)..where((row) => row.id.equals(id))).write(
-          TasksCompanion(
-            status: const Value(TaskStatus.done),
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
-      }
-    });
+    await setTaskStatus(id, TaskStatus.done);
     return getTaskWithTags(id);
   });
 

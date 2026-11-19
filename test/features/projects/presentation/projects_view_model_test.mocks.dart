@@ -97,6 +97,15 @@ class MockTasksRepository extends _i1.Mock implements _i5.TasksRepository {
   }
 
   @override
+  _i3.Future<void> setTaskStatus(String? id, _i6.TaskStatus? status) =>
+      (super.noSuchMethod(
+            Invocation.method(#setTaskStatus, [id, status]),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
   _i3.Future<_i6.Task?> completeTask(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#completeTask, [id]),

@@ -4,10 +4,19 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/sync/data/drift_sync_store.dart';
+import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:tasks_api/tasks_api.dart';
 
 void main() {
+  Future<void> removeSyncProjection(AppDatabase db) async {
+    for (final event in ['insert', 'update', 'delete']) {
+      await db.customStatement('DROP TRIGGER sync_entity_heads_after_$event');
+    }
+    await db.customStatement('DROP TABLE sync_entity_heads');
+  }
+
   Future<void> removeSyncSchema(AppDatabase db) async {
+    await removeSyncProjection(db);
     await db.customStatement('DROP INDEX tags_sync_id_unique');
     await db.customStatement('ALTER TABLE tags DROP COLUMN sync_id');
     for (final name in ['sync_cursors', 'sync_revisions', 'sync_identities']) {
@@ -17,6 +26,36 @@ void main() {
 
   late Directory directory;
   late File file;
+  test(
+    'v12 builds the projection lazily without rewriting the journal',
+    () async {
+      final old = AppDatabase(NativeDatabase(file));
+      final task = Task.blank();
+      final journal = DriftSyncStore(old);
+      await journal.initialize('dataset');
+      await journal.saveTask(task, expectedHeads: {});
+      final original = await old.select(old.syncRevisions).getSingle();
+      await removeSyncProjection(old);
+      await old.customStatement('PRAGMA user_version = 12');
+      await old.close();
+
+      final upgraded = AppDatabase(NativeDatabase(file));
+      try {
+        final store = DriftSyncStore(upgraded);
+        final dao = TasksDao(upgraded, journal: store);
+        expect(await upgraded.select(upgraded.syncEntityHeads).get(), isEmpty);
+        await dao.setTaskStatus(task.id, TaskStatus.done);
+        final revisions = await upgraded.select(upgraded.syncRevisions).get();
+        expect(revisions, hasLength(2));
+        expect(revisions.first, original);
+        final result = (await dao.getTaskWithTags(task.id))!;
+        expect(result.status, TaskStatus.done);
+        expect(result.storageRevision, revisions.last.revisionId);
+      } finally {
+        await upgraded.close();
+      }
+    },
+  );
   test(
     'v11 migration adds portable tag IDs without rewriting immutable revisions',
     () async {
@@ -37,6 +76,7 @@ void main() {
           );
       await old.customStatement('DROP INDEX tags_sync_id_unique');
       await old.customStatement('ALTER TABLE tags DROP COLUMN sync_id');
+      await removeSyncProjection(old);
       await old.customStatement('PRAGMA user_version = 11');
       await old.close();
       final upgraded = AppDatabase(NativeDatabase(file));

@@ -65,6 +65,9 @@ class WorkLogsSession implements WorkLogsApi {
   Future<void> updateWorkLog(WorkLog log) =>
       _enqueue(() => _repository.updateWorkLog(log));
   @override
+  Future<void> setWorkLogStatus(String id, int status) =>
+      _enqueue(() => _repository.setWorkLogStatus(id, status));
+  @override
   Future<void> deleteWorkLog(String id) =>
       _enqueue(() => _repository.deleteWorkLog(id));
   void stopAccepting() {

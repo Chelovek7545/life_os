@@ -119,8 +119,9 @@ class _WorkLogsSectionState extends State<WorkLogsSection> {
                             onChanged: (val) {
                               final model = _viewModel;
                               _run(
-                                () => model.updateWorkLog(
-                                  log.copyWith(status: (val == true) ? 1 : 0),
+                                () => model.setWorkLogStatus(
+                                  log.id,
+                                  (val == true) ? 1 : 0,
                                 ),
                               );
                             },

@@ -17,6 +17,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
   DriftSyncStore(this.db);
   final AppDatabase db;
   final Object _captureZone = Object();
+  static const _projectionMarker = '';
   @override
   SyncStore get store => this;
   @override
@@ -143,11 +144,71 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
   Future<String?> observedRevision(String key, String payload) async =>
       (await observedRevisions({key: payload}))[key];
 
-  String? _observedRevision(SyncGraph graph, String key, String payload) {
-    final versions = graph.heads[key] ?? [];
-    return versions.length == 1 && versions.single.payload == payload
-        ? versions.single.id
-        : null;
+  Future<void> _saveProjection(
+    SyncGraph graph,
+    Iterable<SyncRevision> revisions,
+  ) async {
+    final pendingKeys = {
+      for (final revision in revisions)
+        if (graph.pending.contains(revision.id)) revision.key,
+    };
+    await db.batch((batch) {
+      batch.deleteAll(db.syncEntityHeads);
+      batch.insertAll(db.syncEntityHeads, [
+        for (final key in {...graph.heads.keys, ...pendingKeys})
+          SyncEntityHeadRow(
+            entityKey: key,
+            revisionId: graph.heads[key]?.length == 1
+                ? graph.heads[key]!.single.id
+                : null,
+            payload: graph.heads[key]?.length == 1
+                ? graph.heads[key]!.single.payload
+                : null,
+            blocked:
+                pendingKeys.contains(key) ||
+                (graph.heads[key]?.length ?? 0) > 1,
+          ),
+        _marker(hasPending: pendingKeys.isNotEmpty),
+      ]);
+    });
+  }
+
+  SyncEntityHeadRow _marker({required bool hasPending}) =>
+      SyncEntityHeadRow(entityKey: _projectionMarker, blocked: hasPending);
+
+  Future<SyncEntityHeadRow?> _projectedHead(String key) => (db.select(
+    db.syncEntityHeads,
+  )..where((row) => row.entityKey.equals(key))).getSingleOrNull();
+
+  Future<SyncEntityHeadRow> _ensureProjection() async {
+    final marker = await _projectedHead(_projectionMarker);
+    if (marker != null) return marker;
+    final revisions = await _revisions();
+    final graph = SyncGraph(revisions);
+    await _saveProjection(graph, revisions);
+    return _marker(hasPending: graph.pending.isNotEmpty);
+  }
+
+  Future<Map<String, String>> _observedTokens(
+    Map<String, String> payloads,
+  ) async {
+    await _ensureProjection();
+    final keys = payloads.keys.toList(growable: false);
+    final tokens = <String, String>{};
+    const batchSize = 500;
+    for (var offset = 0; offset < keys.length; offset += batchSize) {
+      final rows =
+          await (db.select(db.syncEntityHeads)..where(
+                (row) => row.entityKey.isIn(keys.skip(offset).take(batchSize)),
+              ))
+              .get();
+      for (final row in rows) {
+        if (row.revisionId != null && row.payload == payloads[row.entityKey]) {
+          tokens[row.entityKey] = row.revisionId!;
+        }
+      }
+    }
+    return tokens;
   }
 
   @override
@@ -157,11 +218,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
             await db.select(db.syncIdentities).getSingleOrNull() == null) {
           return {};
         }
-        final graph = await state();
-        return {
-          for (final entry in payloads.entries)
-            entry.key: ?_observedRevision(graph, entry.key, entry.value),
-        };
+        return _observedTokens(payloads);
       });
   @override
   Future<T> trackEntity<T>(
@@ -188,7 +245,9 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
     if (await db.select(db.syncIdentities).getSingleOrNull() == null) {
       return tasks;
     }
-    final graph = await state();
+    final tokens = await _observedTokens({
+      for (final task in tasks) task.id: TaskSyncCodec.encode(task),
+    });
     return [
       for (final task in tasks)
         Task(
@@ -209,11 +268,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
           timerSeconds: task.timerSeconds,
           effortWeight: task.effortWeight,
           tags: task.tags,
-          storageRevision: _observedRevision(
-            graph,
-            task.id,
-            TaskSyncCodec.encode(task),
-          ),
+          storageRevision: tokens[task.id],
         ),
     ];
   });
@@ -229,7 +284,10 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
         if (await db.select(db.syncIdentities).getSingleOrNull() == null) {
           return logs;
         }
-        final graph = await state();
+        final tokens = await _observedTokens({
+          for (final log in logs)
+            'workLog/${log.id}': WorkLogSyncCodec.encode(log),
+        });
         return [
           for (final log in logs)
             WorkLog(
@@ -240,11 +298,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
               description: log.description,
               startedAt: log.startedAt,
               endedAt: log.endedAt,
-              storageRevision: _observedRevision(
-                graph,
-                'workLog/${log.id}',
-                WorkLogSyncCodec.encode(log),
-              ),
+              storageRevision: tokens['workLog/${log.id}'],
             ),
         ];
       });
@@ -319,6 +373,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
     }
     await _insert(revision);
     await _materialize(after);
+    await _saveProjection(after, [...revisions, revision]);
   });
   Future<void> _ensureTagIds() async {
     for (final row in await (db.select(
@@ -462,6 +517,9 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
         for (final r in added) {
           await _insert(r);
         }
+        if (added.isNotEmpty) {
+          await _saveProjection(graph, [...revisions, ...added]);
+        }
         return result;
       });
 
@@ -506,6 +564,87 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
 
   @override
   Future<T> trackGraph<T>(Future<T> Function() write) => _capture(write);
+
+  Future<String?> _statusPayload(String type, String id) async {
+    if (type == 'workLog') {
+      final row = await (db.select(
+        db.workLogs,
+      )..where((row) => row.id.equals(id))).getSingleOrNull();
+      return row == null ? null : WorkLogSyncCodec.encode(row.toDomain());
+    }
+    final task = await (db.select(
+      db.tasks,
+    )..where((row) => row.id.equals(id))).getSingleOrNull();
+    if (task == null) return null;
+    final tags = await (db.select(db.tags).join([
+      innerJoin(
+        db.taskTagEntries,
+        db.tags.id.equalsExp(db.taskTagEntries.tagId),
+      ),
+    ])..where(db.taskTagEntries.taskId.equals(id))).get();
+    return TaskSyncCodec.encode(
+      task.toDomain(
+        tags: tags.map((row) => row.readTable(db.tags).toDomain()).toList(),
+      ),
+    );
+  }
+
+  @override
+  Future<void> trackStatus(
+    String type,
+    String id,
+    Future<void> Function() write,
+  ) => db.transaction(() async {
+    if (type != 'task' && type != 'workLog') {
+      throw ArgumentError.value(type, 'type');
+    }
+    if (Zone.current[_captureZone] == true) return write();
+    final local = await existingIdentity();
+    if (local == null) return write();
+    final key = SyncPayload.key(type, id);
+    final marker = await _ensureProjection();
+    final head = await _projectedHead(key);
+    if (head?.blocked == true) {
+      throw StateError(
+        'Resolve pending revisions and conflicts before editing.',
+      );
+    }
+    final before = await _statusPayload(type, id);
+    if (head?.payload != before) {
+      throw StateError('Untracked local changes; refusing to overwrite $key.');
+    }
+    if (before == null) return;
+    if (marker.blocked) return _capture(write);
+    await write();
+    final after = await _statusPayload(type, id);
+    if (after == before) return;
+    String withoutStatus(String payload) {
+      final fields = jsonDecode(payload) as Map<String, dynamic>;
+      fields.remove('status');
+      if (type == 'task') fields.remove('updatedAt');
+      return jsonEncode(fields);
+    }
+
+    if (after == null || withoutStatus(before) != withoutStatus(after)) {
+      throw StateError('Status command changed other fields of $key.');
+    }
+    final revision = SyncRevision(
+      id: const Uuid().v4(),
+      deviceId: local.deviceId,
+      entityId: id,
+      entityType: type,
+      parents: [head!.revisionId!],
+      payload: after,
+      schemaVersion: _version(type, after),
+    );
+    await _insert(revision);
+    await db
+        .into(db.syncEntityHeads)
+        .insertOnConflictUpdate(
+          head.copyWith(revisionId: Value(revision.id), payload: Value(after)),
+        );
+    await db.into(db.syncEntityHeads).insert(marker);
+  });
 
   Future<void> initialize(
     String datasetId, {
@@ -564,6 +703,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
     for (final r in added) {
       await _insert(r);
     }
+    await _saveProjection(graph, [...old, ...added]);
   });
   @override
   Future<SyncIdentity> identity() async {
@@ -901,6 +1041,9 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
           for (final k in after.heads.keys) k: after.winner(k)?.payload,
         })) {
       await _materialize(after);
+    }
+    if (added.isNotEmpty) {
+      await _saveProjection(after, byId.values);
     }
     await db
         .into(db.syncCursors)

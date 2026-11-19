@@ -11,6 +11,7 @@ abstract interface class TaskQueries {
 abstract interface class TaskCommands {
   Future<void> addTask(Task task);
   Future<void> updateTask(Task task);
+  Future<void> setTaskStatus(String id, TaskStatus status);
   Future<void> deleteTask(String id);
 }
 
@@ -35,5 +36,6 @@ abstract interface class WorkLogsApi {
   Stream<List<WorkLog>> watchWorkLogsForTask(String taskId);
   Future<void> addWorkLog(WorkLog workLog);
   Future<void> updateWorkLog(WorkLog workLog);
+  Future<void> setWorkLogStatus(String id, int status);
   Future<void> deleteWorkLog(String id);
 }

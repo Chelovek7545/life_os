@@ -20,6 +20,11 @@ abstract interface class TaskMutationJournal {
     bool createOnly = false,
   });
   Future<T> trackGraph<T>(Future<T> Function() write);
+  Future<void> trackStatus(
+    String type,
+    String id,
+    Future<void> Function() write,
+  );
   Future<Task> observe(Task task);
   Future<List<Task>> observeTasks(List<Task> tasks);
   Future<WorkLog> observeWorkLog(WorkLog log);

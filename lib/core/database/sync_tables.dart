@@ -22,3 +22,13 @@ class SyncCursors extends Table {
   @override
   Set<Column> get primaryKey => {deviceId};
 }
+
+@DataClassName('SyncEntityHeadRow')
+class SyncEntityHeads extends Table {
+  TextColumn get entityKey => text()();
+  TextColumn get revisionId => text().nullable()();
+  TextColumn get payload => text().nullable()();
+  BoolColumn get blocked => boolean()();
+  @override
+  Set<Column> get primaryKey => {entityKey};
+}

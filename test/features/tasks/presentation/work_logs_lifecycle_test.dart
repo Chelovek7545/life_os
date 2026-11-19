@@ -1,11 +1,38 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tasks_api/tasks_api.dart';
 import 'package:tasks_plugin/tasks_plugin.dart';
 import 'package:life_os/features/tasks/presentation/components/work_logs_section.dart';
 import '../support/memory_tasks.dart';
 
 void main() {
+  testWidgets('checkbox preserves work log fields changed after rendering', (
+    tester,
+  ) async {
+    final store = MemoryWorkLogs();
+    final log = WorkLog.blank('task').copyWith(description: 'Displayed');
+    store.items[log.id] = log;
+    final session = WorkLogsSession(store);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WorkLogsSection(taskId: 'task', repository: session),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    store.items[log.id] = log.copyWith(description: 'Newer description');
+    await tester.tap(find.byType(Checkbox));
+    await tester.pumpAndSettle();
+    expect(store.items[log.id]!.status, 1);
+    expect(store.items[log.id]!.description, 'Newer description');
+    expect(find.text('Newer description'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    await tester.runAsync(session.dispose);
+    expect(tester.takeException(), isNull);
+  });
+
   test(
     'work log model cancels its subscription and new logs have unique IDs',
     () async {

@@ -653,6 +653,29 @@ void main() {
   );
 
   test(
+    'work log scope drains status writes and rejects stale commands',
+    () async {
+      final store = MemoryWorkLogs()
+        ..writeGate = Completer<void>()
+        ..entered = Completer<void>();
+      final log = WorkLog.blank('task');
+      store.items[log.id] = log;
+      final session = WorkLogsSession(store);
+      final write = session.setWorkLogStatus(log.id, 1);
+      await store.entered!.future;
+      var closed = false;
+      final closing = session.dispose().then((_) => closed = true);
+      await tick();
+      expect(closed, isFalse);
+      await expectLater(session.setWorkLogStatus(log.id, 0), throwsStateError);
+      store.writeGate!.complete();
+      await write;
+      await closing;
+      expect(store.items[log.id]!.status, 1);
+    },
+  );
+
+  test(
     'work log cancellation failure still releases every source and finishes streams',
     () async {
       final store = MemoryWorkLogs();

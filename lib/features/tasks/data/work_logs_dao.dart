@@ -104,6 +104,17 @@ class WorkLogsDao extends DatabaseAccessor<AppDatabase>
     });
   }
 
+  Future<void> setWorkLogStatus(String id, int status) {
+    Future<void> write() async {
+      await (update(workLogs)..where(
+            (row) => row.id.equals(id) & row.status.equals(status).not(),
+          ))
+          .write(WorkLogsCompanion(status: Value(status)));
+    }
+
+    return journal?.trackStatus('workLog', id, write) ?? transaction(write);
+  }
+
   Future<int> deleteWorkLog(String id) {
     return transaction(() async {
       final previous = await getById(id);

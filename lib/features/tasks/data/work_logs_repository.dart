@@ -89,6 +89,10 @@ class WorkLogsRepository implements WorkLogsApi {
   }
 
   @override
+  Future<void> setWorkLogStatus(String id, int status) =>
+      _workLogsDao.setWorkLogStatus(id, status);
+
+  @override
   Future<void> deleteWorkLog(String id) async {
     await _workLogsDao.deleteWorkLog(id);
   }
