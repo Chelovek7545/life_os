@@ -1,460 +1,305 @@
-import 'dart:async';
-import 'package:flutter/material.dart';
+enum QuickTaskField { title, date, time, deadline, priority }
 
-class TimeRange {
-  final String start;
-  final String? end;
-
-  TimeRange({
-    required this.start,
-    this.end,
-  });
-
-  Map<String, dynamic> toMap() {
-    final map = <String, dynamic>{
-      'start': start,
-    };
-
-    if (end != null) {
-      map['end'] = end;
-    }
-
-    return map;
-  }
-
-  @override
-  String toString() => 'TimeRange(start: $start, end: $end)';
-}
+typedef QuickTaskSpan = ({QuickTaskField field, int start, int end});
 
 class QuickTaskDraft {
-  final String title;
-  final TimeRange? time;
-  final DateTime? deadline;
-  final String? project;
-  final List<String> tags;
-  final List<String> warnings;
-  final String raw;
-
-  QuickTaskDraft({
+  const QuickTaskDraft._(
+    this._connectorStart, {
+    required this.start,
+    required this.end,
     required this.title,
-    this.time,
-    this.deadline,
-    this.project,
-    required this.tags,
-    required this.warnings,
-    required this.raw,
+    required this.day,
+    required this.startMinute,
+    required this.endMinute,
+    required this.deadline,
+    required this.priority,
+    required this.spans,
+    required this.issues,
   });
 
-  String? get deadlineIso => deadline == null ? null : dateToIso(deadline!);
+  final int start;
+  final int end;
+  final String title;
+  final DateTime? day;
+  final int? startMinute;
+  final int? endMinute;
+  final DateTime? deadline;
+  final int priority;
+  final List<QuickTaskSpan> spans;
+  final List<String> issues;
+  final int? _connectorStart;
 
-  Map<String, dynamic> toMap() {
-    return {
-      'title': title,
-      'time': time?.toMap(),
-      'deadline': deadlineIso,
-      'project': project,
-      'tags': tags,
-      'warnings': warnings,
-      'raw': raw,
-    };
-  }
+  DateTime? get startsAt => _atMinute(startMinute ?? 0);
+  DateTime? get endsAt => endMinute == null ? null : _atMinute(endMinute!);
 
-  @override
-  String toString() => 'QuickTaskDraft(${toMap()})';
-}
+  DateTime? _atMinute(int minute) => switch (day) {
+    final date? => DateTime(
+      date.year,
+      date.month,
+      date.day,
+      minute ~/ 60,
+      minute % 60,
+    ),
+    null => null,
+  };
 
-QuickTaskDraft parseQuickTask(
-  String rawInput, [
-  DateTime? now,
-]) {
-  final baseNow = now ?? DateTime.now();
-
-  final warnings = <String>[];
-  final tags = <String>[];
-
-  String? project;
-  DateTime? deadline;
-  TimeRange? time;
-
-  var text = ' ${rawInput.trim()} ';
-
-  // 1. Теги вида #анатомия #учёба
-  final tagRe = RegExp(
-    r'#([A-Za-zА-Яа-яЁё0-9_\-]+)',
-    unicode: true,
-  );
-
-  text = text.replaceAllMapped(tagRe, (match) {
-    final tag = match.group(1);
-    if (tag != null && tag.isNotEmpty) {
-      tags.add(tag);
+  String replaceField(String text, QuickTaskField field, String value) {
+    final ranges = spans.where((span) => span.field == field).toList();
+    if (ranges.isEmpty) {
+      if (value.isEmpty) return text;
+      return text.replaceRange(end, end, ' $value');
     }
-    return ' ';
-  });
-
-  // 2. Проект / предмет / курс / категория
-  // Примеры:
-  // проект анатомия
-  // проект: анатомия
-  // предмет анатомия
-  // курс биология
-  final projectRe = RegExp(
-    r'[\s,;]+(?:проект|предмет|курс|категория|тег|тэг)\s*[:\-]?\s*([^,;.\n]+)',
-    caseSensitive: false,
-    unicode: true,
-  );
-
-  final projectMatch = projectRe.firstMatch(text);
-
-  if (projectMatch != null) {
-    final captured = projectMatch.group(1)?.trim();
-
-    if (captured != null && captured.isNotEmpty) {
-      project = captured.replaceAll(RegExp(r'\s+'), ' ');
-      text = text.replaceFirst(projectMatch.group(0)!, ' ');
+    final originalLength = text.length;
+    for (final span in ranges.reversed) {
+      text = text.replaceRange(
+        span.start,
+        span.end,
+        span == ranges.first ? value : '',
+      );
     }
-  }
-
-  // 3. Дедлайн с ключевым словом
-  // Примеры:
-  // дедлайн 12.08.2007
-  // срок 12.08
-  // до 12.08.2007
-  // к 12.08
-  final deadlineRe = RegExp(
-    r'[\s,;]+(?:дедлайна|дедлайн|крайний срок|срок|до|к)\s*[:\-]?\s*(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?',
-    caseSensitive: false,
-    unicode: true,
-  );
-
-  final deadlineMatch = deadlineRe.firstMatch(text);
-
-  if (deadlineMatch != null) {
-    final day = int.tryParse(deadlineMatch.group(1) ?? '');
-    final month = int.tryParse(deadlineMatch.group(2) ?? '');
-    final year = normalizeYear(deadlineMatch.group(3));
-
-    if (day != null && month != null) {
-      final date = parseDate(day, month, year, baseNow);
-
-      if (date != null) {
-        deadline = date;
-        text = text.replaceFirst(deadlineMatch.group(0)!, ' ');
-      } else {
-        warnings.add('Не удалось разобрать дату дедлайна');
+    final connector = _connectorStart;
+    if (connector != null) {
+      final clause = text.substring(start, end + text.length - originalLength);
+      final first = _fields.firstMatch(clause.trimLeft());
+      if (first == null ||
+          first.start != 0 ||
+          first.namedGroup('literal') != null) {
+        text = text.replaceRange(connector, start, '; ');
       }
     }
+    return text;
   }
-
-  // 4. Время вида:
-  // с 8 до 9
-  // с 08:30 до 10:00
-  // с 14 до 16
-  // с 8-9
-  final timeRangeRe = RegExp(
-    r'[\s,;]+с\s*(\d{1,2})(?::(\d{2}))?\s*(?:ч(?:ас(?:а|ов)?)?)?\s*(?:до|по|-|–|—)\s*(\d{1,2})(?::(\d{2}))?\s*(?:ч(?:ас(?:а|ов)?)?)?',
-    caseSensitive: false,
-    unicode: true,
-  );
-
-  final timeMatch = timeRangeRe.firstMatch(text);
-
-  if (timeMatch != null) {
-    final startHour = int.tryParse(timeMatch.group(1) ?? '') ?? -1;
-    final endHour = int.tryParse(timeMatch.group(3) ?? '') ?? -1;
-
-    final start = toTime(startHour, timeMatch.group(2));
-    final end = toTime(endHour, timeMatch.group(4));
-
-    if (start != null && end != null) {
-      time = TimeRange(start: start, end: end);
-      text = text.replaceFirst(timeMatch.group(0)!, ' ');
-
-      if (end.compareTo(start) <= 0) {
-        warnings.add('Время окончания раньше времени начала');
-      }
-    }
-  }
-
-  // 5. Если дедлайн не нашли с ключевым словом,
-  // пробуем найти обычную дату в тексте:
-  // 12.08.2007 или 12.08
-  if (deadline == null) {
-    final standaloneDateRe = RegExp(
-      r'[\s,;]+(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?',
-      unicode: true,
-    );
-
-    final dateMatch = standaloneDateRe.firstMatch(text);
-
-    if (dateMatch != null) {
-      final day = int.tryParse(dateMatch.group(1) ?? '');
-      final month = int.tryParse(dateMatch.group(2) ?? '');
-      final year = normalizeYear(dateMatch.group(3));
-
-      if (day != null && month != null) {
-        final date = parseDate(day, month, year, baseNow);
-
-        if (date != null) {
-          deadline = date;
-          text = text.replaceFirst(dateMatch.group(0)!, ' ');
-        }
-      }
-    }
-  }
-
-  // 6. То, что осталось, считаем названием задачи
-  final title = text
-      .replaceFirst(RegExp(r'^[\s,;.]+'), '')
-      .replaceFirst(RegExp(r'[\s,;.]+$'), '')
-      .replaceAll(RegExp(r'\s+'), ' ')
-      .trim();
-
-  if (title.isEmpty) {
-    warnings.add('Пустое название задачи');
-  }
-
-  return QuickTaskDraft(
-    title: title,
-    time: time,
-    deadline: deadline,
-    project: project,
-    tags: tags,
-    warnings: warnings,
-    raw: rawInput,
-  );
 }
 
-int? normalizeYear(String? year) {
-  if (year == null || year.isEmpty) return null;
+const _relative = r'послезавтра|завтра|сегодня';
+const _weekdays =
+    r'понедельник|вторник|сред[ау]|четверг|пятниц[ау]|суббот[ау]|воскресенье';
+const _numericDate = r'\d{1,2}\.\d{1,2}(?:\.\d{4})?';
+const _date = '(?:$_relative|$_weekdays|$_numericDate)';
+const _partOfDay = r'утра|дня|вечера|ночи';
+const _clock =
+    r'\d{1,2}(?::\d{2})?'
+    '(?:[ \t]+(?:$_partOfDay|час(?:а|ов)?|ч))?';
+const _range =
+    r'с[ \t]+'
+    '$_clock'
+    r'[ \t]*(?:до|по|[-–—])[ \t]*'
+    '$_clock';
+const _fieldPattern =
+    r'(?<![\p{L}\p{N}_#])'
+    r'(?:(?<deadline>дедлайн[ \t]*:?[ \t]+(?:до[ \t]+)?'
+    '$_date)'
+    '|(?<time>$_range'
+    r'|в[ \t]+'
+    '$_clock)'
+    r'|(?<date>(?:(?:на|в|во)[ \t]+)?'
+    '$_date)'
+    r'|(?<priority>приоритет[ \t]*:?[ \t]+(?:высокий|обычный|средний|низкий)))'
+    r'(?![\p{L}\p{N}_]|[.:]\d)';
+const _literalTitle = r'"(?:\\[^\r\n]|[^"\\\r\n])*"';
+final _fields = RegExp(
+  '(?<literal>$_literalTitle)|$_fieldPattern',
+  caseSensitive: false,
+  unicode: true,
+);
+final _separator = RegExp(
+  '(?<literal>$_literalTitle)|'
+  r'[\r\n;]+|(?<connector>(?:[ \t]*,[ \t]*|[ \t]+)(?:а|затем|потом)[ \t]+'
+  '(?=$_fieldPattern))',
+  caseSensitive: false,
+  unicode: true,
+);
+final _edgeSeparator = RegExp(r'^[\s,;:—–]+|[\s,;:—–]+$');
+final _space = RegExp(r'\s+');
+final _escape = RegExp(r'\\(["\\])');
+final _timeParts = RegExp(
+  r'(\d{1,2})(?::(\d{2}))?'
+  '(?:[ \t]+($_partOfDay))?',
+);
 
-  // 07 -> 2007
-  // 26 -> 2026
-  if (year.length == 2) {
-    return int.tryParse('20$year');
+List<QuickTaskDraft> parseQuickTasks(String text, DateTime now) {
+  final today = DateTime(now.year, now.month, now.day);
+  final drafts = <QuickTaskDraft>[];
+  var start = 0;
+  int? connectorStart;
+  for (final separator in _separator.allMatches(text)) {
+    if (separator.namedGroup('literal') != null) continue;
+    if (_parseDraft(text, start, separator.start, today, connectorStart)
+        case final draft?) {
+      drafts.add(draft);
+    }
+    start = separator.end;
+    connectorStart = separator.namedGroup('connector') == null
+        ? null
+        : separator.start;
   }
-
-  return int.tryParse(year);
+  if (_parseDraft(text, start, text.length, today, connectorStart)
+      case final draft?) {
+    drafts.add(draft);
+  }
+  return drafts;
 }
 
-DateTime? parseDate(
-  int day,
-  int month,
-  int? year,
-  DateTime now,
+String quoteQuickTaskTitle(String title) =>
+    '"${title.replaceAll(r'\', r'\\').replaceAll('"', r'\"')}"';
+
+QuickTaskDraft? _parseDraft(
+  String text,
+  int start,
+  int end,
+  DateTime today,
+  int? connectorStart,
 ) {
-  if (month < 1 || month > 12) return null;
+  final clause = text.substring(start, end);
+  if (clause.trim().isEmpty) return null;
 
-  final resolvedYear = year ?? now.year;
+  final spans = <QuickTaskSpan>[];
+  final issues = <String>[];
+  final titleParts = <String>[];
+  final seen = <QuickTaskField>{};
+  DateTime? day;
+  DateTime? deadline;
+  int? startMinute;
+  int? endMinute;
+  var priority = 0;
+  var cursor = 0;
 
-  if (day < 1 || day > daysInMonth(resolvedYear, month)) {
-    return null;
+  void readTitle(int until) {
+    final piece = clause.substring(cursor, until);
+    final title = piece.replaceAll(_edgeSeparator, '');
+    if (title.isEmpty) return;
+    final offset = start + cursor + piece.indexOf(title);
+    titleParts.add(title);
+    spans.add((
+      field: QuickTaskField.title,
+      start: offset,
+      end: offset + title.length,
+    ));
   }
 
-  final date = DateTime(resolvedYear, month, day);
-
-  // Если год не указан и дата уже прошла в текущем году,
-  // переносим её на следующий подходящий год.
-  if (year == null) {
-    final today = DateTime(now.year, now.month, now.day);
-
-    if (date.isBefore(today)) {
-      var nextYear = resolvedYear + 1;
-
-      // На случай 29 февраля: ищем ближайший подходящий год.
-      while (nextYear <= resolvedYear + 4 &&
-          day > daysInMonth(nextYear, month)) {
-        nextYear++;
-      }
-
-      if (day <= daysInMonth(nextYear, month)) {
-        return DateTime(nextYear, month, day);
-      }
-
-      return null;
+  for (final match in _fields.allMatches(clause)) {
+    readTitle(match.start);
+    cursor = match.end;
+    if (match.namedGroup('literal') case final literal?) {
+      final content = literal.substring(1, literal.length - 1);
+      titleParts.add(content.replaceAllMapped(_escape, (m) => m.group(1)!));
+      spans.add((
+        field: QuickTaskField.title,
+        start: start + match.start,
+        end: start + match.end,
+      ));
+      continue;
+    }
+    final field = QuickTaskField.values.firstWhere(
+      (field) =>
+          field != QuickTaskField.title && match.namedGroup(field.name) != null,
+    );
+    spans.add((
+      field: field,
+      start: start + match.start,
+      end: start + match.end,
+    ));
+    final value = match.group(0)!.toLowerCase();
+    if (!seen.add(field)) {
+      issues.add('Для задачи указан один и тот же параметр несколько раз.');
+      continue;
+    }
+    switch (field) {
+      case QuickTaskField.title:
+        break;
+      case QuickTaskField.date:
+        day = _resolveDate(value, today);
+        if (day == null) issues.add('Уточните дату задачи.');
+      case QuickTaskField.deadline:
+        deadline = _resolveDate(value, today);
+        if (deadline == null) issues.add('Уточните дату дедлайна.');
+      case QuickTaskField.time:
+        final times = _timeParts.allMatches(value).toList();
+        final lastPart = times.length == 2 ? times.last.group(3) : null;
+        startMinute = _minutes(times.first, otherPartOfDay: lastPart);
+        endMinute = times.length == 2 ? _minutes(times.last) : null;
+        if (startMinute == null || (times.length == 2 && endMinute == null)) {
+          issues.add('Уточните время задачи.');
+        } else if (endMinute != null && endMinute <= startMinute) {
+          issues.add('Время окончания должно быть позже начала.');
+        }
+      case QuickTaskField.priority:
+        priority = switch (value.split(_space).last) {
+          'высокий' => 2,
+          'обычный' || 'средний' => 1,
+          _ => 0,
+        };
     }
   }
-
-  return date;
+  readTitle(clause.length);
+  final title = titleParts.join(' ').replaceAll(_space, ' ').trim();
+  if (title.isEmpty) issues.add('Добавьте название задачи.');
+  return QuickTaskDraft._(
+    connectorStart,
+    start: start,
+    end: end,
+    title: title,
+    day: day ?? (startMinute == null ? null : today),
+    startMinute: startMinute,
+    endMinute: endMinute,
+    deadline: deadline,
+    priority: priority,
+    spans: List.unmodifiable(spans),
+    issues: List.unmodifiable(issues),
+  );
 }
 
-int daysInMonth(int year, int month) {
-  const monthDays = [
-    31, // январь
-    28, // февраль
-    31, // март
-    30, // апрель
-    31, // май
-    30, // июнь
-    31, // июль
-    31, // август
-    30, // сентябрь
-    31, // октябрь
-    30, // ноябрь
-    31, // декабрь
-  ];
-
-  if (month == 2 && _isLeapYear(year)) {
-    return 29;
+DateTime? _resolveDate(String value, DateTime today) {
+  final word = value.split(_space).last;
+  final offset = switch (word) {
+    'сегодня' => 0,
+    'завтра' => 1,
+    'послезавтра' => 2,
+    _ => null,
+  };
+  if (offset != null) {
+    return DateTime(today.year, today.month, today.day + offset);
   }
-
-  return monthDays[month - 1];
-}
-
-bool _isLeapYear(int year) {
-  return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
-}
-
-String dateToIso(DateTime date) {
-  final yyyy = date.year.toString().padLeft(4, '0');
-  final mm = date.month.toString().padLeft(2, '0');
-  final dd = date.day.toString().padLeft(2, '0');
-
-  return '$yyyy-$mm-$dd';
-}
-
-String twoDigits(int n) {
-  return n.toString().padLeft(2, '0');
-}
-
-String? toTime(int hour, String? minuteStr) {
-  if (hour < 0 || hour > 24) return null;
-
-  final minute = minuteStr == null ? 0 : int.tryParse(minuteStr);
-
-  if (minute == null || minute < 0 || minute > 59) {
-    return null;
-  }
-
-  // 24:00 можно считать концом дня,
-  // но 24:30 уже некорректно.
-  if (hour == 24 && minute != 0) return null;
-
-  return '${twoDigits(hour)}:${twoDigits(minute)}';
-}
-
-// void main() {
-//   const input =
-//       'Посмотреть лекцию с 8 до 9 дедлайн 12.08.2007, проект анатомия';
-
-//   final parsed = parseQuickTask(input);
-
-//   print(parsed.toMap());
-// }
-
-// Сюда должен быть подключён код парсера выше.
-// Например, если он лежит в отдельном файле:
-// import 'quick_task_parser.dart';
-
-class SmartTaskInput extends StatefulWidget {
-  const SmartTaskInput({super.key});
-
-  @override
-  State<SmartTaskInput> createState() => _SmartTaskInputState();
-}
-
-class _SmartTaskInputState extends State<SmartTaskInput> {
-  final TextEditingController _controller = TextEditingController();
-
-  Timer? _debounce;
-  QuickTaskDraft? _parsed;
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _onChanged(String value) {
-    _debounce?.cancel();
-
-    _debounce = Timer(
-      const Duration(milliseconds: 200),
-      () {
-        setState(() {
-          if (value.trim().isEmpty) {
-            _parsed = null;
-          } else {
-            _parsed = parseQuickTask(value);
-          }
-        });
-      },
+  final weekday = switch (word) {
+    'понедельник' => DateTime.monday,
+    'вторник' => DateTime.tuesday,
+    'среда' || 'среду' => DateTime.wednesday,
+    'четверг' => DateTime.thursday,
+    'пятница' || 'пятницу' => DateTime.friday,
+    'суббота' || 'субботу' => DateTime.saturday,
+    'воскресенье' => DateTime.sunday,
+    _ => null,
+  };
+  if (weekday != null) {
+    return DateTime(
+      today.year,
+      today.month,
+      today.day + (weekday - today.weekday) % 7,
     );
   }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: _controller,
-            onChanged: _onChanged,
-            decoration: const InputDecoration(
-              labelText: 'Быстрый ввод задачи',
-              hintText:
-                  'Посмотреть лекцию с 8 до 9 дедлайн 12.08.2007, проект анатомия',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 16),
-          if (_parsed != null) ...[
-            const Text(
-              'Распознанная задача:',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (_parsed!.title.isNotEmpty)
-                  Chip(
-                    label: Text(_parsed!.title),
-                    backgroundColor: Colors.blue.shade50,
-                  ),
-                if (_parsed!.time != null)
-                  Chip(
-                    label: Text(
-                      '${_parsed!.time!.start}–${_parsed!.time!.end ?? ''}',
-                    ),
-                    backgroundColor: Colors.green.shade50,
-                  ),
-                if (_parsed!.deadlineIso != null)
-                  Chip(
-                    label: Text('Дедлайн: ${_parsed!.deadlineIso}'),
-                    backgroundColor: Colors.red.shade50,
-                  ),
-                if (_parsed!.project != null)
-                  Chip(
-                    label: Text('Проект: ${_parsed!.project}'),
-                    backgroundColor: Colors.purple.shade50,
-                  ),
-                for (final tag in _parsed!.tags)
-                  Chip(
-                    label: Text('#$tag'),
-                    backgroundColor: Colors.orange.shade50,
-                  ),
-              ],
-            ),
-            if (_parsed!.warnings.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              ..._parsed!.warnings.map(
-                (warning) => Text(
-                  warning,
-                  style: const TextStyle(color: Colors.orange),
-                ),
-              ),
-            ],
-          ],
-        ],
-      ),
-    );
+  final numbers = word.split('.').map(int.parse).toList();
+  final [day, month, ...years] = numbers;
+  if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+  if (years.isNotEmpty) {
+    final year = years.single;
+    final date = DateTime(year, month, day);
+    return year > 0 && date.month == month ? date : null;
   }
+  for (var year = today.year; year <= today.year + 8; year++) {
+    final date = DateTime(year, month, day);
+    if (date.month == month && !date.isBefore(today)) return date;
+  }
+  return null;
+}
+
+int? _minutes(RegExpMatch match, {String? otherPartOfDay}) {
+  var hour = int.parse(match.group(1)!);
+  final minute = int.parse(match.group(2) ?? '0');
+  final part = match.group(3) ?? (hour <= 12 ? otherPartOfDay : null);
+  if (minute > 59 || hour > 23) return null;
+  if (part != null) {
+    if (hour == 0 || hour > 12) return null;
+    hour = hour % 12 + (part == 'дня' || part == 'вечера' ? 12 : 0);
+  }
+  return hour * 60 + minute;
 }

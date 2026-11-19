@@ -263,6 +263,10 @@ class DependencyContainer {
       ...projectsPlugin.plugins,
       ...habitsPlugin.plugins,
       ...tasksPlugin.plugins,
+      registerUiModule(
+        pulseQuickTaskModule(() => tasksPlugin.viewModel, ui),
+        ui,
+      ),
       createWorkspacePlugin(
         ui: ui,
         tasks: tasksRepository,
