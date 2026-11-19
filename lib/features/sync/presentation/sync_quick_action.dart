@@ -148,6 +148,7 @@ class _QuickSyncDialogState extends State<_QuickSyncDialog> {
         CurveTween(curve: Curves.easeOutCubic),
       );
       return Dialog(
+        shape: RoundedRectangleBorder(),
         alignment: Alignment.topCenter,
         insetPadding: const EdgeInsets.all(AppSpacing.md),
         constraints: const BoxConstraints(maxWidth: 440),
@@ -159,9 +160,25 @@ class _QuickSyncDialogState extends State<_QuickSyncDialog> {
           ),
           child: FadeTransition(
             opacity: entrance,
-            child: GlassPanel(
-              color: AppColors.surfaceContainer.withValues(alpha: .94),
+            child: Container(
+              
               padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF242123), Color(0xFF171619), Color(0xFF211B1B)],
+            ),
+            border: Border.all(color: Colors.white.withValues(alpha: .15)),
+            boxShadow: [
+              BoxShadow(
+                blurRadius: 34,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
               child: Material(
                 type: MaterialType.transparency,
                 child: SizedBox(

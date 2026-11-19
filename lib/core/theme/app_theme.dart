@@ -513,9 +513,11 @@ class AppTheme {
         color: AppColors.surfaceContainerLow,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+          side: BorderSide(
+            color: AppColors.borderGlass,
+            width: 1,
+          ),
         ),
-        elevation: 0,
       ),
 
       iconButtonTheme: IconButtonThemeData(
@@ -582,7 +584,7 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: AppColors.surfaceBright,
           foregroundColor: AppColors.onBackground,
-          disabledBackgroundColor: _dark.withValues(alpha: .6) ,
+          disabledBackgroundColor: _dark.withValues(alpha: .6),
           disabledForegroundColor: _white.withValues(alpha: .3),
           overlayColor: AppColors.onSurfaceVariant.withValues(alpha: .08),
           elevation: 0,

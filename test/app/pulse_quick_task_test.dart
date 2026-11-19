@@ -41,7 +41,11 @@ void main() {
       app.navigation.open('pulse');
       await pumpStorage(tester);
       await tester.tap(find.byType(PulseQuickTaskAction));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 80));
+      final panelEnteringTop = tester.getTopLeft(_input).dy;
       await pumpStorage(tester);
+      expect(panelEnteringTop, lessThan(tester.getTopLeft(_input).dy));
       await tester.enterText(_input, 'Завтра');
       await tester.pump();
       expect(_inline('Завтра'), findsNothing);
@@ -113,14 +117,18 @@ void main() {
       final studyChip = _inline('учёба');
       final chipBounds = tester.getRect(studyChip);
       await tester.tap(studyChip, kind: PointerDeviceKind.mouse);
-      await tester.pumpAndSettle();
       final currentOption = find.byKey(
         ValueKey(('pulse.quick-task.project', study.id)),
       );
       final replacement = find.byKey(
         ValueKey(('pulse.quick-task.project', filming.id)),
       );
+      await tester.pumpAndSettle();
       expect(find.byType(PopupMenuItem<String>), findsNWidgets(5));
+      expect(
+        find.ancestor(of: replacement, matching: find.byType(SlideTransition)),
+        findsNothing,
+      );
       expect(
         find.descendant(
           of: currentOption,

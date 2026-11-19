@@ -171,7 +171,7 @@ class _NotesPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
     margin: EdgeInsets.zero,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    //shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

@@ -35,16 +35,40 @@ class _PulseQuickTaskActionState extends State<PulseQuickTaskAction> {
   Future<void> _open() async {
     final isActive = widget.isActive;
     if (!isActive()) return;
-    final saved = await showDialog<int>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: AppColors.surfaceDim.withValues(alpha: .75),
-      builder: (_) => _QuickTaskNote(
-        initialText: _draft,
-        addTask: widget.addTask,
-        watchProjects: widget.watchProjects,
-        isActive: () => mounted && isActive(),
-        onDraftChanged: (text) => _draft = text,
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final themes = InheritedTheme.capture(from: context, to: navigator.context);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final saved = await navigator.push(
+      RawDialogRoute<int>(
+        barrierDismissible: false,
+        barrierColor: AppColors.surfaceDim.withValues(alpha: .75),
+        traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
+        transitionDuration: reduceMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 280),
+        pageBuilder: (_, _, _) => themes.wrap(
+          SafeArea(
+            child: _QuickTaskNote(
+              initialText: _draft,
+              addTask: widget.addTask,
+              watchProjects: widget.watchProjects,
+              isActive: () => mounted && isActive(),
+              onDraftChanged: (text) => _draft = text,
+            ),
+          ),
+        ),
+        transitionBuilder: (_, animation, _, child) {
+          if (reduceMotion) return child;
+          final entrance = animation.drive(
+            CurveTween(curve: Curves.easeOutCubic),
+          );
+          return SlideTransition(
+            position: entrance.drive(
+              Tween(begin: const Offset(0, -1), end: Offset.zero),
+            ),
+            child: FadeTransition(opacity: entrance, child: child),
+          );
+        },
       ),
     );
     if (saved != null && mounted && isActive()) {
@@ -440,9 +464,23 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
         backgroundColor: AppColors.surfaceContainerLow,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         elevation: 0,
-        child: GlassPanel(
-          hasBlur: false,
-          padding: EdgeInsets.zero,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF242123), Color(0xFF171619), Color(0xFF211B1B)],
+            ),
+            border: Border.all(color: Colors.white.withValues(alpha: .15)),
+            boxShadow: [
+              BoxShadow(
+                //color: palette.shadow,
+                blurRadius: 34,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
           child: SizedBox(
             width: 720,
             child: SingleChildScrollView(
@@ -525,6 +563,7 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
   }
 
   Widget _composer(bool enabled, int count) => GlassPanel(
+    color: AppColors.surfaceGlass,
     hasBlur: false,
     borderRadius: AppRadius.xl,
     padding: const EdgeInsets.all(AppSpacing.md),
