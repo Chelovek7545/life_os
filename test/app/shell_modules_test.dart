@@ -73,11 +73,50 @@ void main() {
     await disposeTestApp(tester, app);
   });
 
+  testWidgets('Pulse shows Hierarchy only in landscape', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1400, 1000);
+    addTearDown(tester.view.reset);
+    final app = (await tester.runAsync(
+      () => createTestApp(enableObsidian: false),
+    ))!;
+    await tester.pumpWidget(MyApp(diContainer: app));
+    await pumpShell(tester);
+
+    final hierarchy = find.text('Hierarchy');
+    expect(hierarchy, findsOneWidget);
+
+    tester.view.physicalSize = const Size(1000, 1400);
+    await pumpShell(tester);
+    expect(hierarchy, findsNothing);
+
+    tester.view.physicalSize = const Size(390, 844);
+    await pumpShell(tester);
+    expect(hierarchy, findsNothing);
+
+    tester.view.physicalSize = const Size(1400, 1000);
+    await pumpShell(tester);
+    expect(hierarchy, findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await disposeTestApp(tester, app);
+  });
+
   testWidgets(
     'registered destination appears in both layouts and retains its draft',
     (tester) async {
       final module = UiModuleSpec(
         id: 'extra.ui',
+        panels: [
+          PluginPanelContribution(
+            id: 'extra.header',
+            slot: PulsePanelSlots.toolbar,
+            builder: (_, _) => const IconButton(
+              tooltip: 'Pulse action',
+              onPressed: null,
+              icon: Icon(Icons.sync),
+            ),
+          ),
+        ],
         screens: [
           PluginScreenContribution(
             id: 'extra',
@@ -93,8 +132,15 @@ void main() {
       ))!;
       await tester.pumpWidget(MyApp(diContainer: app));
       await tester.pump();
+      final header = find.byTooltip('Pulse action');
+      final pulseAction = find.descendant(
+        of: find.byType(AppBar),
+        matching: header,
+      );
+      expect(pulseAction, findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('navigation-rail:extra')));
       await pumpShell(tester);
+      expect(header, findsNothing);
       await tester.enterText(
         find.byKey(const ValueKey('plugin-draft')),
         'Keep this draft',
@@ -114,10 +160,17 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Keep this draft'), findsOneWidget);
+      expect(header, findsNothing);
+      app.navigation.open('pulse');
+      await pumpShell(tester);
+      expect(pulseAction, findsOneWidget);
+      app.navigation.open('extra');
+      await pumpShell(tester);
       app.ui.unregister('extra.ui');
       await pumpShell(tester);
       expect(app.navigation.selectedId, 'pulse');
       expect(find.byKey(const ValueKey('plugin-draft')), findsNothing);
+      expect(header, findsNothing);
       await disposeTestApp(tester, app);
     },
   );

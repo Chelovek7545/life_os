@@ -53,7 +53,6 @@ class PulseScreen extends StatefulWidget {
   final PluginUiRegistry registry;
   final ValueChanged<Task>? onOpenTask;
   final ValueChanged<Task>? onCompleteTask;
-  final Widget? portraitAppBarAction;
 
   const PulseScreen({
     super.key,
@@ -61,7 +60,6 @@ class PulseScreen extends StatefulWidget {
     required this.registry,
     this.onOpenTask,
     this.onCompleteTask,
-    this.portraitAppBarAction,
   });
 
   @override
@@ -70,12 +68,19 @@ class PulseScreen extends StatefulWidget {
 
 class _PulseScreenState extends State<PulseScreen> {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ListenableBuilder(listenable: widget.registry, builder: _buildScreen);
+
+  Widget _buildScreen(BuildContext context, Widget? child) {
+    final isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
+    final hasToolbar =
+        isLandscape ||
+        widget.registry.panelsFor(PulsePanelSlots.toolbar).isNotEmpty;
     return Scaffold(
       backgroundColor: AppColors.surfaceDim,
-      appBar: MediaQuery.orientationOf(context) == Orientation.portrait
-          ? null
-          : AppBar(
+      appBar: hasToolbar
+          ? AppBar(
               centerTitle: true,
               title: Text('PULSE', style: AppTypography.headlineLgMobile),
               forceMaterialTransparency: true,
@@ -88,21 +93,13 @@ class _PulseScreenState extends State<PulseScreen> {
                   layout: (_, panels) =>
                       Row(mainAxisSize: MainAxisSize.min, children: panels),
                 ),
-                if (MediaQuery.orientationOf(context) == Orientation.portrait &&
-                    widget.portraitAppBarAction != null)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: widget.portraitAppBarAction!,
-                  ),
               ],
-            ),
+            )
+          : null,
       body: LayoutBuilder(
         builder: (context, asyncSnapshot) {
           bool isSplit = asyncSnapshot.maxWidth >= 900;
 
-          final hierarchyPanel = SingleChildScrollView(
-            child: HierarchyPanel(viewModel: widget.viewModel),
-          );
           final spheresPanel = SingleChildScrollView(
             child: SpheresPanel(
               viewModel: widget.viewModel,
@@ -132,7 +129,8 @@ class _PulseScreenState extends State<PulseScreen> {
               ),
             );
             body = SplitView(
-              minSizes: [300, 300, 300],
+              key: ValueKey(isLandscape),
+              minSizes: [if (isLandscape) 300, 300, 300],
               axis: Axis.horizontal,
               dividerThickness: 2,
               dividerBuilder: (context, dividerIndex, axis) {
@@ -143,8 +141,15 @@ class _PulseScreenState extends State<PulseScreen> {
                   ),
                 );
               },
-              initialWeights: [0.15, 0.7, 0.15],
-              children: [hierarchyPanel, centerColumn, spheresPanel],
+              initialWeights: [if (isLandscape) 0.15, 0.7, 0.15],
+              children: [
+                if (isLandscape)
+                  SingleChildScrollView(
+                    child: HierarchyPanel(viewModel: widget.viewModel),
+                  ),
+                centerColumn,
+                spheresPanel,
+              ],
             );
           } else {
             body = PluginPanelSlot(
@@ -163,8 +168,10 @@ class _PulseScreenState extends State<PulseScreen> {
                     const SizedBox(height: 12),
                     panel,
                   ],
-                  const SizedBox(height: 12),
-                  HierarchyPanel(viewModel: widget.viewModel, expand: false),
+                  if (isLandscape) ...[
+                    const SizedBox(height: 12),
+                    HierarchyPanel(viewModel: widget.viewModel, expand: false),
+                  ],
                   const SizedBox(height: 12),
                   SpheresPanel(
                     viewModel: widget.viewModel,

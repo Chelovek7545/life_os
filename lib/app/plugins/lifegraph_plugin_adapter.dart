@@ -77,11 +77,6 @@ LifeGraphPlugin createLifeGraphPlugin({
   screen: (_, model, registry, openTask, completeTask) => PulseScreen(
     viewModel: model,
     registry: registry,
-    portraitAppBarAction: PluginActions(
-      registry: registry,
-      location: PluginActionLocation.appBar,
-      compact: true,
-    ),
     onOpenTask: openTask,
     onCompleteTask: completeTask,
   ),

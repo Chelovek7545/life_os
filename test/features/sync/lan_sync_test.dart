@@ -253,12 +253,28 @@ void main() {
     },
   );
   test(
-    'credentials and trust survive restart without generating a new key',
+    'offline task is delivered after retry when the trusted peer restarts',
     () async {
       await pair();
+      final peerId = b.state.peers.single.id;
+      await b.synchronize(peerId);
+      final lastExchange = b.state.lastSync;
       final port = Uri.parse(a.state.endpoint!).port;
       final old = aSecrets.value;
       await a.stop();
+
+      final tasksA = TasksRepository(TasksDao(aDb, journal: aData));
+      final tasksB = TasksRepository(TasksDao(bDb, journal: bData));
+      final offline = Task.blank().copyWith(title: 'Created offline');
+      await tasksB.addTask(offline);
+      await expectLater(
+        b.synchronize(peerId),
+        throwsA(isA<LocalSyncException>()),
+      );
+      expect(b.state.error, isNotNull);
+      expect(b.state.lastSync, lastExchange);
+      expect(await tasksA.getById(offline.id), isNull);
+
       a = LanSyncService(
         data: aData,
         secrets: aSecrets,
@@ -268,8 +284,10 @@ void main() {
       expect(a.state.peers, hasLength(1));
       expect(aSecrets.value, old);
       await a.listen('127.0.0.1');
-      await b.synchronize(b.state.peers.single.id);
-      expect(b.state.lastSync, isNotNull);
+      await b.synchronize(peerId);
+      await b.synchronize(peerId);
+      expect(b.state.error, isNull);
+      expect((await tasksA.getAllTasks()).single.title, offline.title);
     },
   );
   test(

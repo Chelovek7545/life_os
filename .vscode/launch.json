@@ -1,0 +1,359 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "life_os",
+            "request": "launch",
+            "type": "dart",
+            "toolArgs": ["--dart-define=ENABLE_SYNC=true"]
+        },
+        {
+            "name": "life_os (profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "life_os (release mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "agent_bridge",
+            "cwd": "packages\\agent_bridge",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "core_contracts",
+            "cwd": "packages\\core_contracts",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "goals_api",
+            "cwd": "packages\\goals_api",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "goals_plugin",
+            "cwd": "packages\\goals_plugin",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "goals_plugin (profile mode)",
+            "cwd": "packages\\goals_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "goals_plugin (release mode)",
+            "cwd": "packages\\goals_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "graph_api",
+            "cwd": "packages\\graph_api",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "graph_canvas",
+            "cwd": "packages\\graph_canvas",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "graph_canvas (profile mode)",
+            "cwd": "packages\\graph_canvas",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "graph_canvas (release mode)",
+            "cwd": "packages\\graph_canvas",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "graph_components",
+            "cwd": "packages\\graph_components",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "graph_components (profile mode)",
+            "cwd": "packages\\graph_components",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "graph_components (release mode)",
+            "cwd": "packages\\graph_components",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "graph_ui",
+            "cwd": "packages\\graph_ui",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "graph_ui (profile mode)",
+            "cwd": "packages\\graph_ui",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "graph_ui (release mode)",
+            "cwd": "packages\\graph_ui",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "habits_api",
+            "cwd": "packages\\habits_api",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "habits_plugin",
+            "cwd": "packages\\habits_plugin",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "habits_plugin (profile mode)",
+            "cwd": "packages\\habits_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "habits_plugin (release mode)",
+            "cwd": "packages\\habits_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "lifegraph_plugin",
+            "cwd": "packages\\lifegraph_plugin",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "lifegraph_plugin (profile mode)",
+            "cwd": "packages\\lifegraph_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "lifegraph_plugin (release mode)",
+            "cwd": "packages\\lifegraph_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "notes_api",
+            "cwd": "packages\\notes_api",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "obsidian_plugin",
+            "cwd": "packages\\obsidian_plugin",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "plugin_runtime",
+            "cwd": "packages\\plugin_runtime",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "plugin_ui",
+            "cwd": "packages\\plugin_ui",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "plugin_ui (profile mode)",
+            "cwd": "packages\\plugin_ui",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "plugin_ui (release mode)",
+            "cwd": "packages\\plugin_ui",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "projects_api",
+            "cwd": "packages\\projects_api",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "projects_plugin",
+            "cwd": "packages\\projects_plugin",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "projects_plugin (profile mode)",
+            "cwd": "packages\\projects_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "projects_plugin (release mode)",
+            "cwd": "packages\\projects_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "resources_plugin",
+            "cwd": "packages\\resources_plugin",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "resources_plugin (profile mode)",
+            "cwd": "packages\\resources_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "resources_plugin (release mode)",
+            "cwd": "packages\\resources_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "spheres_api",
+            "cwd": "packages\\spheres_api",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "spheres_plugin",
+            "cwd": "packages\\spheres_plugin",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "spheres_plugin (profile mode)",
+            "cwd": "packages\\spheres_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "spheres_plugin (release mode)",
+            "cwd": "packages\\spheres_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "sync_plugin",
+            "cwd": "packages\\sync_plugin",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "tasks_api",
+            "cwd": "packages\\tasks_api",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "tasks_plugin",
+            "cwd": "packages\\tasks_plugin",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "tasks_plugin (profile mode)",
+            "cwd": "packages\\tasks_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "tasks_plugin (release mode)",
+            "cwd": "packages\\tasks_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "telegram_plugin",
+            "cwd": "packages\\telegram_plugin",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "telegram_plugin (profile mode)",
+            "cwd": "packages\\telegram_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "telegram_plugin (release mode)",
+            "cwd": "packages\\telegram_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "today_plugin",
+            "cwd": "packages\\today_plugin",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "today_plugin (profile mode)",
+            "cwd": "packages\\today_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "today_plugin (release mode)",
+            "cwd": "packages\\today_plugin",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        }
+    ]
+}

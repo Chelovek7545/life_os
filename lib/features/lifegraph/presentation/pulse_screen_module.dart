@@ -21,11 +21,6 @@ UiModuleSpec pulseScreenModule(
       builder: (_, screen) => PulseScreen(
         viewModel: viewModel,
         registry: registry,
-        portraitAppBarAction: PluginActions(
-          registry: registry,
-          location: PluginActionLocation.appBar,
-          compact: true,
-        ),
         onOpenTask: (task) {
           if (!screen.openScreen('tasks', argument: task, select: false)) {
             registry.notify(const PluginNotice('Экран задач недоступен.'));

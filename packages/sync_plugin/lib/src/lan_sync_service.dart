@@ -690,6 +690,15 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
         }
         return await _read(response);
       }()).timeout(timeout ?? options.timeout);
+    } on SocketException {
+      throw const LocalSyncException(
+        'Устройство недоступно. Проверьте, что Pulse открыт, приём включён '
+        'и оба устройства подключены к одной сети.',
+      );
+    } on TimeoutException {
+      throw const LocalSyncException(
+        'Устройство не ответило вовремя. Проверьте сеть и повторите обмен.',
+      );
     } finally {
       _clients.remove(client);
       client.close(force: true);

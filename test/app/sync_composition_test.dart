@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/app/dependency_container.dart';
 import 'package:life_os/core/database/database.dart';
+import 'package:lifegraph_plugin/lifegraph_plugin.dart' show PulsePanelSlots;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sync_plugin/sync_logic.dart';
 import 'package:sync_plugin/sync_native.dart';
@@ -38,6 +39,7 @@ void main() {
       await app.init();
       expect(app.syncPlugin, isNull);
       expect(secrets.reads, 0);
+      expect(app.ui.panelsFor(PulsePanelSlots.toolbar), isEmpty);
       expect(
         app.ui.settings.any((s) => s.id == 'sync.local.settings'),
         isFalse,
@@ -68,6 +70,10 @@ void main() {
       await app.init();
       expect(app.plugins.states.containsKey('sync.local'), isTrue);
       expect(app.ui.settings.any((s) => s.id == 'sync.local.settings'), isTrue);
+      expect(
+        app.ui.panelsFor(PulsePanelSlots.toolbar).single.id,
+        'sync.local.quick',
+      );
       expect(app.syncPlugin!.state.listening, isFalse);
       expect(await app.taskSyncStore.existingIdentity(), isNull);
       await app.syncPlugin!.createSpace();
@@ -75,6 +81,7 @@ void main() {
       await app.tasksRepository.addTask(task);
       expect((await app.taskSyncStore.readFeed()).entries, hasLength(1));
       await app.dispose();
+      expect(app.ui.panelsFor(PulsePanelSlots.toolbar), isEmpty);
       expect(
         app.ui.settings.any((s) => s.id == 'sync.local.settings'),
         isFalse,

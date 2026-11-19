@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:life_os/core/ui/glass_panel.dart';
+import 'package:life_os/features/sync/presentation/sync_quick_action.dart';
 import 'package:life_os/features/sync/presentation/sync_settings_panel.dart';
 import 'package:sync_plugin/sync_logic.dart';
 import 'package:tasks_api/tasks_api.dart';
@@ -28,6 +30,7 @@ class _Control implements LocalSyncControl {
   LocalSyncState state = LocalSyncState();
   final events = StreamController<LocalSyncState>.broadcast();
   final calls = <String>[];
+  Future<void> Function(String)? exchange;
   Map<String, List<SyncRevision>> variants = {};
   Set<String>? resolvedBasis;
   String? repairedPayload;
@@ -79,6 +82,7 @@ class _Control implements LocalSyncControl {
   @override
   Future<void> synchronize(String id) async {
     calls.add('sync:$id');
+    await exchange?.call(id);
   }
 
   @override
@@ -99,6 +103,107 @@ void main() {
   late _Control control;
   setUp(() => control = _Control());
   tearDown(() => control.events.close());
+
+  testWidgets('quick sync handles progress and retry on a narrow screen', (
+    tester,
+  ) async {
+    const peer = LocalSyncPeer(
+      id: 'phone',
+      name: 'Телефон',
+      endpoint: 'https://192.168.1.3:48766/',
+      fingerprint: 'fingerprint',
+    );
+    control.state = LocalSyncState(enrolled: true, peers: [peer]);
+    final checks = <Completer<void>>[];
+    control.exchange = (_) async {
+      final result = Completer<void>();
+      checks.add(result);
+      control.emit(LocalSyncState(enrolled: true, busy: true, peers: [peer]));
+      try {
+        await result.future;
+        control.emit(
+          LocalSyncState(
+            enrolled: true,
+            peers: [peer],
+            lastSync: DateTime(2026, 11, 19, 14, 30),
+            conflictCount: 1,
+          ),
+        );
+      } on LocalSyncException catch (error) {
+        control.emit(
+          LocalSyncState(enrolled: true, peers: [peer], error: error.message),
+        );
+        rethrow;
+      }
+    };
+    await tester.binding.setSurfaceSize(const Size(320, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topRight,
+            child: SyncQuickAction(control: control),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byTooltip('Локальная синхронизация'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 48));
+    final card = find.byType(GlassPanel);
+    final enteringTop = tester.getTopLeft(card).dy;
+    await tester.pumpAndSettle();
+    expect(tester.getCenter(card).dx, closeTo(160, .1));
+    expect(tester.getTopLeft(card).dy, closeTo(12, .1));
+    expect(enteringTop, lessThan(tester.getTopLeft(card).dy));
+    expect(find.text('Телефон'), findsOneWidget);
+    expect(find.text('В этом сеансе обмена ещё не было.'), findsOneWidget);
+    final sync = find.widgetWithText(FilledButton, 'Синхронизировать');
+    await tester.tap(sync);
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(tester.widget<FilledButton>(sync).onPressed, isNull);
+    checks.single.completeError(
+      const LocalSyncException('Устройство недоступно.'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Устройство недоступно.'), findsOneWidget);
+    await tester.tap(sync);
+    await tester.pump();
+    checks.last.complete();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Последний обмен:'), findsOneWidget);
+    expect(find.text('Конфликты: 1'), findsOneWidget);
+    expect(find.text('Устройство недоступно.'), findsNothing);
+    expect(tester.takeException(), isNull);
+    expect(control.calls, ['sync:phone', 'sync:phone']);
+  });
+
+  testWidgets('quick sync opens the existing setup without enrolling', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: SyncQuickAction(control: control)),
+      ),
+    );
+    await tester.tap(find.byTooltip('Локальная синхронизация'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Подключите свои устройства в настройках.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.widgetWithText(TextButton, 'Настройки'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SyncSettingsPanel), findsOneWidget);
+    expect(
+      find.text('Создать пространство на этом устройстве'),
+      findsOneWidget,
+    );
+    expect(control.calls, isEmpty);
+  });
+
   Future<void> show(WidgetTester tester, {double width = 800}) async {
     await tester.binding.setSurfaceSize(Size(width, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
