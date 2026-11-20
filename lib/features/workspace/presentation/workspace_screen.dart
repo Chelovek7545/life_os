@@ -15,10 +15,12 @@ class WorkspaceEditor {
     required this.label,
     required this.icon,
     required this.builder,
+    this.backgroundColor = AppColors.surfaceContainerLow,
   });
   final String id;
   final String label;
   final IconData icon;
+  final Color backgroundColor;
   final Widget Function(BuildContext, String paneId) builder;
 }
 
@@ -194,6 +196,7 @@ class WorkspaceScreen extends StatelessWidget {
     int count,
   ) {
     final colors = Theme.of(context).colorScheme;
+    final editor = editors[pane.editorId]!;
     return SingleChildScrollView(
       primary: false,
       physics: rect.height >= _paneSize.height
@@ -207,7 +210,7 @@ class WorkspaceScreen extends StatelessWidget {
             padding: EdgeInsets.all(AppSpacing.md),
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLow,
+              color: editor.backgroundColor,
               borderRadius: BorderRadius.circular(AppRadius.lg),
             ),
             child: Column(
@@ -234,7 +237,7 @@ class WorkspaceScreen extends StatelessWidget {
                                 width: null,
                                 expandedInsets: EdgeInsets.zero,
                                 leadingIcon: Icon(
-                                  editors[pane.editorId]!.icon,
+                                  editor.icon,
                                   size: 18,
                                 ),
                                 inputDecorationTheme: AppButtonStyles
@@ -327,7 +330,7 @@ class WorkspaceScreen extends StatelessWidget {
                   key: ValueKey('workspace-content:${pane.id}'),
                   child: KeyedSubtree(
                     key: ValueKey(pane.editorId),
-                    child: editors[pane.editorId]!.builder(context, pane.id),
+                    child: editor.builder(context, pane.id),
                   ),
                 ),
               ],

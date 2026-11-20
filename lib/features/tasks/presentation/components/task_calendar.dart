@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:tasks_api/tasks_api.dart';
 import 'package:tasks_plugin/tasks_logic.dart';
 import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/ui/fixed_fade_mask.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
+import 'date_header.dart';
 import 'timeline.dart';
 
 /// Connects the existing timeline to a screen-owned tasks model.
@@ -14,21 +16,27 @@ class TaskCalendar extends StatefulWidget {
     required this.isWeek,
     required this.topPadding,
     this.onOpenTask,
+    this.showDayHeader = false,
     this.showUnscheduledToggle = false,
     this.showDateOnlyPanel,
+    this.onToggleDateOnlyPanel,
   });
   final TasksViewModel viewModel;
   final bool isWeek;
   final double topPadding;
   final ValueChanged<Task>? onOpenTask;
+  final bool showDayHeader;
   final bool showUnscheduledToggle;
   final bool? showDateOnlyPanel;
+  final VoidCallback? onToggleDateOnlyPanel;
 
   @override
   State<TaskCalendar> createState() => _TaskCalendarState();
 }
 
 class _TaskCalendarState extends State<TaskCalendar> {
+  static const _dayHeaderSpace = 80.0;
+
   Stream<List<Task>> _watchUnscheduled() => widget.viewModel.state.map(
     (state) => state is TasksLoaded
         ? [for (final item in state.unscheduledTasks) item.task]
@@ -83,6 +91,7 @@ class _TaskCalendarState extends State<TaskCalendar> {
   Widget build(BuildContext context) => StreamBuilder<List<TaskWithProject>>(
     stream: widget.viewModel.watchCalendarTasks(
       bufferDays: widget.isWeek ? TimelineBody.weekBufferDays : 0,
+      period: widget.isWeek ? DatePeriod.week : DatePeriod.day,
     ),
     builder: (context, snapshot) {
       if (snapshot.hasError) {
@@ -95,9 +104,16 @@ class _TaskCalendarState extends State<TaskCalendar> {
         _lastAnchorDate = date;
         _selectedDate = date;
       }
-      return TimelineBody(
+      final hasDayHeader = !widget.isWeek && widget.showDayHeader;
+      final dayHeaderSpace = hasDayHeader
+          ? MediaQuery.textScalerOf(
+              context,
+            ).clamp(minScaleFactor: 1).scale(_dayHeaderSpace)
+          : 0.0;
+      final timeline = TimelineBody(
         key: ObjectKey(widget.viewModel),
         showDateOnlyPanel: widget.showDateOnlyPanel,
+        onToggleDateOnlyPanel: widget.onToggleDateOnlyPanel,
         watchUnscheduled: widget.isWeek && widget.showUnscheduledToggle
             ? _watchUnscheduled
             : null,
@@ -137,7 +153,7 @@ class _TaskCalendarState extends State<TaskCalendar> {
         anchorDate: widget.isWeek ? _selectedDate : date,
         onWeekChange: widget.isWeek ? _changeWeek : null,
         onDaySelected: widget.isWeek ? _selectDay : null,
-        topPadding: widget.topPadding,
+        topPadding: widget.topPadding + dayHeaderSpace,
         onEventChanged: (task, {startMinutes, durationMinutes, newDate}) =>
             _run(
               context,
@@ -157,6 +173,21 @@ class _TaskCalendarState extends State<TaskCalendar> {
             _run(context, () => widget.viewModel.toggleTask(task)),
         taskFormProjects: widget.viewModel.watchProjects(),
         onSubmitNewTask: widget.viewModel.addTask,
+      );
+      if (!hasDayHeader) return timeline;
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          FixedVerticalFadeMask(
+            topFade: dayHeaderSpace + 20,
+            bottomFade: 10,
+            child: timeline,
+          ),
+          Align(
+            alignment: Alignment.topCenter,
+            child: DateHeader(anchorDate: date, onDateChange: _selectDay),
+          ),
+        ],
       );
     },
   );

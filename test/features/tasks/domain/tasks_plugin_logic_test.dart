@@ -208,6 +208,9 @@ void main() {
         (await model.watchCalendarTasks().first).single.task.id,
         items[2].id,
       );
+      final dayCalendar = model.watchCalendarTasks(period: DatePeriod.day);
+      expect(await dayCalendar.first, isEmpty);
+      expect(model.currentFilterValue.period, DatePeriod.week);
       await model.updateTask(items[1].copyWith(title: 'Updated buffered task'));
       expect((await stream.first).first.task.title, 'Updated buffered task');
       expect(

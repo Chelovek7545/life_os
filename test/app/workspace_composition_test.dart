@@ -4,10 +4,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:plugin_ui/plugin_ui.dart';
 import 'package:tasks_api/tasks_api.dart';
 import 'package:tasks_plugin/tasks_panels.dart';
+import 'package:tasks_plugin/tasks_logic.dart' show DatePeriod;
 import 'package:habits_api/habits_api.dart';
 import 'package:life_os/features/habits/presentation/todays_habits_panel.dart';
 import 'package:life_os/features/habits/presentation/widgets/habit_card.dart';
 import 'package:life_os/features/habits/presentation/habits_calendar_panel.dart';
+import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/ui/fixed_fade_mask.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:projects_api/projects_api.dart';
 import 'package:spheres_api/spheres_api.dart';
@@ -15,7 +18,9 @@ import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
 import 'package:life_os/app.dart';
 import 'package:life_os/app/plugins/workspace_plugin_adapter.dart';
+import 'package:life_os/features/tasks/presentation/components/date_header.dart';
 import 'package:life_os/features/tasks/presentation/components/task_calendar.dart';
+import 'package:life_os/features/tasks/presentation/components/timeline.dart';
 import 'package:life_os/features/workspace/presentation/workspace_screen.dart';
 import 'package:life_os/features/workspace/workspace_layout.dart';
 import '../support/test_app.dart';
@@ -53,6 +58,7 @@ void main() {
         'tasks',
         'projectTasks',
         'calendar',
+        'dayCalendar',
         'hierarchy',
         'habits',
         'stats',
@@ -166,6 +172,7 @@ void main() {
         'stats',
         'spheres',
         'projectTasks',
+        'dayCalendar',
       ]) {
         controller.changeEditor(controller.selectedId, editor);
         await pumpStorage(tester);
@@ -233,8 +240,75 @@ void main() {
       );
       expect(app.tasksViewModel.currentFilterValue, original);
       controller.split(controller.selectedId, WorkspaceAxis.vertical);
-      controller.changeEditor(controller.selectedId, 'calendar');
+      controller.changeEditor(controller.selectedId, 'dayCalendar');
       await pumpStorage(tester);
+      final dayPanel = find.byWidgetPredicate(
+        (widget) => widget is TaskCalendar && !widget.isWeek,
+      );
+      final dayCalendar = tester.widget<TaskCalendar>(dayPanel);
+      final dayModel = dayCalendar.viewModel;
+      expect(dayModel.currentFilterValue.period, DatePeriod.day);
+      expect(calendar.viewModel.currentFilterValue.period, DatePeriod.week);
+      dayModel.updateFilter((filter) => filter.copyWith(anchorDate: date));
+      await pumpStorage(tester);
+      final grid = find.descendant(
+        of: dayPanel,
+        matching: find.byType(TimelineBody),
+      );
+      final dateHeader = find.descendant(
+        of: dayPanel,
+        matching: find.byType(DateHeader),
+      );
+      final fade = find.ancestor(
+        of: grid,
+        matching: find.byType(FixedVerticalFadeMask),
+      );
+      expect(fade, findsOneWidget);
+      final fadeTop = tester.getTopLeft(fade).dy;
+      final headerBottom = tester.getBottomLeft(dateHeader).dy;
+      expect(fadeTop, tester.getTopLeft(dateHeader).dy);
+      expect(
+        fadeTop + tester.widget<FixedVerticalFadeMask>(fade).topFade,
+        greaterThan(headerBottom),
+      );
+      expect(find.ancestor(of: dateHeader, matching: fade), findsNothing);
+      final dayPane = find.byKey(
+        ValueKey('workspace-pane:${controller.selectedId}'),
+      );
+      expect(
+        find.descendant(
+          of: dayPane,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Container &&
+                widget.decoration is BoxDecoration &&
+                (widget.decoration as BoxDecoration).color ==
+                    AppColors.surfaceDim,
+          ),
+        ),
+        findsOneWidget,
+      );
+      TimelineBody dayTimeline() => tester.widget<TimelineBody>(grid);
+      expect(
+        tester.getTopLeft(grid).dy + dayTimeline().topPadding,
+        greaterThan(headerBottom),
+      );
+      expect(dayTimeline().events.single.task.id, task.id);
+      final weekFilter = calendar.viewModel.currentFilterValue;
+      await tester.tap(
+        find.descendant(
+          of: dayPanel,
+          matching: find.byTooltip('Следующий день'),
+        ),
+      );
+      await pumpStorage(tester);
+      expect(
+        dayModel.currentFilterValue.anchorDate,
+        DateUtils.addDaysToDate(date, 1),
+      );
+      expect(dayTimeline().events, isEmpty);
+      expect(calendar.viewModel.currentFilterValue, weekFilter);
+      expect(app.tasksViewModel.currentFilterValue, original);
       final expected = controller.layout.encode();
       await tester.runAsync(controller.flush);
       final prefs = await SharedPreferences.getInstance();
@@ -286,6 +360,7 @@ void main() {
       await disposeTestApp(tester, app);
       expect(list.viewModel.isActive, isFalse);
       expect(calendar.viewModel.isActive, isFalse);
+      expect(dayModel.isActive, isFalse);
       expect(controller.isActive, isFalse);
     },
   );

@@ -9,6 +9,7 @@ import 'package:tasks_plugin/tasks_logic.dart';
 import 'package:tasks_plugin/tasks_panels.dart';
 import 'package:habits_api/habits_api.dart';
 import 'package:habits_plugin/habits_logic.dart';
+import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/ui/task_drag.dart';
 import 'package:life_os/core/utils/color_format.dart';
@@ -235,6 +236,21 @@ AppPlugin createWorkspacePlugin({
                         onOpenTask: open,
                       ),
               ),
+              WorkspaceEditor(
+                id: 'dayCalendar',
+                label: 'Календарь на день',
+                icon: Icons.calendar_view_day_outlined,
+                backgroundColor: AppColors.surfaceDim,
+                builder: (_, id) => !active()
+                    ? const SizedBox.shrink()
+                    : TaskCalendar(
+                        viewModel: lifecycle.models[id]!,
+                        isWeek: false,
+                        topPadding: 8,
+                        showDayHeader: true,
+                        onOpenTask: open,
+                      ),
+              ),
             ],
           );
         },
@@ -276,6 +292,7 @@ class _WorkspaceLifecycle implements AppPlugin {
       'projectTasks',
       'tasks',
       'calendar',
+      'dayCalendar',
       'hierarchy',
       'habits',
       'stats',

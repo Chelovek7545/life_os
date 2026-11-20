@@ -258,18 +258,26 @@ class TasksViewModel {
   Stream<List<Task>> watchAllTasks() => _queries.watch(_repository.watchTasks);
   Stream<List<Project>> watchProjects() =>
       _queries.watch(_projects.watchAllProjects);
-  final _calendarTaskStreams = <int, Stream<List<TaskWithProject>>>{};
-  Stream<List<TaskWithProject>> watchCalendarTasks({int bufferDays = 0}) {
+  final _calendarTaskStreams =
+      <(int, DatePeriod?), Stream<List<TaskWithProject>>>{};
+  Stream<List<TaskWithProject>> watchCalendarTasks({
+    int bufferDays = 0,
+    DatePeriod? period,
+  }) {
     if (!_accepting) throw StateError('Tasks view model is closed.');
     RangeError.checkNotNegative(bufferDays, 'bufferDays');
     return _calendarTaskStreams.putIfAbsent(
-      bufferDays,
+      (bufferDays, period),
       () => _queries.watch(
         () => Rx.combineLatest2(_useCase.call(), _filters.stream, (
           List<TaskWithProject> items,
           TaskFilterConfig filter,
         ) {
-          return _filterTasks(items, filter, bufferDays: bufferDays);
+          return _filterTasks(
+            items,
+            period == null ? filter : filter.copyWith(period: period),
+            bufferDays: bufferDays,
+          );
         }),
       ),
     );

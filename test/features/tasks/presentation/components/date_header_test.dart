@@ -12,6 +12,32 @@ Widget createTestWidget(Widget child) {
 
 void main() {
   group('DateHeader', () {
+    testWidgets('keeps the date button compact on wide and narrow screens', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1500, 800);
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        createTestWidget(
+          DateHeader(anchorDate: DateTime.now(), onDateChange: (_) {}),
+        ),
+      );
+
+      final button = find.byType(TextButton);
+      expect(tester.getSize(button).width, lessThan(400));
+      expect(tester.getCenter(button).dx, closeTo(750, .01));
+
+      tester.view.physicalSize = const Size(250, 700);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getSize(find.byType(DateHeader)).width,
+        lessThanOrEqualTo(250),
+      );
+      expect(tester.getCenter(button).dx, closeTo(125, .01));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('renders formatted date', (tester) async {
       final date = DateTime(2024, 7, 15);
       await tester.pumpWidget(createTestWidget(

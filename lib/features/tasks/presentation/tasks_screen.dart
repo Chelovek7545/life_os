@@ -426,12 +426,18 @@ class TasksScreenState extends State<TasksScreen> {
     );
   }
 
-  Widget _buildEventBody(bool isWide) => TaskCalendar(
+  Widget _buildEventBody(bool isWeek) => TaskCalendar(
+    key: ValueKey(isWeek),
     viewModel: widget.viewModel,
-    isWeek: isWide,
-    topPadding: isWide ? _kWeekTimelineTopPadding : _kTimelineTopPadding,
+    isWeek: isWeek,
+    topPadding: isWeek ? _kWeekTimelineTopPadding : _kTimelineTopPadding,
     showDateOnlyPanel: _showDateOnlyPanel,
+    onToggleDateOnlyPanel: isWeek ? _toggleDateOnlyPanel : null,
   );
+
+  void _toggleDateOnlyPanel() {
+    setState(() => _showDateOnlyPanel = !_showDateOnlyPanel);
+  }
 
   Widget _buildWeekTasks(
     List<TaskWithProject> items,
@@ -456,12 +462,10 @@ class TasksScreenState extends State<TasksScreen> {
     workLogs: widget.workLogs,
   );
   Widget _buildHeaderPanel(
-    bool isFormVisible,
-    bool isLandscape,
-    bool _isEventMode,
-    double tasksScreenWidth,
-    bool isWide,
-  ) {
+    bool isEventMode,
+    double tasksScreenWidth, {
+    bool isWeek = false,
+  }) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -479,12 +483,19 @@ class TasksScreenState extends State<TasksScreen> {
                   widget.viewModel.hideForm();
                   if (!widget.embeddedEditor) widget.viewModel.disableForm();
                 }
-              : widget.viewModel.showForm,
-          onModeChanged: (index) => _onModeChanged(index, isWide),
+              : () {
+                  if (isEventMode && !isWeek) {
+                    widget.viewModel.selectCalendarCreationDate(
+                      widget.viewModel.currentFilterValue.anchorDate,
+                    );
+                  }
+                  widget.viewModel.showForm();
+                },
+          onModeChanged: _onModeChanged,
           onToggleUnscheduled: _toggleUnscheduledOverlay,
           isDateOnlyPanelVisible: _showDateOnlyPanel,
-          onToggleDateOnlyPanel: _isEventMode
-              ? () => setState(() => _showDateOnlyPanel = !_showDateOnlyPanel)
+          onToggleDateOnlyPanel: isEventMode && !isWeek
+              ? _toggleDateOnlyPanel
               : null,
           onToggleHierarchy: _toggleHierarchyOverlay,
         ),
@@ -499,7 +510,7 @@ class TasksScreenState extends State<TasksScreen> {
 
             return Column(
               children: [
-                if (_isEventMode && !isWide)
+                if (isEventMode && !isWeek)
                   DateHeader(
                     anchorDate: currentFilter.anchorDate,
                     onDateChange: (value) => widget.viewModel.updateFilter(
@@ -507,7 +518,7 @@ class TasksScreenState extends State<TasksScreen> {
                     ),
                   ),
 
-                if (!_isEventMode) ...[
+                if (!isEventMode) ...[
                   Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: AppMargins.sm,
@@ -597,23 +608,12 @@ class TasksScreenState extends State<TasksScreen> {
     widget.viewModel.showForm();
   }
 
-  void _onModeChanged(int index, bool isWide) {
+  void _onModeChanged(int index) {
     if (index < 0 || index > 2) return;
     setState(() => _kanbanMode = index == 2);
-    if (index == 1) _onPeriodChanged(isWide ? DatePeriod.week.index : 0);
     if (widget.viewModel.currentUiFlags.isEventMode != (index == 1)) {
       widget.viewModel.toggleEventMode();
     }
-  }
-
-  void _syncEventPeriod(bool isWide, bool isEventMode) {
-    if (!isEventMode) return;
-    final desired = isWide ? DatePeriod.week : DatePeriod.day;
-    if (widget.viewModel.currentFilterValue.period == desired) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      widget.viewModel.updateFilter((old) => old.copyWith(period: desired));
-    });
   }
 
   void _onPeriodChanged(int index) {
@@ -678,6 +678,7 @@ class TasksScreenState extends State<TasksScreen> {
                 today,
                 widget.embeddedEditor && uiFlags.isFormVisible,
                 uiFlags.isEventMode,
+                period,
               );
             }
             return _buildPortraitLayout(
@@ -696,11 +697,8 @@ class TasksScreenState extends State<TasksScreen> {
     double overlayHeight,
     DateTime today,
     bool isFormVisible,
-    bool _isEventMode,
+    bool isEventMode,
   ) {
-    final isWide = false;
-    _syncEventPeriod(isWide, _isEventMode);
-
     return Stack(
       alignment: AlignmentDirectional.topCenter,
       children: [
@@ -712,19 +710,13 @@ class TasksScreenState extends State<TasksScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: FixedVerticalFadeMask(
               topFade: 100,
-              child: _isEventMode
-                  ? _buildEventBody(isWide)
+              child: isEventMode
+                  ? _buildEventBody(false)
                   : _buildTaskBody(overlayHeight, today),
             ),
           ),
         ),
-        _buildHeaderPanel(
-          isFormVisible,
-          false,
-          _isEventMode,
-          MediaQuery.sizeOf(context).width,
-          isWide,
-        ),
+        _buildHeaderPanel(isEventMode, MediaQuery.sizeOf(context).width),
         _buildUnscheduledOverlay(
           today,
           MediaQuery.sizeOf(context).width > 400
@@ -750,7 +742,8 @@ class TasksScreenState extends State<TasksScreen> {
     double overlayHeight,
     DateTime today,
     bool isFormVisible,
-    bool _isEventMode,
+    bool isEventMode,
+    DatePeriod period,
   ) {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -761,8 +754,10 @@ class TasksScreenState extends State<TasksScreen> {
                   _panelWidth // _panelWidth храним в State
             : totalWidth;
 
-        final isWide = _isEventMode && leftWidth >= _kWideBreakpoint;
-        _syncEventPeriod(isWide, _isEventMode);
+        final isWeek =
+            isEventMode &&
+            period != DatePeriod.day &&
+            leftWidth >= _kWideBreakpoint;
 
         //print(leftWidth);
         //print(totalWidth);
@@ -775,30 +770,24 @@ class TasksScreenState extends State<TasksScreen> {
                 children: [
                   ConstrainedBox(
                     constraints: BoxConstraints(
-                      maxWidth: isWide || _kanbanMode || _wideWeek
+                      maxWidth: isWeek || _kanbanMode || _wideWeek
                           ? double.infinity
                           : 550,
                     ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: _isEventMode && isWide
-                          ? _buildEventBody(isWide)
+                      child: isWeek
+                          ? _buildEventBody(true)
                           : FixedVerticalFadeMask(
                               topFade: 100,
                               bottomFade: 10,
-                              child: _isEventMode
-                                  ? _buildEventBody(isWide)
+                              child: isEventMode
+                                  ? _buildEventBody(false)
                                   : _buildTaskBody(overlayHeight, today),
                             ),
                     ),
                   ),
-                  _buildHeaderPanel(
-                    isFormVisible,
-                    false,
-                    _isEventMode,
-                    leftWidth,
-                    isWide,
-                  ),
+                  _buildHeaderPanel(isEventMode, leftWidth, isWeek: isWeek),
                   _buildUnscheduledOverlay(
                     today,
                     leftWidth > 400 ? 400 : leftWidth,

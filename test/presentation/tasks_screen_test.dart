@@ -14,6 +14,7 @@ import 'package:projects_api/projects_api.dart' show Project;
 import 'package:tasks_api/tasks_api.dart' show Task;
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
 import 'package:life_os/features/tasks/presentation/components/day_calendar.dart';
+import 'package:life_os/features/tasks/presentation/components/task_calendar.dart';
 import 'package:life_os/features/tasks/presentation/tasks_screen.dart';
 
 import '../test_helpers.dart';
@@ -145,6 +146,19 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
   Stream<List<Task>> watchAllTasks() => Stream.value(_allTasks);
 
   @override
+  Stream<List<TaskWithProject>> watchCalendarTasks({
+    int bufferDays = 0,
+    DatePeriod? period,
+  }) => const Stream.empty();
+
+  @override
+  void toggleEventMode() {
+    _uiFlagsController.add(
+      currentUiFlags.copyWith(isEventMode: !currentUiFlags.isEventMode),
+    );
+  }
+
+  @override
   void initialize() {}
 
   @override
@@ -188,6 +202,61 @@ void main() {
         home: TasksScreen(viewModel: viewModel),
       );
     }
+
+    testWidgets('calendar follows the list period and preserves it on resize', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1100, 650);
+      addTearDown(tester.view.reset);
+      viewModel._stateController.add(const TasksEmpty());
+      await tester.pumpWidget(createWidgetUnderTest());
+
+      await tester.tap(find.text('Week'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Календарь'));
+      await tester.pumpAndSettle();
+      TaskCalendar calendar() =>
+          tester.widget<TaskCalendar>(find.byType(TaskCalendar));
+      expect(calendar().isWeek, isTrue);
+      expect(viewModel.currentFilterValue.period, DatePeriod.week);
+      expect(find.byTooltip('Календарь на день'), findsNothing);
+
+      await tester.tap(find.byTooltip('Список'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Day'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Календарь'));
+      await tester.pumpAndSettle();
+      expect(calendar().isWeek, isFalse);
+      expect(viewModel.currentFilterValue.period, DatePeriod.day);
+      expect(viewModel.currentFilterValue.anchorDate, today);
+      expect(find.byTooltip('Календарь на неделю'), findsNothing);
+
+      await tester.tap(find.byTooltip('Следующий день'));
+      await tester.pumpAndSettle();
+      final tomorrow = DateUtils.addDaysToDate(today, 1);
+      expect(viewModel.currentFilterValue.anchorDate, tomorrow);
+
+      await tester.tap(find.byTooltip('Список'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Week'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Календарь'));
+      await tester.pumpAndSettle();
+      expect(calendar().isWeek, isTrue);
+      expect(viewModel.currentFilterValue.period, DatePeriod.week);
+      expect(viewModel.currentFilterValue.anchorDate, tomorrow);
+
+      tester.view.physicalSize = const Size(390, 844);
+      await tester.pumpAndSettle();
+      expect(calendar().isWeek, isFalse);
+      expect(viewModel.currentFilterValue.period, DatePeriod.week);
+
+      tester.view.physicalSize = const Size(1100, 650);
+      await tester.pumpAndSettle();
+      expect(calendar().isWeek, isTrue);
+    });
 
     group('Initial State', () {
       testWidgets('shows loading indicator initially', (tester) async {

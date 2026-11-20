@@ -124,12 +124,14 @@ class TimelineBody extends StatefulWidget {
     this.onExternalDrop,
     this.watchUnscheduled,
     this.showDateOnlyPanel,
+    this.onToggleDateOnlyPanel,
   });
 
   final List<TaskEvent> events;
   final List<Task> dateOnlyTasks;
   final Stream<List<Task>> Function()? watchUnscheduled;
   final bool? showDateOnlyPanel;
+  final VoidCallback? onToggleDateOnlyPanel;
   final ValueChanged<Task>? onOpenTask;
   final void Function(Task task, DateTime sourceDay, DateTime targetDay)?
   onDayTaskMoved;
@@ -162,6 +164,8 @@ class _TimelineBodyState extends State<TimelineBody>
   bool _localDateOnlyPanelVisible = true;
   bool get _dateOnlyPanelVisible =>
       widget.showDateOnlyPanel ?? _localDateOnlyPanelVisible;
+  bool get _canToggleDateOnlyPanel =>
+      widget.onToggleDateOnlyPanel != null || widget.showDateOnlyPanel == null;
   Stream<List<Task>>? _unscheduled;
   final _panelTasksByDay = <DateTime, List<Task>>{};
   int _panelMaxCount = 0;
@@ -252,9 +256,11 @@ class _TimelineBodyState extends State<TimelineBody>
       selectedIcon: const Icon(Icons.event_note, size: 20),
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints.tightFor(width: 34, height: 34),
-      onPressed: () => setState(
-        () => _localDateOnlyPanelVisible = !_localDateOnlyPanelVisible,
-      ),
+      onPressed:
+          widget.onToggleDateOnlyPanel ??
+          () => setState(
+            () => _localDateOnlyPanelVisible = !_localDateOnlyPanelVisible,
+          ),
     ),
   );
 
@@ -1988,7 +1994,7 @@ class _TimelineBodyState extends State<TimelineBody>
                 ? null
                 : _toggleUnscheduled,
             isUnscheduledVisible: _unscheduled != null,
-            dateOnlyPanelToggle: widget.showDateOnlyPanel == null
+            dateOnlyPanelToggle: _canToggleDateOnlyPanel
                 ? _dateOnlyPanelButton()
                 : null,
           ),
@@ -2062,7 +2068,7 @@ class _TimelineBodyState extends State<TimelineBody>
             right: 0,
             child: _buildDateOnlyRow(),
           ),
-        if (widget.showDateOnlyPanel == null && widget.dateOnlyTasks.isNotEmpty)
+        if (_canToggleDateOnlyPanel && widget.dateOnlyTasks.isNotEmpty)
           Positioned(
             top: widget.topPadding + 3,
             right: 8,

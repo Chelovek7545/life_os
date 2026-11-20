@@ -41,14 +41,19 @@ void main() {
     expect(app.tasksViewModel.currentFilterValue.period, DatePeriod.week);
     final panel = find.byKey(const ValueKey('timeline.date-only'));
     expect(panel, findsOneWidget);
-    final withoutDate = find.byTooltip('Задачи без дня');
     final withoutTime = find.byTooltip('Скрыть задачи без времени');
-    expect(tester.getCenter(withoutTime).dy, tester.getCenter(withoutDate).dy);
-    expect(tester.getRect(withoutTime).left, tester.getRect(withoutDate).right);
+    final toggleRect = tester.getRect(withoutTime);
+    expect(
+      toggleRect.center.dy,
+      tester.getCenter(find.byTooltip('Zoom in')).dy,
+    );
+    expect(toggleRect.right, closeTo(tester.getRect(panel).right - 16, 1));
     await tester.tap(withoutTime);
     await tester.pumpAndSettle();
     expect(panel, findsNothing);
-    await tester.tap(find.byTooltip('Показать задачи без времени'));
+    final showWithoutTime = find.byTooltip('Показать задачи без времени');
+    expect(tester.getRect(showWithoutTime), toggleRect);
+    await tester.tap(showWithoutTime);
     await tester.pumpAndSettle();
     expect(panel, findsOneWidget);
     await tester.tap(find.byIcon(Icons.view_kanban_outlined));
@@ -98,6 +103,25 @@ void main() {
             .task
             .startsAt,
         chosen.startOfDay,
+      );
+      await tester.tap(find.byKey(const ValueKey('task-editor.close')));
+      await pumpStorage(tester);
+      final displayedDay = app.tasksViewModel.currentFilterValue.anchorDate;
+      expect(displayedDay, isNot(chosen));
+      await tester.tap(find.byTooltip('Список'));
+      await pumpStorage(tester);
+      await tester.tap(find.text('Day'));
+      await pumpStorage(tester);
+      await tester.tap(find.byTooltip('Календарь'));
+      await pumpStorage(tester);
+      await tester.tap(find.byIcon(Icons.add));
+      await pumpStorage(tester);
+      expect(
+        tester
+            .widget<CollapsibleTaskForm>(find.byType(CollapsibleTaskForm))
+            .task
+            .startsAt,
+        displayedDay.startOfDay,
       );
       expect(tester.takeException(), isNull);
       await disposeTestApp(tester, app);
