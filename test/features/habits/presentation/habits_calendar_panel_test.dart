@@ -107,9 +107,18 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(HabitCalendarMap), findsOneWidget);
+      expect(
+        tester
+            .widget<HabitCalendarMap>(find.byType(HabitCalendarMap))
+            .habit
+            .title,
+        'Run',
+      );
     });
 
-    testWidgets('tapping a day toggles the habit for that date', (tester) async {
+    testWidgets('tapping a day toggles the habit for that date', (
+      tester,
+    ) async {
       final habit = Habit.create(title: 'Read', type: const MorningHabit());
       await pumpPanel(tester, [habit]);
 
@@ -119,6 +128,7 @@ void main() {
         '${today.month.toString().padLeft(2, '0')}-'
         '${today.day.toString().padLeft(2, '0')}',
       );
+      await tester.ensureVisible(find.byKey(key));
       await tester.tap(find.byKey(key));
       await tester.pump();
 
@@ -126,8 +136,9 @@ void main() {
       expect(viewModel.toggled, [(habit.id, expectedDate)]);
     });
 
-    testWidgets('renders inside CollapsibleSheet without layout errors',
-        (tester) async {
+    testWidgets('renders inside CollapsibleSheet without layout errors', (
+      tester,
+    ) async {
       final habit = Habit.create(title: 'Read', type: const MorningHabit());
       viewModel._stateController.add(
         HabitsLoaded(habits: [habitWithEntry(habit)]),
@@ -152,8 +163,10 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.byType(HabitCalendarMap), findsOneWidget);
-      expect(find.text('Тап по дню — отметить или снять выполнение'),
-          findsOneWidget);
+      expect(
+        find.text('Тап по дню — отметить или снять выполнение'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('dragging to minimum does not overflow', (tester) async {

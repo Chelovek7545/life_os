@@ -16,6 +16,7 @@ import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/ui/task_drag.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/features/settings/settings_service.dart';
 import 'package:tasks_api/tasks_api.dart' show Task;
 
 import 'mini_task_form.dart';
@@ -27,11 +28,16 @@ const _startHour = 0;
 const _endHour = 24;
 
 const _defaultHourHeight = 140.0;
+const _weekHourHeight = 56.0;
 const _minHourHeight = 40.0;
 const _maxHourHeight = 240.0;
 
 const _leftLabelWidth = 52.0;
 const _minDayWidth = 150.0;
+const _weekDayNames = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const _weekGridLine = Color(0x17FFFFFF);
+const _weekGridSurface = Color(0xFF191717);
+const _weekPanelTint = Color(0xB3211E1E);
 
 const _snapMinutes = 15;
 const _resizeHandleHeight = 18.0;
@@ -116,10 +122,14 @@ class TimelineBody extends StatefulWidget {
     this.taskFormProjects,
     this.onSubmitNewTask,
     this.onExternalDrop,
+    this.watchUnscheduled,
+    this.showDateOnlyPanel,
   });
 
   final List<TaskEvent> events;
   final List<Task> dateOnlyTasks;
+  final Stream<List<Task>> Function()? watchUnscheduled;
+  final bool? showDateOnlyPanel;
   final ValueChanged<Task>? onOpenTask;
   final void Function(Task task, DateTime sourceDay, DateTime targetDay)?
   onDayTaskMoved;
@@ -131,7 +141,7 @@ class TimelineBody extends StatefulWidget {
   final ValueChanged<DateTime>? onDaySelected;
   final Stream<List<Project>>? taskFormProjects;
   final Future<void> Function(Task task)? onSubmitNewTask;
-  final void Function(
+  final FutureOr<void> Function(
     Task task, {
     int? startMinutes,
     int? durationMinutes,
@@ -148,26 +158,32 @@ class TimelineBody extends StatefulWidget {
 
 class _TimelineBodyState extends State<TimelineBody>
     with SingleTickerProviderStateMixin {
-  bool _panelExpanded = true;
+  final _pendingEventPlacements = <String, (TaskEvent, TaskEvent)>{};
+  bool _localDateOnlyPanelVisible = true;
+  bool get _dateOnlyPanelVisible =>
+      widget.showDateOnlyPanel ?? _localDateOnlyPanelVisible;
+  Stream<List<Task>>? _unscheduled;
   final _panelTasksByDay = <DateTime, List<Task>>{};
   int _panelMaxCount = 0;
   double? _panelHeight;
   double _panelMaxHeight = 360;
   final _dayPanelKey = GlobalKey();
+  final _timedDragFeedbackVisible = ValueNotifier(true);
   DateTime? _hoveredPanelDay;
   bool get _showPanelDropTargets =>
       _dropTask != null &&
       (widget.onEventToDay != null || widget.onDayTaskMoved != null);
-  bool get _showPanelContents => _panelExpanded || _showPanelDropTargets;
 
-  DateTime? _panelDropDayAt(Offset global) {
+  Offset? _dayPanelPoint(Offset global) {
+    if (!_dateOnlyPanelVisible) return null;
     final box = _dayPanelKey.currentContext?.findRenderObject();
     if (box is! RenderBox || !box.hasSize) return null;
     final local = box.globalToLocal(global);
-    if (!(Offset.zero & box.size).contains(local) ||
-        local.dx < _leftLabelWidth) {
-      return null;
-    }
+    return (Offset.zero & box.size).contains(local) ? local : null;
+  }
+
+  DateTime? _panelDropDayAt(Offset local) {
+    if (local.dx < _leftLabelWidth) return null;
     final week = widget.weekStart;
     if (week == null) return _dateOnly(widget.anchorDate ?? DateTime.now());
     if (_lastColumnWidth <= 0) return null;
@@ -210,9 +226,12 @@ class _TimelineBodyState extends State<TimelineBody>
       _panelTasksByDay[_dateOnly(day)] ?? const [];
 
   double get _dateOnlyHeight {
-    if (_panelMaxCount == 0 && !_showPanelDropTargets) return 0;
-    if (!_showPanelContents) return 28;
-    return (_panelHeight ?? (28 + math.min(_panelMaxCount, 3) * 38.0 + 22))
+    if (!_dateOnlyPanelVisible ||
+        (_panelMaxCount == 0 && !_showPanelDropTargets)) {
+      return 0;
+    }
+    final rowHeight = widget.weekStart == null ? 38.0 : 32.0;
+    return (_panelHeight ?? (28 + math.min(_panelMaxCount, 3) * rowHeight + 18))
         .clamp(80.0, _panelMaxHeight)
         .toDouble();
   }
@@ -221,6 +240,23 @@ class _TimelineBodyState extends State<TimelineBody>
   // scrollable content size or move hours while its resize handle is dragged.
   double get _gridTopPadding =>
       widget.weekStart == null ? widget.topPadding : 200.0;
+
+  Widget _dateOnlyPanelButton() => _GlassBox(
+    borderRadius: 999,
+    child: IconButton(
+      tooltip: _dateOnlyPanelVisible
+          ? 'Скрыть задачи без времени'
+          : 'Показать задачи без времени',
+      isSelected: _dateOnlyPanelVisible,
+      icon: const Icon(Icons.event_note_outlined, size: 20),
+      selectedIcon: const Icon(Icons.event_note, size: 20),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 34, height: 34),
+      onPressed: () => setState(
+        () => _localDateOnlyPanelVisible = !_localDateOnlyPanelVisible,
+      ),
+    ),
+  );
 
   Widget _buildDateOnlyRow({double? columnWidth}) {
     final week = widget.weekStart;
@@ -252,7 +288,7 @@ class _TimelineBodyState extends State<TimelineBody>
                 child: TaskDraggable(
                   task: task,
                   sourceDay: _dateOnly(day),
-                  child: _dateOnlyCard(task),
+                  child: _dateOnlyCard(task, compact: week != null),
                 ),
               );
             },
@@ -269,156 +305,120 @@ class _TimelineBodyState extends State<TimelineBody>
         key: _dayPanelKey,
         borderColor: _hoveredPanelDay == null ? null : AppColors.primary,
         borderRadius: 16,
-        //hasBlur: false,
+        color: week == null ? null : _weekPanelTint,
+        padding: EdgeInsets.zero,
         child: Column(
           children: [
-            SizedBox(
+            const SizedBox(
               height: 28,
+              child: Padding(
+                padding: EdgeInsets.only(left: 12),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Задачи на день',
+                    style: TextStyle(fontSize: 12, color: AppColors.onSurface),
+                  ),
+                ),
+              ),
+            ),
+            Expanded(
               child: Row(
                 children: [
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Задачи на день',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  CalendarTaskHint(
-                    message: _panelExpanded
-                        ? 'Скрыть панель задач'
-                        : 'Показать панель задач',
-                    child: IconButton(
-                      key: const ValueKey('timeline.toggle-day-panel'),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 40,
-                        height: 28,
-                      ),
-                      iconSize: 18,
-                      onPressed: () =>
-                          setState(() => _panelExpanded = !_panelExpanded),
-                      icon: Icon(
-                        _panelExpanded ? Icons.expand_less : Icons.expand_more,
-                      ),
-                    ),
+                  const SizedBox(width: _leftLabelWidth),
+                  Expanded(
+                    child: week == null
+                        ? LayoutBuilder(
+                            builder: (_, constraints) => column(
+                              widget.anchorDate ?? DateTime.now(),
+                              constraints.maxWidth,
+                            ),
+                          )
+                        : ClipRect(
+                            child: AnimatedBuilder(
+                              animation: _horizontalController,
+                              child: RepaintBoundary(
+                                child: Row(
+                                  children: [
+                                    for (var i = 0; i < _weekTotalDays; i++)
+                                      column(
+                                        _addDays(_visibleStart(week), i),
+                                        columnWidth!,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              builder: (_, child) => Stack(
+                                children: [
+                                  Positioned(
+                                    left: -(_horizontalController.hasClients
+                                        ? _horizontalController.offset
+                                        : _weekBufferDays * columnWidth!),
+                                    top: 0,
+                                    bottom: 0,
+                                    width: _weekTotalDays * columnWidth!,
+                                    child: child!,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                   ),
                 ],
               ),
             ),
-            if (_showPanelContents)
-              Expanded(
-                child: Row(
-                  children: [
-                    const SizedBox(
-                      width: _leftLabelWidth,
-                      child: Text(
-                        'На\nдень',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: AppColors.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: week == null
-                          ? LayoutBuilder(
-                              builder: (_, constraints) => column(
-                                widget.anchorDate ?? DateTime.now(),
-                                constraints.maxWidth,
-                              ),
-                            )
-                          : ClipRect(
-                              child: AnimatedBuilder(
-                                animation: _horizontalController,
-                                child: RepaintBoundary(
-                                  child: Row(
-                                    children: [
-                                      for (var i = 0; i < _weekTotalDays; i++)
-                                        column(
-                                          _addDays(_visibleStart(week), i),
-                                          columnWidth!,
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                builder: (_, child) => Stack(
-                                  children: [
-                                    Positioned(
-                                      left: -(_horizontalController.hasClients
-                                          ? _horizontalController.offset
-                                          : _weekBufferDays * columnWidth!),
-                                      top: 0,
-                                      bottom: 0,
-                                      width: _weekTotalDays * columnWidth!,
-                                      child: child!,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            if (_showPanelContents)
-              MouseRegion(
-                cursor: SystemMouseCursors.resizeUpDown,
-                child: GestureDetector(
-                  key: const ValueKey('timeline.panel-resize'),
-                  behavior: HitTestBehavior.opaque,
-                  onVerticalDragUpdate: (details) => setState(() {
-                    _panelHeight = (_dateOnlyHeight + details.delta.dy)
-                        .clamp(80.0, _panelMaxHeight)
-                        .toDouble();
-                  }),
-                  child: SizedBox(
-                    height: 10,
-                    width: double.infinity,
-                    child: Center(
-                      child: Container(
-                        width: 40,
-                        height: 3,
-                        decoration: BoxDecoration(
-                          color: AppColors.onSurfaceVariant,
-                          borderRadius: BorderRadius.circular(3),
-                        ),
+            MouseRegion(
+              cursor: SystemMouseCursors.resizeUpDown,
+              child: GestureDetector(
+                key: const ValueKey('timeline.panel-resize'),
+                behavior: HitTestBehavior.opaque,
+                onVerticalDragUpdate: (details) => setState(() {
+                  _panelHeight = (_dateOnlyHeight + details.delta.dy)
+                      .clamp(80.0, _panelMaxHeight)
+                      .toDouble();
+                }),
+                child: SizedBox(
+                  height: 10,
+                  width: double.infinity,
+                  child: Center(
+                    child: Container(
+                      width: 40,
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: AppColors.onSurfaceVariant,
+                        borderRadius: BorderRadius.circular(3),
                       ),
                     ),
                   ),
                 ),
               ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _dateOnlyCard(Task task) => Material(
-    color: task.isCompleted
-        ? AppColors.surface
-        : AppColors.surfaceContainerHigh,
-    borderRadius: BorderRadius.circular(8),
+  Widget _dateOnlyCard(Task task, {bool compact = false}) => Material(
+    color: task.isCompleted ? const Color(0x802C2929) : const Color(0xD9322E2E),
+    borderRadius: BorderRadius.circular(10),
     child: InkWell(
       key: ValueKey('timeline.date-only.${task.id}'),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(10),
       onTap: widget.onOpenTask == null ? null : () => widget.onOpenTask!(task),
       child: SizedBox(
-        height: 34,
+        height: compact ? 28 : 34,
         child: Row(
           children: [
             CalendarTaskHint(
               message: task.isCompleted ? 'Вернуть в работу' : 'Выполнить',
               child: IconButton(
-                constraints: const BoxConstraints.tightFor(
-                  width: 34,
-                  height: 34,
+                constraints: BoxConstraints.tightFor(
+                  width: compact ? 30 : 34,
+                  height: compact ? 28 : 34,
                 ),
                 padding: EdgeInsets.zero,
-                iconSize: 18,
+                iconSize: compact ? 15 : 18,
                 onPressed: () => widget.onToggleTask(task),
                 icon: Icon(
                   task.isCompleted
@@ -468,6 +468,77 @@ class _TimelineBodyState extends State<TimelineBody>
       ),
     ),
   );
+
+  void _toggleUnscheduled() => setState(() {
+    _unscheduled = _unscheduled == null
+        ? widget.watchUnscheduled?.call()
+        : null;
+  });
+
+  Widget _buildUnscheduledPanel(Stream<List<Task>> stream, double width) {
+    return Positioned(
+      top: widget.topPadding + 54,
+      right: 8,
+      width: math.max(0.0, math.min(320, width - 16)),
+      child: GlassPanel(
+        key: const ValueKey('timeline.unscheduled'),
+        padding: const EdgeInsets.all(8),
+        borderRadius: 16,
+        color: const Color(0xF0232020),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                const SizedBox(width: 8),
+                const Expanded(child: Text('Задачи без дня')),
+                IconButton(
+                  tooltip: 'Скрыть задачи без дня',
+                  onPressed: _toggleUnscheduled,
+                  icon: const Icon(Icons.close, size: 18),
+                ),
+              ],
+            ),
+            StreamBuilder<List<Task>>(
+              stream: stream,
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const Text('Не удалось загрузить задачи');
+                }
+                if (!snapshot.hasData) {
+                  return const LinearProgressIndicator();
+                }
+                final tasks = snapshot.data!;
+                if (tasks.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.all(8),
+                    child: Text('Нет задач без дня'),
+                  );
+                }
+                return ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: _panelMaxHeight),
+                  child: ListView.separated(
+                    primary: false,
+                    shrinkWrap: true,
+                    itemCount: tasks.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 4),
+                    itemBuilder: (_, index) {
+                      final task = tasks[index];
+                      return TaskDraggable(
+                        task: task,
+                        child: _dateOnlyCard(task, compact: true),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   static const _totalMinutes = (_endHour - _startHour) * 60;
 
   // Width-only pinch (для шапки дней)
@@ -547,12 +618,19 @@ class _TimelineBodyState extends State<TimelineBody>
         .toInt();
   }
 
-  Rect? _eventRect(TaskEvent event) {
+  double _eventHeight(int duration) {
+    final slotHeight = duration / 60 * _hourHeight;
+    return widget.weekStart == null
+        ? math.max(30.0, slotHeight + 4)
+        : math.max(8.0, slotHeight - 2);
+  }
+
+  Rect? _eventRect(
+    TaskEvent event, {
+    _EventLayoutInfo layout = const _EventLayoutInfo(0, 1),
+  }) {
     final top = (event.startMinutes - _startHour * 60) / 60 * _hourHeight;
-    final height = math.max(
-      30.0,
-      event.durationMinutes / 60 * _hourHeight + 4.0,
-    );
+    final height = _eventHeight(event.durationMinutes);
     if (widget.weekStart != null) {
       final date = event.date;
       if (date == null) return null;
@@ -562,8 +640,9 @@ class _TimelineBodyState extends State<TimelineBody>
       final colW = _lastColumnWidth;
       final innerLeft = dayIndex * colW + 3;
       final innerWidth = math.max(0.0, colW - 6);
-      final width = math.max(18.0, innerWidth - 2);
-      return Rect.fromLTWH(innerLeft + 1, top + 2, width, height);
+      final width = math.max(18.0, innerWidth * layout.widthFactor - 2);
+      final left = innerLeft + innerWidth * layout.leftFactor + 1;
+      return Rect.fromLTWH(left, top + 2, width, height);
     }
     final width = math.max(0.0, _lastDayViewWidth - 4);
     return Rect.fromLTWH(_leftLabelWidth + 12, top + 2, width, height);
@@ -571,8 +650,50 @@ class _TimelineBodyState extends State<TimelineBody>
 
   bool _eventAt(Offset localPosition) {
     return widget.events.any(
-      (event) => _eventRect(event)?.contains(localPosition) ?? false,
+      (event) =>
+          _eventRect(_applyPendingPlacement(event))?.contains(localPosition) ??
+          false,
     );
+  }
+
+  TaskEvent _applyPendingPlacement(TaskEvent event) {
+    final placement = _pendingEventPlacements[event.task.id]?.$2;
+    if (placement == null) return event;
+    return event.copyWith(
+      date: placement.date,
+      startMinutes: placement.startMinutes,
+      durationMinutes: placement.durationMinutes,
+    );
+  }
+
+  Future<void> _saveEventPlacement(
+    TaskEvent event, {
+    int? startMinutes,
+    int? durationMinutes,
+    DateTime? newDate,
+  }) async {
+    final id = event.task.id;
+    final placement = (
+      event,
+      event.copyWith(
+        date: newDate,
+        startMinutes: startMinutes,
+        durationMinutes: durationMinutes,
+      ),
+    );
+    setState(() => _pendingEventPlacements[id] = placement);
+    try {
+      await widget.onEventChanged(
+        event.task,
+        startMinutes: startMinutes,
+        durationMinutes: durationMinutes,
+        newDate: newDate,
+      );
+      // Keep the new position until the calendar stream publishes the change.
+    } catch (_) {
+      if (!mounted || _pendingEventPlacements[id] != placement) return;
+      setState(() => _pendingEventPlacements.remove(id));
+    }
   }
 
   Rect _selectionGhostRect() {
@@ -688,7 +809,8 @@ class _TimelineBodyState extends State<TimelineBody>
     final drag = details.data;
     final task = drag.task;
     final pointer = drag.pointerAt(details.offset);
-    final panelDay = _panelDropDayAt(pointer);
+    final panelPoint = _dayPanelPoint(pointer);
+    final panelDay = panelPoint == null ? null : _panelDropDayAt(panelPoint);
     final sourceDay = drag.sourceDay ?? task.startsAt;
     if (panelDay != null) {
       if (_canMoveDayTask(task)) {
@@ -760,6 +882,8 @@ class _TimelineBodyState extends State<TimelineBody>
     if (!_canAcceptDrag(details.data)) return;
     final target = _targetFor(details);
     if (identical(_dropTask, details.data) && _dropTarget == target) return;
+    _timedDragFeedbackVisible.value =
+        !identical(details.data.sourceTimeline, this) || target == null;
     setState(() {
       _dropTask = details.data;
       _dropTarget = target;
@@ -805,11 +929,13 @@ class _TimelineBodyState extends State<TimelineBody>
           ? day
           : null;
       if (newDate != null || minutes != event.startMinutes) {
-        widget.onEventChanged(
-          task,
-          startMinutes: minutes,
-          durationMinutes: target.duration,
-          newDate: newDate,
+        unawaited(
+          _saveEventPlacement(
+            event,
+            startMinutes: minutes,
+            durationMinutes: target.duration,
+            newDate: newDate,
+          ),
         );
       }
       return;
@@ -831,6 +957,7 @@ class _TimelineBodyState extends State<TimelineBody>
 
   void _clearDrop(TaskDrag? drag) {
     if (_dropTask == null || !identical(_dropTask, drag)) return;
+    _timedDragFeedbackVisible.value = true;
     setState(() {
       _dropTask = null;
       _dropTarget = null;
@@ -885,6 +1012,8 @@ class _TimelineBodyState extends State<TimelineBody>
                 children: [
                   Text(
                     '${_formatTime(start)} – ${_formatTime(end)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white70, fontSize: 11),
                   ),
                   if (_dropTask != null && height >= 40)
@@ -1034,17 +1163,15 @@ class _TimelineBodyState extends State<TimelineBody>
   void initState() {
     super.initState();
     _indexPanelTasks();
+    if (widget.weekStart != null) _hourHeight = _weekHourHeight;
     final initialVerticalOffset = math.max(
       0.0,
-      DateTime.now().hour * _defaultHourHeight - 120.0,
+      DateTime.now().hour * _hourHeight - 120.0,
     );
-    final initialHorizontalOffset = _minDayWidth * 7;
     _verticalController = ScrollController(
       initialScrollOffset: initialVerticalOffset,
     );
-    _horizontalController = _TimelineScrollController(
-      initialScrollOffset: initialHorizontalOffset,
-    );
+    _horizontalController = _TimelineScrollController();
 
     _zoomAnimationController = AnimationController(
       vsync: this,
@@ -1076,6 +1203,25 @@ class _TimelineBodyState extends State<TimelineBody>
   @override
   void didUpdateWidget(covariant TimelineBody oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_pendingEventPlacements.isNotEmpty &&
+        oldWidget.events != widget.events) {
+      final eventsById = {
+        for (final event in widget.events) event.task.id: event,
+      };
+      _pendingEventPlacements.removeWhere((id, placement) {
+        final saved = eventsById[id];
+        final (source, _) = placement;
+        return saved == null ||
+            !DateUtils.isSameDay(saved.date, source.date) ||
+            saved.startMinutes != source.startMinutes ||
+            saved.durationMinutes != source.durationMinutes;
+      });
+    }
+    if (oldWidget.watchUnscheduled != widget.watchUnscheduled) {
+      _unscheduled = _unscheduled == null
+          ? null
+          : widget.watchUnscheduled?.call();
+    }
     if (oldWidget.dateOnlyTasks != widget.dateOnlyTasks ||
         oldWidget.weekStart != widget.weekStart ||
         oldWidget.anchorDate != widget.anchorDate) {
@@ -1091,6 +1237,7 @@ class _TimelineBodyState extends State<TimelineBody>
 
   @override
   void dispose() {
+    _timedDragFeedbackVisible.dispose();
     _panZoomSafetyTimer?.cancel();
     _widthPanZoomSafetyTimer?.cancel();
     _zoomAnimationController.dispose();
@@ -1144,17 +1291,14 @@ class _TimelineBodyState extends State<TimelineBody>
   Map<String, _EventLayoutInfo> _computeLayout(List<TaskEvent> events) {
     if (events.isEmpty) return const {};
 
-    // Сортируем по оригинальному времени, чтобы при драге колонки не прыгали
-    final originalStarts = {
-      for (var e in widget.events) e.task.id: e.startMinutes,
-    };
-
+    // Group overlaps using the positions currently displayed in the grid,
+    // including moves the storage stream has not confirmed yet.
     final sorted = List<TaskEvent>.from(events)
       ..sort((a, b) {
-        final startA = originalStarts[a.task.id] ?? a.startMinutes;
-        final startB = originalStarts[b.task.id] ?? b.startMinutes;
-        final cmp = startA.compareTo(startB);
-        return cmp != 0 ? cmp : a.endMinutes.compareTo(b.endMinutes);
+        final byStart = a.startMinutes.compareTo(b.startMinutes);
+        if (byStart != 0) return byStart;
+        final byEnd = a.endMinutes.compareTo(b.endMinutes);
+        return byEnd != 0 ? byEnd : a.task.id.compareTo(b.task.id);
       });
 
     final layout = <String, _EventLayoutInfo>{};
@@ -1488,6 +1632,7 @@ class _TimelineBodyState extends State<TimelineBody>
   } // --- Drag & Resize Handlers ---
 
   void _onResizeStart(TaskEvent event, DragStartDetails details) {
+    if (_pendingEventPlacements.containsKey(event.task.id)) return;
     if (_pinching || _panZooming || _widthPinching || _widthPanZooming) return;
     if (_pinchPointers.length > 1 || _widthPinchPointers.length > 1) return;
 
@@ -1502,6 +1647,7 @@ class _TimelineBodyState extends State<TimelineBody>
   }
 
   void _onResizeUpdate(TaskEvent event, DragUpdateDetails details) {
+    if (_resizingId != event.task.id) return;
     if (_pinching ||
         _panZooming ||
         _widthPinching ||
@@ -1528,8 +1674,16 @@ class _TimelineBodyState extends State<TimelineBody>
   }
 
   void _onResizeEnd(TaskEvent event, DragEndDetails details) {
-    if (_ghostDuration != null)
-      widget.onEventChanged(event.task, durationMinutes: _ghostDuration);
+    if (_resizingId != event.task.id) return;
+    final duration = _ghostDuration;
+    if (duration != null && duration != _resizeStartDuration) {
+      unawaited(
+        _saveEventPlacement(
+          event.copyWith(durationMinutes: _resizeStartDuration),
+          durationMinutes: duration,
+        ),
+      );
+    }
     setState(() {
       _resizingId = null;
       _ghostStart = null;
@@ -1604,7 +1758,7 @@ class _TimelineBodyState extends State<TimelineBody>
                     startMinutes: _ghostStart ?? event.startMinutes,
                     durationMinutes: _ghostDuration ?? event.durationMinutes,
                   )
-                : event,
+                : _applyPendingPlacement(event),
         ];
         return DragTarget<TaskDrag>(
           onWillAcceptWithDetails: (details) => _canAcceptDrag(details.data),
@@ -1627,6 +1781,9 @@ class _TimelineBodyState extends State<TimelineBody>
       _minDayWidth,
       baseColumnWidth * _dayWidthScale,
     );
+    if (!_horizontalController.hasClients) {
+      _horizontalController.layoutInitialOffset = _weekBufferDays * columnWidth;
+    }
 
     // Синхронизация offset при ресайзе или смене недели
     if (_horizontalController.hasClients &&
@@ -1668,10 +1825,34 @@ class _TimelineBodyState extends State<TimelineBody>
     _lastWeekStart = weekStart;
     _lastMaxWidth = maxWidth;
     final layouts = _computeWeekLayout(events, weekStart);
+    final bounds = <String, Rect?>{
+      for (final event in events)
+        event.task.id: _eventRect(
+          event,
+          layout: layouts[event.task.id] ?? const _EventLayoutInfo(0, 1),
+        ),
+    };
+    final links = <(Rect, Rect)>[
+      for (final event in events)
+        if (bounds[event.task.parentTaskId] case final parent?)
+          if (bounds[event.task.id] case final child?)
+            if (child.left >= parent.right || child.right <= parent.left)
+              (parent, child),
+    ];
 
     return Stack(
-      //crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const Positioned.fill(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [ui.Color.fromARGB(255, 0, 0, 0), Color(0xFF151414)],
+              ),
+            ),
+          ),
+        ),
         // ─── Таймлайн: зум ВЫСОТЫ ───
         FixedVerticalFadeMask(
           topFade: _gridTopPadding + _dateOnlyHeight,
@@ -1726,6 +1907,14 @@ class _TimelineBodyState extends State<TimelineBody>
                                     weekStart,
                                   ),
                                   ..._buildWeekHourGridlines(),
+                                  if (links.isNotEmpty)
+                                    Positioned.fill(
+                                      child: IgnorePointer(
+                                        child: CustomPaint(
+                                          painter: _WeekTaskLinksPainter(links),
+                                        ),
+                                      ),
+                                    ),
                                   ...events.map((event) {
                                     final layout =
                                         layouts[event.task.id] ??
@@ -1795,8 +1984,17 @@ class _TimelineBodyState extends State<TimelineBody>
             footer: _dateOnlyHeight == 0
                 ? null
                 : _buildDateOnlyRow(columnWidth: columnWidth),
+            onToggleUnscheduled: widget.watchUnscheduled == null
+                ? null
+                : _toggleUnscheduled,
+            isUnscheduledVisible: _unscheduled != null,
+            dateOnlyPanelToggle: widget.showDateOnlyPanel == null
+                ? _dateOnlyPanelButton()
+                : null,
           ),
         ),
+        if (_unscheduled case final stream?)
+          _buildUnscheduledPanel(stream, maxWidth),
         _buildDraftFormOverlay(),
       ],
     );
@@ -1864,6 +2062,12 @@ class _TimelineBodyState extends State<TimelineBody>
             right: 0,
             child: _buildDateOnlyRow(),
           ),
+        if (widget.showDateOnlyPanel == null && widget.dateOnlyTasks.isNotEmpty)
+          Positioned(
+            top: widget.topPadding + 3,
+            right: 8,
+            child: _dateOnlyPanelButton(),
+          ),
         _buildDraftFormOverlay(),
       ],
     );
@@ -1904,13 +2108,13 @@ class _TimelineBodyState extends State<TimelineBody>
     return List.generate(_endHour - _startHour + 1, (index) {
       final hour = _startHour + index;
       return Positioned(
-        top: index * _hourHeight,
+        top: math.max(0, index * _hourHeight - 8),
         left: 0,
-        right: 0,
+        right: 10,
         child: Text(
           '${hour.toString().padLeft(2, '0')}:00',
           textAlign: TextAlign.right,
-          style: const TextStyle(color: Colors.white38, fontSize: 11),
+          style: const TextStyle(color: Colors.white70, fontSize: 11),
         ),
       );
     });
@@ -1923,18 +2127,11 @@ class _TimelineBodyState extends State<TimelineBody>
         left: 0,
         right: 0,
         child: const ColoredBox(
-          color: Color(0xFF2A2A2A),
+          color: _weekGridLine,
           child: SizedBox(height: 1),
         ),
       );
     });
-  }
-
-  Color _weekColumnColor(DateTime date, bool isToday) {
-    if (isToday) return const Color(0x14FFFFFF);
-    final isWeekend =
-        date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
-    return isWeekend ? const Color(0x06FFFFFF) : Colors.transparent;
   }
 
   List<Widget> _buildWeekColumnBackground(
@@ -1946,23 +2143,21 @@ class _TimelineBodyState extends State<TimelineBody>
     final todayIndex = _daysBetween(visibleStart, today);
 
     return [
+      if (todayIndex >= 0 && todayIndex < _weekTotalDays)
+        Positioned(
+          left: todayIndex * columnWidth,
+          top: 0,
+          bottom: 0,
+          width: columnWidth,
+          child: const ColoredBox(color: Color(0x0BFFFFFF)),
+        ),
       for (var i = 0; i < _weekTotalDays; i++)
         Positioned(
           left: i * columnWidth,
           top: 0,
           bottom: 0,
-          width: columnWidth,
-          child: ColoredBox(
-            color: _weekColumnColor(_addDays(visibleStart, i), i == todayIndex),
-          ),
-        ),
-      for (var i = 1; i < _weekTotalDays; i++)
-        Positioned(
-          left: i * columnWidth - 0.5,
-          top: 0,
-          bottom: 0,
           width: 1,
-          child: const ColoredBox(color: Color(0x14FFFFFF)),
+          child: const ColoredBox(color: _weekGridLine),
         ),
     ];
   }
@@ -2001,24 +2196,21 @@ class _TimelineBodyState extends State<TimelineBody>
 
     final y = (now.hour * 60 + now.minute - _startHour * 60) / 60 * _hourHeight;
     return Positioned(
-      top: y,
-      left: todayIndex * columnWidth,
-      width: columnWidth,
-      child: Row(
-        children: [
-          const SizedBox(width: 6),
-          const DecoratedBox(
-            decoration: BoxDecoration(color: _orange, shape: BoxShape.circle),
-            child: SizedBox(width: 10, height: 10),
-          ),
-          Expanded(
-            child: CustomPaint(
-              size: const Size(double.infinity, 1.5),
-              painter: const _DashedLinePainter(color: _orange),
+      top: y - 4,
+      left: (todayIndex - now.weekday + 1) * columnWidth,
+      width: 7 * columnWidth,
+      child: const IgnorePointer(
+        child: Row(
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(color: _orange, shape: BoxShape.circle),
+              child: SizedBox(width: 8, height: 8),
             ),
-          ),
-          const SizedBox(width: 6),
-        ],
+            Expanded(
+              child: ColoredBox(color: _orange, child: SizedBox(height: 1)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -2037,10 +2229,7 @@ class _TimelineBodyState extends State<TimelineBody>
         ? (_ghostDuration ?? event.durationMinutes)
         : event.durationMinutes;
     final top = (displayStart - _startHour * 60) / 60 * _hourHeight;
-    final visualHeight = math.max(
-      30.0,
-      displayDuration / 60 * _hourHeight + 4.0,
-    );
+    final visualHeight = _eventHeight(displayDuration);
 
     double eventLeft;
     double eventWidth;
@@ -2048,18 +2237,10 @@ class _TimelineBodyState extends State<TimelineBody>
     if (widget.weekStart != null &&
         weekColumnWidth != null &&
         weekColumnWidth > 0) {
-      final date = event.date;
-      if (date == null) return const SizedBox.shrink();
-
-      final visibleStart = _visibleStart(widget.weekStart!);
-      final dayIndex = _daysBetween(visibleStart, date);
-      if (dayIndex < 0 || dayIndex >= _weekTotalDays) {
-        return const SizedBox.shrink();
-      }
-      final innerLeft = dayIndex * weekColumnWidth + 3;
-      final innerWidth = math.max(0.0, weekColumnWidth - 6);
-      eventWidth = math.max(18.0, innerWidth * layout.widthFactor - 2);
-      eventLeft = innerLeft + innerWidth * layout.leftFactor + 1;
+      final rect = _eventRect(event, layout: layout);
+      if (rect == null) return const SizedBox.shrink();
+      eventWidth = rect.width;
+      eventLeft = rect.left;
     } else {
       eventWidth = math.max(0.0, availableWidth * layout.widthFactor - 4);
       eventLeft = _leftLabelWidth + 12 + availableWidth * layout.leftFactor + 2;
@@ -2074,14 +2255,17 @@ class _TimelineBodyState extends State<TimelineBody>
       child: TaskDraggable(
         task: event.task,
         sourceTimeline: this,
+        feedbackVisible: _timedDragFeedbackVisible,
         enabled:
             _resizingId == null &&
+            !_pendingEventPlacements.containsKey(event.task.id) &&
             !_pinching &&
             !_panZooming &&
             !_widthPinching &&
             !_widthPanZooming,
         child: _EventTile(
           event: event,
+          compact: weekColumnWidth != null,
           height: visualHeight,
           isResizing: isResizing,
           onResizeStart: (d) => _onResizeStart(event, d),
@@ -2109,6 +2293,7 @@ class _EventTile extends StatelessWidget {
     required this.onToggleTask,
     this.ghostStart,
     this.ghostDuration,
+    this.compact = false,
   });
 
   final TaskEvent event;
@@ -2120,6 +2305,104 @@ class _EventTile extends StatelessWidget {
   final VoidCallback onToggleTask;
   final int? ghostStart;
   final int? ghostDuration;
+  final bool compact;
+
+  Widget _compactTile(TimeOfDay start, TimeOfDay end) {
+    final accent = event.accentColor;
+    final strength = event.isCompleted ? .35 : .85;
+    final radius = BorderRadius.circular(10);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        border: Border.all(color: accent.withValues(alpha: strength)),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.alphaBlend(accent.withValues(alpha: .28), _weekGridSurface),
+            Color.alphaBlend(accent.withValues(alpha: .12), _weekGridSurface),
+          ],
+        ),
+        boxShadow: [
+          BoxShadow(color: accent.withValues(alpha: .16), blurRadius: 10),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: LayoutBuilder(
+          builder: (context, constraints) => Row(
+            children: [
+              SizedBox(
+                width: 4,
+                height: double.infinity,
+                child: ColoredBox(color: accent.withValues(alpha: strength)),
+              ),
+              if (constraints.maxWidth >= 65)
+                IconButton(
+                  tooltip: event.isCompleted ? 'Вернуть в работу' : 'Выполнить',
+                  constraints: const BoxConstraints.tightFor(
+                    width: 27,
+                    height: 28,
+                  ),
+                  padding: EdgeInsets.zero,
+                  iconSize: math.min(15, height - 2),
+                  color: accent,
+                  onPressed: onToggleTask,
+                  icon: Icon(
+                    event.isCompleted ? Icons.check_circle : Icons.task_alt,
+                  ),
+                ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: LayoutBuilder(
+                    builder: (context, textBounds) => FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: SizedBox(
+                        width: textBounds.maxWidth,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              event.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.1,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.onSurface,
+                                decoration: event.isCompleted
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                            ),
+                            if (height >= 24)
+                              Text(
+                                '${_formatWeekTime(start)} – ${_formatWeekTime(end)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  height: 1.1,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   TimeOfDay _minutesToTime(int minutes) =>
       TimeOfDay(hour: (minutes ~/ 60) % 24, minute: minutes % 60);
@@ -2145,127 +2428,133 @@ class _EventTile extends StatelessWidget {
 
     return Stack(
       children: [
-        ClipRRect(
-          borderRadius: borderRadius,
-          child: Container(
-            color: AppColors.surfaceContainerLow,
+        if (compact)
+          Positioned.fill(child: _compactTile(start, end))
+        else
+          ClipRRect(
+            borderRadius: borderRadius,
+            child: Container(
+              color: AppColors.surfaceContainerLow,
 
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 120),
-              padding: const EdgeInsets.fromLTRB(20, 2, 10, 2),
-              decoration: BoxDecoration(
-                borderRadius: borderRadius,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    if (event.isCompleted)
-                      Colors.white.withOpacity(0.05)
-                    else
-                      accent.withOpacity(0.22),
-                    Colors.white.withOpacity(0.06),
-                    Colors.black.withOpacity(0.01),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 120),
+                padding: const EdgeInsets.fromLTRB(20, 2, 10, 2),
+                decoration: BoxDecoration(
+                  borderRadius: borderRadius,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      if (event.isCompleted)
+                        Colors.white.withOpacity(0.05)
+                      else
+                        accent.withOpacity(0.22),
+                      Colors.white.withOpacity(0.06),
+                      Colors.black.withOpacity(0.01),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: isInteracting
+                        ? accent.withOpacity(0.95)
+                        : Colors.white.withOpacity(
+                            event.isCompleted ? 0.08 : 0.14,
+                          ),
+                    width: isInteracting ? 1.5 : 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(
+                        isInteracting ? 0.35 : 0.18,
+                      ),
+                      blurRadius: isInteracting ? 22 : 10,
+                      offset: const Offset(0, 8),
+                    ),
+                    if (isInteracting)
+                      BoxShadow(
+                        color: accent.withOpacity(0.25),
+                        blurRadius: 18,
+                      ),
                   ],
                 ),
-                border: Border.all(
-                  color: isInteracting
-                      ? accent.withOpacity(0.95)
-                      : Colors.white.withOpacity(
-                          event.isCompleted ? 0.08 : 0.14,
-                        ),
-                  width: isInteracting ? 1.5 : 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(
-                      isInteracting ? 0.35 : 0.18,
-                    ),
-                    blurRadius: isInteracting ? 22 : 10,
-                    offset: const Offset(0, 8),
-                  ),
-                  if (isInteracting)
-                    BoxShadow(color: accent.withOpacity(0.25), blurRadius: 18),
-                ],
-              ),
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final showTitle = height > 34 && constraints.maxWidth > 40;
-                  final showTime = height > 54 && constraints.maxWidth > 70;
-                  final showDragHandle =
-                      height > 36 && constraints.maxWidth > 88;
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final showTitle = height > 34 && constraints.maxWidth > 40;
+                    final showTime = height > 54 && constraints.maxWidth > 70;
+                    final showDragHandle =
+                        height > 36 && constraints.maxWidth > 88;
 
-                  return Row(
-                    children: [
-                      CheckDot(
-                        isCompleted: event.isCompleted,
-                        onCheckChanged: onToggleTask,
-                        isSelected: false,
-                        isOverdue: false,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (showTitle)
-                              Text(
-                                event.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  decoration: event.isCompleted
-                                      ? TextDecoration.lineThrough
-                                      : TextDecoration.none,
-                                  decorationColor: accent.withOpacity(0.8),
-                                  decorationThickness: 1.6,
-                                  color: event.isCompleted
-                                      ? Colors.white.withOpacity(0.65)
-                                      : Colors.white,
-                                  fontWeight: event.isCompleted
-                                      ? FontWeight.w400
-                                      : FontWeight.w600,
-                                  fontSize: 13.5,
-                                ),
-                              ),
-                            if (showTime) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                '${_formatTime(start)} - ${_formatTime(end)}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(
-                                    isInteracting ? 0.8 : 0.55,
+                    return Row(
+                      children: [
+                        CheckDot(
+                          isCompleted: event.isCompleted,
+                          onCheckChanged: onToggleTask,
+                          isSelected: false,
+                          isOverdue: false,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (showTitle)
+                                Text(
+                                  event.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    decoration: event.isCompleted
+                                        ? TextDecoration.lineThrough
+                                        : TextDecoration.none,
+                                    decorationColor: accent.withOpacity(0.8),
+                                    decorationThickness: 1.6,
+                                    color: event.isCompleted
+                                        ? Colors.white.withOpacity(0.65)
+                                        : Colors.white,
+                                    fontWeight: event.isCompleted
+                                        ? FontWeight.w400
+                                        : FontWeight.w600,
+                                    fontSize: 13.5,
                                   ),
-                                  fontSize: 11.5,
-                                  fontWeight: isInteracting
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
                                 ),
-                              ),
+                              if (showTime) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${_formatTime(start)} - ${_formatTime(end)}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(
+                                      isInteracting ? 0.8 : 0.55,
+                                    ),
+                                    fontSize: 11.5,
+                                    fontWeight: isInteracting
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                      if (showDragHandle)
-                        const Icon(
-                          Icons.drag_indicator,
-                          color: Colors.white24,
-                          size: 16,
-                        ),
-                    ],
-                  );
-                },
+                        if (showDragHandle)
+                          const Icon(
+                            Icons.drag_indicator,
+                            color: Colors.white24,
+                            size: 16,
+                          ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
           ),
-        ),
         Positioned(
           left: 0,
           right: 0,
           bottom: 0,
-          height: _resizeHandleHeight,
+          height: compact ? math.min(10, height / 3) : _resizeHandleHeight,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             dragStartBehavior: DragStartBehavior.down,
@@ -2276,8 +2565,8 @@ class _EventTile extends StatelessWidget {
               color: Colors.transparent,
               alignment: Alignment.center,
               child: Container(
-                width: 34,
-                height: 4,
+                width: compact ? 20 : 34,
+                height: compact ? (height >= 42 ? 2 : 0) : 4,
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(isInteracting ? 0.55 : 0.16),
                   borderRadius: BorderRadius.circular(999),
@@ -2286,23 +2575,24 @@ class _EventTile extends StatelessWidget {
             ),
           ),
         ),
-        Positioned(
-          top: 8,
-          bottom: 8,
-          left: 6,
-          child: IgnorePointer(
-            child: Container(
-              width: 5,
-              decoration: BoxDecoration(
-                color: event.isCompleted ? accent.withOpacity(0.45) : accent,
-                borderRadius: BorderRadius.circular(999),
-                boxShadow: [
-                  BoxShadow(color: accent.withOpacity(0.35), blurRadius: 6),
-                ],
+        if (!compact)
+          Positioned(
+            top: 8,
+            bottom: 8,
+            left: 6,
+            child: IgnorePointer(
+              child: Container(
+                width: 5,
+                decoration: BoxDecoration(
+                  color: event.isCompleted ? accent.withOpacity(0.45) : accent,
+                  borderRadius: BorderRadius.circular(999),
+                  boxShadow: [
+                    BoxShadow(color: accent.withOpacity(0.35), blurRadius: 6),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -2325,6 +2615,9 @@ class _WeekGridHeader extends StatefulWidget {
     required this.onDaySelected,
     this.footer,
     this.onWeekChange,
+    this.onToggleUnscheduled,
+    this.isUnscheduledVisible = false,
+    this.dateOnlyPanelToggle,
   });
 
   final DateTime weekStart;
@@ -2339,6 +2632,9 @@ class _WeekGridHeader extends StatefulWidget {
   final VoidCallback onWidthZoomIn;
   final VoidCallback onWidthZoomOut;
   final Widget? footer;
+  final VoidCallback? onToggleUnscheduled;
+  final bool isUnscheduledVisible;
+  final Widget? dateOnlyPanelToggle;
   final ScrollPhysics scrollPhysics;
   final ValueChanged<double> onHorizontalScroll;
   final ValueChanged<double> onHorizontalScrollEnd;
@@ -2514,221 +2810,79 @@ class _WeekGridHeaderState extends State<_WeekGridHeader> {
         if (hasNav)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
-            child: Center(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _glassIconButton(
-                      Icons.chevron_left,
-                      'Previous week',
-                      () => widget.onWeekChange!(_addDays(displayedWeek, -7)),
-                    ),
-                    const SizedBox(width: 10),
-                    _GlassBox(
-                      borderRadius: 999,
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(999),
-                          onTap: () => _pickDate(context),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 6,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Center(
+                    // A shader mask around the scroll view isolates the
+                    // selector from the moving grid behind the toolbar.
+                    child: ScrollConfiguration(
+                      behavior: ScrollConfiguration.of(
+                        context,
+                      ).copyWith(overscroll: false, scrollbars: false),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _glassIconButton(
+                              Icons.chevron_left,
+                              'Previous week',
+                              () => widget.onWeekChange!(
+                                _addDays(displayedWeek, -7),
+                              ),
                             ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 200),
-                                  transitionBuilder: (child, animation) {
-                                    return FadeTransition(
-                                      opacity: animation,
-                                      child: SizeTransition(
-                                        sizeFactor: animation,
-                                        child: child,
-                                      ),
-                                    );
-                                  },
-                                  child: isCurrentWeek
-                                      ? Text(
-                                          'THIS WEEK',
-                                          key: const ValueKey('this_week_text'),
-                                          style: AppTypography.codeLabel,
-                                        )
-                                      : const SizedBox.shrink(
-                                          key: ValueKey('empty_space'),
-                                        ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${_twoDigit(displayedWeek.day)}.${_twoDigit(displayedWeek.month)} – ${_twoDigit(weekEnd.day)}.${_twoDigit(weekEnd.month)}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    _glassIconButton(
-                      Icons.chevron_right,
-                      'Next week',
-                      () => widget.onWeekChange!(_addDays(displayedWeek, 7)),
-                    ),
-                    const SizedBox(width: 10),
-                    _glassIconButton(
-                      Icons.remove,
-                      'Zoom out',
-                      widget.onZoomOut,
-                    ),
-                    _glassIconButton(Icons.add, 'Zoom in', widget.onZoomIn),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.only(
-            left: _leftLabelWidth,
-            right: 0,
-            bottom: 10,
-          ),
-          child: SizedBox(
-            height: 58,
-            child: ClipRect(
-              child: NotificationListener<ScrollNotification>(
-                onNotification: (notification) {
-                  if (!_syncingDays &&
-                      notification.depth == 0 &&
-                      notification is ScrollEndNotification) {
-                    widget.onHorizontalScrollEnd(_daysScroll.offset);
-                  }
-                  return false;
-                },
-                child: SingleChildScrollView(
-                  key: const ValueKey('timeline.header-scroll'),
-                  scrollDirection: Axis.horizontal,
-                  controller: _daysScroll,
-                  physics: widget.scrollPhysics,
-                  child: AnimatedBuilder(
-                    animation: _highlightedWeek,
-                    builder: (context, _) => RepaintBoundary(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: List.generate(_weekTotalDays, (index) {
-                          final date = _addDays(visibleStart, index);
-                          final isToday = _isSameDay(date, today);
-                          final isAnchor = _isSameDay(date, widget.anchorDate);
-                          final membership = _weekMembership(
-                            _absDay(date).toDouble(),
-                          );
-
-                          return SizedBox(
-                            key: ValueKey(('timeline.day', _dateOnly(date))),
-                            width: widget.columnWidth,
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(12),
-                                onTap: hasNav
-                                    ? () => widget.onDaySelected(date)
-                                    : null,
-                                child: Container(
-                                  margin: const EdgeInsets.symmetric(
-                                    horizontal: 2,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(
-                                      0.04 + 0.16 * membership,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: isAnchor
-                                            ? Colors.white.withValues(alpha: .6)
-                                            : AppColors.borderGlass,
-                                      ),
+                            const SizedBox(width: 10),
+                            _GlassBox(
+                              key: const ValueKey('timeline.week-selector'),
+                              borderRadius: 999,
+                              blur: 20,
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(999),
+                                  onTap: () => _pickDate(context),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 6,
                                     ),
                                     child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
+                                      mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 2,
-                                            ),
-                                            child: Text(
-                                              getWeekDayName(
-                                                date.weekday,
-                                              ).toUpperCase(),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                color: isToday
-                                                    ? _orange
-                                                    : Colors.white.withOpacity(
-                                                        0.55,
-                                                      ),
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w700,
-                                                letterSpacing: 0.6,
-                                              ),
-                                            ),
+                                        AnimatedSwitcher(
+                                          duration: const Duration(
+                                            milliseconds: 200,
                                           ),
+                                          transitionBuilder:
+                                              (child, animation) {
+                                                return FadeTransition(
+                                                  opacity: animation,
+                                                  child: SizeTransition(
+                                                    sizeFactor: animation,
+                                                    child: child,
+                                                  ),
+                                                );
+                                              },
+                                          child: isCurrentWeek
+                                              ? Text(
+                                                  'THIS WEEK',
+                                                  key: const ValueKey(
+                                                    'this_week_text',
+                                                  ),
+                                                  style:
+                                                      AppTypography.codeLabel,
+                                                )
+                                              : const SizedBox.shrink(
+                                                  key: ValueKey('empty_space'),
+                                                ),
                                         ),
-                                        const SizedBox(height: 4),
-                                        Container(
-                                          width: 30,
-                                          height: 30,
-                                          alignment: Alignment.center,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            gradient: isToday
-                                                ? LinearGradient(
-                                                    colors: [
-                                                      _orange,
-                                                      _orange.withOpacity(0.85),
-                                                    ],
-                                                  )
-                                                : null,
-                                            boxShadow: isToday
-                                                ? [
-                                                    BoxShadow(
-                                                      color: _orange
-                                                          .withOpacity(0.35),
-                                                      blurRadius: 10,
-                                                      offset: const Offset(
-                                                        0,
-                                                        3,
-                                                      ),
-                                                    ),
-                                                  ]
-                                                : null,
-                                          ),
-                                          child: Text(
-                                            '${date.day}',
-                                            style: TextStyle(
-                                              color: isToday
-                                                  ? Colors.black
-                                                  : Colors.white.withOpacity(
-                                                      0.85,
-                                                    ),
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 13,
-                                            ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          '${_twoDigit(displayedWeek.day)}.${_twoDigit(displayedWeek.month)} – ${_twoDigit(weekEnd.day)}.${_twoDigit(weekEnd.month)}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                         ),
                                       ],
@@ -2737,24 +2891,222 @@ class _WeekGridHeaderState extends State<_WeekGridHeader> {
                                 ),
                               ),
                             ),
-                          );
-                        }),
+                            const SizedBox(width: 10),
+                            _glassIconButton(
+                              Icons.chevron_right,
+                              'Next week',
+                              () => widget.onWeekChange!(
+                                _addDays(displayedWeek, 7),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            _glassIconButton(
+                              Icons.remove,
+                              'Zoom out',
+                              widget.onZoomOut,
+                            ),
+                            _glassIconButton(
+                              Icons.add,
+                              'Zoom in',
+                              widget.onZoomIn,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
+                if (widget.onToggleUnscheduled != null)
+                  _glassIconButton(
+                    widget.isUnscheduledVisible
+                        ? Icons.visibility_off_outlined
+                        : Icons.inbox_outlined,
+                    widget.isUnscheduledVisible
+                        ? 'Скрыть панель задач без дня'
+                        : 'Показать задачи без дня',
+                    widget.onToggleUnscheduled!,
+                  ),
+                if (widget.dateOnlyPanelToggle case final toggle?) ...[
+                  const SizedBox(width: 6),
+                  toggle,
+                ],
+              ],
             ),
+          ),
+        Padding(
+          padding: const EdgeInsets.only(left: _leftLabelWidth, bottom: 10),
+          child: SizedBox(
+            height: 64,
+            child: _buildWeekDayStrip(context, visibleStart, today, hasNav),
           ),
         ),
         if (widget.footer != null) widget.footer!,
       ],
     );
   }
+
+  static final _dayPillBlur = ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10);
+
+  Widget _buildWeekDayStrip(
+    BuildContext context,
+    DateTime visibleStart,
+    DateTime today,
+    bool hasNav,
+  ) {
+    // Keep the pills in the same compositing scene as the grid underneath.
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(
+        context,
+      ).copyWith(overscroll: false, scrollbars: false),
+      child: ClipRect(
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            if (!_syncingDays &&
+                notification.depth == 0 &&
+                notification is ScrollEndNotification) {
+              widget.onHorizontalScrollEnd(_daysScroll.offset);
+            }
+            return false;
+          },
+          child: SingleChildScrollView(
+            key: const ValueKey('timeline.header-scroll'),
+            scrollDirection: Axis.horizontal,
+            controller: _daysScroll,
+            physics: widget.scrollPhysics,
+            child: BackdropGroup(
+              child: ValueListenableBuilder<bool>(
+                valueListenable: SettingsService.hasBlur,
+                builder: (context, blurEnabled, _) => AnimatedBuilder(
+                  animation: _highlightedWeek,
+                  builder: (context, _) => Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var index = 0; index < _weekTotalDays; index++)
+                        _buildDayPill(
+                          _addDays(visibleStart, index),
+                          today,
+                          hasNav: hasNav,
+                          blurEnabled: blurEnabled,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDayPill(
+    DateTime date,
+    DateTime today, {
+    required bool hasNav,
+    required bool blurEnabled,
+  }) {
+    final isToday = _isSameDay(date, today);
+    final isAnchor = _isSameDay(date, widget.anchorDate);
+    final membership = _weekMembership(_absDay(date).toDouble());
+    final radius = BorderRadius.circular(14);
+    return SizedBox(
+      key: ValueKey(('timeline.day', _dateOnly(date))),
+      width: widget.columnWidth,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: BackdropFilter.grouped(
+            enabled: blurEnabled,
+            filter: _dayPillBlur,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: radius,
+                onTap: hasNav ? () => widget.onDaySelected(date) : null,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: isToday
+                        ? _orange.withValues(alpha: .11 + .04 * membership)
+                        : Colors.white.withValues(
+                            alpha: .025 + .035 * membership,
+                          ),
+                    borderRadius: radius,
+                    border: Border.all(
+                      color: isToday
+                          ? _orange
+                          : isAnchor
+                          ? Colors.white.withValues(alpha: .6)
+                          : AppColors.borderGlass,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          _weekDayNames[date.weekday - 1],
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isToday
+                                ? _orange
+                                : Colors.white.withValues(alpha: .88),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Container(
+                        width: 30,
+                        height: 30,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: isToday
+                              ? LinearGradient(
+                                  colors: [
+                                    _orange,
+                                    _orange.withValues(alpha: .85),
+                                  ],
+                                )
+                              : null,
+                          boxShadow: isToday
+                              ? [
+                                  BoxShadow(
+                                    color: _orange.withValues(alpha: .35),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Text(
+                          '${date.day}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 19,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _GlassBox extends StatelessWidget {
   const _GlassBox({
+    super.key,
     required this.child,
     this.borderRadius = 18,
     this.blur = 16,
@@ -2803,6 +3155,8 @@ class _GlassBox extends StatelessWidget {
 class _TimelineScrollController extends ScrollController {
   _TimelineScrollController({super.initialScrollOffset});
 
+  double? layoutInitialOffset;
+
   @override
   ScrollPosition createScrollPosition(
     ScrollPhysics physics,
@@ -2811,7 +3165,7 @@ class _TimelineScrollController extends ScrollController {
   ) => _TimelineScrollPosition(
     physics: physics,
     context: context,
-    initialPixels: initialScrollOffset,
+    initialPixels: layoutInitialOffset ?? initialScrollOffset,
     keepScrollOffset: keepScrollOffset,
     oldPosition: oldPosition,
   );
@@ -2966,6 +3320,36 @@ class _FlexibleSnapScrollPhysics extends ScrollPhysics {
   bool get allowImplicitScrolling => true;
 }
 
+class _WeekTaskLinksPainter extends CustomPainter {
+  const _WeekTaskLinksPainter(this.links);
+
+  final List<(Rect, Rect)> links;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final line = Paint()
+      ..color = AppColors.primary.withValues(alpha: .85)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.25;
+    final dot = Paint()..color = AppColors.primary;
+    for (final (parent, child) in links) {
+      final forward = parent.center.dx < child.center.dx;
+      final start = forward ? parent.centerRight : parent.centerLeft;
+      final end = forward ? child.centerLeft : child.centerRight;
+      final middle = (start.dx + end.dx) / 2;
+      final path = Path()
+        ..moveTo(start.dx, start.dy)
+        ..cubicTo(middle, start.dy, middle, end.dy, end.dx, end.dy);
+      canvas.drawPath(path, line);
+      canvas.drawCircle(end, 3, dot);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _WeekTaskLinksPainter oldDelegate) =>
+      oldDelegate.links != links;
+}
+
 class _DashedLinePainter extends CustomPainter {
   const _DashedLinePainter({required this.color});
   final Color color;
@@ -3019,3 +3403,6 @@ String _formatTime(TimeOfDay time) =>
 bool _isSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
 String _twoDigit(int value) => value.toString().padLeft(2, '0');
+
+String _formatWeekTime(TimeOfDay time) =>
+    '${_twoDigit(time.hour)}:${_twoDigit(time.minute)}';

@@ -208,9 +208,36 @@ void main() {
       final open = tester
           .widget<TodaysHabitsPanel>(find.byType(TodaysHabitsPanel))
           .onOpenCalendar;
+      final header = find.byType(HabitsMapHeader);
+      final close = find.byTooltip('Закрыть карту привычек');
+
       open();
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 100));
+      final enteringTop = tester.getTopLeft(header).dy;
+      await tester.pump(HabitsMapOverlay.transitionDuration);
+      final openTop = tester.getTopLeft(header).dy;
+      expect(openTop, lessThan(enteringTop));
+      expect(tester.getSize(header).width, HabitsMapOverlay.maxWidth);
+
+      await tester.tap(close);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.getTopLeft(header).dy, greaterThan(openTop));
+
+      open();
+      await tester.pump();
+      await tester.pump(HabitsMapOverlay.transitionDuration);
+      expect(header, findsOneWidget);
+      expect(tester.getTopLeft(header).dy, closeTo(openTop, 1));
+      await tester.tap(close);
+      await tester.pump();
+      await tester.pump(HabitsMapOverlay.transitionDuration);
+      expect(header, findsNothing);
+
+      open();
+      await tester.pump();
+      await tester.pump(HabitsMapOverlay.transitionDuration);
       expect(find.byType(HabitsCalendarPanel), findsOneWidget);
       app.ui.unregister('habits.ui');
       await pumpShell(tester);

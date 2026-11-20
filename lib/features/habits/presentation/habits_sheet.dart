@@ -9,6 +9,7 @@ import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:habits_plugin/habits_panels.dart'
     show habitIconFor, habitColorFor;
 import 'package:life_os/features/habits/presentation/widgets/habit_edit_form.dart';
+import 'package:life_os/features/habits/presentation/widgets/habit_panel_style.dart';
 
 /// Окно со списком всех привычек.
 ///
@@ -38,23 +39,31 @@ Future<void> showHabitEditSheet({
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
+    showDragHandle: false,
+    enableDrag: false,
     backgroundColor: Colors.transparent,
-    builder: (context) => FractionallySizedBox(
-      heightFactor: 0.9,
-      child: HabitEditForm(
-        initial: habit,
-        onDelete: habit == null
-            ? null
-            : () async {
-                viewModel.editingHabit = habit;
-                await viewModel.deleteEditingHabit();
-                if (context.mounted) Navigator.of(context).pop();
-              },
-        onSave: (updated) async {
-          viewModel.editingHabit = habit;
-          await viewModel.saveDraft(updated);
-          if (context.mounted) Navigator.of(context).pop();
-        },
+    constraints: const BoxConstraints(maxWidth: habitPanelMaxWidth),
+    builder: (context) => AnimatedPadding(
+      duration: const Duration(milliseconds: 160),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: FractionallySizedBox(
+        heightFactor: 0.94,
+        child: HabitEditForm(
+          initial: habit,
+          onDelete: habit == null
+              ? null
+              : () async {
+                  viewModel.editingHabit = habit;
+                  await viewModel.deleteEditingHabit();
+                  if (context.mounted) Navigator.of(context).pop();
+                },
+          onSave: (updated) async {
+            viewModel.editingHabit = habit;
+            await viewModel.saveDraft(updated);
+            if (context.mounted) Navigator.of(context).pop();
+          },
+        ),
       ),
     ),
   );

@@ -26,8 +26,9 @@ class HabitsHarness {
         callbacks.add(open);
         return TextButton(onPressed: open, child: const Text('Open calendar'));
       },
-      calendar: (_, _, close) =>
-          TextButton(onPressed: close, child: const Text('Calendar')),
+      calendar: (_, _, visible, close) => visible
+          ? TextButton(onPressed: close, child: const Text('Calendar'))
+          : const SizedBox.shrink(),
       showAll: (_, model) async => opened.add(model),
     ),
   );

@@ -23,6 +23,7 @@ void main() {
       'lunch',
       'evening',
       'time',
+      'anytime',
     ]);
     expect(HabitEntryStatus.values.map((value) => value.name), [
       'pending',

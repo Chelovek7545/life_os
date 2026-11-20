@@ -17,7 +17,8 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         final store = MemoryHabits();
-        final habit = Habit.create(title: 'Read', type: const MorningHabit());
+        const type = TimeHabit(time: HabitTime(hour: 9, minute: 30));
+        final habit = Habit.create(title: 'Read', type: type);
         store.habits[habit.id] = habit;
         final model = HabitsViewModel(store)..initialize();
         await tester.runAsync(
@@ -44,7 +45,9 @@ void main() {
         if (!deleting) {
           await tester.enterText(find.byType(TextField), 'Read more');
         }
-        final action = deleting ? find.byTooltip('Delete') : find.text('Save');
+        final action = deleting
+            ? find.byTooltip('Удалить привычку')
+            : find.text('Сохранить');
         await tester.ensureVisible(action);
         store.writeGate = Completer<void>();
         await tester.tap(action);
@@ -53,7 +56,7 @@ void main() {
         expect(
           tester
               .widget<ElevatedButton>(
-                find.widgetWithText(ElevatedButton, 'Save'),
+                find.widgetWithText(ElevatedButton, 'Сохранить'),
               )
               .onPressed,
           isNull,
@@ -63,7 +66,8 @@ void main() {
               .widget<IconButton>(
                 find.byWidgetPredicate(
                   (widget) =>
-                      widget is IconButton && widget.tooltip == 'Delete',
+                      widget is IconButton &&
+                      widget.tooltip == 'Удалить привычку',
                 ),
               )
               .onPressed,
@@ -73,7 +77,8 @@ void main() {
           tester
               .widget<IconButton>(
                 find.byWidgetPredicate(
-                  (widget) => widget is IconButton && widget.tooltip == 'Close',
+                  (widget) =>
+                      widget is IconButton && widget.tooltip == 'Закрыть',
                 ),
               )
               .onPressed,
@@ -96,6 +101,7 @@ void main() {
           expect(store.habits, isEmpty);
         } else {
           expect(store.habits[habit.id]!.title, 'Read more');
+          expect(store.habits[habit.id]!.type, type);
         }
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());

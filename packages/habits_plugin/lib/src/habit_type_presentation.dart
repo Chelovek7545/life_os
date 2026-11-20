@@ -7,12 +7,13 @@ extension HabitTypePresentation on HabitType {
     HabitTypeKind.lunch => 'Lunch',
     HabitTypeKind.evening => 'Evening',
     HabitTypeKind.time => 'Time',
+    HabitTypeKind.anytime => 'В любое время',
   };
   IconData get icon => switch (kind) {
     HabitTypeKind.morning => Icons.wb_sunny_outlined,
     HabitTypeKind.lunch => Icons.restaurant_outlined,
     HabitTypeKind.evening => Icons.nights_stay_outlined,
-    HabitTypeKind.time => Icons.schedule,
+    HabitTypeKind.time || HabitTypeKind.anytime => Icons.schedule,
   };
 }
 

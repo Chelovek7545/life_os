@@ -82,6 +82,7 @@ class _HabitsPanelState extends State<HabitsPanel> {
                       HabitTypeKind.lunch => 'День',
                       HabitTypeKind.evening => 'Вечер',
                       HabitTypeKind.time => habit.type.timeLabel ?? '',
+                      HabitTypeKind.anytime => 'В любое время',
                     };
               return ListTile(
                 contentPadding: EdgeInsets.zero,

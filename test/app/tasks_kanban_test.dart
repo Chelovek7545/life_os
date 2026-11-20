@@ -18,6 +18,14 @@ void main() {
     final app = (await tester.runAsync(
       () => createTestApp(enableObsidian: false),
     ))!;
+    await tester.runAsync(
+      () => app.tasksRepository.addTask(
+        Task.blank().copyWith(
+          title: 'Task without a time',
+          startsAt: Wrapped(DateTime.now().startOfDay),
+        ),
+      ),
+    );
     await tester.pumpWidget(MyApp(diContainer: app));
     app.navigation.open('tasks');
     await pumpStorage(tester);
@@ -31,6 +39,18 @@ void main() {
     await tester.tap(find.byIcon(Icons.event));
     await pumpStorage(tester);
     expect(app.tasksViewModel.currentFilterValue.period, DatePeriod.week);
+    final panel = find.byKey(const ValueKey('timeline.date-only'));
+    expect(panel, findsOneWidget);
+    final withoutDate = find.byTooltip('Задачи без дня');
+    final withoutTime = find.byTooltip('Скрыть задачи без времени');
+    expect(tester.getCenter(withoutTime).dy, tester.getCenter(withoutDate).dy);
+    expect(tester.getRect(withoutTime).left, tester.getRect(withoutDate).right);
+    await tester.tap(withoutTime);
+    await tester.pumpAndSettle();
+    expect(panel, findsNothing);
+    await tester.tap(find.byTooltip('Показать задачи без времени'));
+    await tester.pumpAndSettle();
+    expect(panel, findsOneWidget);
     await tester.tap(find.byIcon(Icons.view_kanban_outlined));
     await pumpStorage(tester);
     expect(tester.getTopLeft(board).dy, weekTop);

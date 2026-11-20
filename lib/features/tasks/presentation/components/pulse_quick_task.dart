@@ -9,6 +9,7 @@ import 'package:life_os/core/ui/app_notifiacations.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
+import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/core/utils/smart_task_input.dart';
 import 'package:projects_api/projects_api.dart';
 import 'package:tasks_api/tasks_api.dart';
@@ -201,7 +202,11 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
         await widget.addTask(
           Task.blank().copyWith(
             title: draft.title,
-            startsAt: Wrapped(draft.startsAt),
+            startsAt: Wrapped(
+              draft.startMinute == null
+                  ? draft.day?.startOfDay
+                  : draft.startsAt,
+            ),
             endsAt: Wrapped(draft.endsAt),
             dueDate: Wrapped(draft.deadline),
             priority: draft.priority,
@@ -261,7 +266,14 @@ class _QuickTaskNoteState extends State<_QuickTaskNote> {
     if (value == null || _controller.text != original) {
       return;
     }
-    final updated = draft.replaceField(original, field, value);
+    final day = draft.day;
+    final keepImplicitDay =
+        field == QuickTaskField.time &&
+        value.isEmpty &&
+        day != null &&
+        !draft.spans.any((span) => span.field == QuickTaskField.date);
+    final replacement = keepImplicitDay ? 'на ${formatDate(day)}' : value;
+    final updated = draft.replaceField(original, field, replacement);
     _setText(
       updated.isEmpty || updated.trimRight() != updated ? updated : '$updated ',
     );

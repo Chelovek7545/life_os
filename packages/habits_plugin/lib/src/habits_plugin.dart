@@ -32,6 +32,7 @@ class HabitsUiBindings {
   final Widget Function(
     BuildContext context,
     HabitsViewModel model,
+    bool visible,
     VoidCallback closeCalendar,
   )
   calendar;
@@ -86,11 +87,11 @@ class HabitsPlugin {
               final model = viewModel;
               return ValueListenableBuilder<bool>(
                 valueListenable: _calendar!,
-                builder: (context, visible, _) => visible
-                    ? visuals.calendar(context, model, () {
-                        if (panel.isActive) _calendar?.value = false;
-                      })
-                    : const SizedBox.shrink(),
+                builder: (context, visible, _) {
+                  return visuals.calendar(context, model, visible, () {
+                    if (panel.isActive) _calendar?.value = false;
+                  });
+                },
               );
             },
           ),

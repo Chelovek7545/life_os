@@ -4,6 +4,7 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/features/habits/presentation/todays_habits_panel.dart';
 import 'package:life_os/features/habits/presentation/habits_sheet.dart';
 import 'package:life_os/features/habits/presentation/habits_calendar_panel.dart';
+import 'package:life_os/features/habits/presentation/widgets/habit_panel_style.dart';
 
 class WorkspaceHabits extends StatelessWidget {
   const WorkspaceHabits({
@@ -28,19 +29,31 @@ class WorkspaceHabits extends StatelessWidget {
       showModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: false,
+        backgroundColor: habitPanelBackground,
+        constraints: const BoxConstraints(maxWidth: HabitsMapOverlay.maxWidth),
+        sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
+            ? AnimationStyle.noAnimation
+            : const AnimationStyle(
+                duration: HabitsMapOverlay.transitionDuration,
+                reverseDuration: HabitsMapOverlay.transitionDuration,
+              ),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(habitPanelRadius),
+          ),
+          side: BorderSide(color: habitPanelBorder),
+        ),
         builder: (context) => SafeArea(
+          top: false,
           child: SizedBox(
-            height: MediaQuery.sizeOf(context).height * .8,
+            height: HabitsMapOverlay.heightFor(
+              MediaQuery.sizeOf(context).height,
+            ),
             child: Column(
               children: [
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: IconButton(
-                    tooltip: 'Закрыть карту привычек',
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
+                HabitsMapHeader(onClose: () => Navigator.of(context).pop()),
                 Expanded(
                   child: HabitsCalendarPanel(viewModel: model, progress: 1),
                 ),

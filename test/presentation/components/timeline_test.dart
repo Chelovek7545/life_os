@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
@@ -20,7 +22,7 @@ void _noopEventChanged(
 void main() {
   for (final isWeek in [true, false]) {
     testWidgets(
-      'timed drag opens a collapsed panel and selects its day in ${isWeek ? 'week' : 'day'} mode',
+      'timed drag keeps the hidden panel off the calendar in ${isWeek ? 'week' : 'day'} mode',
       (tester) async {
         tester.view.physicalSize = const Size(1600, 1000);
         tester.view.devicePixelRatio = 1;
@@ -49,8 +51,9 @@ void main() {
               anchorDate: monday,
               topPadding: 0,
               onWeekChange: (_) {},
-              onEventChanged: (_, {startMinutes, durationMinutes, newDate}) =>
-                  timeChanges++,
+              onEventChanged: (_, {startMinutes, durationMinutes, newDate}) {
+                timeChanges++;
+              },
               onToggleTask: (_) {},
               onEventToDay: (task, day) => drops.add((task.id, day)),
             ),
@@ -69,33 +72,23 @@ void main() {
             .controller!;
         vertical.jumpTo(400);
         await tester.pumpAndSettle();
-        await tester.tap(find.byTooltip('Скрыть панель задач'));
+        await tester.tap(find.byTooltip('Скрыть задачи без времени'));
         await tester.pumpAndSettle();
         final panel = find.byKey(const ValueKey('timeline.date-only'));
-        expect(tester.getSize(panel).height, 30);
+        expect(panel, findsNothing);
+        expect(find.byTooltip('Показать задачи без времени'), findsOneWidget);
         final gesture = await tester.startGesture(
           tester.getCenter(find.byKey(ValueKey(task.id))),
         );
         await tester.pump(const Duration(milliseconds: 600));
-        expect(tester.getSize(panel).height, greaterThan(30));
-        final targetDay = isWeek ? monday.add(const Duration(days: 1)) : monday;
-        final column = find.byKey(ValueKey(('timeline.panel-day', targetDay)));
-        await gesture.moveTo(tester.getCenter(column));
+        expect(panel, findsNothing);
+        await gesture.moveBy(const Offset(0, 100));
         await tester.pump();
         await gesture.up();
         await tester.pumpAndSettle();
-        expect(drops, [(task.id, targetDay)]);
-        expect(
-          timeChanges,
-          0,
-          reason:
-              'Dropping on the panel must not also reschedule the time block',
-        );
-        expect(
-          tester.getSize(panel).height,
-          30,
-          reason: 'Temporary expansion keeps the user collapse preference',
-        );
+        expect(drops, isEmpty);
+        expect(timeChanges, 1);
+        expect(panel, findsNothing);
         expect(tester.takeException(), isNull);
       },
     );
@@ -584,10 +577,10 @@ void main() {
       await tester.pumpAndSettle();
       final resized = tester.getSize(panel).height;
       expect(resized, greaterThan(initial + 40));
-      await tester.tap(find.byTooltip('Скрыть панель задач'));
+      await tester.tap(find.byTooltip('Скрыть задачи без времени'));
       await tester.pumpAndSettle();
-      expect(tester.getSize(panel).height, 30);
-      await tester.tap(find.byTooltip('Показать панель задач'));
+      expect(panel, findsNothing);
+      await tester.tap(find.byTooltip('Показать задачи без времени'));
       await tester.pumpAndSettle();
       expect(tester.getSize(panel).height, resized);
       Finder column(int day) =>
@@ -1131,7 +1124,7 @@ void main() {
         required List<TaskEvent> events,
         DateTime? anchorDate,
         ValueChanged<DateTime>? onWeekChange,
-        void Function(
+        FutureOr<void> Function(
           Task, {
           int? startMinutes,
           int? durationMinutes,
@@ -1169,7 +1162,7 @@ void main() {
       ) async {
         await tester.pumpWidget(weekBody(events: const []));
 
-        for (final day in ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']) {
+        for (final day in ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']) {
           expect(find.text(day), findsNWidgets(3));
         }
         for (final day in [10, 11, 12, 13, 14, 15, 16]) {
@@ -1206,6 +1199,38 @@ void main() {
         expect(box.dx, lessThan(columnEnd));
       });
 
+      testWidgets('consecutive short events do not cover one another', (
+        tester,
+      ) async {
+        final date = DateTime(2026, 8, 12);
+        final first = createMockTask(id: 'first-short');
+        final second = createMockTask(id: 'second-short');
+        await tester.pumpWidget(
+          weekBody(
+            events: [
+              TaskEvent(
+                task: first,
+                title: 'First',
+                startMinutes: 540,
+                durationMinutes: 15,
+                date: date,
+              ),
+              TaskEvent(
+                task: second,
+                title: 'Second',
+                startMinutes: 555,
+                durationMinutes: 15,
+                date: date,
+              ),
+            ],
+          ),
+        );
+        final firstRect = tester.getRect(find.byKey(ValueKey(first.id)));
+        final secondRect = tester.getRect(find.byKey(ValueKey(second.id)));
+        expect(firstRect.bottom, lessThanOrEqualTo(secondRect.top));
+        expect(tester.takeException(), isNull);
+      });
+
       testWidgets('does not render events outside the buffered weeks', (
         tester,
       ) async {
@@ -1222,44 +1247,87 @@ void main() {
         expect(find.text('Outside Week'), findsNothing);
       });
 
-      testWidgets('horizontal drag moves event to another day', (tester) async {
-        tester.view.physicalSize = const Size(1600, 4200);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.reset);
+      for (final succeeds in [true, false]) {
+        testWidgets(
+          'horizontal drag immediately moves event (save succeeds: $succeeds)',
+          (tester) async {
+            tester.view.physicalSize = const Size(1600, 4200);
+            tester.view.devicePixelRatio = 1.0;
+            addTearDown(tester.view.reset);
 
-        DateTime? receivedNewDate;
-        int? newStart;
-        final event = TaskEvent(
-          task: createMockTask(),
-          title: 'Draggable Event',
-          startMinutes: 540,
-          durationMinutes: 60,
-          date: DateTime(2026, 8, 12, 9), // Wednesday
+            DateTime? receivedNewDate;
+            int? newStart;
+            final save = Completer<void>();
+            final event = TaskEvent(
+              task: createMockTask(title: 'Draggable Event'),
+              title: 'Draggable Event',
+              startMinutes: 540,
+              durationMinutes: 60,
+              date: DateTime(2026, 8, 12, 9), // Wednesday
+            );
+
+            Widget calendar(TaskEvent storedEvent) => weekBody(
+              events: [storedEvent],
+              onEventChanged: (task, {startMinutes, durationMinutes, newDate}) {
+                newStart = startMinutes;
+                receivedNewDate = newDate;
+                return save.future;
+              },
+            );
+            await tester.pumpWidget(calendar(event));
+
+            final card = find.byKey(ValueKey(event.task.id));
+            final origin = tester.getCenter(find.text(event.title));
+            final originalRect = tester.getRect(card);
+            final destination = origin + const Offset(320, 0);
+            final gesture = await tester.startGesture(origin);
+            await tester.pump(const Duration(milliseconds: 600));
+            await gesture.moveTo(destination);
+            await tester.pump(const Duration(milliseconds: 50));
+            final gridPreview = find.text('9:00 AM – 10:00 AM');
+            expect(gridPreview, findsOneWidget);
+            expect(
+              find.text(event.title),
+              findsNWidgets(2),
+              reason:
+                  'Only the origin and the preview in the grid show the title',
+            );
+            await gesture.moveTo(Offset(-10, destination.dy));
+            await tester.pump();
+            expect(gridPreview, findsNothing);
+            expect(
+              find.text(event.title),
+              findsNWidgets(2),
+              reason:
+                  'The title follows the pointer again outside the calendar',
+            );
+            await gesture.moveTo(destination);
+            await tester.pump();
+            await gesture.up();
+            await tester.pump();
+
+            expect(newStart, 540);
+            expect(receivedNewDate, DateTime(2026, 8, 13)); // Thursday
+            final movedRect = tester.getRect(card);
+            expect(movedRect.left, greaterThan(originalRect.left));
+
+            if (succeeds) {
+              save.complete();
+              await tester.pump(const Duration(seconds: 1));
+              expect(tester.getRect(card), movedRect);
+              await tester.pumpWidget(
+                calendar(event.copyWith(date: receivedNewDate)),
+              );
+              expect(tester.getRect(card), movedRect);
+            } else {
+              save.completeError(StateError('Write rejected'));
+              await tester.pumpAndSettle();
+              expect(tester.getRect(card), originalRect);
+            }
+            expect(tester.takeException(), isNull);
+          },
         );
-
-        await tester.pumpWidget(
-          weekBody(
-            events: [event],
-            onEventChanged: (task, {startMinutes, durationMinutes, newDate}) {
-              newStart = startMinutes;
-              receivedNewDate = newDate;
-            },
-          ),
-        );
-
-        const columnWidth = 320.0;
-        final gesture = await tester.startGesture(
-          tester.getCenter(find.text('Draggable Event')),
-        );
-        await tester.pump(const Duration(milliseconds: 600));
-        await gesture.moveBy(Offset(columnWidth, 0));
-        await tester.pump(const Duration(milliseconds: 50));
-        await gesture.up();
-        await tester.pumpAndSettle();
-
-        expect(newStart, 540);
-        expect(receivedNewDate, DateTime(2026, 8, 13)); // Thursday
-      });
+      }
 
       testWidgets('quick drag over a task scrolls instead of moving it', (
         tester,
@@ -1310,6 +1378,78 @@ void main() {
         expect(receivedNewDate, isNull);
         expect(verticalOffsetOf(tester), isNot(startOffset));
       });
+
+      for (final overlaps in [false, true]) {
+        testWidgets(
+          'crossing an event keeps the saved widths (overlap: $overlaps)',
+          (tester) async {
+            tester.view.physicalSize = const Size(1600, 3000);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.reset);
+            final task = createMockTask(title: 'Moving event');
+            final neighborTask = createMockTask(title: 'Neighbor event');
+            final moving = TaskEvent(
+              task: task,
+              title: task.title,
+              date: monday,
+              startMinutes: 540,
+              durationMinutes: 60,
+            );
+            final neighbor = TaskEvent(
+              task: neighborTask,
+              title: neighborTask.title,
+              date: monday,
+              startMinutes: 600,
+              durationMinutes: 60,
+            );
+            final save = Completer<void>();
+            int? savedStart;
+            Widget calendar(TaskEvent event) => weekBody(
+              events: [event, neighbor],
+              onEventChanged: (_, {startMinutes, durationMinutes, newDate}) {
+                savedStart = startMinutes;
+                return save.future;
+              },
+            );
+            await tester.pumpWidget(calendar(moving));
+
+            final card = find.byKey(ValueKey(task.id));
+            final neighborCard = find.byKey(ValueKey(neighborTask.id));
+            final normalWidth = tester.getSize(card).width;
+            final hourHeight =
+                tester.getTopLeft(find.text('10:00')).dy -
+                tester.getTopLeft(find.text('09:00')).dy;
+            final gesture = await tester.startGesture(tester.getCenter(card));
+            await tester.pump(const Duration(milliseconds: 600));
+            await gesture.moveBy(Offset(0, hourHeight));
+            await tester.pump();
+            await gesture.moveBy(Offset(0, hourHeight * (overlaps ? .5 : 1)));
+            await tester.pump();
+            await gesture.up();
+            await tester.pump();
+
+            expect(savedStart, overlaps ? 630 : 660);
+            final movedRect = tester.getRect(card);
+            final neighborRect = tester.getRect(neighborCard);
+            if (overlaps) {
+              expect(movedRect.width, lessThan(normalWidth));
+              expect(movedRect.left, greaterThanOrEqualTo(neighborRect.right));
+            } else {
+              expect(movedRect.width, normalWidth);
+              expect(neighborRect.width, normalWidth);
+            }
+
+            save.complete();
+            await tester.pump();
+            await tester.pumpWidget(
+              calendar(moving.copyWith(startMinutes: savedStart)),
+            );
+            expect(tester.getRect(card), movedRect);
+            expect(tester.getRect(neighborCard), neighborRect);
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
 
       testWidgets('left arrow navigates to previous week', (tester) async {
         DateTime? received;
@@ -1530,9 +1670,7 @@ void main() {
         final after =
             (tester.getTopLeft(find.text('10:00')).dy -
             tester.getTopLeft(find.text('09:00')).dy);
-        // Check hour spacing independently of the preserved zoom focal point.
-        // 140 * 2.0 is clamped to 240, so adjacent hours spread by 100.
-        expect(after - before, closeTo(100, 1));
+        expect(after, closeTo(before * 2, 1));
       });
 
       testWidgets('zoom in increases hour slot height', (tester) async {
@@ -1553,8 +1691,7 @@ void main() {
             (tester.getTopLeft(find.text('10:00')).dy -
             tester.getTopLeft(find.text('09:00')).dy);
 
-        // Adjacent hour spacing grows from 140 to 168.
-        expect(after - before, closeTo(140 * 0.2, 1));
+        expect(after, closeTo(before * 1.2, 1));
       });
 
       testWidgets('zoom out decreases hour slot height', (tester) async {
@@ -1575,13 +1712,15 @@ void main() {
             (tester.getTopLeft(find.text('10:00')).dy -
             tester.getTopLeft(find.text('09:00')).dy);
 
-        // Adjacent hour spacing shrinks from 140 to about 116.67.
-        expect(before - after, closeTo(140 * (1 - 1 / 1.2), 1));
+        expect(after, closeTo(before / 1.2, 1));
       });
     });
 
     group('Task creation via long-press selection', () {
       final monday = DateTime(2026, 8, 10);
+      double hourHeight(WidgetTester tester) =>
+          tester.getTopLeft(find.text('10:00')).dy -
+          tester.getTopLeft(find.text('09:00')).dy;
 
       Widget buildBody({
         List<TaskEvent> events = const [],
@@ -1648,11 +1787,12 @@ void main() {
         final h = horizontalOffset(tester);
         final v = verticalOffset(tester);
         final screenX = 52 + (7 * columnWidth + columnWidth / 2) - h;
-        final screenY = 200 + (9 * 140 + 70) - v;
+        final hour = hourHeight(tester);
+        final screenY = 200 + 9.5 * hour - v;
 
         final gesture = await tester.startGesture(Offset(screenX, screenY));
         await tester.pump(const Duration(milliseconds: 600));
-        await gesture.moveBy(const Offset(0, 140));
+        await gesture.moveBy(Offset(0, hour));
         await tester.pump(const Duration(milliseconds: 50));
         await gesture.up();
         await tester.pump(const Duration(milliseconds: 100));
@@ -1699,7 +1839,7 @@ void main() {
         final h = horizontalOffset(tester);
         final v = verticalOffset(tester);
         final screenX = 52 + (7 * columnWidth + columnWidth / 2) - h;
-        final screenY = 200 + ((540 + 30) / 60 * 140) - v;
+        final screenY = 200 + 9.5 * hourHeight(tester) - v;
 
         final gesture = await tester.startGesture(Offset(screenX, screenY));
         await tester.pump(const Duration(milliseconds: 600));
@@ -1772,7 +1912,7 @@ void main() {
           final h = horizontalOffset(tester);
           final v = verticalOffset(tester);
           final screenX = 52 + (7 * columnWidth + columnWidth / 2) - h;
-          final screenY = 200 + (10 * 140 + 70) - v;
+          final screenY = 200 + 10.5 * hourHeight(tester) - v;
 
           final gesture = await tester.startGesture(Offset(screenX, screenY));
           await tester.pump(const Duration(milliseconds: 600));
@@ -1793,7 +1933,7 @@ void main() {
       testWidgets('mini form moves together with the ghost on scroll', (
         tester,
       ) async {
-        tester.view.physicalSize = const Size(1600, 4200);
+        tester.view.physicalSize = const Size(1600, 1050);
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.reset);
 
@@ -1802,9 +1942,19 @@ void main() {
 
         const columnWidth = (1600 - 52) / 7.0;
         final h = horizontalOffset(tester);
-        final v = verticalOffset(tester);
+        final vertical = tester
+            .widgetList<SingleChildScrollView>(
+              find.byType(SingleChildScrollView),
+            )
+            .firstWhere(
+              (w) => w.scrollDirection == Axis.vertical && w.controller != null,
+            )
+            .controller!;
+        vertical.jumpTo(0);
+        await tester.pump();
+        final hour = hourHeight(tester);
         final screenX = 52 + (7 * columnWidth + columnWidth / 2) - h;
-        final screenY = 200 + (9 * 140 + 70) - v;
+        final screenY = 200 + 9.5 * hour;
 
         final gesture = await tester.startGesture(Offset(screenX, screenY));
         await tester.pump(const Duration(milliseconds: 600));
@@ -1824,21 +1974,13 @@ void main() {
                   w.scrollDirection == Axis.horizontal && w.controller != null,
             )
             .controller!;
-        final vertical = tester
-            .widgetList<SingleChildScrollView>(
-              find.byType(SingleChildScrollView),
-            )
-            .firstWhere(
-              (w) => w.scrollDirection == Axis.vertical && w.controller != null,
-            )
-            .controller!;
         horizontal.jumpTo(horizontal.offset + columnWidth);
-        vertical.jumpTo(vertical.offset + 140);
+        vertical.jumpTo(hour);
         await tester.pump();
 
         final after = tester.getRect(find.byType(MiniTaskForm));
         expect(after.left, closeTo(before.left - columnWidth, 1));
-        expect(after.top, closeTo(before.top - 140, 1));
+        expect(after.top, closeTo(before.top - hour, 1));
       });
 
       testWidgets('cancel button closes mini form and clears ghost', (
@@ -1855,7 +1997,7 @@ void main() {
         final h = horizontalOffset(tester);
         final v = verticalOffset(tester);
         final screenX = 52 + (7 * columnWidth + columnWidth / 2) - h;
-        final screenY = 200 + (9 * 140 + 70) - v;
+        final screenY = 200 + 9.5 * hourHeight(tester) - v;
 
         final gesture = await tester.startGesture(Offset(screenX, screenY));
         await tester.pump(const Duration(milliseconds: 600));

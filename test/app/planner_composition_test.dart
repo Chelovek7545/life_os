@@ -13,6 +13,85 @@ import '../support/test_app.dart';
 import 'today_composition_test.dart' show pumpStorage;
 
 void main() {
+  testWidgets('undated panel toggles independently of the pinned week header', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1700, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final app = (await tester.runAsync(
+      () => createTestApp(enableObsidian: false, includePlanningScreens: true),
+    ))!;
+    final monday = getWeekStart(DateTime.now());
+    final undated = Task.blank().copyWith(title: 'Undated task');
+    final planned = Task.blank().copyWith(
+      title: 'Task for Monday',
+      startsAt: Wrapped(monday.startOfDay),
+    );
+    await tester.runAsync(() async {
+      await app.tasksRepository.addTask(undated);
+      await app.tasksRepository.addTask(planned);
+    });
+    await tester.pumpWidget(MyApp(diContainer: app));
+    app.navigation.open('planner');
+    await pumpStorage(tester);
+
+    final day = find.byKey(ValueKey(('timeline.day', monday)));
+    final panel = find.byKey(const ValueKey('timeline.date-only'));
+    final inbox = find.byKey(const ValueKey('timeline.unscheduled'));
+    final headerTop = tester.getTopLeft(day).dy;
+    final panelTop = tester.getTopLeft(panel).dy;
+    final dayBlur = tester.widget<BackdropFilter>(
+      find.descendant(of: day, matching: find.byType(BackdropFilter)),
+    );
+    expect(dayBlur.enabled, isTrue);
+    expect(
+      find.ancestor(of: day, matching: find.byType(BackdropGroup)),
+      findsOneWidget,
+    );
+    expect(
+      find.ancestor(of: day, matching: find.byType(ShaderMask)),
+      findsNothing,
+    );
+    final selector = find.byKey(const ValueKey('timeline.week-selector'));
+    expect(
+      find.descendant(of: selector, matching: find.byType(BackdropFilter)),
+      findsOneWidget,
+    );
+    expect(
+      find.ancestor(of: selector, matching: find.byType(ShaderMask)),
+      findsNothing,
+    );
+    await tester.tap(find.byTooltip('Показать задачи без дня'));
+    await pumpStorage(tester);
+    expect(
+      find.descendant(of: inbox, matching: find.text(undated.title)),
+      findsOneWidget,
+    );
+    await tester.tap(find.byTooltip('Скрыть задачи без дня'));
+    await tester.pumpAndSettle();
+    expect(inbox, findsNothing);
+    expect(panel, findsOneWidget);
+
+    final hour = find.text('12:00');
+    final vertical = tester
+        .widgetList<SingleChildScrollView>(
+          find.ancestor(of: hour, matching: find.byType(SingleChildScrollView)),
+        )
+        .singleWhere((scroll) => scroll.scrollDirection == Axis.vertical)
+        .controller!;
+    vertical.jumpTo(0);
+    await tester.pump();
+    final hourTop = tester.getTopLeft(hour).dy;
+    vertical.jumpTo(80);
+    await tester.pump();
+    expect(tester.getTopLeft(hour).dy, closeTo(hourTop - 80, .01));
+    expect(tester.getTopLeft(day).dy, headerTop);
+    expect(tester.getTopLeft(panel).dy, panelTop);
+    expect(tester.takeException(), isNull);
+    await disposeTestApp(tester, app);
+  });
+
   testWidgets(
     'hierarchy tasks drop into day panel or time grid and cancel without changes',
     (tester) async {
@@ -86,32 +165,14 @@ void main() {
         findsOneWidget,
       );
 
-      // A collapsed panel also opens for hierarchy drags; the grid remains a time target.
-      await tester.tap(find.byTooltip('Скрыть панель задач'));
+      // The hidden panel stays off the calendar while the grid accepts drops.
+      await tester.tap(find.byTooltip('Скрыть задачи без времени'));
       await tester.pump();
-      final toCollapsedDay = await startDrag();
-      await toCollapsedDay.moveTo(enter);
-      await tester.pump();
-      final anotherDay = monday.add(const Duration(days: 3));
-      await toCollapsedDay.moveTo(
-        tester.getCenter(
-          find.byKey(ValueKey(('timeline.panel-day', anotherDay))),
-        ),
-      );
-      await tester.pump();
-      await toCollapsedDay.up();
-      await pumpStorage(tester);
-      expect(
-        (await tester.runAsync(
-          () => app.tasksRepository.getById(task.id),
-        ))!.startsAt,
-        anotherDay.startOfDay,
-      );
-      expect(tester.getSize(panel).height, 30);
+      expect(panel, findsNothing);
       final toTime = await startDrag();
       await toTime.moveTo(enter);
       await tester.pump();
-      expect(tester.getSize(panel).height, greaterThan(30));
+      expect(panel, findsNothing);
       await toTime.moveTo(tester.getTopLeft(timeline) + const Offset(400, 600));
       await tester.pump();
       await toTime.up();
@@ -413,17 +474,14 @@ void main() {
         ),
         findsOneWidget,
       );
-      await tester.tap(find.byTooltip('Скрыть панель задач'));
+      await tester.tap(find.byTooltip('Скрыть задачи без времени'));
       await tester.pump();
       expect(find.text(range.title), findsNothing);
-      expect(
-        tester.getSize(find.byKey(const ValueKey('timeline.date-only'))).height,
-        30,
-      );
+      expect(find.byKey(const ValueKey('timeline.date-only')), findsNothing);
       await tester.tap(find.byTooltip('Previous week'));
       await pumpStorage(tester);
-      expect(find.byTooltip('Показать панель задач'), findsOneWidget);
-      await tester.tap(find.byTooltip('Показать панель задач'));
+      expect(find.byTooltip('Показать задачи без времени'), findsOneWidget);
+      await tester.tap(find.byTooltip('Показать задачи без времени'));
       await tester.pump();
       expect(find.text(range.title), findsWidgets);
       expect(tester.takeException(), isNull);

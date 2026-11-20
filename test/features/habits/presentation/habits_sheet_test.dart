@@ -13,7 +13,7 @@ class FakeHabitsViewModel extends Fake implements HabitsViewModel {
   final BehaviorSubject<DateTime> _dateController;
   final BehaviorSubject<bool> _formController;
 
-  final List<String> savedTitles = [];
+  final List<Habit> savedHabits = [];
 
   @override
   Habit? editingHabit;
@@ -63,7 +63,7 @@ class FakeHabitsViewModel extends Fake implements HabitsViewModel {
 
   @override
   Future<void> saveDraft(Habit habit) async {
-    savedTitles.add(habit.title);
+    savedHabits.add(habit);
   }
 
   @override
@@ -107,10 +107,8 @@ void main() {
         createTestWidget(
           child: Builder(
             builder: (context) => ElevatedButton(
-              onPressed: () => showAllHabitsSheet(
-                context: context,
-                viewModel: viewModel,
-              ),
+              onPressed: () =>
+                  showAllHabitsSheet(context: context, viewModel: viewModel),
               child: const Text('Open'),
             ),
           ),
@@ -153,7 +151,7 @@ void main() {
       await tester.tap(find.byTooltip('New habit'));
       await tester.pumpAndSettle();
 
-      expect(find.text('New habit'), findsOneWidget);
+      expect(find.text('Новая привычка'), findsOneWidget);
       expect(find.byType(HabitEditForm), findsOneWidget);
     });
 
@@ -165,10 +163,16 @@ void main() {
       await tester.tap(find.text('Read'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Edit habit'), findsOneWidget);
+      expect(find.text('Редактировать привычку'), findsOneWidget);
     });
 
-    testWidgets('saving new habit from form calls view model', (tester) async {
+    testWidgets('saves the selected habit settings on a narrow screen', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 720);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       emitLoaded(const []);
       await openSheet(tester);
 
@@ -176,21 +180,45 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.enterText(find.byType(TextField), 'Drink water');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('В любое время'));
+      await tester.tap(find.byTooltip('Расписание по дням'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('По будням'));
+      await tester.pumpAndSettle();
+
       final formScrollable = find
           .descendant(
             of: find.byType(HabitEditForm),
             matching: find.byType(Scrollable),
           )
           .first;
-      await tester.scrollUntilVisible(
-        find.text('Save'),
-        300,
-        scrollable: formScrollable,
-      );
-      await tester.tap(find.text('Save'));
-      await tester.pumpAndSettle();
+      Future<void> select(Finder control) async {
+        await tester.scrollUntilVisible(
+          control,
+          160,
+          scrollable: formScrollable,
+        );
+        await tester.tap(control);
+        await tester.pumpAndSettle();
+      }
 
-      expect(viewModel.savedTitles, ['Drink water']);
+      await select(find.text('2 нед'));
+      await select(find.byType(Switch));
+      await select(find.byTooltip('Вода'));
+      await select(find.byTooltip('Голубой'));
+      await select(find.text('Сохранить'));
+
+      final habit = viewModel.savedHabits.single;
+      expect(habit.title, 'Drink water');
+      expect(habit.type, const AnytimeHabit());
+      expect(habit.schedule.daysOfWeek, [1, 2, 3, 4, 5]);
+      expect(habit.schedule.durationWeeks, 2);
+      expect(habit.reminderTime, const HabitTime(hour: 8, minute: 0));
+      expect(habit.icon, 'water_drop');
+      expect(habit.colorHex, '#4FC3F7');
+      expect(tester.takeException(), isNull);
     });
   });
 }

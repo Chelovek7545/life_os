@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/app.dart';
 import 'package:life_os/core/theme/app_theme.dart';
+import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:life_os/features/tasks/presentation/components/pulse_quick_task.dart';
 import 'package:projects_api/projects_api.dart';
 
@@ -220,6 +221,64 @@ void main() {
       TargetPlatform.android,
     }),
   );
+
+  testWidgets('quick input saves a day without time separately from midnight', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final app = (await tester.runAsync(
+      () => createTestApp(enableObsidian: false),
+    ))!;
+    await tester.pumpWidget(MyApp(diContainer: app));
+    app.navigation.open('pulse');
+    await pumpStorage(tester);
+    await tester.tap(find.byType(PulseQuickTaskAction));
+    await pumpStorage(tester);
+    await tester.enterText(
+      _input,
+      'Оплатить счёт\nПроверка в 00:00\nУборка в 8 ',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ActionChip, 'Дата'));
+    await tester.pumpAndSettle();
+    final date = tester
+        .widget<DatePickerDialog>(find.byType(DatePickerDialog))
+        .initialDate!;
+    await tester.tap(find.text('Применить'));
+    await tester.pumpAndSettle();
+    await tester.tap(_inline('08:00'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Убрать время'));
+    await tester.pumpAndSettle();
+    expect(_inline('08:00'), findsNothing);
+
+    await tester.tap(_save);
+    for (
+      var attempt = 0;
+      attempt < 10 && _input.evaluate().isNotEmpty;
+      attempt++
+    ) {
+      await pumpStorage(tester);
+    }
+    expect(_input, findsNothing);
+    final tasks = (await tester.runAsync(app.tasksRepository.getAllTasks))!;
+    final dateOnly = tasks.singleWhere((task) => task.title == 'Оплатить счёт');
+    final midnight = tasks.singleWhere((task) => task.title == 'Проверка');
+    final cleared = tasks.singleWhere((task) => task.title == 'Уборка');
+    expect(dateOnly.startsAt, date.startOfDay);
+    expect(dateOnly.endsAt, isNull);
+    expect(midnight.startsAt!.isDateOnly, isFalse);
+    expect(midnight.startsAt!.hour, 0);
+    expect(midnight.startsAt!.minute, 0);
+    expect(cleared.startsAt, midnight.startsAt!.startOfDay);
+    expect(cleared.endsAt, isNull);
+
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    await disposeTestApp(tester, app);
+  });
 
   testWidgets('unsaved note survives closing and retry excludes saved tasks', (
     tester,

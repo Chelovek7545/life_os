@@ -38,6 +38,9 @@ void main() {
     expect(restored.schedule.durationWeeks, 2);
     expect(restored.icon, 'menu_book');
     expect(restored.colorHex, '#4FC3F7');
+
+    await dao.updateHabit(restored.copyWith(type: const AnytimeHabit()));
+    expect((await dao.getAllHabits()).single.type, const AnytimeHabit());
   });
 
   test('set entry status creates then updates idempotently', () async {

@@ -230,6 +230,7 @@ AppPlugin createWorkspacePlugin({
                     : TaskCalendar(
                         viewModel: lifecycle.models[id]!,
                         isWeek: true,
+                        showUnscheduledToggle: true,
                         topPadding: 8,
                         onOpenTask: open,
                       ),

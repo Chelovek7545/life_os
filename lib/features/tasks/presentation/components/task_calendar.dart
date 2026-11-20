@@ -14,17 +14,27 @@ class TaskCalendar extends StatefulWidget {
     required this.isWeek,
     required this.topPadding,
     this.onOpenTask,
+    this.showUnscheduledToggle = false,
+    this.showDateOnlyPanel,
   });
   final TasksViewModel viewModel;
   final bool isWeek;
   final double topPadding;
   final ValueChanged<Task>? onOpenTask;
+  final bool showUnscheduledToggle;
+  final bool? showDateOnlyPanel;
 
   @override
   State<TaskCalendar> createState() => _TaskCalendarState();
 }
 
 class _TaskCalendarState extends State<TaskCalendar> {
+  Stream<List<Task>> _watchUnscheduled() => widget.viewModel.state.map(
+    (state) => state is TasksLoaded
+        ? [for (final item in state.unscheduledTasks) item.task]
+        : const <Task>[],
+  );
+
   // Browsing weeks changes the query period, but keeps the chosen day intact.
   late DateTime _lastAnchorDate =
       widget.viewModel.currentFilterValue.anchorDate;
@@ -52,8 +62,9 @@ class _TaskCalendarState extends State<TaskCalendar> {
 
   Future<void> _run(
     BuildContext context,
-    Future<void> Function() action,
-  ) async {
+    Future<void> Function() action, {
+    bool propagateError = false,
+  }) async {
     try {
       await action();
     } catch (_) {
@@ -64,6 +75,7 @@ class _TaskCalendarState extends State<TaskCalendar> {
           ),
         );
       }
+      if (propagateError) rethrow;
     }
   }
 
@@ -84,6 +96,11 @@ class _TaskCalendarState extends State<TaskCalendar> {
         _selectedDate = date;
       }
       return TimelineBody(
+        key: ObjectKey(widget.viewModel),
+        showDateOnlyPanel: widget.showDateOnlyPanel,
+        watchUnscheduled: widget.isWeek && widget.showUnscheduledToggle
+            ? _watchUnscheduled
+            : null,
         dateOnlyTasks: [
           for (final item in items)
             if ((item.task.startsAt?.isDateOnly ?? false) ||
@@ -109,9 +126,11 @@ class _TaskCalendarState extends State<TaskCalendar> {
                 startMinutes: item.task.startsAt!.durationInMinutes,
                 durationMinutes: item.task.duration.inMinutes,
                 isCompleted: item.task.isCompleted,
-                accentColor: item.project == null
-                    ? AppColors.onSurface
-                    : parseHexColor(item.project!.color),
+                accentColor: item.project != null
+                    ? parseHexColor(item.project!.color)
+                    : widget.isWeek
+                    ? AppColors.primaryContainer
+                    : AppColors.onSurface,
               ),
         ],
         weekStart: widget.isWeek ? getWeekStart(date) : null,
@@ -128,6 +147,7 @@ class _TaskCalendarState extends State<TaskCalendar> {
                 durationMinutes: durationMinutes,
                 newDate: newDate,
               ),
+              propagateError: true,
             ),
         onExternalDrop: (task, startsAt, endsAt) => _run(
           context,

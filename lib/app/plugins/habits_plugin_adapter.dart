@@ -1,8 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:habits_api/habits_api.dart';
 import 'package:habits_plugin/habits_plugin.dart';
 import 'package:plugin_ui/plugin_ui.dart';
-import 'package:life_os/core/ui/collapsible_sheet.dart';
 import 'package:life_os/features/habits/presentation/habits_calendar_panel.dart';
 import 'package:life_os/features/habits/presentation/habits_sheet.dart';
 import 'package:life_os/features/habits/presentation/todays_habits_panel.dart';
@@ -34,15 +32,7 @@ HabitsPlugin createHabitsPlugin({
     ),
     showAll: (context, model) =>
         showAllHabitsSheet(context: context, viewModel: model),
-    calendar: (context, model, close) {
-      final height = MediaQuery.sizeOf(context).height * .85;
-      return CollapsibleSheet(
-        snapPoints: [60, 190, height],
-        initialHeight: height,
-        header: HabitsMapHeader(onClose: close),
-        bodyBuilder: (progress, _) =>
-            HabitsCalendarPanel(viewModel: model, progress: progress),
-      );
-    },
+    calendar: (_, model, visible, close) =>
+        HabitsMapOverlay(viewModel: model, visible: visible, onClose: close),
   ),
 );

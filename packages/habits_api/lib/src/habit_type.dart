@@ -1,7 +1,8 @@
 import 'habit_time.dart';
 
 /// Discriminator для хранения типа привычки в БД.
-enum HabitTypeKind { morning, lunch, evening, time }
+// Значения хранятся по индексу. Новые типы добавляются в конец.
+enum HabitTypeKind { morning, lunch, evening, time, anytime }
 
 /// Абстрактный тип привычки.
 ///
@@ -70,6 +71,19 @@ class EveningHabit extends HabitType {
   String? get timeLabel => null;
 }
 
+class AnytimeHabit extends HabitType {
+  const AnytimeHabit();
+
+  @override
+  HabitTypeKind get kind => HabitTypeKind.anytime;
+
+  @override
+  HabitTime? get time => null;
+
+  @override
+  String? get timeLabel => null;
+}
+
 /// Привычка по конкретному времени.
 class TimeHabit extends HabitType {
   const TimeHabit({required this.time});
@@ -94,6 +108,7 @@ HabitType habitTypeFromStorage(HabitTypeKind kind, {String? time}) {
     HabitTypeKind.lunch => const LunchHabit(),
     HabitTypeKind.evening => const EveningHabit(),
     HabitTypeKind.time => TimeHabit(time: parseStoredTime(time)),
+    HabitTypeKind.anytime => const AnytimeHabit(),
   };
 }
 

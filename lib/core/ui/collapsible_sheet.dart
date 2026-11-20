@@ -21,6 +21,7 @@ class CollapsibleSheet extends StatefulWidget {
     this.contentPadding = const EdgeInsets.fromLTRB(20, 8, 20, 20),
     this.scrollableBody = true,
     this.onVisibilityChanged,
+    this.backgroundColor,
   });
 
   /// Высоты снаппоинтов по возрастанию: первый — минимум (видна только
@@ -52,6 +53,7 @@ class CollapsibleSheet extends StatefulWidget {
 
   /// Вызывается при изменении видимости (false = свёрнута до минимума).
   final ValueChanged<bool>? onVisibilityChanged;
+  final Color? backgroundColor;
 
   @override
   State<CollapsibleSheet> createState() => _CollapsibleSheetState();
@@ -75,7 +77,7 @@ class _CollapsibleSheetState extends State<CollapsibleSheet> {
   @override
   void initState() {
     super.initState();
-    assert(_snapPoints.length >= 1, 'snapPoints must not be empty');
+    assert(_snapPoints.isNotEmpty, 'snapPoints must not be empty');
     assert(_isSortedAscending(_snapPoints), 'snapPoints must be sorted');
 
     if (widget.forceExpanded) {
@@ -177,11 +179,9 @@ class _CollapsibleSheetState extends State<CollapsibleSheet> {
               strokeAlign: BorderSide.strokeAlignOutside,
             ),
             // Динамический цвет: становится темнее при полном раскрытии
-            color: Color.lerp(
-              AppColors.surface,
-              AppColors.surfaceDim,
-              progress,
-            ),
+            color:
+                widget.backgroundColor ??
+                Color.lerp(AppColors.surface, AppColors.surfaceDim, progress),
             borderRadius: BorderRadius.vertical(
               top: Radius.circular(AppSpacing.xxl),
             ),
@@ -240,7 +240,7 @@ class _CollapsibleSheetState extends State<CollapsibleSheet> {
           color: AppColors.borderGlass,
           strokeAlign: BorderSide.strokeAlignOutside,
         ),
-        color: AppColors.surfaceDim,
+        color: widget.backgroundColor ?? AppColors.surfaceDim,
       ),
       child: Column(
         children: [

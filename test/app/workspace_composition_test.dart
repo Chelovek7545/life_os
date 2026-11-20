@@ -110,8 +110,15 @@ void main() {
       );
       await pumpStorage(tester);
       expect(find.byType(HabitsCalendarPanel), findsOneWidget);
+      final mapHeader = find.byType(HabitsMapHeader);
+      final mapTop = tester.getTopLeft(mapHeader).dy;
+      expect(tester.getSize(mapHeader).width, HabitsMapOverlay.maxWidth);
       await tester.tap(find.byTooltip('Закрыть карту привычек'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.getTopLeft(mapHeader).dy, greaterThan(mapTop));
       await pumpStorage(tester);
+      expect(mapHeader, findsNothing);
       final otherId = controller.layout.root.panes.last.id;
       controller.changeEditor(otherId, 'habits');
       await pumpStorage(tester);

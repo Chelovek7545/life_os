@@ -86,6 +86,7 @@ class TasksScreenState extends State<TasksScreen> {
       widget.viewModel.currentFilterValue.period == DatePeriod.week;
   bool _kanbanMode = false;
   bool _showUnscheduledOverlay = false;
+  bool _showDateOnlyPanel = true;
   bool _draggingFromOverlay = false;
   bool _showHierarchyOverlay = false;
 
@@ -171,6 +172,7 @@ class TasksScreenState extends State<TasksScreen> {
                               ),
                               const Spacer(),
                               IconButton(
+                                tooltip: 'Скрыть задачи без дня',
                                 icon: const Icon(Icons.close),
                                 onPressed: _toggleUnscheduledOverlay,
                               ),
@@ -428,6 +430,7 @@ class TasksScreenState extends State<TasksScreen> {
     viewModel: widget.viewModel,
     isWeek: isWide,
     topPadding: isWide ? _kWeekTimelineTopPadding : _kTimelineTopPadding,
+    showDateOnlyPanel: _showDateOnlyPanel,
   );
 
   Widget _buildWeekTasks(
@@ -479,6 +482,10 @@ class TasksScreenState extends State<TasksScreen> {
               : widget.viewModel.showForm,
           onModeChanged: (index) => _onModeChanged(index, isWide),
           onToggleUnscheduled: _toggleUnscheduledOverlay,
+          isDateOnlyPanelVisible: _showDateOnlyPanel,
+          onToggleDateOnlyPanel: _isEventMode
+              ? () => setState(() => _showDateOnlyPanel = !_showDateOnlyPanel)
+              : null,
           onToggleHierarchy: _toggleHierarchyOverlay,
         ),
         const SizedBox(height: AppSpacing.sm),
@@ -1365,6 +1372,8 @@ class _TasksHeader extends StatelessWidget {
     required this.vm,
     required this.tasksScreenWidth,
     required this.onToggleUnscheduled,
+    required this.isDateOnlyPanelVisible,
+    this.onToggleDateOnlyPanel,
     required this.onToggleHierarchy,
     required this.selectedMode,
   });
@@ -1373,11 +1382,16 @@ class _TasksHeader extends StatelessWidget {
   final ValueChanged<int> onModeChanged;
   final double tasksScreenWidth;
   final VoidCallback onToggleUnscheduled;
+  final bool isDateOnlyPanelVisible;
+  final VoidCallback? onToggleDateOnlyPanel;
   final VoidCallback onToggleHierarchy;
   final int selectedMode;
 
   @override
   Widget build(BuildContext context) {
+    final hasPanelToggle = onToggleDateOnlyPanel != null;
+    final compact = hasPanelToggle && tasksScreenWidth < 400;
+    final density = compact ? VisualDensity.compact : null;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: AppMargins.xs),
       child: Row(
@@ -1385,6 +1399,7 @@ class _TasksHeader extends StatelessWidget {
         children: [
           // Внутри TasksScreen (в AppBar или любой кнопке)
           IconButton(
+            visualDensity: density,
             icon: const Icon(Icons.settings_outlined),
             onPressed: () {
               Navigator.of(context).push(
@@ -1414,11 +1429,24 @@ class _TasksHeader extends StatelessWidget {
               },
             ),
             child: IconButton(
+              visualDensity: density,
+              tooltip: 'Задачи без дня',
               onPressed: onToggleUnscheduled,
               icon: const Icon(Icons.inbox_rounded, color: Colors.white),
             ),
           ),
-          if (MediaQuery.sizeOf(context).width > 410)
+          if (hasPanelToggle)
+            IconButton(
+              visualDensity: density,
+              tooltip: isDateOnlyPanelVisible
+                  ? 'Скрыть задачи без времени'
+                  : 'Показать задачи без времени',
+              icon: const Icon(Icons.event_note_outlined, size: 20),
+              selectedIcon: const Icon(Icons.event_note, size: 20),
+              isSelected: isDateOnlyPanelVisible,
+              onPressed: onToggleDateOnlyPanel,
+            ),
+          if (tasksScreenWidth > (hasPanelToggle ? 450 : 410))
             IconButton(
               tooltip: 'Hierarchy',
               onPressed: onToggleHierarchy,
@@ -1426,7 +1454,7 @@ class _TasksHeader extends StatelessWidget {
             ),
           Spacer(),
           SizedBox(
-            width: 150,
+            width: compact ? 120 : 150,
             child: PillSwitcher(
               selectedIndex: selectedMode,
               outerPadding: 1,

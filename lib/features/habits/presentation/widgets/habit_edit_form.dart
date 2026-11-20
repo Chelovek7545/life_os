@@ -1,19 +1,55 @@
-import 'package:life_os/core/utils/date_format.dart';
 import 'dart:async';
-import 'package:habits_api/habits_api.dart';
+
 import 'package:flutter/material.dart';
-import 'package:life_os/core/theme/app_colors.dart';
-import 'package:life_os/core/theme/app_spacing.dart';
-import 'package:life_os/core/theme/app_text_styles.dart';
-import 'package:life_os/core/ui/glass_panel.dart';
-import 'package:life_os/core/ui/pill_switcher.dart';
+import 'package:habits_api/habits_api.dart';
 import 'package:habits_plugin/habits_panels.dart'
     show
-        kHabitIcons,
-        kHabitColors,
-        habitColorFor,
         HabitTimePresentation,
-        habitTimeFromTimeOfDay;
+        habitColorFor,
+        habitIconFor,
+        habitTimeFromTimeOfDay,
+        kHabitColors,
+        kHabitIcons;
+import 'package:life_os/features/habits/presentation/widgets/habit_panel_style.dart';
+
+const _timeOptions = [
+  ('Утро', Icons.wb_sunny_outlined, MorningHabit()),
+  ('День', Icons.restaurant, LunchHabit()),
+  ('Вечер', Icons.nightlight_outlined, EveningHabit()),
+  ('В любое время', Icons.schedule, AnytimeHabit()),
+];
+
+const _iconLabels = {
+  'task_alt': 'Галочка',
+  'fitness_center': 'Тренировка',
+  'directions_run': 'Бег',
+  'medication': 'Лекарство',
+  'restaurant': 'Питание',
+  'menu_book': 'Чтение',
+  'self_improvement': 'Медитация',
+  'spa': 'Растение',
+  'bedtime': 'Сон',
+  'water_drop': 'Вода',
+  'mood': 'Настроение',
+  'school': 'Учёба',
+  'laptop': 'Компьютер',
+  'local_drink': 'Напиток',
+  'payments': 'Финансы',
+};
+
+const _colorLabels = [
+  'Оранжевый',
+  'Сиреневый',
+  'Голубой',
+  'Зелёный',
+  'Розовый',
+  'Жёлтый',
+  'Коралловый',
+  'Бирюзовый',
+];
+
+const _accentFill = Color(0xFFBD4D24);
+const _selectedFill = Color(0xFF543427);
 
 class HabitEditForm extends StatefulWidget {
   const HabitEditForm({
@@ -34,16 +70,15 @@ class HabitEditForm extends StatefulWidget {
 class _HabitEditFormState extends State<HabitEditForm> {
   late final TextEditingController _titleController;
   late HabitType _type;
-  late List<int> _days;
+  late Set<int> _days;
   int? _durationWeeks;
   late String _icon;
   late String _color;
-  TimeOfDay? _reminderTime;
+  late TimeOfDay _reminderTime;
+  late bool _reminderEnabled;
 
   bool _busy = false;
   String? _error;
-
-  bool get _isEditing => widget.initial != null;
 
   @override
   void initState() {
@@ -51,11 +86,14 @@ class _HabitEditFormState extends State<HabitEditForm> {
     final initial = widget.initial;
     _titleController = TextEditingController(text: initial?.title ?? '');
     _type = initial?.type ?? const MorningHabit();
-    _days = List.from(initial?.schedule.daysOfWeek ?? kAllWeekdays);
+    _days = (initial?.schedule.daysOfWeek ?? kAllWeekdays).toSet();
     _durationWeeks = initial?.schedule.durationWeeks;
     _icon = initial?.icon ?? 'task_alt';
     _color = initial?.colorHex ?? kHabitColors.first;
-    _reminderTime = initial?.reminderTime?.toTimeOfDay();
+    _reminderEnabled = initial?.reminderTime != null;
+    _reminderTime =
+        initial?.reminderTime?.toTimeOfDay() ??
+        const TimeOfDay(hour: 8, minute: 0);
   }
 
   @override
@@ -64,11 +102,18 @@ class _HabitEditFormState extends State<HabitEditForm> {
     super.dispose();
   }
 
-  Future<void> _pickTime() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime:
-          _type.time?.toTimeOfDay() ?? const TimeOfDay(hour: 9, minute: 0),
+  Future<TimeOfDay?> _pickTime(TimeOfDay initialTime) => showTimePicker(
+    context: context,
+    initialTime: initialTime,
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+      child: child!,
+    ),
+  );
+
+  Future<void> _pickScheduledTime() async {
+    final picked = await _pickTime(
+      _type.time?.toTimeOfDay() ?? const TimeOfDay(hour: 9, minute: 0),
     );
     if (picked != null && mounted) {
       setState(() => _type = TimeHabit(time: habitTimeFromTimeOfDay(picked)));
@@ -76,37 +121,31 @@ class _HabitEditFormState extends State<HabitEditForm> {
   }
 
   Future<void> _pickReminder() async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: _reminderTime ?? const TimeOfDay(hour: 9, minute: 0),
-    );
-    if (picked != null) {
+    final picked = await _pickTime(_reminderTime);
+    if (picked != null && mounted) {
       setState(() => _reminderTime = picked);
     }
   }
 
   Future<void> _save() async {
-    if (_busy) return;
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
-
-    final schedule = HabitSchedule(
-      daysOfWeek: _days,
-      durationWeeks: _durationWeeks,
-    );
 
     await _run(
       () => widget.onSave(
         (widget.initial ?? Habit.create(title: title, type: _type)).copyWith(
           title: title,
           type: _type,
-          schedule: schedule,
+          schedule: HabitSchedule(
+            daysOfWeek: kAllWeekdays.where(_days.contains).toList(),
+            durationWeeks: _durationWeeks,
+          ),
           icon: _icon,
           colorHex: _color,
-          reminderTime: _reminderTime == null
-              ? null
-              : habitTimeFromTimeOfDay(_reminderTime!),
-          clearReminderTime: _reminderTime == null,
+          reminderTime: _reminderEnabled
+              ? habitTimeFromTimeOfDay(_reminderTime)
+              : null,
+          clearReminderTime: !_reminderEnabled,
         ),
       ),
     );
@@ -133,238 +172,588 @@ class _HabitEditFormState extends State<HabitEditForm> {
 
   @override
   Widget build(BuildContext context) {
-    return GlassPanel(
-      borderRadius: 0,
-      padding: EdgeInsets.zero,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Text(
-                  _isEditing ? 'Edit habit' : 'New habit',
-                  style: AppTypography.headlineLgMobile.copyWith(fontSize: 20),
-                ),
-                const Spacer(),
-                if (_isEditing && widget.onDelete != null)
-                  IconButton(
-                    tooltip: 'Delete',
-                    onPressed: _busy ? null : () => _run(widget.onDelete!),
-                    icon: const Icon(
-                      Icons.delete_outline,
-                      color: Colors.redAccent,
-                    ),
-                  ),
-                IconButton(
-                  tooltip: 'Close',
-                  onPressed: _busy
-                      ? null
-                      : () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            TextField(
-              controller: _titleController,
-              enabled: !_busy,
-              style: AppTypography.bodyMd,
-              decoration: const InputDecoration(
-                hintText: 'Drink water, read 20 pages…',
-                border: OutlineInputBorder(),
+    return PopScope(
+      canPop: !_busy,
+      child: Material(
+        color: habitPanelBackground,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(habitPanelRadius),
+          ),
+          side: BorderSide(color: habitPanelBorder),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 560;
+            final duration = _buildDuration();
+            final reminder = _buildReminder();
+
+            return SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(
+                wide ? 24 : 14,
+                16,
+                wide ? 24 : 14,
+                24 + MediaQuery.paddingOf(context).bottom,
               ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Text('When', style: AppTypography.codeLabel),
-            const SizedBox(height: AppSpacing.sm),
-            PillSwitcher(
-              selectedIndex: _type.kind.index,
-              options: const [
-                Icon(Icons.wb_sunny_outlined),
-                Icon(Icons.restaurant_outlined),
-                Icon(Icons.nights_stay_outlined),
-                Icon(Icons.schedule),
-              ],
-              onSelectionChanged: (index) {
-                setState(() {
-                  _type = switch (HabitTypeKind.values[index]) {
-                    HabitTypeKind.lunch => const LunchHabit(),
-                    HabitTypeKind.evening => const EveningHabit(),
-                    HabitTypeKind.time => const TimeHabit(
-                      time: HabitTime(hour: 9, minute: 0),
-                    ),
-                    HabitTypeKind.morning => const MorningHabit(),
-                  };
-                });
-              },
-            ),
-            if (_type.kind == HabitTypeKind.time) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: OutlinedButton.icon(
-                  onPressed: _pickTime,
-                  icon: const Icon(Icons.access_time),
-                  label: Text((_type as TimeHabit).formatTime),
-                ),
-              ),
-            ],
-            const SizedBox(height: AppSpacing.lg),
-            Text('Days', style: AppTypography.codeLabel),
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: kAllWeekdays.map((day) {
-                final selected = _days.contains(day);
-                return ChoiceChip(
-                  label: Text(
-                    getWeekDayName(day),
-                    style: AppTypography.codeLabel.copyWith(fontSize: 10),
-                  ),
-                  selected: selected,
-                  onSelected: (value) {
-                    setState(() {
-                      if (value) {
-                        _days = {..._days, day}.toList();
-                      } else {
-                        _days = _days.where((d) => d != day).toList();
-                        if (_days.isEmpty) _days = [...kAllWeekdays];
-                      }
-                    });
-                  },
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Text('Duration', style: AppTypography.codeLabel),
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(
-              spacing: AppSpacing.sm,
-              children: [
-                for (final (label, weeks) in [
-                  ('∞', null),
-                  ('1 week', 1),
-                  ('2 weeks', 2),
-                  ('3 weeks', 3),
-                ])
-                  ChoiceChip(
-                    label: Text(label, style: AppTypography.codeLabel),
-                    selected: _durationWeeks == weeks,
-                    onSelected: (_) => setState(() => _durationWeeks = weeks),
-                  ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Text('Reminder', style: AppTypography.codeLabel),
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(
-              spacing: AppSpacing.sm,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: _pickReminder,
-                  icon: const Icon(Icons.notifications_outlined),
-                  label: Text(
-                    _reminderTime == null
-                        ? 'No reminder'
-                        : '${_reminderTime!.hour.toString().padLeft(2, '0')}:${_reminderTime!.minute.toString().padLeft(2, '0')}',
-                  ),
-                ),
-                if (_reminderTime != null)
-                  IconButton(
-                    tooltip: 'Clear reminder',
-                    onPressed: () => setState(() => _reminderTime = null),
-                    icon: const Icon(Icons.close, size: 18),
-                  ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            Text('Icon', style: AppTypography.codeLabel),
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: kHabitIcons.entries.map((entry) {
-                final selected = _icon == entry.key;
-                return InkWell(
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  onTap: () => setState(() => _icon = entry.key),
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: selected
-                          ? AppColors.primaryContainer
-                          : AppColors.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(AppRadius.lg),
-                      border: Border.all(
-                        color: selected
-                            ? Colors.transparent
-                            : AppColors.borderGlass,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 16),
+                  _buildTitleField(),
+                  const SizedBox(height: 14),
+                  _buildTimeOptions(wide),
+                  const SizedBox(height: 12),
+                  _buildDays(),
+                  const SizedBox(height: 12),
+                  if (wide)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: duration),
+                        const SizedBox(width: 12),
+                        Expanded(child: reminder),
+                      ],
+                    )
+                  else ...[
+                    duration,
+                    const SizedBox(height: 12),
+                    reminder,
+                  ],
+                  const SizedBox(height: 12),
+                  _buildIcons(),
+                  const SizedBox(height: 12),
+                  _buildColors(),
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.redAccent),
                       ),
                     ),
-                    child: Icon(
-                      entry.value,
-                      size: 20,
-                      color: selected
-                          ? Colors.white
-                          : AppColors.onSurfaceVariant,
-                    ),
-                  ),
-                );
-              }).toList(),
+                  ],
+                  const SizedBox(height: 22),
+                  _buildSaveButton(),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    final isEditing = widget.initial != null;
+    return Row(
+      children: [
+        const HabitIconBadge(
+          icon: Icons.layers_outlined,
+          color: habitPanelAccent,
+        ),
+        const SizedBox(width: 12),
+        Container(width: 1, height: 24, color: habitPanelBorder),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            isEditing ? 'Редактировать привычку' : 'Новая привычка',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 19,
+              height: 1.15,
+              fontWeight: FontWeight.w700,
             ),
-            const SizedBox(height: AppSpacing.lg),
-            Text('Color', style: AppTypography.codeLabel),
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(
-              spacing: AppSpacing.sm,
-              children: kHabitColors.map((hex) {
-                final selected = _color == hex;
-                return GestureDetector(
-                  onTap: () => setState(() => _color = hex),
-                  child: Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: habitColorFor(hex),
-                      shape: BoxShape.circle,
-                      border: selected
-                          ? Border.all(color: Colors.white, width: 2)
-                          : Border.all(color: AppColors.borderGlass),
-                    ),
-                    child: selected
-                        ? const Icon(Icons.check, size: 16, color: Colors.white)
-                        : null,
-                  ),
-                );
-              }).toList(),
+          ),
+        ),
+        const SizedBox(width: 4),
+        if (isEditing && widget.onDelete != null) ...[
+          _headerButton(
+            tooltip: 'Удалить привычку',
+            icon: Icons.delete_outline_rounded,
+            color: const Color(0xFFFF6D6D),
+            onPressed: () => _run(widget.onDelete!),
+          ),
+          const SizedBox(width: 6),
+        ],
+        _headerButton(
+          tooltip: 'Закрыть',
+          icon: Icons.close_rounded,
+          color: habitPanelLabel,
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
+      ],
+    );
+  }
+
+  Widget _headerButton({
+    required String tooltip,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+  }) => IconButton(
+    tooltip: tooltip,
+    onPressed: _busy ? null : onPressed,
+    icon: Icon(icon, size: 22),
+    style: IconButton.styleFrom(
+      foregroundColor: color,
+      backgroundColor: Colors.white.withValues(alpha: .05),
+      minimumSize: const Size.square(42),
+      side: const BorderSide(color: habitPanelBorder),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+  );
+
+  Widget _buildTitleField() => DecoratedBox(
+    decoration: habitPanelCard(),
+    child: TextField(
+      controller: _titleController,
+      enabled: !_busy,
+      textCapitalization: TextCapitalization.sentences,
+      textInputAction: TextInputAction.done,
+      cursorColor: habitPanelAccent,
+      style: const TextStyle(color: Colors.white, fontSize: 17),
+      decoration: InputDecoration(
+        hintText: 'Название привычки',
+        hintStyle: const TextStyle(color: Color(0xFFB9AAA5)),
+        filled: false,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: habitPanelAccent),
+        ),
+        disabledBorder: InputBorder.none,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 18,
+        ),
+        prefixIcon: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 9, 10, 9),
+          child: HabitIconBadge(
+            icon: habitIconFor(_icon),
+            color: habitColorFor(_color),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Widget _buildTimeOptions(bool wide) {
+    final options = [
+      for (final (label, icon, type) in _timeOptions)
+        _HabitOption(
+          label: label,
+          icon: icon,
+          selected: _type.kind == type.kind,
+          strong: true,
+          onPressed: _busy ? null : () => setState(() => _type = type),
+        ),
+    ];
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: _sectionTitle(
+            Icons.calendar_today_outlined,
+            'Когда',
+            trailing: TextButton.icon(
+              onPressed: _busy ? null : _pickScheduledTime,
+              style: TextButton.styleFrom(
+                foregroundColor: habitPanelLabel,
+                textStyle: const TextStyle(fontFamily: 'Inter', fontSize: 12),
+              ),
+              icon: const Icon(Icons.more_time, size: 18),
+              label: Text(_type.timeLabel ?? 'Точное время'),
             ),
-            if (_error != null) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Text(_error!, style: const TextStyle(color: Colors.redAccent)),
-            ],
-            const SizedBox(height: AppSpacing.xl),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _busy ? null : _save,
-                style: ElevatedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.xl),
-                  ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.all(7),
+          decoration: habitPanelCard(),
+          child: wide
+              ? _optionRow(options)
+              : Column(
+                  children: [
+                    _optionRow(options.take(2)),
+                    const SizedBox(height: 6),
+                    _optionRow(options.skip(2)),
+                  ],
                 ),
-                child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDays() {
+    final weekdays = kAllWeekdays.take(5).toSet();
+    final weekends = kAllWeekdays.skip(5).toSet();
+    final label = _days.length == 7
+        ? 'Каждый день'
+        : _days.length == 5 && _days.containsAll(weekdays)
+        ? 'По будням'
+        : _days.length == 2 && _days.containsAll(weekends)
+        ? 'По выходным'
+        : 'Выбор дней';
+
+    return _section(
+      icon: Icons.calendar_today_outlined,
+      title: 'Дни недели',
+      trailing: PopupMenuButton<Set<int>>(
+        enabled: !_busy,
+        tooltip: 'Расписание по дням',
+        color: const Color(0xFF302828),
+        onSelected: (days) => setState(() => _days = days),
+        itemBuilder: (context) => [
+          for (final (label, days) in [
+            ('Каждый день', kAllWeekdays.toSet()),
+            ('По будням', weekdays),
+            ('По выходным', weekends),
+          ])
+            PopupMenuItem(
+              value: days,
+              child: Text(
+                label,
+                style: const TextStyle(color: habitPanelLabel),
               ),
             ),
+        ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: habitPanelLabel, fontSize: 12),
+                ),
+              ),
+              const Icon(Icons.expand_more, size: 18, color: habitPanelLabel),
+            ],
+          ),
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) => _optionRow([
+          for (final day in kAllWeekdays)
+            _HabitOption(
+              label: habitWeekdays[day - 1],
+              selected: _days.contains(day),
+              icon: _days.contains(day) && constraints.maxWidth >= 410
+                  ? Icons.check_rounded
+                  : null,
+              horizontalPadding: 1,
+              onPressed: _busy
+                  ? null
+                  : () {
+                      setState(() {
+                        if (!_days.remove(day)) _days.add(day);
+                        if (_days.isEmpty) _days.addAll(kAllWeekdays);
+                      });
+                    },
+            ),
+        ], spacing: 4),
+      ),
+    );
+  }
+
+  Widget _buildDuration() {
+    final initialWeeks = widget.initial?.schedule.durationWeeks;
+
+    return _section(
+      icon: Icons.repeat_rounded,
+      title: 'Длительность',
+      child: _optionRow([
+        for (final weeks in [
+          null,
+          1,
+          2,
+          3,
+          if (initialWeeks != null && initialWeeks > 3) initialWeeks,
+        ])
+          _HabitOption(
+            label: weeks == null ? '∞' : '$weeks нед',
+            tooltip: weeks == null ? 'Без ограничения' : null,
+            selected: _durationWeeks == weeks,
+            horizontalPadding: 2,
+            onPressed: _busy
+                ? null
+                : () => setState(() => _durationWeeks = weeks),
+          ),
+      ]),
+    );
+  }
+
+  Widget _buildReminder() => _section(
+    icon: Icons.notifications_none_rounded,
+    title: 'Напоминание',
+    trailing: Semantics(
+      label: 'Напоминание',
+      child: Switch(
+        value: _reminderEnabled,
+        onChanged: _busy
+            ? null
+            : (enabled) => setState(() => _reminderEnabled = enabled),
+        activeThumbColor: Colors.white,
+        activeTrackColor: const Color(0xFFDD713D),
+        inactiveThumbColor: habitPanelLabel,
+        inactiveTrackColor: const Color(0xFF322B2B),
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+    ),
+    child: _HabitOption(
+      label: formatStoredTime(habitTimeFromTimeOfDay(_reminderTime)),
+      icon: Icons.notifications_none_rounded,
+      trailingIcon: Icons.expand_more,
+      onPressed: _busy || !_reminderEnabled ? null : _pickReminder,
+    ),
+  );
+
+  Widget _buildIcons() => _section(
+    icon: Icons.view_in_ar_outlined,
+    title: 'Иконка',
+    child: Wrap(
+      spacing: 7,
+      runSpacing: 7,
+      children: [
+        for (final entry in kHabitIcons.entries)
+          SizedBox(
+            width: 46,
+            child: _HabitOption(
+              icon: entry.value,
+              tooltip: _iconLabels[entry.key],
+              selected: _icon == entry.key,
+              onPressed: _busy ? null : () => setState(() => _icon = entry.key),
+            ),
+          ),
+      ],
+    ),
+  );
+
+  Widget _buildColors() => _section(
+    icon: Icons.palette_outlined,
+    title: 'Цвет',
+    child: Material(
+      type: MaterialType.transparency,
+      child: _buildColorOptions(),
+    ),
+  );
+
+  Widget _buildColorOptions() => Wrap(
+    spacing: 6,
+    runSpacing: 6,
+    children: [
+      for (final (index, hex) in kHabitColors.indexed)
+        Tooltip(
+          message: _colorLabels[index],
+          child: Semantics(
+            button: true,
+            selected: _color == hex,
+            child: InkWell(
+              onTap: _busy ? null : () => setState(() => _color = hex),
+              customBorder: const CircleBorder(),
+              child: Padding(
+                padding: const EdgeInsets.all(3),
+                child: Ink(
+                  width: 39,
+                  height: 39,
+                  decoration: BoxDecoration(
+                    color: habitColorFor(hex),
+                    shape: BoxShape.circle,
+                    border: _color == hex
+                        ? Border.all(color: Colors.white, width: 2)
+                        : null,
+                    boxShadow: _color == hex
+                        ? [
+                            BoxShadow(
+                              color: habitColorFor(hex).withValues(alpha: .35),
+                              blurRadius: 10,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: _color == hex
+                      ? const Icon(Icons.check, color: Colors.white, size: 22)
+                      : null,
+                ),
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+
+  Widget _buildSaveButton() => ValueListenableBuilder<TextEditingValue>(
+    valueListenable: _titleController,
+    builder: (context, value, _) {
+      final enabled = !_busy && value.text.trim().isNotEmpty;
+      return ElevatedButton.icon(
+        onPressed: enabled ? _save : null,
+        icon: const Icon(Icons.check_rounded, size: 24),
+        label: const Text('Сохранить'),
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size.fromHeight(52),
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          backgroundColor: _accentFill,
+          disabledBackgroundColor: const Color(0xFF2D2523),
+          foregroundColor: Colors.white,
+          disabledForegroundColor: Colors.white38,
+          textStyle: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+          ),
+          side: BorderSide(
+            color: enabled ? habitPanelAccent : habitPanelBorder,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      );
+    },
+  );
+
+  Widget _section({
+    required IconData icon,
+    required String title,
+    required Widget child,
+    Widget? trailing,
+  }) => Container(
+    padding: const EdgeInsets.fromLTRB(12, 9, 12, 12),
+    decoration: habitPanelCard(),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _sectionTitle(icon, title, trailing: trailing),
+        const SizedBox(height: 8),
+        child,
+      ],
+    ),
+  );
+
+  Widget _sectionTitle(IconData icon, String title, {Widget? trailing}) =>
+      ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 36),
+        child: Row(
+          children: [
+            Icon(icon, color: habitPanelLabel, size: 21),
+            const SizedBox(width: 8),
+            Flexible(
+              fit: FlexFit.tight,
+              flex: 3,
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (trailing != null) ...[
+              const SizedBox(width: 4),
+              Flexible(
+                flex: 2,
+                child: Align(alignment: Alignment.centerRight, child: trailing),
+              ),
+            ],
+          ],
+        ),
+      );
+
+  Widget _optionRow(Iterable<Widget> options, {double spacing = 6}) => Row(
+    children: [
+      for (final (index, option) in options.indexed) ...[
+        if (index > 0) SizedBox(width: spacing),
+        Expanded(child: option),
+      ],
+    ],
+  );
+}
+
+class _HabitOption extends StatelessWidget {
+  const _HabitOption({
+    this.label,
+    this.icon,
+    this.trailingIcon,
+    this.tooltip,
+    this.selected,
+    this.strong = false,
+    this.horizontalPadding = 6,
+    required this.onPressed,
+  });
+
+  final String? label;
+  final IconData? icon;
+  final IconData? trailingIcon;
+  final String? tooltip;
+  final bool? selected;
+  final bool strong;
+  final double horizontalPadding;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = selected == true;
+    final fill = active
+        ? (strong ? _accentFill : _selectedFill)
+        : Colors.white.withValues(alpha: .025);
+    final button = Semantics(
+      selected: selected,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 42),
+          padding: EdgeInsets.symmetric(
+            horizontal: horizontalPadding,
+            vertical: 6,
+          ),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          backgroundColor: fill,
+          disabledBackgroundColor: fill,
+          foregroundColor: active && strong
+              ? Colors.white
+              : active && label == null
+              ? habitPanelAccent
+              : habitPanelLabel,
+          disabledForegroundColor: Colors.white38,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          side: BorderSide(color: active ? habitPanelAccent : habitPanelBorder),
+          textStyle: const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (icon != null) Icon(icon, size: label == null ? 21 : 17),
+            if (label != null) ...[
+              if (icon != null) const SizedBox(width: 4),
+              Flexible(child: Text(label!, textAlign: TextAlign.center)),
+            ],
+            if (trailingIcon != null) ...[
+              const Spacer(),
+              Icon(trailingIcon, size: 17),
+            ],
           ],
         ),
       ),
     );
+
+    return tooltip == null ? button : Tooltip(message: tooltip!, child: button);
   }
 }

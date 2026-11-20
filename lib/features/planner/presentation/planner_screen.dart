@@ -126,6 +126,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
                         viewModel: widget.tasks,
                         onOpenTask: widget.onOpenTask,
                         isWeek: true,
+                        showUnscheduledToggle: true,
                         topPadding: 12,
                       ),
                     ),
