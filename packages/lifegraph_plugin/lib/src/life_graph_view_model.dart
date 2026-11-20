@@ -4,6 +4,7 @@ import 'canvas_note_mapper.dart';
 import '../canvas_document.dart';
 import '../canvas_board.dart';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:plugin_runtime/debounced_writer.dart';
 import 'package:plugin_runtime/owned_streams.dart';
 import 'package:graph_api/graph_api.dart';
@@ -11,6 +12,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:spheres_api/spheres_api.dart';
+import 'package:tasks_api/tasks_api.dart' show TaskStatus;
 import 'graph_node.dart';
 import 'graph_builder.dart';
 import 'package:notes_api/notes_api.dart';
@@ -77,7 +79,9 @@ class LifeGraphViewModel {
   bool _discardBoardWrite = false;
   (Object, StackTrace)? _boardBuildFailure;
   bool get hasCanvasBoard => _board != null;
-  double get canvasWorldSize => hasCanvasBoard ? _boardWorldSize : worldSize;
+  double _layoutWorldSize = 0;
+  double get canvasWorldSize =>
+      math.max(hasCanvasBoard ? _boardWorldSize : worldSize, _layoutWorldSize);
   String? get canvasBoardPath => _board?.session.path;
   late final _boardWriter = DebouncedWriter<_CanvasBoardWrite>(
     _persistBoard,
@@ -157,6 +161,7 @@ class LifeGraphViewModel {
     _boardBuildFailure = null;
     _boardOrigin = Offset.zero;
     _boardWorldSize = worldSize;
+    _layoutWorldSize = 0;
     _boardSizes.clear();
     final vault = obsidianRepository;
     if (vault is! VaultCanvasBoardsApi ||
@@ -513,11 +518,16 @@ class LifeGraphViewModel {
   }, isAvailable: isAvailable);
 
   Offset _childPosition(String parentId, String kind) {
-    final parentView = graph.firstWhere((node) => node.id == parentId);
-    final parentPos = _positions[parentId] ?? parentView.position;
-    return _clampPosition(
-      Offset(parentPos.dx + 280, parentPos.dy),
-      nodePresentations.sizeFor(kind),
+    final parent = graph.firstWhere((node) => node.id == parentId);
+    final size = nodePresentations.sizeFor(kind);
+    final siblings = graph.where((node) => node.parentId == parentId);
+    final y = siblings.fold<double>(
+      parent.position.dy + (parent.size.height - size.height) / 2,
+      (top, node) => math.max(top, node.position.dy + node.size.height + 28),
+    );
+    return Offset(
+      parent.position.dx + parent.size.width + 68,
+      math.max(y, worldMargin),
     );
   }
 
@@ -705,10 +715,36 @@ class LifeGraphViewModel {
     if (!_disposed) _graphSubject.add(_toViewNodes(_domainNodes));
   }
 
+  final _taskProgress = <String, ({int total, int completed})>{};
+
+  ({int total, int completed}) taskProgressFor(String id) =>
+      _taskProgress[id] ?? (total: 0, completed: 0);
+
+  void _countDescendantTasks(List<GraphNode> nodes) {
+    _taskProgress.clear();
+    // The projection is breadth-first, so children accumulate before parents.
+    for (final node in nodes.reversed) {
+      final parent = node.parentId;
+      if (parent == null) continue;
+      final nested = taskProgressFor(node.id);
+      final parentProgress = taskProgressFor(parent);
+      final isTask = node.taskStatus != null;
+      _taskProgress[parent] = (
+        total: parentProgress.total + nested.total + (isTask ? 1 : 0),
+        completed:
+            parentProgress.completed +
+            nested.completed +
+            (node.taskStatus == TaskStatus.done ? 1 : 0),
+      );
+    }
+  }
+
   List<gv.GraphNode> _toViewNodes(List<GraphNode> nodes) {
+    _countDescendantTasks(nodes);
     if (nodes.isEmpty) return const [];
     final depth = _depthsOf(nodes);
     final positions = _layoutPositions(nodes);
+    _fitLayoutExtent(nodes, positions);
     final out = <gv.GraphNode>[];
     for (var i = 0; i < nodes.length; i++) {
       final n = nodes[i];
@@ -749,44 +785,117 @@ class LifeGraphViewModel {
     return depth;
   }
 
-  /// Накладывает финальные позиции: сохранённую из [_positions], либо
-  /// автопозицию через BFS от корня (дети вправо, веером по Y).
-  Map<String, Offset> _layoutPositions(List<GraphNode> nodes) {
-    final positions = <String, Offset>{};
-    GraphNode? root;
-    for (final n in nodes) {
-      if (n.parentId == null) {
-        root = n;
-        break;
+  /// Places whole branches in separate bands, centered around their parent.
+  Map<String, Offset> _layoutPositions(
+    List<GraphNode> nodes, {
+    bool keepSaved = true,
+  }) {
+    if (nodes.isEmpty) return {};
+    const rowGap = 28.0;
+    const columnGap = 68.0;
+    final root = nodes.first;
+    final children = <String, List<GraphNode>>{};
+    final sizes = {
+      for (final node in nodes)
+        node.id: _boardSizes[node.id] ?? nodePresentations.sizeFor(node.kind),
+    };
+    final depths = _depthsOf(nodes);
+    final widths = <int, double>{};
+    for (final node in nodes) {
+      final depth = depths[node.id] ?? 0;
+      widths[depth] = math.max(widths[depth] ?? 0, sizes[node.id]!.width);
+      if (node.parentId case final parent?) {
+        (children[parent] ??= []).add(node);
       }
     }
-    if (root == null) return positions;
-
-    final childrenOf = <String, List<GraphNode>>{};
-    for (final n in nodes) {
-      if (n.parentId != null) {
-        childrenOf.putIfAbsent(n.parentId!, () => []).add(n);
-      }
+    final bands = <String, double>{};
+    double childBand(List<GraphNode> kids) => kids.isEmpty
+        ? 0
+        : kids.fold<double>(0, (height, child) => height + bands[child.id]!) +
+              (kids.length - 1) * rowGap;
+    for (final node in nodes.reversed) {
+      bands[node.id] = math.max(
+        sizes[node.id]!.height,
+        childBand(children[node.id] ?? const []),
+      );
     }
-
-    positions[root.id] =
+    final rootOffset =
         _positions[root.id] ?? const Offset(worldCenter, worldCenter);
-    final queue = <GraphNode>[root];
-    while (queue.isNotEmpty) {
-      final parent = queue.removeAt(0);
-      final kids = childrenOf[parent.id] ?? const <GraphNode>[];
-      final n = kids.length;
-      final parentPos = positions[parent.id]!;
-      for (var i = 0; i < n; i++) {
-        final kid = kids[i];
-        final pos =
-            _positions[kid.id] ??
-            Offset(parentPos.dx + 280, parentPos.dy + (i - (n - 1) / 2) * 160);
-        positions[kid.id] = pos;
-        queue.add(kid);
+    final topSafeRoot = Offset(
+      rootOffset.dx,
+      math.max(
+        rootOffset.dy,
+        worldMargin + (bands[root.id]! - sizes[root.id]!.height) / 2,
+      ),
+    );
+    final positions = {
+      root.id: keepSaved ? _positions[root.id] ?? topSafeRoot : topSafeRoot,
+    };
+    for (final parent in nodes) {
+      final kids = children[parent.id] ?? const [];
+      if (kids.isEmpty) continue;
+      final parentPosition = positions[parent.id]!;
+      var top =
+          parentPosition.dy +
+          sizes[parent.id]!.height / 2 -
+          childBand(kids) / 2;
+      final x = parentPosition.dx + widths[depths[parent.id] ?? 0]! + columnGap;
+      for (final child in kids) {
+        final band = bands[child.id]!;
+        positions[child.id] =
+            (keepSaved ? _positions[child.id] : null) ??
+            Offset(x, top + (band - sizes[child.id]!.height) / 2);
+        top += band + rowGap;
       }
     }
     return positions;
+  }
+
+  void _fitLayoutExtent(List<GraphNode> nodes, Map<String, Offset> layout) {
+    for (final node in nodes) {
+      final size = _boardSizes[node.id] ?? nodePresentations.sizeFor(node.kind);
+      final point = layout[node.id]!;
+      _layoutWorldSize = math.max(
+        _layoutWorldSize,
+        math.max(point.dx + size.width, point.dy + size.height) + worldMargin,
+      );
+    }
+  }
+
+  Future<void> arrangeNodes() {
+    final generation = _scopeGeneration;
+    return _enqueue(() async {
+      if (_domainNodes.isEmpty) return;
+      final layout = _layoutPositions(_domainNodes, keepSaved: false);
+      _fitLayoutExtent(_domainNodes, layout);
+      for (final node in _domainNodes) {
+        _positions[node.id] = layout[node.id]!;
+      }
+      _graphSubject.add(_toViewNodes(_domainNodes));
+      await _scheduleSavePositions();
+    }, isAvailable: () => generation == _scopeGeneration);
+  }
+
+  bool get hasCustomNodeSizes =>
+      _boardSizes.isNotEmpty &&
+      _domainNodes.any(
+        (node) =>
+            _boardSizes[node.id] != null &&
+            _boardSizes[node.id] != nodePresentations.sizeFor(node.kind),
+      );
+
+  Future<void> resetNodeSizes() {
+    final generation = _scopeGeneration;
+    return _enqueue(() async {
+      if (!hasCustomNodeSizes) return;
+      // Keep the current layout, including nodes positioned automatically.
+      for (final node in graph) {
+        _positions.putIfAbsent(node.id, () => node.position);
+      }
+      _boardSizes.clear();
+      _graphSubject.add(_toViewNodes(_domainNodes));
+      _scheduleBoard();
+    }, isAvailable: () => generation == _scopeGeneration);
   }
 
   // ── Персистентность позиций (с debounce) ──────────────────────────────────

@@ -226,6 +226,63 @@ void main() {
     },
   );
 
+  testWidgets('task checkboxes persist status and refresh goal progress', (
+    tester,
+  ) async {
+    final app = (await tester.runAsync(
+      () => createTestApp(enableObsidian: false),
+    ))!;
+    final sphere = Sphere.create(name: 'Root');
+    final goal = Goal.create(name: 'Goal', sphereId: sphere.id);
+    final project = Project.create(name: 'Project', goalId: goal.id);
+    final task = Task.blank().copyWith(
+      title: 'Write outline',
+      status: TaskStatus.notStarted,
+      projectId: Wrapped(project.id),
+    );
+    final subtask = Task.blank().copyWith(
+      title: 'Draft chapter',
+      status: TaskStatus.notStarted,
+      parentTaskId: Wrapped(task.id),
+    );
+    late LifeGraphViewModel vm;
+    await tester.runAsync(() async {
+      await app.spheresRepository.addSphere(sphere);
+      await app.goalsRepository.addGoal(goal);
+      await app.projectsRepository.addProject(project);
+      await app.tasksRepository.addTask(task);
+      await app.tasksRepository.addTask(subtask);
+      vm = await app.pulseScreenViewModel.openGraph(sphere.id);
+      await vm.graphStream.firstWhere((nodes) => nodes.length == 5);
+    });
+    await showGraph(tester, vm);
+    Finder checkboxFor(Task item) => find.descendant(
+      of: find.byKey(ValueKey(item.id)),
+      matching: find.byType(Checkbox),
+    );
+    expect(find.text('0/2'), findsOneWidget);
+    await tester.tap(checkboxFor(task));
+    await settleUntil(tester, () => find.text('1/2').evaluate().isNotEmpty);
+    expect(tester.widget<Checkbox>(checkboxFor(task)).value, isTrue);
+    await tester.tap(checkboxFor(subtask));
+    await settleUntil(tester, () => find.text('2/2').evaluate().isNotEmpty);
+    expect(tester.widget<Checkbox>(checkboxFor(subtask)).value, isTrue);
+    await tester.tap(checkboxFor(task));
+    await settleUntil(tester, () => find.text('1/2').evaluate().isNotEmpty);
+    expect(tester.widget<Checkbox>(checkboxFor(task)).value, isFalse);
+    await tester.runAsync(() async {
+      final savedTask = (await app.tasksRepository.getById(task.id))!;
+      expect(savedTask.status, TaskStatus.inProgress);
+      expect(savedTask.title, task.title);
+      expect(savedTask.projectId, project.id);
+      expect(
+        (await app.tasksRepository.getById(subtask.id))!.status,
+        TaskStatus.done,
+      );
+    });
+    await disposeTestApp(tester, app);
+  });
+
   testWidgets(
     'built-in editor is opened through registration and saves its node',
     (tester) async {

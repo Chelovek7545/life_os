@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:graph_api/graph_api.dart';
+import 'package:graph_ui/graph_ui.dart';
 
 typedef GraphAttributesBuilder =
     Widget Function(
@@ -23,6 +24,8 @@ class GraphNodeComponentSpec {
     this.editFields,
     this.createFields,
     this.badge,
+    this.details,
+    this.leading,
   });
   final String kind;
   final String label;
@@ -37,4 +40,8 @@ class GraphNodeComponentSpec {
   final GraphAttributesBuilder? editFields;
   final GraphAttributesBuilder? createFields;
   final Widget? Function(BuildContext, GraphNodeData)? badge;
+  final Widget? Function(BuildContext, GraphNodeData, GraphNodeInteraction)?
+  details;
+  final Widget Function(BuildContext, GraphNodeData, GraphNodeInteraction)?
+  leading;
 }

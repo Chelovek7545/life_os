@@ -24,6 +24,7 @@ class GraphNodeInteraction {
     this.createChild,
     this.updateNode,
     this.deleteNode,
+    this.descendantProgress,
   });
   final Size size;
   final bool selected;
@@ -42,6 +43,7 @@ class GraphNodeInteraction {
   final Future<String> Function(GraphNodeDraft draft)? createChild;
   final Future<void> Function(GraphNodeData updated)? updateNode;
   final Future<void> Function(bool keepChildren)? deleteNode;
+  final ({int total, int completed})? descendantProgress;
 }
 
 class GraphNodePresentation {

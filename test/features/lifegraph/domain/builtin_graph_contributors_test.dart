@@ -23,7 +23,11 @@ void main() {
         final otherGoal = Goal.create(name: 'Other goal', sphereId: other.id);
         await app.goalsRepository.addGoal(goal);
         await app.goalsRepository.addGoal(otherGoal);
-        final project = Project.create(name: 'Root project', goalId: goal.id);
+        final deadline = DateTime(2026, 12, 1);
+        final project = Project.create(
+          name: 'Root project',
+          goalId: goal.id,
+        ).copyWith(dueDate: Wrapped(deadline));
         final child = Project.create(
           name: 'Child',
           parentProjectId: project.id,
@@ -42,17 +46,21 @@ void main() {
           title: 'Task',
           projectId: Wrapped(leaf.id),
           status: TaskStatus.inProgress,
+          startsAt: Wrapped(DateTime(2026, 12, 1, 12)),
+          endsAt: Wrapped(DateTime(2026, 12, 1, 12, 40)),
         );
         final subtask = Task.blank().copyWith(
           title: 'Subtask',
           parentTaskId: Wrapped(task.id),
+          status: TaskStatus.done,
         );
         final nested = Task.blank().copyWith(
           title: 'Deep task',
           parentTaskId: Wrapped(subtask.id),
         );
         final detached = Task.blank();
-        for (final item in [nested, subtask, task, detached]) {
+        final sibling = Task.blank().copyWith(projectId: Wrapped(leaf.id));
+        for (final item in [nested, subtask, task, detached, sibling]) {
           await app.tasksRepository.addTask(item);
         }
         final graph = await app.graphBuilder.watchGraph(sphere.id).first;
@@ -65,8 +73,15 @@ void main() {
           task.id,
           subtask.id,
           nested.id,
+          sibling.id,
         });
         final byId = {for (final node in graph) node.id: node};
+        expect(byId[project.id]!.attributes['dueDate'], deadline);
+        expect(byId[task.id]!.attributes['durationMinutes'], 40);
+        expect(
+          byId[subtask.id]!.attributes,
+          isNot(contains('durationMinutes')),
+        );
         expect(byId[leaf.id]!.parentId, child.id);
         expect(byId[task.id]!.color, leaf.color);
         expect(byId[subtask.id]!.color, '#CCC2DC');
@@ -90,6 +105,25 @@ void main() {
           displayed.firstWhere((node) => node.id == task.id).size,
           const Size(160, 120),
         );
+        expect(vm.taskProgressFor(goal.id), (total: 4, completed: 1));
+        expect(vm.taskProgressFor(sphere.id), (total: 4, completed: 1));
+        await vm.arrangeNodes();
+        final arranged = {for (final node in vm.graph) node.id: node};
+        final taskCard = arranged[task.id]!;
+        final siblingCard = arranged[sibling.id]!;
+        expect(taskCard.position.dx, siblingCard.position.dx);
+        expect(
+          taskCard.position.dx,
+          greaterThan(arranged[leaf.id]!.position.dx),
+        );
+        expect(
+          (taskCard.position & taskCard.size).overlaps(
+            siblingCard.position & siblingCard.size,
+          ),
+          isFalse,
+        );
+        expect(taskCard.size, const Size(160, 120));
+        await vm.flush();
         await vm.dispose();
         await app.spheresRepository.deleteSphere(sphere.id);
         expect(await app.graphBuilder.watchGraph(sphere.id).first, isEmpty);

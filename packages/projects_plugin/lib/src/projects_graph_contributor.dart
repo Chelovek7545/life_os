@@ -19,6 +19,7 @@ class ProjectsGraphContributor implements GraphContributor {
               subtitle: project.description,
               color: project.color,
               attributes: {
+                if (project.dueDate case final date?) 'dueDate': date,
                 if (project.storageRevision != null)
                   'storageRevision': project.storageRevision,
               },

@@ -46,10 +46,11 @@ TasksPlugin createTasksPlugin({
 }) {
   TasksNodeUi node({bool subtask = false}) {
     final spec = taskGraphComponent(subtask: subtask);
-    final card = graphNodePresentation(spec);
     return TasksNodeUi(
-      size: card.size,
-      card: card.builder,
+      size: spec.size,
+      card: (context, node, state, setStatus) => graphNodePresentation(
+        taskGraphComponent(subtask: subtask, setStatus: setStatus),
+      ).builder(context, node, state),
       editor: graphNodeEditor(spec).builder,
       create: (_, actions) => graphChildForm(spec, actions),
       attach: (watchTasks) =>

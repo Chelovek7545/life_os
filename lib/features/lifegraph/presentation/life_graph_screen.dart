@@ -46,6 +46,37 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   bool _allowPop = false;
   bool _closing = false;
   bool _exporting = false;
+  bool _arranging = false;
+
+  Future<void> _arrangeNodes() async {
+    if (_arranging) return;
+    setState(() => _arranging = true);
+    try {
+      await widget.viewModel.arrangeNodes();
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _camera.fitView();
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось разложить граф.')),
+      );
+    } finally {
+      if (mounted) setState(() => _arranging = false);
+    }
+  }
+
+  Future<void> _resetNodeSizes() async {
+    try {
+      await widget.viewModel.resetNodeSizes();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось сбросить размеры узлов.')),
+      );
+    }
+  }
 
   Future<void> _reloadCanvas() async {
     final confirmed = await showDialog<bool>(
@@ -240,7 +271,24 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
             Positioned(
               left: 18,
               bottom: 18,
-              child: _StatsChip(count: nodes.length),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _StatsChip(count: nodes.length),
+                  if (ready && nodes.length > 1)
+                    IconButton(
+                      tooltip: 'Разложить по веткам',
+                      icon: const Icon(Icons.account_tree_outlined),
+                      onPressed: _arranging ? null : _arrangeNodes,
+                    ),
+                  if (ready && widget.viewModel.hasCustomNodeSizes)
+                    IconButton(
+                      tooltip: 'Сбросить размеры узлов',
+                      icon: const Icon(Icons.aspect_ratio_rounded),
+                      onPressed: _resetNodeSizes,
+                    ),
+                ],
+              ),
             ),
             Positioned(
               right: 18,
@@ -347,6 +395,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
               collapsed: state.collapsed,
               hiddenCount: state.hiddenCount,
               accent: state.accent,
+              descendantProgress: widget.viewModel.taskProgressFor(node.id),
               select: state.select,
               toggleCollapse: state.toggleCollapse,
               dragStart: state.dragStart,

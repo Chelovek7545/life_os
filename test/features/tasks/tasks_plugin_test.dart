@@ -22,7 +22,7 @@ class TasksHarness {
   late Stream<List<Task>> Function() formSource;
   TasksNodeUi get node => TasksNodeUi(
     size: const Size(180, 120),
-    card: (_, data, _) => Text(data.title),
+    card: (_, data, _, _) => Text(data.title),
     editor: (_, _) => const SizedBox(),
     create: (_, _) => const SizedBox(),
     attach: (watchTasks) {

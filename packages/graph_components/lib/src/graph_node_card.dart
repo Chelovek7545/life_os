@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:graph_api/graph_api.dart';
@@ -100,7 +102,17 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                     ),
                   ],
                 ),
-                child: _isRound ? _buildRoundContent(n) : _buildRectContent(n),
+                child: Tooltip(
+                  message: n.subtitle.isEmpty
+                      ? n.title
+                      : '${n.title}\n${n.subtitle}',
+                  triggerMode: TooltipTriggerMode.manual,
+                  child: ClipRect(
+                    child: _isRound
+                        ? _buildRoundContent(n)
+                        : _buildRectContent(n),
+                  ),
+                ),
               ),
             ),
           ),
@@ -272,116 +284,220 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
     );
   }
 
-  Widget _buildRoundContent(GraphNodeData n) {
+  Widget _buildRoundContent(GraphNodeData node) {
+    final details = widget.spec.details?.call(context, node, widget.state);
     return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: _accent.withValues(alpha: 0.18),
-              border: Border.all(
-                color: _accent.withValues(alpha: 0.6),
-                width: 1.5,
-              ),
-            ),
-            child: Icon(widget.spec.icon, color: _accent, size: 24),
-          ),
-          const SizedBox(height: 7),
-          Text(
-            n.title,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: _palette.onSurface,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              height: 1.15,
-            ),
-          ),
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: LayoutBuilder(
+        builder: (context, space) {
+          final showIcon = space.maxHeight >= 74 && space.maxWidth >= 42;
+          final showDetails = details != null && space.maxHeight >= 86;
+          return Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (showIcon) ...[
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _accent.withValues(alpha: .18),
+                    border: Border.all(color: _accent.withValues(alpha: .6)),
+                  ),
+                  child: Icon(widget.spec.icon, color: _accent, size: 22),
+                ),
+                const SizedBox(height: 5),
+              ],
+              Flexible(child: _title(node.title, centered: true)),
+              if (showDetails) ...[
+                const SizedBox(height: 3),
+                SizedBox(
+                  height: 16,
+                  child: FittedBox(fit: BoxFit.scaleDown, child: details),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildRectContent(GraphNodeData n) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          width: 5,
-          decoration: BoxDecoration(
-            color: _accent,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(12),
-              bottomLeft: Radius.circular(12),
-            ),
-          ),
+  Widget _title(String title, {bool centered = false}) => LayoutBuilder(
+    builder: (context, space) {
+      final lineHeight = MediaQuery.textScalerOf(context).scale(13) * 1.2;
+      return Text(
+        title,
+        maxLines: (space.maxHeight / lineHeight).floor().clamp(1, 4),
+        textAlign: centered ? TextAlign.center : TextAlign.start,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: _palette.onSurface,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          height: 1.15,
         ),
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 9, 22, 9),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
+      );
+    },
+  );
+
+  Widget _buildRectContent(GraphNodeData node) {
+    final badge = widget.spec.badge?.call(context, node);
+    final details = widget.spec.details?.call(context, node, widget.state);
+    final showDescription =
+        widget.spec.details == null && node.subtitle.isNotEmpty;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(left: BorderSide(color: _accent, width: 4)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+        child: LayoutBuilder(
+          builder: (context, space) {
+            final scaler = MediaQuery.textScalerOf(context);
+            final labelHeight = scaler.scale(9) * 1.2;
+            final footerHeight = math.max(18.0, scaler.scale(10) * 1.2 + 6);
+            final titleBudget = scaler.scale(13) * 2.4;
+            final showFooter =
+                (details != null || badge != null || showDescription) &&
+                space.maxHeight >= footerHeight + titleBudget + 4 &&
+                space.maxWidth >= 42;
+            final showLabel =
+                space.maxHeight >=
+                labelHeight +
+                    titleBudget +
+                    4 +
+                    (showFooter ? footerHeight + 4 : 0);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  widget.spec.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.4,
-                    color: _accent.withValues(alpha: 0.85),
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Icon(widget.spec.icon, color: _accent, size: 18),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        n.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: _palette.onSurface,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          height: 1.1,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                if (n.subtitle.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+                if (showLabel) ...[
                   Text(
-                    n.subtitle,
+                    widget.spec.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: _palette.onSurfaceVariant,
-                      fontSize: 10.5,
+                      color: _accent,
+                      fontSize: 9,
+                      height: 1.2,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .8,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      if (space.maxWidth >= 52) ...[
+                        widget.spec.leading?.call(
+                              context,
+                              node,
+                              widget.state,
+                            ) ??
+                            Icon(widget.spec.icon, color: _accent, size: 18),
+                        const SizedBox(width: 6),
+                      ],
+                      Expanded(child: _title(node.title)),
+                    ],
+                  ),
+                ),
+                if (showFooter) ...[
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    height: footerHeight,
+                    child: Row(
+                      children: [
+                        if (details != null)
+                          Expanded(child: details)
+                        else if (showDescription)
+                          Expanded(
+                            child: Text(
+                              node.subtitle,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: _palette.onSurfaceVariant,
+                                fontSize: 10,
+                              ),
+                            ),
+                          )
+                        else
+                          const Spacer(),
+                        if (badge != null) ...[
+                          const SizedBox(width: 5),
+                          Flexible(
+                            flex: details == null && !showDescription ? 4 : 1,
+                            child: badge,
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ],
-                if (widget.spec.badge?.call(context, n) case final badge?) ...[
-                  const SizedBox(height: 5),
-                  badge,
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class GraphNodeMetaChip extends StatelessWidget {
+  const GraphNodeMetaChip({
+    super.key,
+    required this.label,
+    this.icon,
+    this.accent,
+  });
+
+  final String label;
+  final IconData? icon;
+  final Color? accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = GraphComponentPalette.of(context);
+    final foreground = accent ?? palette.onSurfaceVariant;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: accent?.withValues(alpha: .18) ?? palette.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(8),
+          border: accent == null
+              ? null
+              : Border.all(color: accent!.withValues(alpha: .45)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, color: foreground, size: 11),
+                  const SizedBox(width: 4),
                 ],
+                Text(
+                  label,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: foreground,
+                    fontSize: 10,
+                    height: 1.2,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }

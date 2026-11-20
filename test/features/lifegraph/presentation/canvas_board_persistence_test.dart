@@ -162,6 +162,54 @@ void main() {
     },
   );
 
+  test('reset restores standard node sizes at the same positions', () async {
+    final vm = await open();
+    final goal = await vm.createChild(
+      sphere.id,
+      GraphNodeDraft(kind: 'goal', title: 'Goal'),
+    );
+    await vm.graphStream.firstWhere((nodes) => nodes.any((n) => n.id == goal));
+    await vm.createNoteWithText(title: '', text: 'Keep this sticker');
+    await vm.flush();
+    final before = await read(vm);
+    (before['nodes'][0] as Map<String, dynamic>).addAll({
+      'x': -460,
+      'y': -170,
+      'width': 280,
+      'height': 280,
+    });
+    (before['nodes'][1] as Map<String, dynamic>).addAll({
+      'width': 310,
+      'height': 150,
+    });
+    await File(vm.canvasBoardPath!).writeAsString(jsonEncode(before));
+    await vm.reloadCanvasBoard();
+    expect(vm.hasCustomNodeSizes, isTrue);
+    final positions = {for (final node in vm.graph) node.id: node.position};
+
+    await vm.resetNodeSizes();
+    expect(vm.hasCustomNodeSizes, isFalse);
+    expect(vm.graph.map((node) => node.size), [
+      const Size(140, 140),
+      const Size(180, 100),
+    ]);
+    expect({for (final node in vm.graph) node.id: node.position}, positions);
+
+    await vm.dispose();
+    final reopened = await open();
+    expect(reopened.hasCustomNodeSizes, isFalse);
+    expect({
+      for (final node in reopened.graph) node.id: node.position,
+    }, positions);
+    final after = await read(reopened);
+    expect(after['nodes'], [
+      {...before['nodes'][0] as Map, 'width': 140, 'height': 140},
+      {...before['nodes'][1] as Map, 'width': 180, 'height': 100},
+      before['nodes'][2],
+    ]);
+    expect(after['edges'], before['edges']);
+  });
+
   test(
     'external edit conflicts produce recovery and reload continues from the external file',
     () async {

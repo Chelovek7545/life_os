@@ -20,7 +20,13 @@ class TasksNodeUi {
     required this.attach,
   });
   final Size size;
-  final Widget Function(BuildContext, GraphNodeData, GraphNodeInteraction) card;
+  final Widget Function(
+    BuildContext,
+    GraphNodeData,
+    GraphNodeInteraction,
+    Future<void> Function(String, TaskStatus),
+  )
+  card;
   final GraphFormBuilder editor;
   final GraphFormBuilder create;
   final GraphFormBuilder Function(Stream<List<Task>> Function() watchTasks)
@@ -97,6 +103,14 @@ class TasksPlugin {
     required GraphDeleteHandler delete,
     required TasksUiBindings visuals,
   }) {
+    GraphNodePresentation presentation(String kind, TasksNodeUi node) =>
+        GraphNodePresentation(
+          kind: kind,
+          size: node.size,
+          builder: (context, data, state) =>
+              node.card(context, data, state, viewModel.setTaskStatus),
+        );
+
     final graph = GraphModulePlugin(
       module: GraphModule(
         id: 'tasks.graph',
@@ -104,16 +118,8 @@ class TasksPlugin {
         contributors: [TasksGraphContributor(_tasks)],
         commands: tasksGraphCommands(_tasks, delete: delete),
         presentations: [
-          GraphNodePresentation(
-            kind: 'task',
-            size: visuals.task.size,
-            builder: visuals.task.card,
-          ),
-          GraphNodePresentation(
-            kind: 'subTask',
-            size: visuals.subtask.size,
-            builder: visuals.subtask.card,
-          ),
+          presentation(TasksGraphContributor.taskKind, visuals.task),
+          presentation(TasksGraphContributor.subTaskKind, visuals.subtask),
         ],
         editors: [
           GraphNodeEditor(kind: 'task', builder: visuals.task.editor),
