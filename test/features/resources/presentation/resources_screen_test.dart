@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/features/resources/presentation/resources_screen.dart';
 import 'package:notes_api/notes_api.dart';
@@ -156,11 +157,9 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Offline'));
       await tester.pumpAndSettle();
-      final field = tester.widget<TextField>(
-        find.byKey(const ValueKey('resource-note-body')),
-      );
-      expect(field.controller!.text, 'Body of Offline');
-      expect(field.readOnly, isTrue);
+      expect(find.byType(Markdown), findsOneWidget);
+      expect(find.text('Body of Offline', findRichText: true), findsWidgets);
+      expect(find.text('Редактирование'), findsNothing);
       expect(find.text('Сохранить'), findsNothing);
       expect(
         find.text('Исходный файл недоступен. Показана сохранённая версия.'),
@@ -205,6 +204,10 @@ void main() {
         'Obsidian original',
       );
       final graphNote = _note('/Pulse/Notes/Graph file.md', 'Graph file');
+      const graphBody =
+          '# План\n\n1. Первый пункт\n2. Второй пункт\n'
+          '\n- [x] Готово\n- [ ] Ожидает\n'
+          '\n| День | Дело |\n| --- | --- |\n| Пн | Работа |\n';
       files.obsidianState = VaultState(vaultPath: '/Vault', notes: [vaultNote]);
       files.graphMarkdownState = VaultState(
         vaultPath: '/Pulse/Notes',
@@ -215,7 +218,7 @@ void main() {
       );
       files.files.addAll({
         vaultNote.absolutePath: 'Vault body',
-        graphNote.absolutePath: 'Graph body',
+        graphNote.absolutePath: graphBody,
       });
       notes.source.emit([
         const NoteDocument(id: 'sticker', text: 'Unlinked sticker'),
@@ -284,21 +287,47 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Graph file'));
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(TextField, 'Graph body'), findsOneWidget);
-      await tester.enterText(
-        find.byKey(const ValueKey('resource-note-body')),
-        'Edited graph file',
+      final preview = find.byType(Markdown);
+      final field = find.byKey(const ValueKey('resource-note-body'));
+      expect(field, findsNothing);
+      expect(find.text('План', findRichText: true), findsWidgets);
+      expect(find.text('# План', findRichText: true), findsNothing);
+      expect(find.text('1.'), findsOneWidget);
+      expect(find.text('2.'), findsOneWidget);
+      expect(find.byIcon(Icons.check_box), findsOneWidget);
+      expect(find.byIcon(Icons.check_box_outline_blank), findsOneWidget);
+      expect(
+        find.descendant(of: preview, matching: find.byType(Table)),
+        findsOneWidget,
       );
+      await tester.tap(find.text('Редактирование'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field).controller!.text, graphBody);
+      const edited = '# Новый план\n\n- **Новый пункт**\n';
+      await tester.enterText(field, edited);
+      await tester.tap(find.text('Предпросмотр'));
+      await tester.pumpAndSettle();
+      expect(find.text('Новый план', findRichText: true), findsWidgets);
+      expect(find.text('Новый пункт', findRichText: true), findsWidgets);
+      expect(find.text('•'), findsOneWidget);
+      expect(files.files[graphNote.absolutePath], graphBody);
+      await tester.tap(find.text('Редактирование'));
+      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field).controller!.text, edited);
+      await tester.tap(find.text('Предпросмотр'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Сохранить'));
       await tester.pumpAndSettle();
-      expect(files.files[graphNote.absolutePath], 'Edited graph file');
+      expect(preview, findsNothing);
+      expect(files.files[graphNote.absolutePath], edited);
       expect(files.files[vaultNote.absolutePath], 'Vault body');
       expect(tester.takeException(), isNull);
       await tester.ensureVisible(find.text('Obsidian original'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Obsidian original'));
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(TextField, 'Vault body'), findsOneWidget);
+      expect(preview, findsOneWidget);
+      expect(find.text('Vault body', findRichText: true), findsWidgets);
       await tester.tap(find.text('Закрыть'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);

@@ -4,6 +4,7 @@ import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:life_os/core/ui/hierarchy/build_note_hierarchy.dart';
 import 'package:notes_api/notes_api.dart';
 import 'package:path/path.dart' as p;
+import 'widgets/markdown_note_editor.dart';
 import 'widgets/markdown_notes_panel.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/markdown_note_dialog.dart';
 import 'package:resources_plugin/resources_plugin.dart' show ResourcesViewModel;
@@ -283,12 +284,13 @@ class _MarkdownNotesPanel extends StatelessWidget {
     onDelete: viewModel.canDeleteMarkdown
         ? (note) => viewModel.deleteMarkdownNote(note.absolutePath)
         : null,
-    onOpen: (note) => _openFileNoteEditor(
+    onOpen: (note, {required editing}) => _openFileNoteEditor(
       context,
       viewModel,
       p.basenameWithoutExtension(note.absolutePath),
       note.absolutePath,
       cachedContent: note.content,
+      startEditing: editing,
     ),
     onCreate: viewModel.canCreateMarkdown
         ? () async {
@@ -306,6 +308,7 @@ Future<void> _openFileNoteEditor(
   String title,
   String path, {
   String? cachedContent,
+  bool startEditing = false,
 }) async {
   String content;
   var readOnly = false;
@@ -325,118 +328,14 @@ Future<void> _openFileNoteEditor(
   if (!context.mounted) return;
   await showDialog<void>(
     context: context,
-    builder: (_) => _NoteEditorDialog(
+    builder: (_) => MarkdownNoteEditor(
       title: title,
       path: path,
       initialContent: content,
-      viewModel: viewModel,
-      readOnly: readOnly,
+      startEditing: startEditing,
+      onSave: readOnly
+          ? null
+          : (text) => viewModel.updateNoteContent(path, text),
     ),
   );
-}
-
-/// Изолированный диалог для предотвращения утечек памяти TextEditingController
-class _NoteEditorDialog extends StatefulWidget {
-  final String title;
-  final String path;
-  final String initialContent;
-  final ResourcesViewModel viewModel;
-  final bool readOnly;
-
-  const _NoteEditorDialog({
-    required this.title,
-    required this.path,
-    required this.initialContent,
-    required this.viewModel,
-    this.readOnly = false,
-  });
-
-  @override
-  State<_NoteEditorDialog> createState() => _NoteEditorDialogState();
-}
-
-class _NoteEditorDialogState extends State<_NoteEditorDialog> {
-  late final TextEditingController _controller;
-  bool _saving = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialContent);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(widget.title),
-          if (widget.readOnly) ...[
-            const SizedBox(height: 8),
-            const Text(
-              'Исходный файл недоступен. Показана сохранённая версия.',
-              style: TextStyle(fontSize: 12),
-            ),
-          ],
-        ],
-      ),
-      content: SizedBox(
-        width: 600,
-        height: 400,
-        child: TextField(
-          key: const ValueKey('resource-note-body'),
-          controller: _controller,
-          enabled: !_saving,
-          readOnly: widget.readOnly,
-          maxLines: null,
-          expands: true,
-          decoration: InputDecoration(
-            border: OutlineInputBorder(),
-            hintText: 'Содержимое заметки (.md)',
-            errorText: _error,
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Закрыть'),
-        ),
-        if (!widget.readOnly)
-          FilledButton(
-            onPressed: _saving
-                ? null
-                : () async {
-                    setState(() {
-                      _saving = true;
-                      _error = null;
-                    });
-                    try {
-                      await widget.viewModel.updateNoteContent(
-                        widget.path,
-                        _controller.text,
-                      );
-                      if (context.mounted) Navigator.pop(context);
-                    } catch (error) {
-                      if (mounted) {
-                        setState(() {
-                          _saving = false;
-                          _error = error.toString();
-                        });
-                      }
-                    }
-                  },
-            child: const Text('Сохранить'),
-          ),
-      ],
-    );
-  }
 }

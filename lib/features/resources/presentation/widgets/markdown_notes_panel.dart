@@ -20,7 +20,7 @@ class MarkdownNotesPanel extends StatefulWidget {
     this.onDelete,
   });
   final VaultState state;
-  final Future<void> Function(VaultNote) onOpen;
+  final Future<void> Function(VaultNote, {required bool editing}) onOpen;
   final Future<VaultNote?> Function()? onCreate;
   final Future<void> Function(VaultNote)? onDelete;
 
@@ -109,14 +109,14 @@ class _MarkdownNotesPanelState extends State<MarkdownNotesPanel> {
     }
   }
 
-  Future<void> _open(VaultNote note) async {
+  Future<void> _open(VaultNote note, {required bool editing}) async {
     if (_opening) return;
     setState(() {
       _opening = true;
       _selectedPath = note.absolutePath;
     });
     try {
-      await widget.onOpen(note);
+      await widget.onOpen(note, editing: editing);
     } finally {
       if (mounted) setState(() => _opening = false);
     }
@@ -408,7 +408,8 @@ class _MarkdownNotesPanelState extends State<MarkdownNotesPanel> {
                             note: notes[index],
                             root: widget.state.vaultPath,
                             selected: notes[index].absolutePath == selected,
-                            onOpen: () => _open(notes[index]),
+                            onOpen: ({required editing}) =>
+                                _open(notes[index], editing: editing),
                             onDelete: widget.onDelete == null || _deleting
                                 ? null
                                 : () => _delete(notes[index]),
@@ -472,7 +473,7 @@ class _MarkdownFileCard extends StatefulWidget {
   final VaultNote note;
   final String root;
   final bool selected;
-  final VoidCallback onOpen;
+  final void Function({required bool editing}) onOpen;
   final VoidCallback? onDelete;
   @override
   State<_MarkdownFileCard> createState() => _MarkdownFileCardState();
@@ -533,7 +534,7 @@ class _MarkdownFileCardState extends State<_MarkdownFileCard> {
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               borderRadius: BorderRadius.circular(24),
-              onTap: widget.onOpen,
+              onTap: () => widget.onOpen(editing: false),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(14, 12, 10, 6),
                 child: Column(
@@ -615,7 +616,7 @@ class _MarkdownFileCardState extends State<_MarkdownFileCard> {
                           ),
                           onSelected: (action) async {
                             if (action == 'open') {
-                              widget.onOpen();
+                              widget.onOpen(editing: true);
                             } else if (action == 'delete') {
                               widget.onDelete?.call();
                             } else {

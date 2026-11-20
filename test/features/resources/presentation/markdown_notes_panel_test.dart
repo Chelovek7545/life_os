@@ -53,7 +53,7 @@ void main() {
     ),
   ];
   Widget panel({
-    required Future<void> Function(VaultNote) onOpen,
+    required Future<void> Function(VaultNote, {required bool editing}) onOpen,
     double scale = 1,
   }) => MaterialApp(
     home: MediaQuery(
@@ -82,7 +82,7 @@ void main() {
               body: SingleChildScrollView(
                 child: MarkdownNotesPanel(
                   state: VaultState(vaultPath: '/Notes', notes: [note]),
-                  onOpen: (_) async {},
+                  onOpen: (_, {required editing}) async {},
                 ),
               ),
             ),
@@ -128,10 +128,12 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(1200, 1100));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       String? opened;
+      bool? openedForEditing;
       await tester.pumpWidget(
         panel(
-          onOpen: (note) async {
+          onOpen: (note, {required editing}) async {
             opened = note.absolutePath;
+            openedForEditing = editing;
           },
         ),
       );
@@ -170,6 +172,7 @@ void main() {
       await tester.tap(find.text('Микробиология'));
       await tester.pumpAndSettle();
       expect(opened, notes[3].absolutePath);
+      expect(openedForEditing, isFalse);
       await tester.enterText(
         find.byKey(const ValueKey('markdown-search')),
         'нет такого текста',
@@ -184,6 +187,7 @@ void main() {
       await tester.tap(find.text('Редактировать'));
       await tester.pumpAndSettle();
       expect(opened, notes[0].absolutePath);
+      expect(openedForEditing, isTrue);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     },
@@ -197,7 +201,7 @@ void main() {
           body: SingleChildScrollView(
             child: MarkdownNotesPanel(
               state: VaultState(vaultPath: '/Notes', notes: [notes.first]),
-              onOpen: (_) async {},
+              onOpen: (_, {required editing}) async {},
               onDelete: (_) async => throw StateError('Access denied'),
             ),
           ),
@@ -221,7 +225,9 @@ void main() {
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(360, 800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
-      await tester.pumpWidget(panel(onOpen: (_) async {}, scale: 1.7));
+      await tester.pumpWidget(
+        panel(onOpen: (_, {required editing}) async {}, scale: 1.7),
+      );
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('markdown-search')), findsOneWidget);
       expect(tester.takeException(), isNull);

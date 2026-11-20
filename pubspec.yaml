@@ -64,6 +64,7 @@ dependencies:
   telegram_plugin: ^0.1.0
   flutter:
     sdk: flutter
+  flutter_markdown_plus: ^1.0.12
   rxdart: ^0.28.0
 
   drift: ^2.15.0
