@@ -29,8 +29,6 @@ class ProjectsScreen extends StatefulWidget {
 }
 
 class _ProjectsScreenState extends State<ProjectsScreen> {
-  bool _isCreating = false;
-  Project? _editingProject;
   _ProjectFilter _filter = _ProjectFilter.all;
   bool _grid = true;
   late Stream<List<Task>> _tasks;
@@ -49,54 +47,62 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     }
   }
 
-  void _startEditingProject({Project? project}) {
-    setState(() {
-      _isCreating = true;
-      _editingProject = project;
-    });
-  }
-
-  void _closeProjectForm() {
-    if (!mounted) return;
-    setState(() {
-      _isCreating = false;
-      _editingProject = null;
-    });
-  }
-
-  Widget _buildCreateProjectForm() {
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 760),
-        child: EditProjectCard(
-          key: ValueKey(_editingProject?.id),
-          project: _editingProject,
-          onSave: (name, description, color, dueDate) async {
-            final project = _editingProject;
-            if (project != null) {
-              await widget.viewModel.updateProject(
-                project.copyWith(
-                  name: name,
-                  description: description,
-                  color: color,
-                  dueDate: Wrapped(dueDate),
+  Future<void> _openProjectDialog({
+    Project? project,
+    bool isCompleted = false,
+  }) async {
+    final viewModel = widget.viewModel;
+    await showGeneralDialog<void>(
+      context: context,
+      barrierColor: AppColors.surfaceDim.withValues(alpha: 0.65),
+      transitionDuration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 280),
+      transitionBuilder: (_, _, _, child) => child,
+      pageBuilder: (dialogContext, animation, _) {
+        final entrance = animation.drive(
+          CurveTween(curve: Curves.easeOutCubic),
+        );
+        return SafeArea(
+          child: Dialog(
+            alignment: Alignment.topCenter,
+            insetPadding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+            constraints: const BoxConstraints(maxWidth: 760),
+            backgroundColor: Colors.transparent,
+            shape: const RoundedRectangleBorder(),
+            elevation: 0,
+            child: SlideTransition(
+              position: entrance.drive(
+                Tween(begin: const Offset(0, -1), end: Offset.zero),
+              ),
+              child: FadeTransition(
+                opacity: entrance,
+                child: SingleChildScrollView(
+                  child: EditProjectCard(
+                    project: project,
+                    isCompleted: isCompleted,
+                    onSave: (draft) async {
+                      if (!mounted || !identical(widget.viewModel, viewModel)) {
+                        throw StateError('Projects screen has changed');
+                      }
+                      if (project == null) {
+                        await viewModel.addProjects(draft);
+                      } else {
+                        await viewModel.updateProject(draft);
+                      }
+                      if (dialogContext.mounted &&
+                          ModalRoute.of(dialogContext)?.isCurrent == true) {
+                        Navigator.of(dialogContext).pop();
+                      }
+                    },
+                    onCancel: () => Navigator.of(dialogContext).pop(),
+                  ),
                 ),
-              );
-            } else {
-              await widget.viewModel.addProjects(
-                Project.create(
-                  name: name,
-                  description: description,
-                  color: color,
-                ).copyWith(dueDate: Wrapped(dueDate)),
-              );
-            }
-            _closeProjectForm();
-          },
-          onCancel: _closeProjectForm,
-        ),
-      ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -167,17 +173,21 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     );
   }
 
-  Widget _buildProjects(List<Project> projects) {
+  Widget _buildProjects(List<Project> projects, double width) {
     return StreamBuilder<List<Task>>(
       stream: _tasks,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return const Center(
-            child: Text('Не удалось загрузить задачи проектов.'),
+          return const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: Text('Не удалось загрузить задачи проектов.')),
           );
         }
         if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: CircularProgressIndicator()),
+          );
         }
         final byProject = <String, List<Task>>{};
         for (final task in snapshot.data!) {
@@ -196,98 +206,81 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           };
         }).toList();
 
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final maxColumns = !_grid || constraints.maxWidth < 720
-                ? 1
-                : constraints.maxWidth < 1120
-                ? 2
-                : 3;
-            // Alternate two feature cards, three compact cards and a wide card.
-            final rows = <List<Project>>[];
-            var offset = 0;
-            while (offset < visible.length) {
-              final count = maxColumns == 3
-                  ? const [2, 3, 1][rows.length % 3]
-                  : maxColumns;
-              final end = (offset + count).clamp(0, visible.length);
-              rows.add(visible.sublist(offset, end));
-              offset = end;
-            }
-            return ScrollConfiguration(
-              behavior: const AppScrollBehavior(fadeExtent: 56),
-              child: ListView.builder(
-                key: const PageStorageKey('projects.gallery'),
-                padding: const EdgeInsets.only(bottom: 8),
-                itemCount: rows.length + 1,
-                itemBuilder: (context, index) {
-                  if (index == 0) {
-                    if (_isCreating) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 20),
-                        child: _buildCreateProjectForm(),
-                      );
-                    }
-                    if (visible.isEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: 64,
-                          horizontal: 16,
-                        ),
-                        child: Column(
-                          children: [
-                            const Icon(
-                              Icons.folder_open_rounded,
-                              size: 48,
-                              color: AppColors.primary,
-                            ),
-                            const SizedBox(height: 18),
-                            Text(
-                              projects.isEmpty
-                                  ? 'Здесь будут ваши проекты'
-                                  : 'В этой категории пока нет проектов',
-                              style: Theme.of(context).textTheme.titleMedium,
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              projects.isEmpty
-                                  ? 'Создайте первый проект и соберите в нём задачи.'
-                                  : 'Выберите другую категорию или создайте новый проект.',
-                              style: const TextStyle(color: Color(0xFFAAA5A2)),
-                              textAlign: TextAlign.center,
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  }
+        final maxColumns = !_grid || width < 720
+            ? 1
+            : width < 1120
+            ? 2
+            : 3;
+        // Alternate two feature cards, three compact cards and a wide card.
+        final rows = <List<Project>>[];
+        var offset = 0;
+        while (offset < visible.length) {
+          final count = maxColumns == 3
+              ? const [2, 3, 1][rows.length % 3]
+              : maxColumns;
+          final end = (offset + count).clamp(0, visible.length);
+          rows.add(visible.sublist(offset, end));
+          offset = end;
+        }
+        return SliverPadding(
+          padding: const EdgeInsets.only(bottom: 8),
+          sliver: SliverList.builder(
+            itemCount: rows.length + 1,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                if (visible.isEmpty) {
                   return Padding(
-                    padding: EdgeInsets.only(
-                      bottom: index == rows.length ? 0 : 18,
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 64,
+                      horizontal: 16,
                     ),
-                    child: IntrinsicHeight(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (var i = 0; i < rows[index - 1].length; i++) ...[
-                            if (i > 0) const SizedBox(width: 18),
-                            Expanded(
-                              child: _projectCard(
-                                rows[index - 1][i],
-                                byProject,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+                    child: Column(
+                      children: [
+                        const Icon(
+                          Icons.folder_open_rounded,
+                          size: 48,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          projects.isEmpty
+                              ? 'Здесь будут ваши проекты'
+                              : 'В этой категории пока нет проектов',
+                          style: Theme.of(context).textTheme.titleMedium,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          projects.isEmpty
+                              ? 'Создайте первый проект и соберите в нём задачи.'
+                              : 'Выберите другую категорию или создайте новый проект.',
+                          style: const TextStyle(color: Color(0xFFAAA5A2)),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
                   );
-                },
-              ),
-            );
-          },
+                }
+                return const SizedBox.shrink();
+              }
+              return Padding(
+                padding: EdgeInsets.only(bottom: index == rows.length ? 0 : 18),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < rows[index - 1].length; i++) ...[
+                        if (i > 0) const SizedBox(width: 18),
+                        Expanded(
+                          child: _projectCard(rows[index - 1][i], byProject),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
         );
       },
     );
@@ -303,15 +296,76 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       project: project,
       viewModel: widget.viewModel,
       tasks: tasks[project.id] ?? const [],
-      onEditRequested: () => _startEditingProject(project: project),
+      onEditRequested: () {
+        final projectTasks = tasks[project.id] ?? const <Task>[];
+        _openProjectDialog(
+          project: project,
+          isCompleted:
+              projectTasks.isNotEmpty &&
+              projectTasks.every((task) => task.isCompleted),
+        );
+      },
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildGallery() {
+    return LayoutBuilder(
+      builder: (context, constraints) => CustomScrollView(
+        key: const PageStorageKey('projects.gallery'),
+        primary: false,
+        scrollBehavior: const AppScrollBehavior(
+          fadeExtent: 56,
+          fadeStart: false,
+        ),
+        slivers: [
+          PinnedHeaderSliver(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    AppColors.surfaceDim,
+                    AppColors.surfaceDim.withValues(alpha: 0.8),
+                    AppColors.surfaceDim.withValues(alpha: 0),
+                  ],
+                  stops: const [0, 0.45, 1],
+                ),
+              ),
+              child: _buildHeader(),
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
+          StreamBuilder<ProjectsScreenState>(
+            stream: widget.viewModel.state,
+            builder: (context, snapshot) {
+              const loading = SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: CircularProgressIndicator()),
+              );
+              final state = snapshot.data;
+              if (state == null) return loading;
+              return state.when(
+                loading: () => loading,
+                error: (error) => SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(child: Text(error)),
+                ),
+                loaded: (projects, _, _) =>
+                    _buildProjects(projects, constraints.maxWidth),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+      padding: const EdgeInsets.only(top: 20),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -326,7 +380,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: _isCreating ? null : () => _startEditingProject(),
+                onPressed: _openProjectDialog,
                 style: FilledButton.styleFrom(
                   backgroundColor: AppColors.primaryContainer,
                   foregroundColor: Colors.white,
@@ -345,25 +399,16 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           ),
           const SizedBox(height: 24),
           _buildToolbar(),
-          const SizedBox(height: 24),
-          Expanded(
-            child: StreamBuilder<ProjectsScreenState>(
-              stream: widget.viewModel.state,
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                return snapshot.data!.when(
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (error) => Center(child: Text(error)),
-                  loaded: (projects, _, _) => _buildProjects(projects),
-                );
-              },
-            ),
-          ),
         ],
       ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: _buildGallery(),
     );
   }
 }

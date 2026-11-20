@@ -8,6 +8,8 @@ void main() {
     testWidgets('renders form with title and description fields', (
       tester,
     ) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark().copyWith(
@@ -20,20 +22,20 @@ void main() {
           ),
           home: Scaffold(
             body: SingleChildScrollView(
-              child: EditProjectCard(onSave: (_, _, _, _) {}, onCancel: () {}),
+              child: EditProjectCard(onSave: (_) {}, onCancel: () {}),
             ),
           ),
         ),
       );
 
-      expect(find.text('CONFIGURE NEW PROJECT'), findsOneWidget);
-      expect(find.text('OBJECT TITLE'), findsOneWidget);
-      expect(find.text('DESCRIPTION MODULE'), findsOneWidget);
+      expect(find.text('Новый проект'), findsOneWidget);
+      expect(find.text('Название проекта'), findsOneWidget);
+      expect(find.text('Описание'), findsOneWidget);
     });
 
-    testWidgets('shows CONFIGURE NEW PROJECT title when creating', (
-      tester,
-    ) async {
+    testWidgets('shows Новый проект title when creating', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark().copyWith(
@@ -46,17 +48,19 @@ void main() {
           ),
           home: Scaffold(
             body: SingleChildScrollView(
-              child: EditProjectCard(onSave: (_, _, _, _) {}, onCancel: () {}),
+              child: EditProjectCard(onSave: (_) {}, onCancel: () {}),
             ),
           ),
         ),
       );
 
-      expect(find.text('CONFIGURE NEW PROJECT'), findsOneWidget);
+      expect(find.text('Новый проект'), findsOneWidget);
     });
 
     testWidgets('calls onCancel when cancel button tapped', (tester) async {
       bool cancelled = false;
+      await tester.binding.setSurfaceSize(const Size(800, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark().copyWith(
@@ -70,7 +74,7 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               child: EditProjectCard(
-                onSave: (_, _, _, _) {},
+                onSave: (_) {},
                 onCancel: () => cancelled = true,
               ),
             ),
@@ -78,7 +82,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.text('CANCEL'));
+      await tester.tap(find.text('Отмена'));
       await tester.pump();
 
       expect(cancelled, isTrue);
@@ -89,6 +93,8 @@ void main() {
       String? savedDesc;
       String? savedColor;
 
+      await tester.binding.setSurfaceSize(const Size(800, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark().copyWith(
@@ -102,10 +108,10 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               child: EditProjectCard(
-                onSave: (name, desc, color, dueDate) {
-                  savedName = name;
-                  savedDesc = desc;
-                  savedColor = color;
+                onSave: (project) {
+                  savedName = project.name;
+                  savedDesc = project.description;
+                  savedColor = project.color;
                 },
                 onCancel: () {},
               ),
@@ -116,11 +122,11 @@ void main() {
 
       await tester.enterText(find.byType(TextFormField).first, 'My Project');
       await tester.enterText(
-        find.byType(TextFormField).last,
+        find.byType(TextFormField).at(1),
         'Description text',
       );
 
-      await tester.tap(find.text('INITIALIZE PROJECT'));
+      await tester.tap(find.text('Создать проект'));
       await tester.pump();
 
       expect(savedName, 'My Project');
@@ -128,7 +134,9 @@ void main() {
       expect(savedColor, isNotNull);
     });
 
-    testWidgets('shows INITIALIZE PROJECT when creating', (tester) async {
+    testWidgets('shows Создать проект when creating', (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark().copyWith(
@@ -141,16 +149,20 @@ void main() {
           ),
           home: Scaffold(
             body: SingleChildScrollView(
-              child: EditProjectCard(onSave: (_, _, _, _) {}, onCancel: () {}),
+              child: EditProjectCard(onSave: (_) {}, onCancel: () {}),
             ),
           ),
         ),
       );
 
-      expect(find.text('INITIALIZE PROJECT'), findsOneWidget);
+      expect(find.text('Создать проект'), findsOneWidget);
     });
 
-    testWidgets('renders color palette options', (tester) async {
+    testWidgets('opens and closes the color controls from the swatch', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark().copyWith(
@@ -163,17 +175,47 @@ void main() {
           ),
           home: Scaffold(
             body: SingleChildScrollView(
-              child: EditProjectCard(onSave: (_, _, _, _) {}, onCancel: () {}),
+              child: EditProjectCard(onSave: (_) {}, onCancel: () {}),
             ),
           ),
         ),
       );
 
-      expect(find.byIcon(Icons.check), findsWidgets);
+      final colorButton = find.widgetWithText(OutlinedButton, 'Цвет');
+      expect(find.byType(Slider), findsNothing);
+      expect(find.text('HEX'), findsNothing);
+      await tester.tap(colorButton);
+      await tester.pumpAndSettle();
+      expect(find.byType(Slider), findsOneWidget);
+      expect(find.text('#FF5C00'), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField).last, '#12');
+      await tester.tap(colorButton);
+      await tester.pumpAndSettle();
+      expect(find.byType(Slider), findsNothing);
+      await tester.tap(colorButton);
+      await tester.pumpAndSettle();
+      expect(find.text('#FF5C00'), findsOneWidget);
+      await tester.tap(colorButton);
+      await tester.pumpAndSettle();
+      final blank = tester.getRect(find.widgetWithText(ChoiceChip, 'Пустой'));
+      final study = tester.getRect(find.widgetWithText(ChoiceChip, 'Учёба'));
+      expect(study.top, blank.top);
+      expect(study.left - blank.right, closeTo(8, 0.1));
+      await tester.tap(find.text('Учёба'));
+      await tester.pump();
+      final description = tester.widget<TextFormField>(
+        find.byType(TextFormField).at(1),
+      );
+      expect(description.controller!.text, contains('План занятий'));
+      await tester.tap(find.text('Пустой'));
+      await tester.pump();
+      expect(description.controller!.text, isEmpty);
     });
 
     testWidgets('does not save when title is empty', (tester) async {
       bool saved = false;
+      await tester.binding.setSurfaceSize(const Size(800, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData.dark().copyWith(
@@ -187,7 +229,7 @@ void main() {
           home: Scaffold(
             body: SingleChildScrollView(
               child: EditProjectCard(
-                onSave: (_, _, _, _) => saved = true,
+                onSave: (_) => saved = true,
                 onCancel: () {},
               ),
             ),
@@ -197,7 +239,7 @@ void main() {
 
       final titleField = find.byType(TextFormField).first;
       await tester.enterText(titleField, '');
-      await tester.tap(find.text('INITIALIZE PROJECT'));
+      await tester.tap(find.text('Создать проект'));
       await tester.pump();
 
       expect(saved, isFalse);

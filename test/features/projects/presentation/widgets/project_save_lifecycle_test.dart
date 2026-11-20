@@ -7,6 +7,8 @@ void main() {
   testWidgets(
     'save waits, prevents duplicate writes and preserves input for retry',
     (tester) async {
+      await tester.binding.setSurfaceSize(const Size(800, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
       final gate = Completer<void>();
       var attempts = 0;
       await tester.pumpWidget(
@@ -15,8 +17,8 @@ void main() {
             body: SingleChildScrollView(
               child: EditProjectCard(
                 onCancel: () {},
-                onSave: (name, description, color, dueDate) async {
-                  expect(name, 'Pending project');
+                onSave: (project) async {
+                  expect(project.name, 'Pending project');
                   attempts++;
                   if (attempts == 1) {
                     await gate.future;
@@ -32,11 +34,11 @@ void main() {
         find.byType(TextFormField).first,
         'Pending project',
       );
-      await tester.tap(find.text('INITIALIZE PROJECT'));
+      await tester.tap(find.text('Создать проект'));
       await tester.pump();
       expect(attempts, 1);
       expect(
-        tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed,
+        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull,
       );
       gate.complete();
@@ -46,7 +48,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Pending project'), findsOneWidget);
-      await tester.tap(find.text('INITIALIZE PROJECT'));
+      await tester.tap(find.text('Создать проект'));
       await tester.pumpAndSettle();
       expect(attempts, 2);
       expect(

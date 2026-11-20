@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/ui/segmented_pill_controller.dart';
-import 'package:projects_api/projects_api.dart' show Project;
+import 'package:projects_api/projects_api.dart' show Project, Wrapped;
 import 'package:life_os/features/projects/presentation/projects_screen.dart';
 import 'package:projects_plugin/projects_logic.dart'
     show
@@ -38,6 +38,8 @@ class FakeProjectsViewModel extends Fake implements ProjectsViewModel {
   Stream<List<Task>> watchAllTasks() => taskController.stream;
 
   final taskController = BehaviorSubject<List<Task>>.seeded([]);
+  final addedProjects = <Project>[];
+  final updatedProjects = <Project>[];
 
   @override
   Future<void> dispose() async {
@@ -46,10 +48,11 @@ class FakeProjectsViewModel extends Fake implements ProjectsViewModel {
   }
 
   @override
-  Future<void> addProjects(Project project) async {}
+  Future<void> addProjects(Project project) async => addedProjects.add(project);
 
   @override
-  Future<void> updateProject(Project project) async {}
+  Future<void> updateProject(Project project) async =>
+      updatedProjects.add(project);
 
   @override
   Future<void> deleteProject(String id) async {}
@@ -153,7 +156,9 @@ void main() {
       expect(find.byType(SegmentedPillControl), findsOneWidget);
     });
 
-    testWidgets('tapping new project button shows edit form', (tester) async {
+    testWidgets('new project form slides down from the top and saves', (
+      tester,
+    ) async {
       await tester.binding.setSurfaceSize(const Size(800, 1600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       viewModel._stateController.add(
@@ -164,9 +169,63 @@ void main() {
 
       await tester.tap(find.text('Новый проект'));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
+      final form = find.byType(EditProjectCard);
+      final startY = tester.getTopLeft(form).dy;
+      expect(startY, lessThan(0));
+      await tester.pump(const Duration(milliseconds: 70));
+      final midwayY = tester.getTopLeft(form).dy;
+      expect(midwayY, greaterThan(startY));
+      await tester.pumpAndSettle();
+      final endY = tester.getTopLeft(form).dy;
+      expect(endY, greaterThan(midwayY));
+      expect(endY, greaterThanOrEqualTo(0));
 
-      expect(find.byType(EditProjectCard), findsOneWidget);
+      await tester.enterText(find.byType(TextFormField).first, 'Новый план');
+      await tester.tap(find.text('Создать проект'));
+      await tester.pumpAndSettle();
+      expect(viewModel.addedProjects.single.name, 'Новый план');
+      expect(form, findsNothing);
+    });
+
+    testWidgets('edits project color and archive status in the same dialog', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1000, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final project = createMockProject(
+        name: 'Исходный проект',
+      ).copyWith(dueDate: Wrapped(DateTime(2026, 12, 1)));
+      viewModel._stateController.add(ProjectsLoaded(projects: [project]));
+      await tester.pumpWidget(createWidget());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Действия с проектом'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Редактировать'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Редактировать проект'), findsOneWidget);
+      expect(find.text('HEX'), findsNothing);
+      final colorButton = find.widgetWithText(OutlinedButton, 'Цвет');
+      await tester.tap(colorButton);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextFormField).last, '#2866BA');
+      await tester.tap(colorButton);
+      await tester.pumpAndSettle();
+      expect(find.text('HEX'), findsNothing);
+      await tester.tap(find.byTooltip('Убрать срок'));
+      await tester.tap(find.byType(DropdownButtonFormField<bool>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('В архиве').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Сохранить изменения'));
+      await tester.pumpAndSettle();
+
+      final saved = viewModel.updatedProjects.single;
+      expect(saved.id, project.id);
+      expect(saved.color, '#2866BA');
+      expect(saved.isArchived, isTrue);
+      expect(saved.dueDate, isNull);
+      expect(find.byType(EditProjectCard), findsNothing);
     });
 
     testWidgets('filters completion and archive and reacts to task updates', (
@@ -244,6 +303,60 @@ void main() {
       );
     });
 
+    testWidgets('cards scroll to the top behind the pinned header', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(1400, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final projects = List.generate(
+        18,
+        (index) => createMockProject(name: 'Project $index'),
+      );
+      viewModel._stateController.add(ProjectsLoaded(projects: projects));
+      await tester.pumpWidget(createWidget());
+      await tester.pumpAndSettle();
+
+      final card = find.byKey(ValueKey(projects.first.id));
+      final filters = find.byType(SegmentedPillControl);
+      final listButton = find.byWidgetPredicate(
+        (widget) => widget is IconButton && widget.tooltip == 'Список',
+      );
+      final filterPosition = tester.getCenter(filters);
+      final buttonPosition = tester.getCenter(listButton);
+      final createButton = find.text('Новый проект');
+      final createPosition = tester.getCenter(createButton);
+      final gallery = find.byKey(const PageStorageKey('projects.gallery'));
+      final scroll = Scrollable.of(tester.element(card)).position;
+      final cardTop = tester.getTopLeft(card).dy;
+      expect(cardTop, greaterThan(tester.getBottomLeft(listButton).dy));
+
+      scroll.jumpTo(cardTop + 12);
+      await tester.pumpAndSettle();
+
+      final screenTop = tester.getTopLeft(find.byType(ProjectsScreen)).dy;
+      expect(tester.getTopLeft(gallery).dy, screenTop);
+      expect(tester.getTopLeft(card).dy, lessThan(screenTop));
+      expect(tester.getBottomLeft(card).dy, greaterThan(filterPosition.dy));
+      expect(tester.getCenter(filters), filterPosition);
+      expect(tester.getCenter(listButton), buttonPosition);
+      expect(tester.getCenter(createButton), createPosition);
+      await tester.tap(listButton);
+      await tester.pumpAndSettle();
+      expect(tester.widget<IconButton>(listButton).isSelected, isTrue);
+
+      final offset = scroll.pixels;
+      await tester.tap(createButton);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getTopLeft(find.byType(EditProjectCard)).dy,
+        lessThan(createPosition.dy),
+      );
+      await tester.tap(find.text('Отмена'));
+      await tester.pumpAndSettle();
+      expect(find.byType(EditProjectCard), findsNothing);
+      expect(scroll.pixels, offset);
+    });
+
     testWidgets('fits narrow screen with long project text and creation form', (
       tester,
     ) async {
@@ -266,6 +379,18 @@ void main() {
       await tester.tap(find.text('Новый проект'));
       await tester.pumpAndSettle();
       expect(find.byType(EditProjectCard), findsOneWidget);
+      final colorButton = find.widgetWithText(OutlinedButton, 'Цвет');
+      await tester.tap(colorButton);
+      await tester.pumpAndSettle();
+      expect(find.byType(Slider), findsOneWidget);
+      await tester.tap(colorButton);
+      await tester.pumpAndSettle();
+      await tester.binding.setSurfaceSize(const Size(360, 340));
+      await tester.pumpAndSettle();
+      final saveButton = find.text('Создать проект');
+      await tester.ensureVisible(saveButton);
+      await tester.pumpAndSettle();
+      expect(saveButton.hitTestable(), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

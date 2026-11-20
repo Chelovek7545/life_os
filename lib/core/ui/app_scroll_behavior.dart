@@ -3,15 +3,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 class AppScrollBehavior extends MaterialScrollBehavior {
-  const AppScrollBehavior({this.fadeColor, this.fadeExtent = 20})
-    : assert(fadeExtent > 0);
+  const AppScrollBehavior({
+    this.fadeColor,
+    this.fadeExtent = 20,
+    this.fadeStart = true,
+  }) : assert(fadeExtent > 0);
   final Color? fadeColor;
   final double fadeExtent;
+  final bool fadeStart;
 
   @override
   bool shouldNotify(covariant AppScrollBehavior oldDelegate) =>
       oldDelegate.fadeColor != fadeColor ||
-      oldDelegate.fadeExtent != fadeExtent;
+      oldDelegate.fadeExtent != fadeExtent ||
+      oldDelegate.fadeStart != fadeStart;
 
   @override
   ScrollPhysics getScrollPhysics(BuildContext context) =>
@@ -33,6 +38,7 @@ class AppScrollBehavior extends MaterialScrollBehavior {
       direction: details.direction,
       fadeColor: fadeColor,
       fadeExtent: fadeExtent,
+      fadeStart: fadeStart,
       child: reduceMotion
           ? child
           : StretchingOverscrollIndicator(
@@ -52,12 +58,14 @@ class ScrollEdgeFade extends StatefulWidget {
     required this.child,
     this.fadeColor,
     this.fadeExtent = 20,
+    this.fadeStart = true,
   }) : assert(fadeExtent > 0);
   final ScrollController controller;
   final AxisDirection direction;
   final Widget child;
   final Color? fadeColor;
   final double fadeExtent;
+  final bool fadeStart;
   @override
   State<ScrollEdgeFade> createState() => _ScrollEdgeFadeState();
 }
@@ -140,8 +148,9 @@ class _ScrollEdgeFadeState extends State<ScrollEdgeFade> {
   Widget build(BuildContext context) {
     final vertical = axisDirectionToAxis(widget.direction) == Axis.vertical;
     final reverse = axisDirectionIsReversed(widget.direction);
-    final leading = reverse ? _after : _before;
-    final trailing = reverse ? _before : _after;
+    final start = widget.fadeStart ? _before : 0.0;
+    final leading = reverse ? _after : start;
+    final trailing = reverse ? start : _after;
     Color shade(double opacity) => Colors.black.withValues(alpha: opacity);
     final fadeColor = widget.fadeColor;
     if (fadeColor != null) {
