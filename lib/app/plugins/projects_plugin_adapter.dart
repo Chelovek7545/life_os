@@ -36,6 +36,11 @@ ProjectsPlugin createProjectsPlugin({
       editor: editor.builder,
       createForm: (_, actions) =>
           graphChildForm(projectGraphComponent, actions),
+      standaloneForm: GraphStandaloneForm(
+        label: 'Создать проект',
+        builder: (_, create) =>
+            GraphChildCreateDialog(spec: projectGraphComponent, onSave: create),
+      ),
     ),
   );
 }

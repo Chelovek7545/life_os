@@ -67,6 +67,10 @@ class MemoryTasks implements TasksApi {
     items[id] = current.copyWith(status: status, updatedAt: DateTime.now());
   });
   @override
+  Future<void> linkTaskAfter(String id, String predecessorId) => _write(id, () {
+    items[id] = items[id]!.copyWith(predecessorTaskId: Wrapped(predecessorId));
+  });
+  @override
   Future<void> moveTaskUnder(String id, String parentId) => _write(id, () {
     final task = items[id];
     if (task == null || task.parentTaskId == parentId) return;

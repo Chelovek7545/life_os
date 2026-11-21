@@ -25,6 +25,8 @@ class TaskSyncCodec {
       'timerSeconds': task.timerSeconds,
       'effortWeight': task.effortWeight,
       if (task.parentTaskId != null) 'parentTaskId': task.parentTaskId,
+      if (task.predecessorTaskId != null)
+        'predecessorTaskId': task.predecessorTaskId,
       if (task.projectId != null) 'projectId': task.projectId,
       if (task.spaceId != null) 'spaceId': task.spaceId,
       if (task.tags.isNotEmpty)
@@ -56,6 +58,7 @@ class TaskSyncCodec {
       projectId: map['projectId'] as String?,
       spaceId: map['spaceId'] as String?,
       parentTaskId: map['parentTaskId'] as String?,
+      predecessorTaskId: map['predecessorTaskId'] as String?,
     );
     // Strict canonical format prevents silently ignoring fields from a newer peer.
     if (encode(task) != payload) {

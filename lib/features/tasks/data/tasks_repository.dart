@@ -28,6 +28,10 @@ class TasksRepository implements TasksApi, TaskCompletionCommands {
   }
 
   @override
+  Future<void> linkTaskAfter(String id, String predecessorId) =>
+      _dao.linkTaskAfter(id, predecessorId);
+
+  @override
   Future<Task?> completeTask(String id) async {
     try {
       return await _dao.completeTask(id);

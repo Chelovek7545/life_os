@@ -193,6 +193,7 @@ class LifeGraphViewModel {
     _boardOrigin = Offset(minX, minY);
     _boardWorldSize = (maxX - minX) > (maxY - minY) ? maxX - minX : maxY - minY;
     _positions.clear();
+    _restoreStandalonePositions();
     _boardSizes.clear();
     for (final node in document.nodes) {
       final id = document.entityId(node);
@@ -403,6 +404,18 @@ class LifeGraphViewModel {
   List<GraphNode> _domainNodes = const [];
 
   final Map<String, Offset> _positions = {};
+  final _standalonePositions = BehaviorSubject<Map<String, GraphPoint>>.seeded(
+    const {},
+  );
+  late final _standaloneWriter =
+      DebouncedWriter<(String, Map<String, GraphPoint>)>(
+        (snapshot) => positionsRepository.saveStandalonePositions(
+          snapshot.$1,
+          snapshot.$2,
+        ),
+        onError: _onSaveError,
+        onIdle: _onSaveIdle,
+      );
 
   late final _positionWriter = DebouncedWriter<(String, Map<String, Offset>)>(
     (snapshot) => positionsRepository.savePositions(snapshot.$1, {
@@ -422,6 +435,7 @@ class LifeGraphViewModel {
   Future<void>? _closing;
   void _onSaveIdle() {
     if (!_disposed &&
+        _standaloneWriter.isIdle &&
         _positionWriter.isIdle &&
         _noteWriter.isIdle &&
         _boardWriter.isIdle) {
@@ -463,12 +477,57 @@ class LifeGraphViewModel {
 
   Future<void> _loadPositions(String sphereId) async {
     final loaded = await positionsRepository.loadPositions(sphereId);
+    _standalonePositions.add(
+      await positionsRepository.loadStandalonePositions(sphereId),
+    );
     _positions.clear();
+    _restoreStandalonePositions();
     if (loaded != null) {
       _positions.addAll(
         loaded.map((id, point) => MapEntry(id, Offset(point.x, point.y))),
       );
     }
+  }
+
+  void _restoreStandalonePositions() {
+    for (final entry in _standalonePositions.value.entries) {
+      _positions[entry.key] = Offset(entry.value.x, entry.value.y);
+    }
+  }
+
+  Future<String> Function(GraphNodeDraft, bool Function()) standaloneCreationAt(
+    Offset point,
+  ) {
+    final scope = _scope();
+    final generation = _scopeGeneration;
+    return (draft, isAvailable) => _enqueue(
+      () async {
+        final position = _clampPosition(
+          point,
+          nodePresentations.sizeFor(draft.kind),
+        );
+        final id = await commands.createStandalone(draft);
+        _positions[id] = position;
+        _saveStandalonePositions(scope.rootId, {
+          ..._standalonePositions.value,
+          id: GraphPoint(position.dx, position.dy),
+        });
+        return id;
+      },
+      isAvailable: () =>
+          generation == _scopeGeneration &&
+          scope.rootId == _currentSphereId &&
+          isAvailable(),
+    );
+  }
+
+  void _saveStandalonePositions(
+    String scopeId,
+    Map<String, GraphPoint> positions,
+  ) {
+    _standalonePositions.add(positions);
+    saveStatus.value = GraphSaveStatus.saving;
+    _standaloneWriter.schedule((scopeId, positions));
   }
 
   Future<String> createChild(
@@ -496,13 +555,71 @@ class LifeGraphViewModel {
     if (_currentSphereId == null) return;
     final parent = _domainNode(parentId).toData();
     final position = _childPosition(parentId, kind);
+    await _attachNode(parent, kind, id, position);
+  }, isAvailable: isAvailable);
+
+  bool Function() connectionGuard(String kind) {
+    final generation = _scopeGeneration;
+    final active = commands.guardFor(kind);
+    return () => _accepting && generation == _scopeGeneration && active();
+  }
+
+  Future<void> connectNodes(
+    String parentId,
+    String id, {
+    String? attachmentKind,
+    GraphLinkType linkType = GraphLinkType.hierarchy,
+    bool Function()? isAvailable,
+  }) {
+    final generation = _scopeGeneration;
+    return _enqueue(
+      () async {
+        final parent = nodeById(parentId);
+        final child = nodeById(id);
+        if (_currentSphereId == null ||
+            parentId == id ||
+            parent == null ||
+            child == null ||
+            (attachmentKind == null && child.parentId != null) ||
+            !commands.canAttach(attachmentKind ?? child.kind, parent.kind)) {
+          return;
+        }
+        final position =
+            _positions[id] ??
+            graph.firstWhere((node) => node.id == id).position;
+        await _attachNode(
+          parent.toData(),
+          attachmentKind ?? child.kind,
+          id,
+          position,
+          linkType,
+        );
+      },
+      isAvailable: () =>
+          generation == _scopeGeneration && (isAvailable?.call() ?? true),
+    );
+  }
+
+  Future<void> _attachNode(
+    GraphNodeData parent,
+    String kind,
+    String id,
+    Offset position, [
+    GraphLinkType linkType = GraphLinkType.hierarchy,
+  ]) async {
     final attached = await commands.attach(
-      GraphAttachRequest(scope: _scope(), parent: parent, kind: kind, id: id),
+      GraphAttachRequest(
+        scope: _scope(),
+        parent: parent,
+        kind: kind,
+        id: id,
+        linkType: linkType,
+      ),
     );
     if (attached == null) return;
     _positions[attached] = position;
     await _scheduleSavePositions();
-  }, isAvailable: isAvailable);
+  }
 
   Future<void> updateNode(GraphNode updated) =>
       updateGraphNode(updated.toData());
@@ -683,6 +800,13 @@ class LifeGraphViewModel {
       if (spheres.isNotEmpty) await _switchToSphere(spheres.first.id);
     } else {
       _removePositions(removed);
+      final standalone = _standalonePositions.value;
+      if (removed.any(standalone.containsKey)) {
+        _saveStandalonePositions(
+          scope.rootId,
+          Map.of(standalone)..removeWhere((id, _) => removed.contains(id)),
+        );
+      }
       await _flush();
     }
   }
@@ -755,6 +879,7 @@ class LifeGraphViewModel {
           index: i,
           depth: depth[n.id] ?? 0,
           parentId: n.parentId,
+          predecessorId: n.attributes['predecessorTaskId'] as String?,
           size: _boardSizes[n.id] ?? nodePresentations.sizeFor(n.kind),
           position: _clampPosition(
             positions[n.id] ?? Offset.zero,
@@ -830,6 +955,8 @@ class LifeGraphViewModel {
     );
     final positions = {
       root.id: keepSaved ? _positions[root.id] ?? topSafeRoot : topSafeRoot,
+      for (final node in nodes.skip(1))
+        if (node.parentId == null) node.id: _positions[node.id] ?? topSafeRoot,
     };
     for (final parent in nodes) {
       final kids = children[parent.id] ?? const [];
@@ -916,6 +1043,7 @@ class LifeGraphViewModel {
   Future<void> _flush() async {
     try {
       await Future.wait([
+        _standaloneWriter.flush(),
         _positionWriter.flush(),
         _noteWriter.flush(),
         _boardWriter.flush(),
@@ -956,11 +1084,13 @@ class LifeGraphViewModel {
     await release(() async => _notesSubscription?.cancel());
     await release(() async => _noteRenames?.cancel());
     await release(_sourceStreams.close);
+    await release(_standaloneWriter.close);
     await release(_positionWriter.close);
     await release(_noteWriter.close);
     await release(_boardWriter.close);
     await release(saveStatus.dispose);
     await release(_graphSubject.close);
+    await release(_standalonePositions.close);
     await release(_notesSubject.close);
     await release(() => onDisposed?.call());
     if (failure case final error?) {
@@ -1236,21 +1366,29 @@ class LifeGraphViewModel {
     await _loadNotes(sphereId);
     if (_disposed) return;
     _currentSphereId = sphereId;
-    saveStatus.value = _positionWriter.isIdle && _noteWriter.isIdle
+    saveStatus.value =
+        _standaloneWriter.isIdle && _positionWriter.isIdle && _noteWriter.isIdle
         ? GraphSaveStatus.saved
         : GraphSaveStatus.saving;
     _domainNodes = const [];
     _graphSubject.add(const []); // сбрасываем устаревшие данные прошлой сферы
-    _graphSubscription = graphBuilder.watchGraph(sphereId).listen((nodes) {
-      _domainNodes = nodes.map(GraphNode.fromData).toList(growable: false);
-      _graphSubject.add(_toViewNodes(_domainNodes));
-      try {
-        _scheduleBoard();
-      } catch (error, stack) {
-        _boardBuildFailure = (error, stack);
-        _onSaveError(error, stack);
-      }
-    }, onError: (e) => debugPrint('Graph stream error: $e'));
+    _graphSubscription = graphBuilder
+        .watchGraph(
+          sphereId,
+          standaloneIds: _standalonePositions.map(
+            (positions) => positions.keys.toSet(),
+          ),
+        )
+        .listen((nodes) {
+          _domainNodes = nodes.map(GraphNode.fromData).toList(growable: false);
+          _graphSubject.add(_toViewNodes(_domainNodes));
+          try {
+            _scheduleBoard();
+          } catch (error, stack) {
+            _boardBuildFailure = (error, stack);
+            _onSaveError(error, stack);
+          }
+        }, onError: (e) => debugPrint('Graph stream error: $e'));
   }
 }
 

@@ -5,43 +5,42 @@ import 'projects_graph_contributor.dart';
 GraphNodeCommands projectsGraphCommands(
   ProjectsApi projects, {
   required GraphDeleteHandler delete,
-}) => GraphNodeCommands(
-  kind: ProjectsGraphContributor.kind,
-  parentKinds: {'goal', ProjectsGraphContributor.kind},
-  create: (request) async {
-    final draft = request.draft;
-    final project = request.parent.kind == ProjectsGraphContributor.kind
-        ? Project.create(
-            name: draft.title,
-            description: draft.subtitle,
-            color: draft.color ?? '#4A90D9',
-            parentProjectId: request.parent.id,
-          )
-        : Project.create(
-            name: draft.title,
-            description: draft.subtitle,
-            color: draft.color ?? '#4A90D9',
-            goalId: request.parent.id,
-          );
+}) {
+  Future<String> create(GraphNodeDraft draft, GraphNodeData? parent) async {
+    final isSubproject = parent?.kind == ProjectsGraphContributor.kind;
+    final project = Project.create(
+      name: draft.title,
+      description: draft.subtitle,
+      color: draft.color ?? '#4A90D9',
+      parentProjectId: isSubproject ? parent?.id : null,
+      goalId: isSubproject ? null : parent?.id,
+    );
     await projects.addProject(project);
     return project.id;
-  },
-  update: (request) async {
-    final existing = await projects.getProjectById(request.current.id);
-    if (existing == null) return;
-    if (existing.storageRevision != null &&
-        request.current.attributes['storageRevision'] !=
-            existing.storageRevision) {
-      throw StateError('Node changed; reload before saving.');
-    }
-    await projects.updateProject(
-      existing.copyWith(
-        name: request.updated.title,
-        description: request.updated.subtitle,
-        color: request.updated.color,
-        updatedAt: DateTime.now(),
-      ),
-    );
-  },
-  delete: delete,
-);
+  }
+
+  return GraphNodeCommands(
+    kind: ProjectsGraphContributor.kind,
+    parentKinds: {'goal', ProjectsGraphContributor.kind},
+    create: (request) => create(request.draft, request.parent),
+    createStandalone: (draft) => create(draft, null),
+    update: (request) async {
+      final existing = await projects.getProjectById(request.current.id);
+      if (existing == null) return;
+      if (existing.storageRevision != null &&
+          request.current.attributes['storageRevision'] !=
+              existing.storageRevision) {
+        throw StateError('Node changed; reload before saving.');
+      }
+      await projects.updateProject(
+        existing.copyWith(
+          name: request.updated.title,
+          description: request.updated.subtitle,
+          color: request.updated.color,
+          updatedAt: DateTime.now(),
+        ),
+      );
+    },
+    delete: delete,
+  );
+}

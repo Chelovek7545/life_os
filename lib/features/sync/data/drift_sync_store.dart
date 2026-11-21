@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' show max;
 import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
@@ -130,6 +131,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
     if (type == 'workLog') return 2;
     if (payload != null) {
       final task = TaskSyncCodec.decode(payload);
+      if (task.predecessorTaskId != null) return 4;
       if (task.projectId != null ||
           task.spaceId != null ||
           task.tags.isNotEmpty) {
@@ -262,6 +264,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
           dueDate: task.dueDate,
           projectId: task.projectId,
           parentTaskId: task.parentTaskId,
+          predecessorTaskId: task.predecessorTaskId,
           space: task.space,
           spaceId: task.spaceId,
           priority: task.priority,
@@ -365,7 +368,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
       entityType: type,
       parents: basis,
       payload: payload,
-      schemaVersion: 3,
+      schemaVersion: max(3, _version(type, payload)),
     );
     final after = SyncGraph([...revisions, revision]);
     if (!after.applied.contains(revision.id)) {
@@ -689,7 +692,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
           entityType: type,
           parents: [],
           payload: entry.value,
-          schemaVersion: 3,
+          schemaVersion: max(3, _version(type, entry.value)),
         ),
       );
     }
@@ -814,6 +817,16 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
     }
     _checkEdit(id, graph, revisions, resolveConflict: resolveConflict);
     await _capture(() async {
+      if (payload == null && SyncPayload.typeOf(id) == 'task') {
+        await (db.update(
+          db.tasks,
+        )..where((t) => t.predecessorTaskId.equals(id))).write(
+          TasksCompanion(
+            predecessorTaskId: const Value(null),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+      }
       await _applyPayload(
         SyncPayload.typeOf(id),
         SyncPayload.idOf(id),

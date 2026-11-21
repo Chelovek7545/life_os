@@ -22,6 +22,7 @@ class Task {
     this.dueDate,
     this.projectId,
     this.parentTaskId,
+    this.predecessorTaskId,
     this.space,
     this.spaceId,
     this.priority = 0,
@@ -42,6 +43,7 @@ class Task {
   final DateTime? dueDate;
   final String? projectId;
   final String? parentTaskId;
+  final String? predecessorTaskId;
   final String? space;
   final String? spaceId;
   final int priority;
@@ -89,6 +91,7 @@ class Task {
     Wrapped<DateTime?>? dueDate,
     Wrapped<String?>? projectId,
     Wrapped<String?>? parentTaskId,
+    Wrapped<String?>? predecessorTaskId,
     Wrapped<String?>? space,
     Wrapped<String?>? spaceId,
     int? priority,
@@ -108,6 +111,9 @@ class Task {
       endsAt: endsAt != null ? endsAt.value : this.endsAt,
 
       projectId: projectId != null ? projectId.value : this.projectId,
+      predecessorTaskId: predecessorTaskId == null
+          ? this.predecessorTaskId
+          : predecessorTaskId.value,
       parentTaskId: parentTaskId != null
           ? parentTaskId.value
           : this.parentTaskId,

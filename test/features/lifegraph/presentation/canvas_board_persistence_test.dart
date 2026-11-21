@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:graph_canvas/graph_canvas.dart' as graph;
 import 'package:graph_api/graph_api.dart';
+import 'package:graph_components/graph_components.dart';
 import 'package:life_os/app/dependency_container.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
@@ -66,6 +67,16 @@ void main() {
   Future<Map<String, dynamic>> read(LifeGraphViewModel vm) async =>
       jsonDecode(await File(vm.canvasBoardPath!).readAsString())
           as Map<String, dynamic>;
+
+  Future<void> cleanTempDirectory() async {
+    final root = await Directory.systemTemp.resolveSymbolicLinks();
+    if (!p.isWithin(root, await directory.resolveSymbolicLinks())) {
+      throw StateError('Unexpected temp directory');
+    }
+    await directory.delete(recursive: true);
+    models.clear();
+    cleaned = true;
+  }
 
   test(
     'deleting selected stickers saves the board and keeps original Markdown',
@@ -348,6 +359,242 @@ void main() {
     },
   );
 
+  testWidgets(
+    'drag links a project to a task and distinguishes subtasks from next tasks',
+    (tester) async {
+      Future<void> until(bool Function() done) async {
+        for (var i = 0; i < 100 && !done(); i++) {
+          await tester.pump(const Duration(milliseconds: 10));
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 2)),
+          );
+        }
+        expect(done(), isTrue);
+      }
+
+      Future<T> finish<T>(Future<T> operation) async {
+        var done = false;
+        final result = operation.whenComplete(() => done = true);
+        await until(() => done);
+        return result;
+      }
+
+      try {
+        final vm = (await tester.runAsync(open))!;
+        await tester.runAsync(() async {
+          await tester.pumpWidget(
+            MaterialApp(home: LifeGraphScreen(viewModel: vm)),
+          );
+          await vm.refreshNotes();
+        });
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Zoom in'));
+        await tester.pumpAndSettle();
+
+        Future<graph.GraphNode> create(
+          Offset point,
+          String menuLabel,
+          String title,
+        ) async {
+          final viewer = find.byType(InteractiveViewer);
+          final controller = tester
+              .widget<InteractiveViewer>(viewer)
+              .transformationController!;
+          final expected = controller.toScene(
+            point - tester.getTopLeft(viewer),
+          );
+          final mouse = await tester.startGesture(
+            point,
+            kind: PointerDeviceKind.mouse,
+            buttons: kSecondaryMouseButton,
+          );
+          await mouse.up();
+          await tester.pumpAndSettle();
+          expect(find.text('Создать задачу'), findsOneWidget);
+          expect(find.text('Создать проект'), findsOneWidget);
+          await tester.tap(find.text(menuLabel));
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find
+                .descendant(
+                  of: find.byType(GraphChildCreateDialog),
+                  matching: find.byType(TextField),
+                )
+                .first,
+            title,
+          );
+          await tester.tap(find.text('Создать'));
+          await until(() => vm.graph.any((n) => n.label == title));
+          final node = vm.graph.singleWhere((node) => node.label == title);
+          expect(node.parentId, isNull);
+          expect((node.position - expected).distance, lessThan(0.01));
+          await tester.pumpAndSettle();
+          return node;
+        }
+
+        final task = await create(
+          const Offset(210, 410),
+          'Создать задачу',
+          'Standalone task',
+        );
+        final project = await create(
+          const Offset(580, 120),
+          'Создать проект',
+          'Standalone project',
+        );
+        await finish(vm.flush());
+        await tester.runAsync(() async {
+          final storedTask = (await app.tasksRepository.getById(task.id))!;
+          final storedProject = (await app.projectsRepository.getProjectById(
+            project.id,
+          ))!;
+          expect(storedTask.projectId, isNull);
+          expect(storedTask.parentTaskId, isNull);
+          expect(storedProject.goalId, isNull);
+          expect(storedProject.parentProejectId, isNull);
+          final document = await read(vm);
+          expect(document['edges'], isEmpty);
+          expect(
+            (document['nodes'] as List).map((node) => node['id']),
+            unorderedEquals([
+              'pulse:${sphere.id}',
+              'pulse:${task.id}',
+              'pulse:${project.id}',
+            ]),
+          );
+        });
+        await tester.tap(find.byTooltip('Fit graph'));
+        await tester.pumpAndSettle();
+
+        Future<TestGesture> drag(String sourceId, String targetTitle) async {
+          final plus = find.byKey(ValueKey('graph-connect:$sourceId'));
+          final mouse = await tester.startGesture(
+            tester.getCenter(plus),
+            kind: PointerDeviceKind.mouse,
+          );
+          await mouse.moveBy(const Offset(-40, 0));
+          await tester.pump();
+          await mouse.moveTo(tester.getCenter(find.text(targetTitle)));
+          await tester.pump();
+          final viewer = tester.widget<InteractiveViewer>(
+            find.byType(InteractiveViewer),
+          );
+          expect(viewer.panEnabled, isFalse);
+          return mouse;
+        }
+
+        final cancelled = await drag(project.id, task.label);
+        await cancelled.cancel();
+        await tester.pump();
+        expect(vm.nodeById(task.id)!.parentId, isNull);
+        expect(
+          tester
+              .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+              .panEnabled,
+          isTrue,
+        );
+
+        final connecting = await drag(project.id, task.label);
+        await connecting.up();
+        await until(() => vm.nodeById(task.id)?.parentId == project.id);
+        expect(
+          vm.graph.singleWhere((node) => node.id == task.id).position,
+          task.position,
+        );
+        expect(
+          vm.graph.singleWhere((node) => node.id == project.id).position,
+          project.position,
+        );
+        await finish(vm.flush());
+        await tester.runAsync(() async {
+          final storedTask = (await app.tasksRepository.getById(task.id))!;
+          expect(storedTask.projectId, project.id);
+          expect(storedTask.parentTaskId, isNull);
+          final document = await read(vm);
+          final edge = (document['edges'] as List).single as Map;
+          expect(edge['fromNode'], 'pulse:${project.id}');
+          expect(edge['toNode'], 'pulse:${task.id}');
+          expect(edge['pulse'], {'kind': 'hierarchy'});
+        });
+
+        Future<String> anotherTask(String title, Offset delta) => finish(
+          vm.standaloneCreationAt(task.position + delta)(
+            GraphNodeDraft(kind: 'task', title: title),
+            () => true,
+          ),
+        );
+        final next = await anotherTask('Next task', const Offset(560, 0));
+        final sub = await anotherTask('Child task', const Offset(560, 240));
+        await until(() => vm.nodeById(sub) != null);
+        await tester.tap(find.byTooltip('Fit graph'));
+        await tester.pumpAndSettle();
+        Future<void> choose(String targetTitle, String option) async {
+          final gesture = await drag(task.id, targetTitle);
+          await gesture.up();
+          await tester.pumpAndSettle();
+          expect(find.text('Сделать подзадачей'), findsOneWidget);
+          expect(find.text('Сделать следующей задачей'), findsOneWidget);
+          await tester.tap(find.text(option));
+          await tester.pumpAndSettle();
+        }
+
+        await choose('Next task', 'Отмена');
+        expect(vm.nodeById(next)!.attributes['predecessorTaskId'], isNull);
+        await choose('Next task', 'Сделать следующей задачей');
+        await until(
+          () => vm.nodeById(next)?.attributes['predecessorTaskId'] == task.id,
+        );
+        await choose('Child task', 'Сделать подзадачей');
+        await until(() => vm.nodeById(sub)?.parentId == task.id);
+        await finish(vm.flush());
+        await tester.runAsync(() async {
+          final edges = (await read(vm))['edges'] as List;
+          expect(edges, hasLength(3));
+          final sequence = edges.singleWhere(
+            (e) => e['toNode'] == 'pulse:$next',
+          );
+          expect(sequence['fromNode'], 'pulse:${task.id}');
+          expect(sequence['pulse'], {'kind': 'sequence'});
+          final hierarchy = edges.singleWhere(
+            (e) => e['toNode'] == 'pulse:$sub',
+          );
+          expect(hierarchy['fromNode'], 'pulse:${task.id}');
+          expect(hierarchy['pulse'], {'kind': 'hierarchy'});
+        });
+
+        await tester.pumpWidget(const SizedBox());
+        await finish(vm.dispose());
+        final reopened = await finish(open());
+        expect(
+          reopened.graph.map((node) => node.id),
+          unorderedEquals([sphere.id, task.id, project.id, next, sub]),
+        );
+        expect(reopened.nodeById(next)!.parentId, isNull);
+        expect(
+          reopened.nodeById(next)!.attributes['predecessorTaskId'],
+          task.id,
+        );
+        expect(reopened.nodeById(sub)!.parentId, task.id);
+        expect(reopened.nodeById(sub)!.attributes['predecessorTaskId'], isNull);
+        expect(reopened.nodeById(task.id)!.parentId, project.id);
+        expect(
+          (reopened.graph.singleWhere((node) => node.id == task.id).position -
+                  task.position)
+              .distance,
+          lessThan(1),
+        );
+      } finally {
+        await tester.pumpWidget(const SizedBox());
+        for (final model in models) {
+          await finish(model.dispose());
+        }
+        await disposeTestApp(tester, app);
+        await finish(vault.dispose());
+        await tester.runAsync(cleanTempDirectory);
+      }
+    },
+  );
+
   testWidgets('board menu converts a sticker and creates a new markdown card', (
     tester,
   ) async {
@@ -563,14 +810,6 @@ void main() {
     final stopping = vault.dispose().then((_) => stopped = true);
     await until(() => stopped);
     await stopping;
-    await tester.runAsync(() async {
-      final root = await Directory.systemTemp.resolveSymbolicLinks();
-      if (!p.isWithin(root, await directory.resolveSymbolicLinks())) {
-        throw StateError('Invalid temp path');
-      }
-      await directory.delete(recursive: true);
-    });
-    models.clear();
-    cleaned = true;
+    await tester.runAsync(cleanTempDirectory);
   });
 }

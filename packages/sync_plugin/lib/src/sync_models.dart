@@ -29,7 +29,7 @@ class SyncRevision {
   bool get deleted => payload == null;
 
   void validate() {
-    if (schemaVersion != 1 && schemaVersion != 2 && schemaVersion != 3) {
+    if (schemaVersion < 1 || schemaVersion > 4) {
       throw UnsupportedError('Unknown sync schema.');
     }
     if (!SyncPayload.types.contains(entityType) ||
@@ -70,18 +70,20 @@ class SyncRevision {
             SyncPayload.payloadId(entityType, payload!) != entityId)) {
       throw const FormatException('Invalid revision payload.');
     }
-    if (schemaVersion < 3 && entityType == 'task' && payload != null) {
+    if (entityType == 'task' && payload != null) {
       final task = TaskSyncCodec.decode(payload!);
-      if (task.projectId != null ||
-          task.spaceId != null ||
-          task.tags.isNotEmpty) {
+      if (schemaVersion < 4 && task.predecessorTaskId != null) {
+        throw const FormatException('Task sequences require schema 4.');
+      }
+      if (schemaVersion < 3 &&
+          (task.projectId != null ||
+              task.spaceId != null ||
+              task.tags.isNotEmpty)) {
         throw const FormatException('Task dependencies require schema 3.');
       }
-    }
-    if (schemaVersion == 1 &&
-        payload != null &&
-        TaskSyncCodec.decode(payload!).parentTaskId != null) {
-      throw const FormatException('Task relationships require schema 2.');
+      if (schemaVersion == 1 && task.parentTaskId != null) {
+        throw const FormatException('Task relationships require schema 2.');
+      }
     }
   }
 
@@ -216,6 +218,7 @@ class SyncGraph {
       }
       final invalid = <String>{};
       final hierarchy = <String, String?>{};
+      final sequence = <String, String?>{};
       final alive = {
         for (final key in heads.keys)
           if (!winner(key)!.deleted) key,
@@ -229,7 +232,13 @@ class SyncGraph {
         ).any((dep) => !alive.contains(dep))) {
           invalid.add(unit(r));
         }
-        if (r.entityType == 'task' || r.entityType == 'project') {
+        if (r.entityType == 'task') {
+          final task = TaskSyncCodec.decode(r.payload!);
+          hierarchy[key] = task.parentTaskId;
+          if (task.predecessorTaskId != null) {
+            sequence[key] = task.predecessorTaskId;
+          }
+        } else if (r.entityType == 'project') {
           hierarchy[key] = SyncPayload.hierarchyParent(
             r.entityType,
             r.payload!,
@@ -251,19 +260,21 @@ class SyncGraph {
           }
         }
       }
-      for (final start in hierarchy.keys) {
-        final path = <String>[];
-        String? next = start;
-        while (next != null && hierarchy.containsKey(next)) {
-          final index = path.indexOf(next);
-          if (index >= 0) {
-            for (final key in path.skip(index)) {
+      for (final links in [hierarchy, sequence]) {
+        final checked = <String>{};
+        for (final start in links.keys) {
+          if (checked.contains(start)) continue;
+          final path = <String>{};
+          String? next = start;
+          while (next != null && !checked.contains(next) && path.add(next)) {
+            next = links[next];
+          }
+          if (next != null && path.contains(next)) {
+            for (final key in path.skipWhile((key) => key != next)) {
               invalid.add(unit(winner(key)!));
             }
-            break;
           }
-          path.add(next);
-          next = hierarchy[next];
+          checked.addAll(path);
         }
       }
       final added = invalid.difference(blocked);

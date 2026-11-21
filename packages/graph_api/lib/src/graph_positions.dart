@@ -12,6 +12,11 @@ class GraphPoint {
 abstract interface class GraphPositionsStore {
   Future<Map<String, GraphPoint>?> loadPositions(String scopeId);
   Future<void> savePositions(String scopeId, Map<String, GraphPoint> positions);
+  Future<Map<String, GraphPoint>> loadStandalonePositions(String scopeId);
+  Future<void> saveStandalonePositions(
+    String scopeId,
+    Map<String, GraphPoint> positions,
+  );
   Future<void> deletePositions(String scopeId);
   Future<String?> loadLastSphereId();
   Future<void> saveLastSphereId(String scopeId);

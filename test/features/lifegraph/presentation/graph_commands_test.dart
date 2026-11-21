@@ -1,6 +1,7 @@
 import 'package:life_os/app/dependency_container.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'dart:async';
+import 'package:core_contracts/core_contracts.dart' show StorageException;
 import 'package:flutter/material.dart';
 import 'package:graph_canvas/graph_canvas.dart' as canvas;
 import 'package:flutter_test/flutter_test.dart';
@@ -42,6 +43,70 @@ void main() {
       );
       return id;
     }
+
+    test(
+      'standalone branches stay on their board and retain moved positions',
+      () async {
+        await vm.dispose();
+        vm = LifeGraphViewModel(
+          spheresRepository: app.spheresRepository,
+          positionsRepository: app.graphPositionsRepository,
+          notesRepository: app.graphNotesRepository,
+          graphBuilder: app.graphBuilder,
+          nodePresentations: app.graphPresentations,
+          nodeEditors: app.graphEditors,
+          commands: app.graphCommands,
+          obsidianRepository: null,
+        );
+        await vm.switchSphere(sphere.id);
+        await vm.graphStream.firstWhere((nodes) => nodes.isNotEmpty);
+        final other = Sphere.create(name: 'Other board');
+        await app.spheresRepository.addSphere(other);
+        await app.tasksRepository.addTask(
+          Task.blank().copyWith(title: 'Inbox'),
+        );
+        final createStandalone = vm.standaloneCreationAt(
+          const Offset(600, 800),
+        );
+        final project = await createStandalone(
+          GraphNodeDraft(kind: 'project', title: 'Standalone'),
+          () => true,
+        );
+        await vm.graphStream.firstWhere(
+          (nodes) => nodes.any((node) => node.id == project),
+        );
+        final task = await create(project, 'task');
+        expect(vm.nodeById(task)!.parentId, project);
+        expect(vm.taskProgressFor(project).total, 1);
+        expect(vm.graph.map((node) => node.id), [sphere.id, project, task]);
+
+        vm.commitMove(project, 750, 900);
+        await vm.arrangeNodes();
+        await vm.switchSphere(other.id);
+        await vm.graphStream.firstWhere((nodes) => nodes.isNotEmpty);
+        expect(vm.graph.single.id, other.id);
+        await vm.switchSphere(sphere.id);
+        await vm.graphStream.firstWhere((nodes) => nodes.length == 3);
+        await expectLater(
+          createStandalone(
+            GraphNodeDraft(kind: 'task', title: 'Stale'),
+            () => true,
+          ),
+          throwsStateError,
+        );
+        expect(
+          vm.graph.singleWhere((node) => node.id == project).position,
+          const Offset(750, 900),
+        );
+        await vm.deleteNode(project, keepChildren: false);
+        await vm.graphStream.firstWhere((nodes) => nodes.length == 1);
+        expect(
+          await app.graphPositionsRepository.loadStandalonePositions(sphere.id),
+          isEmpty,
+        );
+        await vm.dispose();
+      },
+    );
 
     test(
       'selection deletes overlapping subtrees once and preserves other branches',
@@ -170,7 +235,7 @@ void main() {
         final child = await create(parent, 'subTask');
         await expectLater(
           vm.attachNode(parentId: child, kind: 'subTask', id: parent),
-          throwsStateError,
+          throwsA(isA<StorageException>()),
         );
         expect(
           (await app.tasksRepository.getById(parent))!.parentTaskId,
@@ -190,6 +255,16 @@ void main() {
         expect(saved.projectId, project);
         expect(saved.title, detached.title);
         expect(saved.dueDate, detached.dueDate);
+
+        final otherProject = await create(goal, 'project');
+        await vm.graphStream.firstWhere(
+          (nodes) => nodes.any((node) => node.id == detached.id),
+        );
+        await vm.connectNodes(otherProject, detached.id);
+        expect(
+          (await app.tasksRepository.getById(detached.id))!.projectId,
+          project,
+        );
       },
     );
 

@@ -45,6 +45,7 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
     final n = widget.node;
     final s = widget.state;
     final size = widget.state.size;
+    final startConnection = s.startConnection;
 
     return MouseRegion(
       cursor: SystemMouseCursors.grab,
@@ -143,12 +144,18 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
               ),
             ),
 
-          if (widget.onAddChild != null)
+          if (widget.onAddChild != null || startConnection != null)
             Positioned(
-              right: -15,
+              // Keep the drag handle mounted when the hover-only delete button changes.
+              key: const ValueKey('add-child'),
+              right: startConnection == null ? -15 : -9,
               top: size.height / 2 - 16,
               child: Tooltip(
-                message: 'Добавить элемент',
+                message: startConnection == null
+                    ? 'Добавить элемент'
+                    : widget.onAddChild == null
+                    ? 'Протянуть связь'
+                    : 'Добавить элемент или протянуть связь',
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   onEnter: (_) => setState(() => _plusHovered = true),
@@ -163,35 +170,38 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                       setState(() => _plusPressed = false);
                       widget.onAddChild?.call();
                     },
-                    child: AnimatedScale(
-                      scale: _plusPressed ? 0.85 : (_plusHovered ? 1.14 : 1),
-                      duration: const Duration(milliseconds: 140),
-                      curve: Curves.easeOutBack,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _plusHovered
-                              ? Color.lerp(_accent, Colors.white, 0.18)!
-                              : _accent,
-                          border: Border.all(
-                            color: _palette.surfaceDim,
-                            width: 3,
-                          ),
-                          boxShadow: const [
-                            BoxShadow(
-                              color: Color(0x66000000),
-                              blurRadius: 8,
-                              offset: Offset(0, 3),
+                    child: _connectionHandle(
+                      startConnection: startConnection,
+                      child: AnimatedScale(
+                        scale: _plusPressed ? 0.85 : (_plusHovered ? 1.14 : 1),
+                        duration: const Duration(milliseconds: 140),
+                        curve: Curves.easeOutBack,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _plusHovered
+                                ? Color.lerp(_accent, Colors.white, 0.18)!
+                                : _accent,
+                            border: Border.all(
+                              color: _palette.surfaceDim,
+                              width: 3,
                             ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.add,
-                          size: 17,
-                          color: Color(0xFF08161B),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x66000000),
+                                blurRadius: 8,
+                                offset: Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            size: 17,
+                            color: Color(0xFF08161B),
+                          ),
                         ),
                       ),
                     ),
@@ -281,6 +291,26 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _connectionHandle({
+    required GestureMultiDragStartCallback? startConnection,
+    required Widget child,
+  }) {
+    if (startConnection == null) return child;
+    return RawGestureDetector(
+      key: ValueKey('graph-connect:${widget.node.id}'),
+      gestures: {
+        ImmediateMultiDragGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<
+              ImmediateMultiDragGestureRecognizer
+            >(
+              ImmediateMultiDragGestureRecognizer.new,
+              (recognizer) => recognizer.onStart = startConnection,
+            ),
+      },
+      child: child,
     );
   }
 

@@ -41,6 +41,7 @@ class Tasks extends Table {
   TextColumn get space => text().nullable()();
   TextColumn get projectId => text().nullable()();
   TextColumn get parentTaskId => text().nullable()();
+  TextColumn get predecessorTaskId => text().nullable()();
   TextColumn get spaceId => text().nullable()();
 
   IntColumn get timerSeconds => integer().withDefault(const Constant(0))();
@@ -176,7 +177,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   Future<void> _createSyncProjectionTriggers() async {
     for (final event in ['INSERT', 'UPDATE', 'DELETE']) {
@@ -202,6 +203,7 @@ class AppDatabase extends _$AppDatabase {
         await customStatement('CREATE UNIQUE INDEX tags_sync_id_unique ON tags(sync_id)');
       },
       onUpgrade: (Migrator m, int from, int to) async {
+        if (from < 14) await m.addColumn(tasks, tasks.predecessorTaskId);
         if (from < 12) {
           await m.addColumn(tags, tags.syncId);
           await customStatement('CREATE UNIQUE INDEX tags_sync_id_unique ON tags(sync_id)');

@@ -97,6 +97,14 @@ class DriftGraphDeletion implements GraphDeletion {
       }
     }
     if (tasks.isNotEmpty) {
+      await (db.update(
+        db.tasks,
+      )..where((row) => row.predecessorTaskId.isIn(tasks))).write(
+        TasksCompanion(
+          predecessorTaskId: const Value(null),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
       await (db.delete(db.tasks)..where((t) => t.id.isIn(tasks))).go();
     }
     if (projects.isNotEmpty) {

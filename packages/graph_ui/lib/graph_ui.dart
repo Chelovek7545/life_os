@@ -18,6 +18,7 @@ class GraphNodeInteraction {
     required this.dragStart,
     required this.dragUpdate,
     required this.dragEnd,
+    this.startConnection,
     this.edit,
     this.addChild,
     this.remove,
@@ -37,6 +38,7 @@ class GraphNodeInteraction {
   final GestureDragStartCallback dragStart;
   final GestureDragUpdateCallback dragUpdate;
   final GestureDragEndCallback dragEnd;
+  final GestureMultiDragStartCallback? startConnection;
   final VoidCallback? edit;
   final VoidCallback? addChild;
   final VoidCallback? remove;

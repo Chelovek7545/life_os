@@ -18,6 +18,7 @@ class TasksNodeUi {
     required this.editor,
     required this.create,
     required this.attach,
+    this.standaloneForm,
   });
   final Size size;
   final Widget Function(
@@ -29,6 +30,7 @@ class TasksNodeUi {
   card;
   final GraphFormBuilder editor;
   final GraphFormBuilder create;
+  final GraphStandaloneForm? standaloneForm;
   final GraphFormBuilder Function(Stream<List<Task>> Function() watchTasks)
   attach;
 }
@@ -122,7 +124,11 @@ class TasksPlugin {
           presentation(TasksGraphContributor.subTaskKind, visuals.subtask),
         ],
         editors: [
-          GraphNodeEditor(kind: 'task', builder: visuals.task.editor),
+          GraphNodeEditor(
+            kind: 'task',
+            builder: visuals.task.editor,
+            standaloneForm: visuals.task.standaloneForm,
+          ),
           GraphNodeEditor(kind: 'subTask', builder: visuals.subtask.editor),
         ],
         childActions: tasksChildActions(visuals, _watchFormTasks),

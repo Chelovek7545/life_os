@@ -115,6 +115,8 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
     String? taskId;
     final fields = <String, String>{
       if (revision.entityType == 'task') ...{
+        if (m['predecessorTaskId'] != null)
+          'predecessorTaskId': 'Убрать предшествующую задачу',
         if (m['parentTaskId'] != null)
           'parentTaskId': 'Убрать связь с родительской задачей',
         if (m['projectId'] != null) 'projectId': 'Отвязать от проекта',
@@ -140,6 +142,9 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
         case 'task':
           return TaskSyncCodec.encode(
             TaskSyncCodec.decode(revision.payload!).copyWith(
+              predecessorTaskId: cleared.contains('predecessorTaskId')
+                  ? const Wrapped(null)
+                  : null,
               parentTaskId: cleared.contains('parentTaskId')
                   ? const Wrapped(null)
                   : null,
@@ -398,6 +403,7 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
     };
     const relations = {
       'parentTaskId': 'Родительская задача',
+      'predecessorTaskId': 'Предшествующая задача',
       'projectId': 'Проект',
       'parentProjectId': 'Родительский проект',
       'goalId': 'Цель',
@@ -405,6 +411,7 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
     };
     const types = {
       'parentTaskId': 'task',
+      'predecessorTaskId': 'task',
       'projectId': 'project',
       'parentProjectId': 'project',
       'goalId': 'goal',

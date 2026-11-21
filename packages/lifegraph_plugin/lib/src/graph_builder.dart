@@ -9,22 +9,37 @@ class GraphBuilder {
   final _streams = OwnedStreams();
   Future<void> dispose() => _streams.close();
 
-  Stream<List<GraphNodeData>> watchGraph(String rootId) =>
-      _streams.watch(() => _watchGraph(rootId));
+  Stream<List<GraphNodeData>> watchGraph(
+    String rootId, {
+    Stream<Set<String>>? standaloneIds,
+  }) => _streams.watch(
+    () => _watchGraph(rootId, standaloneIds ?? Stream.value(const {})),
+  );
 
-  Stream<List<GraphNodeData>> _watchGraph(String rootId) {
+  Stream<List<GraphNodeData>> _watchGraph(
+    String rootId,
+    Stream<Set<String>> standaloneIds,
+  ) {
     final scope = GraphScope(rootId: rootId, rootKind: rootKind);
-    return registry.watch().switchMap((contributors) {
-      if (contributors.isEmpty) return Stream.value(const <GraphNodeData>[]);
+    final snapshots = registry.watch().switchMap((contributors) {
+      if (contributors.isEmpty) {
+        return Stream.value(const <List<GraphNodeData>>[]);
+      }
       return Rx.combineLatestList(
         contributors.map((contributor) => contributor.watch(scope)),
-      ).map((snapshots) => _project(scope, snapshots));
+      );
     });
+    return Rx.combineLatest2(
+      snapshots,
+      standaloneIds,
+      (nodes, ids) => _project(scope, nodes, ids),
+    );
   }
 
   List<GraphNodeData> _project(
     GraphScope scope,
     List<List<GraphNodeData>> snapshots,
+    Set<String> standaloneIds,
   ) {
     final byId = <String, GraphNodeData>{};
     for (final nodes in snapshots) {
@@ -44,8 +59,14 @@ class GraphBuilder {
     for (final node in byId.values) {
       if (node.parentId != null) (children[node.parentId!] ??= []).add(node);
     }
-    final result = <GraphNodeData>[root];
-    final visited = <String>{root.id};
+    final result = [
+      root,
+      for (final id in standaloneIds)
+        if (byId[id] case final node?
+            when node.parentId == null && node.kind != scope.rootKind)
+          node,
+    ];
+    final visited = result.map((node) => node.id).toSet();
     for (var index = 0; index < result.length; index++) {
       final parent = result[index];
       for (final child in children[parent.id] ?? const <GraphNodeData>[]) {

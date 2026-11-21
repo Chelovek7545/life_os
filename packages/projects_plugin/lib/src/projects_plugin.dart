@@ -17,6 +17,7 @@ class ProjectsUiBindings {
     required this.nodeSize,
     required this.editor,
     required this.createForm,
+    this.standaloneForm,
   });
   final Widget Function(BuildContext, ProjectsViewModel) screen;
   final Widget Function(BuildContext, GraphNodeData, GraphNodeInteraction)
@@ -24,6 +25,7 @@ class ProjectsUiBindings {
   final Size nodeSize;
   final GraphFormBuilder editor;
   final GraphFormBuilder createForm;
+  final GraphStandaloneForm? standaloneForm;
 }
 
 List<GraphChildAction> projectsChildActions(GraphFormBuilder createForm) => [
@@ -85,7 +87,13 @@ class ProjectsPlugin {
             builder: visuals.nodeCard,
           ),
         ],
-        editors: [GraphNodeEditor(kind: 'project', builder: visuals.editor)],
+        editors: [
+          GraphNodeEditor(
+            kind: 'project',
+            builder: visuals.editor,
+            standaloneForm: visuals.standaloneForm,
+          ),
+        ],
         childActions: projectsChildActions(visuals.createForm),
       ),
       contributors: contributors,

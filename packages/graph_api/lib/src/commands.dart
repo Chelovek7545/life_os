@@ -55,17 +55,21 @@ class GraphDeleteRequest {
 }
 
 /// A request to attach an existing entity below a resolved graph node.
+enum GraphLinkType { hierarchy, sequence }
+
 class GraphAttachRequest {
   const GraphAttachRequest({
     required this.scope,
     required this.parent,
     required this.kind,
     required this.id,
+    this.linkType = GraphLinkType.hierarchy,
   });
   final GraphScope scope;
   final GraphNodeData parent;
   final String kind;
   final String id;
+  final GraphLinkType linkType;
 }
 
 typedef GraphCreateHandler =
@@ -86,6 +90,7 @@ class GraphNodeCommands {
     required this.kind,
     Set<String> parentKinds = const {},
     this.create,
+    this.createStandalone,
     this.update,
     this.delete,
     this.attach,
@@ -94,6 +99,7 @@ class GraphNodeCommands {
   final String kind;
   final Set<String> parentKinds;
   final GraphCreateHandler? create;
+  final Future<String> Function(GraphNodeDraft draft)? createStandalone;
   final GraphUpdateHandler? update;
   final GraphDeleteHandler? delete;
   final GraphAttachHandler? attach;
@@ -112,6 +118,8 @@ class GraphCommandRegistry {
 
   bool canUpdate(String kind) => _find(kind)?.commands.update != null;
   bool canDelete(String kind) => _find(kind)?.commands.delete != null;
+  bool canCreateStandalone(String kind) =>
+      _find(kind)?.commands.createStandalone != null;
 
   /// Captures the current command owner for validating a delayed UI action.
   bool Function() guardFor(String kind) {
@@ -175,6 +183,15 @@ class GraphCommandRegistry {
       );
     }
     return _run(entry.owner, () => handler(request));
+  }
+
+  Future<String> createStandalone(GraphNodeDraft draft) async {
+    final entry = _require(draft.kind);
+    final handler = entry.commands.createStandalone;
+    if (handler == null) {
+      throw UnsupportedError('Cannot create ${draft.kind} without a parent.');
+    }
+    return _run(entry.owner, () => handler(draft));
   }
 
   Future<void> update(GraphUpdateRequest request) async {

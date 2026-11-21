@@ -383,7 +383,7 @@ void main() {
         entityId: r.entityId,
         parents: [],
         payload: r.payload,
-        schemaVersion: 4,
+        schemaVersion: 5,
       );
       await expectLater(
         b.receive(SyncBatch(batch.source, 1, [SyncEntry(2, unknown)])),

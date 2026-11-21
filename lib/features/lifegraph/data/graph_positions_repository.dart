@@ -16,13 +16,22 @@ class GraphPositionsRepository implements GraphPositionsStore {
   static const String _lastSphereKey = 'life_graph.last_sphere';
 
   String _key(String sphereId) => '$prefix.$sphereId';
+  String _standaloneKey(String sphereId) => '${_key(sphereId)}.standalone';
 
   /// Загружает позиции для графа (сферы).
   /// Возвращает null, если позиций ещё нет.
   @override
-  Future<Map<String, GraphPoint>?> loadPositions(String sphereId) async {
+  Future<Map<String, GraphPoint>?> loadPositions(String sphereId) =>
+      _load(_key(sphereId));
+
+  @override
+  Future<Map<String, GraphPoint>> loadStandalonePositions(
+    String sphereId,
+  ) async => await _load(_standaloneKey(sphereId)) ?? const {};
+
+  Future<Map<String, GraphPoint>?> _load(String key) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key(sphereId));
+    final raw = prefs.getString(key);
     if (raw == null) return null;
     try {
       final data = jsonDecode(raw) as Map<String, dynamic>;
@@ -49,10 +58,18 @@ class GraphPositionsRepository implements GraphPositionsStore {
   Future<void> savePositions(
     String sphereId,
     Map<String, GraphPoint> positions,
-  ) async {
+  ) => _save(_key(sphereId), positions);
+
+  @override
+  Future<void> saveStandalonePositions(
+    String sphereId,
+    Map<String, GraphPoint> positions,
+  ) => _save(_standaloneKey(sphereId), positions);
+
+  Future<void> _save(String key, Map<String, GraphPoint> positions) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _key(sphereId),
+    final saved = await prefs.setString(
+      key,
       jsonEncode({
         'v': _version,
         'entities': positions.map(
@@ -60,6 +77,7 @@ class GraphPositionsRepository implements GraphPositionsStore {
         ),
       }),
     );
+    if (!saved) throw StateError('Could not save graph positions.');
   }
 
   /// Удаляет позиции графа (например, при удалении сферы).
@@ -67,6 +85,7 @@ class GraphPositionsRepository implements GraphPositionsStore {
   Future<void> deletePositions(String sphereId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_key(sphereId));
+    await prefs.remove(_standaloneKey(sphereId));
   }
 
   // ── App-state (не слот графа): какая сфера открыта последней ─────────────

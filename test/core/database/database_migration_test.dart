@@ -9,6 +9,9 @@ import 'package:tasks_api/tasks_api.dart';
 
 void main() {
   Future<void> removeSyncProjection(AppDatabase db) async {
+    await db.customStatement(
+      'ALTER TABLE tasks DROP COLUMN predecessor_task_id',
+    );
     for (final event in ['insert', 'update', 'delete']) {
       await db.customStatement('DROP TRIGGER sync_entity_heads_after_$event');
     }
@@ -26,6 +29,33 @@ void main() {
 
   late Directory directory;
   late File file;
+  test(
+    'v13 tasks keep their hierarchy and start without a predecessor',
+    () async {
+      final old = AppDatabase(NativeDatabase(file));
+      final parent = Task.blank();
+      final child = Task.blank().copyWith(parentTaskId: Wrapped(parent.id));
+      final store = DriftSyncStore(old);
+      await store.initialize('dataset');
+      await store.saveTask(parent, expectedHeads: {});
+      await store.saveTask(child, expectedHeads: {});
+      await old.customStatement(
+        'ALTER TABLE tasks DROP COLUMN predecessor_task_id',
+      );
+      await old.customStatement('PRAGMA user_version = 13');
+      await old.close();
+      final upgraded = AppDatabase(NativeDatabase(file));
+      try {
+        final dao = TasksDao(upgraded, journal: DriftSyncStore(upgraded));
+        final migrated = (await dao.getTaskWithTags(child.id))!;
+        expect(migrated.parentTaskId, parent.id);
+        expect(migrated.predecessorTaskId, isNull);
+        expect(migrated.storageRevision, isNotNull);
+      } finally {
+        await upgraded.close();
+      }
+    },
+  );
   test(
     'v12 builds the projection lazily without rewriting the journal',
     () async {

@@ -1,4 +1,5 @@
 import 'package:graph_ui/graph_ui.dart';
+import 'package:graph_api/graph_api.dart' show GraphLinkType;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -15,6 +16,9 @@ import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart
 import 'package:spheres_api/spheres_api.dart';
 import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
 import 'package:notes_api/notes_api.dart';
+import 'package:projects_plugin/projects_logic.dart'
+    show ProjectsGraphContributor;
+import 'package:tasks_plugin/tasks_logic.dart' show TasksGraphContributor;
 import 'widgets/markdown_note_dialog.dart';
 import 'widgets/graph_note_creation_dialog.dart';
 import 'widgets/graph_note_context_menu.dart';
@@ -230,6 +234,10 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
               child: graph.GraphView(
                 key: ValueKey(sphereId),
                 onSelectionContextMenu: _showSelectionMenu,
+                onBackgroundContextMenu: ready ? _showCreationMenu : null,
+                canStartConnection: _canStartConnection,
+                canConnect: _canConnect,
+                onConnect: _connectNodes,
                 nodes: widget.viewModel.graphStream,
                 notes: widget.viewModel.notesStream,
                 onAction: _onAction,
@@ -401,6 +409,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
               dragStart: state.dragStart,
               dragUpdate: state.dragUpdate,
               dragEnd: state.dragEnd,
+              startConnection: state.startConnection,
               edit: dialogs.canEdit(node.kind)
                   ? () => dialogs.edit(context, actions)
                   : null,
@@ -421,6 +430,132 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           );
         },
       );
+
+  bool _canStartConnection(String id) {
+    final model = widget.viewModel;
+    final kind = model.nodeById(id)?.kind;
+    return switch (kind) {
+      ProjectsGraphContributor.kind => model.commands.canAttach(
+        TasksGraphContributor.taskKind,
+        kind!,
+      ),
+      TasksGraphContributor.taskKind || TasksGraphContributor.subTaskKind =>
+        model.commands.canAttach(TasksGraphContributor.subTaskKind, kind!),
+      _ => false,
+    };
+  }
+
+  bool _canConnect(String source, String target) {
+    final task = widget.viewModel.nodeById(target);
+    if (task == null || source == target || !_canStartConnection(source)) {
+      return false;
+    }
+    if (widget.viewModel.nodeById(source)?.kind ==
+        ProjectsGraphContributor.kind) {
+      return task.kind == TasksGraphContributor.taskKind &&
+          task.parentId == null;
+    }
+    if (task.kind != TasksGraphContributor.taskKind &&
+        task.kind != TasksGraphContributor.subTaskKind) {
+      return false;
+    }
+    return _taskLinkTypes(source, target).isNotEmpty;
+  }
+
+  Set<GraphLinkType> _taskLinkTypes(String source, String target) {
+    final model = widget.viewModel;
+    final task = model.nodeById(target);
+    if (task == null ||
+        task.parentId == source ||
+        task.attributes['predecessorTaskId'] == source) {
+      return {};
+    }
+
+    bool wouldCycle(GraphLinkType type) {
+      final visited = {target};
+      String? id = source;
+      while (id != null) {
+        if (!visited.add(id)) return true;
+        final node = model.nodeById(id);
+        id = type == GraphLinkType.hierarchy
+            ? node?.parentId
+            : node?.attributes['predecessorTaskId'] as String?;
+      }
+      return false;
+    }
+
+    return {
+      if (!wouldCycle(GraphLinkType.hierarchy)) GraphLinkType.hierarchy,
+      if (task.attributes['predecessorTaskId'] == null &&
+          !wouldCycle(GraphLinkType.sequence))
+        GraphLinkType.sequence,
+    };
+  }
+
+  Future<void> _connectNodes(String source, String target) async {
+    final model = widget.viewModel;
+    try {
+      if (!_canConnect(source, target)) return;
+      if (model.nodeById(source)?.kind == ProjectsGraphContributor.kind) {
+        await model.connectNodes(source, target);
+        return;
+      }
+      final active = model.connectionGuard(TasksGraphContributor.subTaskKind);
+      final task = model.nodeById(target)!;
+      final options = _taskLinkTypes(source, target);
+      final sourceTitle = model.nodeById(source)!.title;
+      final choice = await showDialog<GraphLinkType>(
+        context: context,
+        builder: (context) => SimpleDialog(
+          title: Text('Как связать «${task.title}» с задачей «$sourceTitle»?'),
+          children: [
+            if (options.contains(GraphLinkType.hierarchy))
+              SimpleDialogOption(
+                onPressed: () =>
+                    Navigator.pop(context, GraphLinkType.hierarchy),
+                child: Text(
+                  task.kind == TasksGraphContributor.subTaskKind
+                      ? 'Перенести подзадачу'
+                      : 'Сделать подзадачей',
+                ),
+              ),
+            if (options.contains(GraphLinkType.sequence))
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(context, GraphLinkType.sequence),
+                child: const Text('Сделать следующей задачей'),
+              ),
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+          ],
+        ),
+      );
+      if (choice == null || !mounted) return;
+      bool available() {
+        if (!mounted || !active() || !_canConnect(source, target)) return false;
+        if (choice == GraphLinkType.hierarchy &&
+            model.nodeById(target)?.parentId != task.parentId) {
+          return false;
+        }
+        return _taskLinkTypes(source, target).contains(choice);
+      }
+
+      if (!available()) return;
+      await model.connectNodes(
+        source,
+        target,
+        attachmentKind: TasksGraphContributor.subTaskKind,
+        linkType: choice,
+        isAvailable: available,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось создать связь: $error')),
+      );
+    }
+  }
 
   Future<void> _showCreateNoteOptions(BuildContext context) async {
     final choice = await showGraphNoteCreationDialog(
@@ -490,6 +625,47 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         ).showSnackBar(SnackBar(content: Text('$error')));
       }
     }
+  }
+
+  Future<void> _showCreationMenu(Offset position, Offset canvasPoint) async {
+    final model = widget.viewModel;
+    if (model.currentSphereId == null || model.isClosing) return;
+    final dialogs = GraphNodeDialogs(
+      registry: model.nodeEditors,
+      commands: model.commands,
+    );
+    final editors = dialogs.standaloneEditors;
+    if (editors.isEmpty) return;
+    final create = model.standaloneCreationAt(canvasPoint);
+    final overlay =
+        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
+    final point = overlay.globalToLocal(position);
+    final palette = AppGraphThemes.dark;
+    final editor = await showMenu<GraphNodeEditor>(
+      context: context,
+      position: RelativeRect.fromSize(
+        Rect.fromLTWH(point.dx, point.dy, 0, 0),
+        overlay.size,
+      ),
+      color: palette.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: palette.border),
+      ),
+      items: [
+        for (final editor in editors)
+          PopupMenuItem(
+            value: editor,
+            child: Text(
+              editor.standaloneForm!.label,
+              style: TextStyle(color: palette.text, fontSize: 13),
+            ),
+          ),
+      ],
+    );
+    if (editor == null || !mounted || widget.viewModel != model) return;
+    await dialogs.createStandalone(context, editor, create);
   }
 
   Future<void> _showSelectionMenu(

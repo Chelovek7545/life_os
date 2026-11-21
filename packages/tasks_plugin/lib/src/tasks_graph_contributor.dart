@@ -24,6 +24,8 @@ class TasksGraphContributor implements GraphContributor {
           inheritParentColor: task.parentTaskId == null,
           attributes: {
             'taskStatus': task.status.name,
+            if (task.predecessorTaskId != null)
+              'predecessorTaskId': task.predecessorTaskId,
             if (task.startsAt != null &&
                 task.endsAt != null &&
                 task.duration.inMinutes > 0)

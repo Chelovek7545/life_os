@@ -74,11 +74,28 @@ class GraphNodeActionContext {
 typedef GraphFormBuilder =
     Widget Function(BuildContext context, GraphNodeActionContext actions);
 
+typedef GraphStandaloneFormBuilder =
+    Widget Function(
+      BuildContext context,
+      Future<void> Function(GraphNodeDraft draft) create,
+    );
+
+class GraphStandaloneForm {
+  const GraphStandaloneForm({required this.label, required this.builder});
+  final String label;
+  final GraphStandaloneFormBuilder builder;
+}
+
 /// A module-owned editor for one node kind.
 class GraphNodeEditor {
-  const GraphNodeEditor({required this.kind, required this.builder});
+  const GraphNodeEditor({
+    required this.kind,
+    required this.builder,
+    this.standaloneForm,
+  });
   final String kind;
   final GraphFormBuilder builder;
+  final GraphStandaloneForm? standaloneForm;
 }
 
 enum GraphChildOperation { create, attach }
@@ -210,6 +227,40 @@ class GraphNodeDialogs {
   bool canEdit(String kind) =>
       registry.hasEditor(kind) && commands.canUpdate(kind);
   bool canAddChild(String parentKind) => _actions(parentKind).isNotEmpty;
+  List<GraphNodeEditor> get standaloneEditors => [
+    for (final owner in registry._owners.values)
+      for (final editor in owner.editors)
+        if (editor.standaloneForm != null &&
+            commands.canCreateStandalone(editor.kind))
+          editor,
+  ];
+
+  Future<void> createStandalone(
+    BuildContext context,
+    GraphNodeEditor editor,
+    Future<String> Function(GraphNodeDraft, bool Function()) create,
+  ) async {
+    final entry = registry._editor(editor.kind);
+    final form = editor.standaloneForm;
+    if (entry == null ||
+        !identical(entry.editor, editor) ||
+        form == null ||
+        !commands.canCreateStandalone(editor.kind)) {
+      return;
+    }
+    await _show(
+      context,
+      entry.owner,
+      (context, active) => form.builder(context, (draft) async {
+        if (draft.kind != editor.kind) {
+          throw ArgumentError('The draft does not match the creation form.');
+        }
+        await create(draft, active);
+      }),
+      commands.guardFor(editor.kind),
+    );
+  }
+
   List<GraphChildAction> _actions(String parentKind) => registry
       .childActions(parentKind)
       .where(
@@ -235,8 +286,8 @@ class GraphNodeDialogs {
     await _show(
       context,
       entry.owner,
-      entry.editor.builder,
-      actions,
+      (context, active) =>
+          entry.editor.builder(context, actions._guarded(active)),
       commands.guardFor(actions.node.kind),
     );
   }
@@ -287,8 +338,8 @@ class GraphNodeDialogs {
     await _show(
       context,
       entry.owner,
-      entry.action.builder,
-      actions,
+      (context, active) =>
+          entry.action.builder(context, actions._guarded(active)),
       commands.guardFor(entry.action.childKind),
     );
   }
@@ -296,34 +347,31 @@ class GraphNodeDialogs {
   Future<void> _show(
     BuildContext context,
     _EditorOwner owner,
-    GraphFormBuilder builder,
-    GraphNodeActionContext actions,
+    Widget Function(BuildContext, bool Function()) builder,
     bool Function() commandActive,
-  ) => showDialog<void>(
-    context: context,
-    builder: (context) => ListenableBuilder(
-      listenable: registry,
-      builder: (context, _) => registry._active(owner) && commandActive()
-          ? builder(
-              context,
-              actions._guarded(
-                () => registry._active(owner) && commandActive(),
-              ),
-            )
-          : AlertDialog(
-              title: const Text('Действие больше недоступно'),
-              content: const Text(
-                'Модуль был отключён. Закройте форму и выберите доступное действие.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Закрыть'),
+  ) {
+    bool active() => registry._active(owner) && commandActive();
+    return showDialog<void>(
+      context: context,
+      builder: (context) => ListenableBuilder(
+        listenable: registry,
+        builder: (context, _) => active()
+            ? builder(context, active)
+            : AlertDialog(
+                title: const Text('Действие больше недоступно'),
+                content: const Text(
+                  'Модуль был отключён. Закройте форму и выберите доступное действие.',
                 ),
-              ],
-            ),
-    ),
-  );
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Закрыть'),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
 
   Future<void> remove(
     BuildContext context,

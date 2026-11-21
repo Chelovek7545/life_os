@@ -53,6 +53,13 @@ TasksPlugin createTasksPlugin({
       ).builder(context, node, state),
       editor: graphNodeEditor(spec).builder,
       create: (_, actions) => graphChildForm(spec, actions),
+      standaloneForm: subtask
+          ? null
+          : GraphStandaloneForm(
+              label: 'Создать задачу',
+              builder: (_, create) =>
+                  GraphChildCreateDialog(spec: spec, onSave: create),
+            ),
       attach: (watchTasks) =>
           tasksGraphAttachForm(watchTasks, subtask: subtask),
     );

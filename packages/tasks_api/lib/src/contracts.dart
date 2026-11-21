@@ -13,6 +13,7 @@ abstract interface class TaskCommands {
   Future<void> updateTask(Task task);
   Future<void> setTaskStatus(String id, TaskStatus status);
   Future<void> moveTaskUnder(String id, String parentId);
+  Future<void> linkTaskAfter(String id, String predecessorId);
   Future<void> deleteTask(String id);
 }
 

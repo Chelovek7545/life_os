@@ -20,26 +20,26 @@ GraphNodeCommands _commands(
   GraphDeleteHandler delete,
 ) {
   final subtask = kind == TasksGraphContributor.subTaskKind;
+  Future<String> create(GraphNodeDraft draft, String? parentId) async {
+    final task = Task.blank().copyWith(
+      title: draft.title,
+      description: draft.subtitle,
+      projectId: Wrapped(subtask ? null : parentId),
+      parentTaskId: Wrapped(subtask ? parentId : null),
+      status: TaskStatus.notStarted,
+      dueDate: Wrapped(draft.attributes['dueDate'] as DateTime?),
+      startsAt: Wrapped(draft.attributes['startsAt'] as DateTime?),
+      endsAt: Wrapped(draft.attributes['endsAt'] as DateTime?),
+    );
+    await tasks.addTask(task);
+    return task.id;
+  }
+
   return GraphNodeCommands(
     kind: kind,
     parentKinds: parentKinds,
-    create: (request) async {
-      final draft = request.draft;
-      final task = Task.blank().copyWith(
-        title: draft.title,
-        description: draft.subtitle,
-        projectId: subtask ? const Wrapped(null) : Wrapped(request.parent.id),
-        parentTaskId: subtask
-            ? Wrapped(request.parent.id)
-            : const Wrapped(null),
-        status: TaskStatus.notStarted,
-        dueDate: Wrapped(draft.attributes['dueDate'] as DateTime?),
-        startsAt: Wrapped(draft.attributes['startsAt'] as DateTime?),
-        endsAt: Wrapped(draft.attributes['endsAt'] as DateTime?),
-      );
-      await tasks.addTask(task);
-      return task.id;
-    },
+    create: (request) => create(request.draft, request.parent.id),
+    createStandalone: subtask ? null : (draft) => create(draft, null),
     update: (request) async {
       final existing = await tasks.getById(request.current.id);
       if (existing == null) return;
@@ -61,6 +61,11 @@ GraphNodeCommands _commands(
       );
     },
     attach: (request) async {
+      if (request.linkType == GraphLinkType.sequence) {
+        if (!subtask) throw UnsupportedError('Sequence requires two tasks.');
+        await tasks.linkTaskAfter(request.id, request.parent.id);
+        return request.id;
+      }
       final existing = await tasks.getById(request.id);
       if (existing == null) return null;
       if (!subtask) {
@@ -71,22 +76,7 @@ GraphNodeCommands _commands(
           existing.copyWith(projectId: Wrapped(request.parent.id)),
         );
       } else {
-        // Walk ancestors before writing: attaching a root below its descendant
-        // would otherwise remove the whole branch from the graph.
-        final byId = {
-          for (final task in await tasks.getAllTasks()) task.id: task,
-        };
-        final visited = <String>{};
-        String? ancestor = request.parent.id;
-        while (ancestor != null) {
-          if (ancestor == existing.id || !visited.add(ancestor)) {
-            throw StateError('Attaching this task would create a cycle.');
-          }
-          ancestor = byId[ancestor]?.parentTaskId;
-        }
-        await tasks.updateTask(
-          existing.copyWith(parentTaskId: Wrapped(request.parent.id)),
-        );
+        await tasks.moveTaskUnder(existing.id, request.parent.id);
       }
       return existing.id;
     },

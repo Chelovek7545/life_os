@@ -193,8 +193,12 @@ class CanvasBoardDocument {
       'edges': [
         for (final edge in edges)
           if (!(edge['id'] as String).startsWith('pulse-hierarchy:') &&
+              !(edge['id'] as String).startsWith('pulse-sequence:') &&
               !((edge['pulse'] is Map) &&
-                  edge['pulse']['kind'] == 'hierarchy') &&
+                  const {
+                    'hierarchy',
+                    'sequence',
+                  }.contains(edge['pulse']['kind'])) &&
               !removed.contains(edge['fromNode']) &&
               !removed.contains(edge['toNode']))
             edge,

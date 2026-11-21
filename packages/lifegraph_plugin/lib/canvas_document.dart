@@ -94,6 +94,20 @@ Map<String, Object?> createSphereCanvas({
     'nodes': nodes,
     'edges': [
       for (final entity in entities)
+        if (entity.node.attributes['predecessorTaskId']
+            case final String previous)
+          if (ids.contains('pulse:$previous'))
+            {
+              'id': 'pulse-sequence:$previous:${entity.node.id}',
+              'fromNode': 'pulse:$previous',
+              'toNode': 'pulse:${entity.node.id}',
+              'fromSide': 'right',
+              'toSide': 'left',
+              'toEnd': 'arrow',
+              'label': 'Следующая задача',
+              'pulse': {'kind': 'sequence'},
+            },
+      for (final entity in entities)
         if (entity.node.parentId case final String parentId)
           if (ids.contains('pulse:$parentId'))
             {

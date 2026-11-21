@@ -118,7 +118,11 @@ Future<void> showGraph(WidgetTester tester, LifeGraphViewModel vm) async {
 
 Finder plusFor(String id) => find.descendant(
   of: find.byKey(ValueKey(id)),
-  matching: find.byTooltip('Добавить элемент'),
+  matching: find.byWidgetPredicate(
+    (widget) =>
+        widget is Tooltip &&
+        (widget.message?.startsWith('Добавить элемент') ?? false),
+  ),
 );
 
 void main() {

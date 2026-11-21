@@ -124,6 +124,7 @@ class GraphLayout {
 /// One node of the graph. The host owns instances; emit fresh objects
 /// (see [clone]) so the internal diff can see changes.
 class GraphNode {
+  final String? predecessorId;
   final String id;
   final String label;
   final int index; // creation order — drives the boot stagger
@@ -138,6 +139,7 @@ class GraphNode {
     required this.index,
     required this.depth,
     required this.parentId,
+    this.predecessorId,
     this.size = const Size(176, 68),
     required this.position,
   });
@@ -148,6 +150,7 @@ class GraphNode {
     index: index,
     depth: depth,
     parentId: parentId,
+    predecessorId: predecessorId,
     size: size,
     position: position,
   );
@@ -371,6 +374,7 @@ class NodeState {
   final GestureDragStartCallback dragStart;
   final GestureDragUpdateCallback dragUpdate;
   final GestureDragEndCallback dragEnd;
+  final GestureMultiDragStartCallback? startConnection;
 
   const NodeState({
     required this.node,
@@ -388,6 +392,7 @@ class NodeState {
     required this.dragStart,
     required this.dragUpdate,
     required this.dragEnd,
+    this.startConnection,
   });
 }
 
@@ -502,7 +507,14 @@ class GraphView extends StatefulWidget {
   /// User intent. Wire it to your store/bloc/repository.
   final ValueChanged<GraphAction>? onAction;
   final void Function(GraphSelection selection, Offset position)?
-      onSelectionContextMenu;
+  onSelectionContextMenu;
+  final void Function(Offset globalPosition, Offset canvasPosition)?
+  onBackgroundContextMenu;
+
+  /// The host opts nodes in and decides which drops request a connection.
+  final bool Function(String sourceId)? canStartConnection;
+  final bool Function(String sourceId, String targetId)? canConnect;
+  final void Function(String sourceId, String targetId)? onConnect;
 
   final GraphViewTheme theme;
   final GraphLayout layout;
@@ -530,6 +542,10 @@ class GraphView extends StatefulWidget {
     required this.nodes,
     this.onAction,
     this.onSelectionContextMenu,
+    this.onBackgroundContextMenu,
+    this.canStartConnection,
+    this.canConnect,
+    this.onConnect,
     this.theme = GraphViewTheme.deep,
     this.layout = const GraphLayout(),
     this.camera,
@@ -567,6 +583,7 @@ class _GraphViewState extends State<GraphView>
   bool _selectionModifier = false;
   Offset? _selectionAnchor;
   Offset? _selectionPoint;
+  _ConnectionDrag? _connection;
   Set<String> _frameNodes = {};
   Set<String> _frameNotes = {};
   Offset _groupStart = Offset.zero;
@@ -657,6 +674,7 @@ class _GraphViewState extends State<GraphView>
       _selectedNotes.clear();
       _selectionAnchor = null;
       _selectionPoint = null;
+      _connection = null;
       _groupNodes.clear();
       _groupNotes.clear();
       _nodes.clear();
@@ -793,6 +811,7 @@ class _GraphViewState extends State<GraphView>
     for (final id
         in _nodes.keys.where((id) => !byId.containsKey(id)).toList()) {
       _nodes.remove(id);
+      if (_connection?.sourceId == id) _connection = null;
       changed = true;
     }
 
@@ -804,6 +823,7 @@ class _GraphViewState extends State<GraphView>
       } else if (existing.label != fresh.label ||
           existing.size != fresh.size ||
           existing.parentId != fresh.parentId ||
+          existing.predecessorId != fresh.predecessorId ||
           existing.depth != fresh.depth ||
           existing.index != fresh.index) {
         _nodes[fresh.id] = fresh;
@@ -1163,6 +1183,68 @@ class _GraphViewState extends State<GraphView>
     }
   }
 
+  void _contextBackground(TapUpDetails details) {
+    final menu = widget.onBackgroundContextMenu;
+    if (menu == null) {
+      _contextSelection(details.globalPosition);
+      return;
+    }
+    _commitNoteEdit();
+    menu(details.globalPosition, details.localPosition);
+  }
+
+  bool _canStartConnection(String id) =>
+      widget.onConnect != null &&
+      widget.canConnect != null &&
+      widget.canStartConnection?.call(id) == true;
+
+  Drag? _startConnection(String sourceId, Offset globalPosition) {
+    if (_connection != null || _selectionAnchor != null) return null;
+    _commitNoteEdit();
+    _selectionFocus.requestFocus();
+    final connection = _ConnectionDrag(this, sourceId, globalPosition);
+    setState(() => _connection = connection);
+    return connection;
+  }
+
+  GraphNode? _connectionTarget(String sourceId, Offset globalPosition) {
+    if (!_canStartConnection(sourceId)) return null;
+    final source = _nodes[sourceId];
+    if (source == null || _visualOf(source).vis < 1) return null;
+    final viewer = _viewerBox;
+    if (viewer == null) return null;
+    final local = viewer.globalToLocal(globalPosition);
+    if (!(Offset.zero & viewer.size).contains(local)) return null;
+    final point = _ctrl.toScene(local);
+    if (_notes.values.any(
+      (note) => (note.position & note.size).contains(point),
+    )) {
+      return null;
+    }
+    for (final node in _nodes.values.toList().reversed) {
+      final visual = _visualOf(node);
+      if (visual.vis < 1 || !visual.rect.contains(point)) continue;
+      return sourceId != node.id && widget.canConnect!(sourceId, node.id)
+          ? node
+          : null;
+    }
+    return null;
+  }
+
+  void _updateConnection(_ConnectionDrag connection, Offset delta) {
+    if (!mounted || !identical(_connection, connection)) return;
+    setState(() => connection.globalPosition += delta);
+  }
+
+  void _finishConnection(_ConnectionDrag connection, {required bool dropped}) {
+    if (!mounted || !identical(_connection, connection)) return;
+    final target = dropped
+        ? _connectionTarget(connection.sourceId, connection.globalPosition)
+        : null;
+    setState(() => _connection = null);
+    if (target != null) widget.onConnect?.call(connection.sourceId, target.id);
+  }
+
   KeyEventResult _selectionKey(FocusNode focus, KeyEvent event) {
     if (!_selectionFocus.hasPrimaryFocus) return KeyEventResult.ignored;
     final modifier = _additive;
@@ -1172,6 +1254,7 @@ class _GraphViewState extends State<GraphView>
     if (event is KeyDownEvent &&
         event.logicalKey == LogicalKeyboardKey.escape) {
       _clearSelection();
+      _connection = null;
       setState(() {});
       return KeyEventResult.handled;
     }
@@ -1455,25 +1538,30 @@ class _GraphViewState extends State<GraphView>
   List<_EdgeSpec> _buildEdges(GraphViewTheme theme) {
     final out = <_EdgeSpec>[];
     for (final n in _nodes.values) {
-      if (n.parentId == null) continue;
-      final from = _nodes[n.parentId!];
-      if (from == null) continue;
-      final vf = _visualOf(from);
-      final vt = _visualOf(n);
-      final alpha = math.min(vf.vis, vt.vis);
-      if (alpha <= 0.01) continue;
-      out.add(
-        _EdgeSpec(
-          from,
-          n,
-          theme.accentFor(from.depth),
-          theme.accentFor(n.depth),
-          _reveals['${from.id}>${n.id}'] ?? 1,
-          alpha,
-          vf.rect,
-          vt.rect,
-        ),
-      );
+      for (final (id, sequence) in [
+        (n.parentId, false),
+        (n.predecessorId, true),
+      ]) {
+        final from = _nodes[id];
+        if (from == null) continue;
+        final vf = _visualOf(from);
+        final vt = _visualOf(n);
+        final alpha = math.min(vf.vis, vt.vis);
+        if (alpha <= 0.01) continue;
+        out.add(
+          _EdgeSpec(
+            from,
+            n,
+            theme.accentFor(from.depth),
+            theme.accentFor(n.depth),
+            _reveals['${from.id}>${n.id}'] ?? 1,
+            alpha,
+            vf.rect,
+            vt.rect,
+            sequence,
+          ),
+        );
+      }
     }
     return out;
   }
@@ -1486,6 +1574,19 @@ class _GraphViewState extends State<GraphView>
     // Keep the recognizer until pointer-up/cancel even if a modifier is released.
     final frameEnabled =
         _selectionMode || _selectionModifier || _selectionAnchor != null;
+    final connection = _connection;
+    final source = _nodes[connection?.sourceId];
+    GraphNode? target;
+    (Offset, Offset, Color)? preview;
+    if (connection != null && source != null) {
+      final point = _sceneFromGlobal(connection.globalPosition);
+      target = _connectionTarget(source.id, connection.globalPosition);
+      preview = (
+        _edgeStart(_visualOf(source).rect),
+        target == null ? point : _edgeEnd(_visualOf(target).rect),
+        theme.accentFor(source.depth),
+      );
+    }
 
     // Слой нод с учётом сворачивания: лерп позиции к центру свёрнутой ноды,
     // масштаб и прозрачность по прогрессу.
@@ -1543,6 +1644,9 @@ class _GraphViewState extends State<GraphView>
                           dragStart: (d) => _dragStart(n, d),
                           dragUpdate: (d) => _dragUpdate(n, d),
                           dragEnd: (_) => _dragEnd(n),
+                          startConnection: _canStartConnection(n.id)
+                              ? (d) => _startConnection(n.id, d)
+                              : null,
                         ),
                       ),
                     ),
@@ -1562,12 +1666,13 @@ class _GraphViewState extends State<GraphView>
       onFocusChange: (focused) {
         final modifier = focused && _additive;
         if (modifier != _selectionModifier ||
-            (!focused && _selectionAnchor != null)) {
+            (!focused && (_selectionAnchor != null || _connection != null))) {
           setState(() {
             _selectionModifier = modifier;
             if (!focused) {
               _selectionAnchor = null;
               _selectionPoint = null;
+              _connection = null;
             }
           });
         }
@@ -1625,10 +1730,10 @@ class _GraphViewState extends State<GraphView>
             InteractiveViewer(
               key: _viewerKey,
               panEnabled:
-                  _editingNoteId == null && !frameEnabled,
+                  _editingNoteId == null && !frameEnabled && connection == null,
               transformationController: _ctrl,
               constrained: false,
-              scaleEnabled: _selectionAnchor == null,
+              scaleEnabled: _selectionAnchor == null && connection == null,
               minScale: widget.minScale,
               maxScale: widget.maxScale,
               child: SizedBox(
@@ -1650,10 +1755,11 @@ class _GraphViewState extends State<GraphView>
                         onPanUpdate: frameEnabled ? _frameUpdate : null,
                         onPanEnd: frameEnabled ? (_) => _frameEnd() : null,
                         onPanCancel: frameEnabled ? _frameEnd : null,
-                        onSecondaryTapDown:
-                            widget.onSelectionContextMenu == null
+                        onSecondaryTapUp:
+                            widget.onBackgroundContextMenu == null &&
+                                widget.onSelectionContextMenu == null
                             ? null
-                            : (d) => _contextSelection(d.globalPosition),
+                            : _contextBackground,
                         onDoubleTapDown: widget.doubleTapCreatesRoot
                             ? (d) => _requestRoot(d.localPosition)
                             : null,
@@ -1663,7 +1769,11 @@ class _GraphViewState extends State<GraphView>
                     Positioned.fill(
                       child: IgnorePointer(
                         child: CustomPaint(
-                          painter: _EdgesPainter(_buildEdges(theme), theme),
+                          painter: _EdgesPainter(
+                            _buildEdges(theme),
+                            theme,
+                            preview,
+                          ),
                         ),
                       ),
                     ),
@@ -1733,6 +1843,21 @@ class _GraphViewState extends State<GraphView>
                                 dragEnd: (_) => _noteDragEnd(nt),
                                 onResize: (size) => _noteResizeUpdate(nt, size),
                                 onResizeEnd: () => _noteResizeEnd(nt),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (target != null)
+                      Positioned.fromRect(
+                        rect: _visualOf(target).rect.inflate(3),
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(15),
+                              border: Border.all(
+                                color: theme.accentFor(target.depth),
+                                width: 2,
                               ),
                             ),
                           ),
@@ -2570,6 +2695,35 @@ class _GridPainter extends CustomPainter {
   bool shouldRepaint(covariant _GridPainter old) => old.theme != theme;
 }
 
+class _ConnectionDrag extends Drag {
+  _ConnectionDrag(this.view, this.sourceId, this.globalPosition);
+
+  final _GraphViewState view;
+  final String sourceId;
+  Offset globalPosition;
+
+  @override
+  void update(DragUpdateDetails details) =>
+      view._updateConnection(this, details.delta);
+
+  @override
+  void end(DragEndDetails details) =>
+      view._finishConnection(this, dropped: true);
+
+  @override
+  void cancel() => view._finishConnection(this, dropped: false);
+}
+
+Offset _edgeStart(Rect rect) => Offset(rect.right + 18, rect.center.dy);
+Offset _edgeEnd(Rect rect) => Offset(rect.left - 8, rect.center.dy);
+
+Path _edgePath(Offset start, Offset end) {
+  final dx = math.max(56.0, (end.dx - start.dx) * 0.55);
+  return Path()
+    ..moveTo(start.dx, start.dy)
+    ..cubicTo(start.dx + dx, start.dy, end.dx - dx, end.dy, end.dx, end.dy);
+}
+
 class _EdgeSpec {
   final GraphNode from;
   final GraphNode to;
@@ -2579,6 +2733,7 @@ class _EdgeSpec {
   final double alpha; // видимость с учётом сворачивания
   final Rect rectFrom;
   final Rect rectTo;
+  final bool sequence;
   const _EdgeSpec(
     this.from,
     this.to,
@@ -2588,24 +2743,41 @@ class _EdgeSpec {
     this.alpha,
     this.rectFrom,
     this.rectTo,
+    this.sequence,
   );
 }
 
 class _EdgesPainter extends CustomPainter {
   final List<_EdgeSpec> edges;
   final GraphViewTheme theme;
-  const _EdgesPainter(this.edges, this.theme);
+  final (Offset, Offset, Color)? preview;
+  const _EdgesPainter(this.edges, this.theme, this.preview);
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final e in edges) {
       if (e.alpha <= 0.01) continue;
-      final a = Offset(e.rectFrom.right + 18, e.rectFrom.center.dy);
-      final b = Offset(e.rectTo.left - 8, e.rectTo.center.dy);
-      final dx = math.max(56.0, (b.dx - a.dx) * 0.55);
-      final path = Path()
-        ..moveTo(a.dx, a.dy)
-        ..cubicTo(a.dx + dx, a.dy, b.dx - dx, b.dy, b.dx, b.dy);
+      final a = _edgeStart(e.rectFrom);
+      final b = _edgeEnd(e.rectTo);
+      final path = _edgePath(a, b);
+      if (e.sequence) {
+        final paint = Paint()
+          ..color = e.cTo.withValues(alpha: e.alpha)
+          ..strokeWidth = 2.4
+          ..style = PaintingStyle.stroke;
+        final metric = path.computeMetrics().first;
+        for (double offset = 0; offset < metric.length; offset += 14) {
+          canvas.drawPath(metric.extractPath(offset, offset + 8), paint);
+        }
+        canvas.drawPath(
+          Path()
+            ..moveTo(b.dx - 9, b.dy - 5)
+            ..lineTo(b.dx, b.dy)
+            ..lineTo(b.dx - 9, b.dy + 5),
+          paint,
+        );
+        continue;
+      }
 
       Path drawn = path;
       ui.PathMetric? pm;
@@ -2647,6 +2819,16 @@ class _EdgesPainter extends CustomPainter {
           Paint()..color = theme.text.withOpacity(e.alpha),
         );
       }
+    }
+    if (preview case (final start, final end, final color)) {
+      canvas.drawPath(
+        _edgePath(start, end),
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = 2.4
+          ..color = color.withValues(alpha: 0.8),
+      );
     }
   }
 

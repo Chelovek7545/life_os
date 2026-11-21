@@ -35,8 +35,13 @@ class SyncPayload {
       if (t.parentTaskId != null && typeOf(t.parentTaskId!) != 'task') {
         throw const FormatException('Task parent must be a task ID.');
       }
+      if (t.predecessorTaskId != null &&
+          typeOf(t.predecessorTaskId!) != 'task') {
+        throw const FormatException('Task predecessor must be a task ID.');
+      }
       return [
         if (t.parentTaskId != null) t.parentTaskId!,
+        if (t.predecessorTaskId != null) t.predecessorTaskId!,
         if (t.projectId != null) 'project/${t.projectId}',
         for (final tag in t.tags) 'tag/${tag.syncId}',
       ];
