@@ -55,11 +55,16 @@ Android APK с исправлением также установлен обно
 
 ```sh
 flutter run --dart-define=ENABLE_SYNC=true
+flutter build apk --release --dart-define=ENABLE_SYNC=true
 flutter build windows --release --dart-define=ENABLE_SYNC=true
 ```
 
+Готовый APK находится в `build/app/outputs/flutter-apk/app-release.apk`.
 Готовая Windows-сборка: `build/windows/x64/runner/Release/Pulse.exe`.
 Рядом с Pulse.exe должны оставаться её DLL и каталог data.
+
+Для обмена флаг `ENABLE_SYNC=true` нужен на обоих устройствах. Его можно
+совмещать с другими [флагами сборки](../README.md#build-an-android-apk-with-optional-modules).
 
 Включение модуля регистрирует секцию «Локальная синхронизация» в настройках
 и подготавливает защищённые ключи. Сетевой listener и учёт БД запускаются
@@ -181,10 +186,8 @@ revision.deviceId — метаданные автора, не криптогра
 
 ### Полевой сценарий Windows ↔ Android
 
-На обоих устройствах нужна сборка с ENABLE_SYNC=true. Android APK собирается
-командой `flutter build apk --release --dart-define=ENABLE_SYNC=true` и находится
-в `build/app/outputs/flutter-apk/app-release.apk`. Установка обновлением сохраняет
-данные; удалять приложение или очищать его хранилище для теста не нужно.
+Для обоих устройств используйте [сборки с локальной синхронизацией](#включение).
+Установите APK поверх текущей версии, чтобы сохранить данные приложения.
 Если база телефона уже заполнена независимо, первый тест присоединения
 останавливается: объединения двух независимых пространств пока нет.
 

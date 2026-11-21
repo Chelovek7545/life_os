@@ -98,6 +98,43 @@ dart run build_runner build --delete-conflicting-outputs
 flutter run
 ```
 
+### Build an Android APK with optional modules
+
+Run the build from the repository root. Pass one `--dart-define=FLAG=true` or
+`--dart-define=FLAG=false` per module you want to configure. Omitted flags use
+the defaults below. Changing a flag requires a rebuild.
+
+| Module | Build flag | Default |
+| --- | --- | --- |
+| Telegram bot | `ENABLE_TELEGRAM` | `true` |
+| [Local device sync](docs/local-sync.md) | `ENABLE_SYNC` | `false` |
+| [Obsidian integration](docs/obsidian-canvas.md) | `ENABLE_OBSIDIAN` | `true` |
+| [Local MCP server](docs/agent-access.md) | `ENABLE_MCP` | `false` |
+| [Local OpenVINO assistant](docs/local-assistant.md) | `ENABLE_ASSISTANT` | `false` |
+
+```bash
+# Default APK: Telegram and Obsidian enabled
+flutter build apk --release
+
+# Enable local sync and keep Telegram enabled
+flutter build apk --release --dart-define=ENABLE_SYNC=true
+
+# Enable local sync and disable Telegram
+flutter build apk --release --dart-define=ENABLE_SYNC=true --dart-define=ENABLE_TELEGRAM=false
+```
+
+Each command writes to `build/app/outputs/flutter-apk/app-release.apk`.
+To start the Telegram bot, enter its token and the allowed Telegram user IDs
+in the app's Telegram settings, then press **TG**.
+
+For Windows ↔ Android sync, enable `ENABLE_SYNC=true` in both builds. Build the
+Windows app with `flutter build windows --release --dart-define=ENABLE_SYNC=true`,
+then pair the devices from **Pulse → Локальная синхронизация → Настройки**. See the
+[local sync setup guide](docs/local-sync.md#подключение-двух-устройств).
+
+The MCP server and OpenVINO assistant have separate Windows runtime setup guides
+linked in the table.
+
 ## Testing
 
 ```bash
