@@ -7,6 +7,7 @@ import 'package:notes_api/notes_api.dart';
 import 'package:obsidian_plugin/obsidian_plugin.dart';
 import 'package:path/path.dart' as p;
 import 'package:plugin_runtime/plugin_runtime.dart';
+import 'package:uuid/uuid.dart';
 
 class GraphStorageRepository
     implements
@@ -25,12 +26,14 @@ class GraphStorageRepository
     required this.beforeSwitch,
     this.obsidian,
     this.onNoteRenamed,
+    this.files = const LocalVaultFiles(),
   });
   final ValueListenable<GraphStorageTarget> target;
   final ValueListenable<VaultFolders> vaultFolders;
   final Future<void> Function() beforeSwitch;
   final ObsidianVault? obsidian;
   final Future<void> Function(String previous, String next)? onNoteRenamed;
+  final VaultFiles files;
   final _noteRenames = StreamController<NotePathChange>.broadcast();
   StreamSubscription<NotePathChange>? _activeRenames;
   StreamSubscription<NotePathChange>? _obsidianRenames;
@@ -168,6 +171,10 @@ class GraphStorageRepository
       }
       if (_selected?.mode == choice.mode &&
           _selected?.localPath == choice.localPath) {
+        if (choice.mode == GraphStorageMode.sharedFolder && copyExisting) {
+          await _checkBoardDirectories(choice.localPath, shared: true);
+          await _active?.refresh();
+        }
         return;
       }
       if (copyExisting &&
@@ -175,10 +182,18 @@ class GraphStorageRepository
           (obsidian == null || obsidian!.state.vaultPath.isEmpty)) {
         throw StateError('Подключите vault в настройках Obsidian.');
       }
-      if (choice.mode == GraphStorageMode.local &&
+      final shared = choice.mode == GraphStorageMode.sharedFolder;
+      final local = choice.mode != GraphStorageMode.obsidian;
+      if (local &&
           (choice.localPath.trim().isEmpty ||
               !p.isAbsolute(choice.localPath))) {
         throw ArgumentError('Выберите абсолютный путь папки Pulse.');
+      }
+      final localRoot = local
+          ? p.normalize(p.absolute(choice.localPath))
+          : null;
+      if (copyExisting && localRoot != null) {
+        await _checkBoardDirectories(localRoot, shared: shared);
       }
       if (_selected != null) {
         await Future.wait(_copies.toList());
@@ -188,17 +203,16 @@ class GraphStorageRepository
       final oldLocal = _local;
       ObsidianVault? candidate;
       try {
-        if (choice.mode == GraphStorageMode.local) {
-          candidate = ObsidianVault();
+        if (localRoot != null) {
+          candidate = ObsidianVault(files: files);
           await candidate.configureFolders(
             GraphStorageTarget.localFolders,
             copyBoards: false,
           );
-          final root = p.normalize(p.absolute(choice.localPath));
-          await Directory(root).create(recursive: true);
-          await candidate.openVault(root);
-          if (candidate.state.error != null) {
-            throw FileSystemException(candidate.state.error!, root);
+          if (!shared) await files.createDirectory(localRoot);
+          await candidate.openVault(localRoot);
+          if (candidate.state.error != null && (!shared || copyExisting)) {
+            throw FileSystemException(candidate.state.error!, localRoot);
           }
         } else {
           candidate = obsidian;
@@ -214,7 +228,8 @@ class GraphStorageRepository
             candidate != null &&
             previous.state.vaultPath.isNotEmpty &&
             candidate.state.vaultPath.isNotEmpty) {
-          await _copyBoards(previous, candidate);
+          await _copyFiles(previous, candidate, copyNotes: shared);
+          if (shared) await candidate.refresh();
         }
         if (generation != _generation) {
           throw StateError('Выбор хранилища устарел.');
@@ -226,7 +241,7 @@ class GraphStorageRepository
         }
         _active = candidate;
         _rootEpoch++;
-        _local = choice.mode == GraphStorageMode.local ? candidate : null;
+        _local = local ? candidate : null;
         _selected = choice;
         _sourceSubscription = candidate?.watch().listen((_) {
           if (_accepting) _changes.add(state);
@@ -251,6 +266,32 @@ class GraphStorageRepository
     return result;
   }
 
+  Future<void> _checkBoardDirectories(
+    String root, {
+    required bool shared,
+  }) async {
+    const folders = GraphStorageTarget.localFolders;
+    try {
+      for (final folder in [
+        folders.boards,
+        folders.backups,
+        if (shared) ...[folders.notes, folders.exports],
+      ]) {
+        final directory = p.join(root, folder);
+        await files.createDirectory(directory);
+        final probe = p.join(directory, '.${const Uuid().v4()}.tmp');
+        await files.writeNew(probe, 'Pulse');
+        await files.delete(probe);
+      }
+    } on FileSystemException catch (error) {
+      throw FileSystemException(
+        'Pulse не может сохранять доски и резервные копии в этой папке',
+        error.path,
+        error.osError,
+      );
+    }
+  }
+
   String _relativeFile(String root, String relative) {
     final parts = p.posix.split(relative);
     if (p.posix.isAbsolute(relative) ||
@@ -267,47 +308,104 @@ class GraphStorageRepository
     return path;
   }
 
-  Future<void> _copyBoards(
+  Future<void> _copyFiles(
     ObsidianVault source,
-    ObsidianVault destination,
-  ) async {
+    ObsidianVault destination, {
+    required bool copyNotes,
+  }) async {
     await source.flush();
     final root = source.state.vaultPath;
     final nextRoot = destination.state.vaultPath;
-    final directory = Directory(
-      source.folders.boards.isEmpty
-          ? root
-          : _relativeFile(root, source.folders.boards),
-    );
-    final plans = <String, (File, String, String)>{};
-    if (!await directory.exists()) return;
-    await for (final file in directory.list(followLinks: false)) {
-      if (file is! File ||
-          p.extension(file.path) != '.canvas' ||
+    final directory = source.folders.boards.isEmpty
+        ? root
+        : _relativeFile(root, source.folders.boards);
+    final plans = <String, (String, String, String)>{};
+    final movedNotes = <String, String>{};
+    if (copyNotes) {
+      final previousNotes = p.joinAll([
+        root,
+        ...p.posix.split(source.folders.notes),
+      ]);
+      final nextNotes = p.joinAll([
+        nextRoot,
+        ...p.posix.split(destination.folders.notes),
+      ]);
+      Future<void> visit(String folder) async {
+        for (final entry in await files.list(folder)) {
+          if (entry.name.startsWith('.')) continue;
+          final path = p.join(folder, entry.name);
+          if (entry.type == FileSystemEntityType.directory) {
+            await visit(path);
+          } else if (p.extension(entry.name).toLowerCase() == '.md') {
+            final target = p.join(
+              nextNotes,
+              p.relative(path, from: previousNotes),
+            );
+            final content = await files.read(path);
+            if (content == null) {
+              throw FileSystemException('Исходная заметка недоступна', path);
+            }
+            movedNotes[path] = target;
+            plans[target] = (path, content, content);
+          }
+        }
+      }
+
+      if (!p.isWithin(previousNotes, nextNotes) &&
+          !p.equals(previousNotes, nextNotes) &&
+          await files.type(previousNotes) == FileSystemEntityType.directory) {
+        await visit(previousNotes);
+      }
+    }
+    final boards = await files.type(directory) == FileSystemEntityType.directory
+        ? await files.list(directory)
+        : const <VaultEntry>[];
+    for (final file in boards) {
+      if (file.type != FileSystemEntityType.file ||
+          p.extension(file.name) != '.canvas' ||
           !RegExp(
             r'^[a-zA-Z0-9_-]+$',
-          ).hasMatch(p.basenameWithoutExtension(file.path))) {
+          ).hasMatch(p.basenameWithoutExtension(file.name))) {
         continue;
       }
       final targetPath = p.joinAll([
         nextRoot,
         ...p.posix.split(destination.folders.boards),
-        p.basename(file.path),
+        file.name,
       ]);
-      if (p.equals(file.path, targetPath)) continue;
-      final original = await file.readAsString();
+      final sourcePath = p.join(directory, file.name);
+      if (p.equals(sourcePath, targetPath)) continue;
+      final original = await files.read(sourcePath);
+      if (original == null) {
+        throw FileSystemException('Исходная доска недоступна', sourcePath);
+      }
       final data = jsonDecode(original) as Map<String, dynamic>;
       var changed = false;
       for (final node in data['nodes'] as List? ?? []) {
+        final metadata = node['pulse'];
+        final copiedNote = metadata is Map
+            ? movedNotes[metadata['externalPath']]
+            : null;
+        if (node['type'] == 'text' && copiedNote != null) {
+          node.remove('text');
+          node['type'] = 'file';
+          node['file'] = p
+              .split(p.relative(copiedNote, from: nextRoot))
+              .join('/');
+          (metadata as Map).remove('externalPath');
+          changed = true;
+          continue;
+        }
         for (final key in ['file', 'background']) {
           final relative = node[key];
           if (relative is! String || relative.isEmpty) continue;
           final absolute = p.isAbsolute(relative)
               ? p.normalize(relative)
               : _relativeFile(root, relative);
-          if (p.isWithin(nextRoot, absolute)) {
+          final rebasedPath = movedNotes[absolute] ?? absolute;
+          if (p.isWithin(nextRoot, rebasedPath)) {
             final rebased = p
-                .split(p.relative(absolute, from: nextRoot))
+                .split(p.relative(rebasedPath, from: nextRoot))
                 .join('/');
             changed = changed || rebased != relative;
             node[key] = rebased;
@@ -318,10 +416,10 @@ class GraphStorageRepository
             final metadata = Map<String, dynamic>.from(
               node['pulse'] as Map? ?? {},
             );
-            final linked = File(absolute);
-            final text = await linked.exists()
-                ? await linked.readAsString()
-                : metadata['cachedText'] as String? ?? '';
+            final text =
+                await files.read(absolute) ??
+                metadata['cachedText'] as String? ??
+                '';
             node.remove('file');
             node['type'] = 'text';
             node['text'] = text;
@@ -342,25 +440,29 @@ class GraphStorageRepository
       final content = changed
           ? const JsonEncoder.withIndent('  ').convert(data)
           : original;
-      final target = File(targetPath);
-      if (await target.exists() && await target.readAsString() != content) {
-        throw FileSystemException('В папке уже есть другая доска', targetPath);
-      }
-      plans[targetPath] = (file, original, content);
+      plans[targetPath] = (sourcePath, original, content);
     }
     for (final entry in plans.entries) {
-      final file = File(entry.key);
-      if (!await file.exists()) {
-        await file.parent.create(recursive: true);
-        await file.create(exclusive: true);
-        await file.writeAsString(entry.value.$3, flush: true);
-      } else if (await file.readAsString() != entry.value.$3) {
-        throw FileSystemException('Целевая доска изменена', file.path);
+      final existing = await files.read(entry.key);
+      if (existing != null && existing != entry.value.$3) {
+        throw FileSystemException(
+          'В папке уже есть другая версия файла',
+          entry.key,
+        );
+      }
+    }
+    for (final entry in plans.entries) {
+      final existing = await files.read(entry.key);
+      if (existing == null) {
+        await files.createDirectory(p.dirname(entry.key));
+        await files.writeNew(entry.key, entry.value.$3);
+      } else if (existing != entry.value.$3) {
+        throw FileSystemException('Целевой файл изменён', entry.key);
       }
     }
     for (final entry in plans.values) {
-      if (await entry.$1.readAsString() != entry.$2) {
-        throw StateError('Исходная доска изменена во время сохранения.');
+      if (await files.read(entry.$1) != entry.$2) {
+        throw StateError('Исходный файл изменён во время сохранения.');
       }
     }
     if (source.state.vaultPath != root ||
@@ -375,7 +477,7 @@ class GraphStorageRepository
     bool copyBoards = true,
   }) async {
     _check();
-    if (_selected?.mode == GraphStorageMode.local) {
+    if (_local != null) {
       await obsidian?.configureFolders(value, copyBoards: false);
       await _files.configureFolders(
         GraphStorageTarget.localFolders,
@@ -457,7 +559,10 @@ class GraphStorageRepository
   Future<String> saveMarkdownCopy(String directory, String title, String text) {
     _check();
     final operation = () async {
-      final writer = ObsidianVault(watchDirectory: (_) => const Stream.empty());
+      final writer = ObsidianVault(
+        files: files,
+        watchDirectory: (_) => const Stream.empty(),
+      );
       try {
         await writer.openVault('');
         return await writer.saveMarkdownCopy(directory, title, text);

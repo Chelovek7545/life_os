@@ -71,6 +71,66 @@ void main() {
       expect(closes, 1);
     },
   );
+  test('an unwritable board folder leaves the active graph open', () async {
+    final board = await storage.openCanvasBoard('sphere');
+    final root = await Directory(local().localPath).create();
+    final blocked = File(p.join(root.path, 'Boards'));
+    await blocked.writeAsString('keep');
+
+    await expectLater(
+      storage.selectTarget(local()),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(closes, 0);
+    expect(storage.state.vaultPath, vault.state.vaultPath);
+    expect(await blocked.readAsString(), 'keep');
+    const data = '{"nodes":[],"edges":[]}';
+    await board.write(data, expected: null);
+    expect(await board.read(), data);
+  });
+  test(
+    'shared folder copies existing Notes and keeps Canvas links relative',
+    () async {
+      await storage.selectTarget(local());
+      final note = await storage.createNote('Original', 'keep');
+      final board = await storage.openCanvasBoard('sphere');
+      final document = jsonEncode({
+        'nodes': [
+          {
+            'id': 'md',
+            'type': 'file',
+            'file': board.notePath(note.absolutePath),
+            'x': 10,
+            'y': 20,
+            'width': 200,
+            'height': 150,
+          },
+        ],
+        'edges': [],
+      });
+      await board.write(document, expected: null);
+      final selected = GraphStorageTarget(
+        mode: GraphStorageMode.sharedFolder,
+        localPath: p.join(temporary.path, 'Shared'),
+        folderName: 'Shared',
+      );
+
+      await storage.selectTarget(selected);
+      final destination = await storage.openCanvasBoard('sphere');
+      final data = CanvasBoardDocument((await destination.read())!);
+      final linked = data.notes(destination.resolveNote).single;
+      final sharedNote = p.join(selected.localPath, 'Notes', 'Original.md');
+      expect(data.nodes.single['file'], 'Notes/Original.md');
+      expect(linked.document.source?.path, sharedNote);
+      expect(await storage.readContent(sharedNote), 'keep');
+      expect(storage.graphMarkdownState.notes.single.absolutePath, sharedNote);
+      await storage.writeContent(sharedNote, 'updated');
+      expect(await File(sharedNote).readAsString(), 'updated');
+      expect(await File(note.absolutePath).readAsString(), 'keep');
+      expect(await File(board.path).readAsString(), document);
+    },
+  );
   test(
     'switching saves the board and keeps existing markdown in its original vault',
     () async {

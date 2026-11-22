@@ -201,13 +201,24 @@ class _PulseScreenState extends State<PulseScreen> {
   }
 
   Future<void> _openGraph(BuildContext context, Sphere sphere) async {
-    final vmGraph = await widget.viewModel.openGraph(sphere.id);
-    if (!context.mounted) return;
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => LifeGraphScreen(viewModel: vmGraph),
-      ),
-    );
+    try {
+      final vmGraph = await widget.viewModel.openGraph(sphere.id);
+      if (!context.mounted) {
+        await vmGraph.dispose();
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => LifeGraphScreen(viewModel: vmGraph),
+        ),
+      );
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось открыть граф. $error')),
+        );
+      }
+    }
   }
 
   Future<void> _showCreateSphereDialog(BuildContext context) async {

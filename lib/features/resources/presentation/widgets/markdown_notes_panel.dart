@@ -6,6 +6,7 @@ import 'package:notes_api/notes_api.dart';
 import 'package:path/path.dart' as p;
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
+import 'package:life_os/features/lifegraph/data/android_graph_files.dart';
 
 const _accent = AppColors.primaryContainer;
 const _ink = Color(0xFFF4F3F2);
@@ -287,11 +288,11 @@ class _MarkdownNotesPanelState extends State<MarkdownNotesPanel> {
                 ),
               const SizedBox(height: 10),
               Tooltip(
-                message: widget.state.vaultPath,
+                message: AndroidGraphFiles.displayPath(widget.state.vaultPath),
                 child: Text(
                   widget.state.vaultPath.isEmpty
                       ? 'Папка Notes не выбрана'
-                      : widget.state.vaultPath,
+                      : AndroidGraphFiles.displayPath(widget.state.vaultPath),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.bodySm.copyWith(
@@ -621,7 +622,11 @@ class _MarkdownFileCardState extends State<_MarkdownFileCard> {
                               widget.onDelete?.call();
                             } else {
                               await Clipboard.setData(
-                                ClipboardData(text: widget.note.absolutePath),
+                                ClipboardData(
+                                  text: AndroidGraphFiles.displayPath(
+                                    widget.note.absolutePath,
+                                  ),
+                                ),
                               );
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(

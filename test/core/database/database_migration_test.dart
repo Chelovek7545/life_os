@@ -56,6 +56,38 @@ void main() {
       }
     },
   );
+  test('v13 with an existing predecessor column preserves its data', () async {
+    final old = AppDatabase(NativeDatabase(file));
+    final store = DriftSyncStore(old);
+    final predecessor = Task.blank();
+    final successor = Task.blank().copyWith(
+      predecessorTaskId: Wrapped(predecessor.id),
+    );
+    try {
+      await store.initialize('dataset');
+      await store.saveTask(predecessor, expectedHeads: {});
+      await store.saveTask(successor, expectedHeads: {});
+      await old.customStatement('PRAGMA user_version = 13');
+    } finally {
+      await old.close();
+    }
+
+    final upgraded = AppDatabase(NativeDatabase.createInBackground(file));
+    try {
+      final journal = DriftSyncStore(upgraded);
+      final dao = TasksDao(upgraded, journal: journal);
+      expect((await journal.existingIdentity())?.datasetId, 'dataset');
+      final migrated = (await dao.getTaskWithTags(successor.id))!;
+      expect(migrated.predecessorTaskId, predecessor.id);
+      expect(migrated.storageRevision, isNotNull);
+      final version = await upgraded
+          .customSelect('PRAGMA user_version')
+          .getSingle();
+      expect(version.read<int>('user_version'), 14);
+    } finally {
+      await upgraded.close();
+    }
+  });
   test(
     'v12 builds the projection lazily without rewriting the journal',
     () async {

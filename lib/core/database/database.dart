@@ -203,7 +203,14 @@ class AppDatabase extends _$AppDatabase {
         await customStatement('CREATE UNIQUE INDEX tags_sync_id_unique ON tags(sync_id)');
       },
       onUpgrade: (Migrator m, int from, int to) async {
-        if (from < 14) await m.addColumn(tasks, tasks.predecessorTaskId);
+        if (from < 14) {
+          // Миграция могла добавить колонку до обновления user_version.
+          final columns = await customSelect('PRAGMA table_info(tasks)').get();
+          final hasPredecessor = columns.any(
+            (column) => column.read<String>('name') == 'predecessor_task_id',
+          );
+          if (!hasPredecessor) await m.addColumn(tasks, tasks.predecessorTaskId);
+        }
         if (from < 12) {
           await m.addColumn(tags, tags.syncId);
           await customStatement('CREATE UNIQUE INDEX tags_sync_id_unique ON tags(sync_id)');

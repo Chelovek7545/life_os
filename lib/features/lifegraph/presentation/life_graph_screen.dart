@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:life_os/core/ui/hierarchy/build_note_hierarchy.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
+import 'package:life_os/features/lifegraph/data/android_graph_files.dart';
 import 'package:graph_canvas/graph_canvas.dart' as graph;
 import 'package:lifegraph_plugin/lifegraph_plugin.dart'
     show LifeGraphViewModel, GraphSaveStatus;
@@ -110,7 +111,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Canvas загружен: ${widget.viewModel.canvasBoardPath}',
+              'Canvas загружен: ${AndroidGraphFiles.displayPath(widget.viewModel.canvasBoardPath!)}',
             ),
           ),
         );
@@ -130,9 +131,13 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     try {
       final path = await widget.viewModel.exportCanvas();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Canvas сохранён: $path')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Canvas сохранён: ${AndroidGraphFiles.displayPath(path)}',
+          ),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -581,9 +586,13 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           text: value.text,
         );
         if (mounted) {
-          ScaffoldMessenger.of(
-            this.context,
-          ).showSnackBar(SnackBar(content: Text('Заметка создана: $path')));
+          ScaffoldMessenger.of(this.context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Заметка создана: ${AndroidGraphFiles.displayPath(path)}',
+              ),
+            ),
+          );
         }
       } catch (error) {
         if (mounted) {
@@ -614,9 +623,13 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         title: value.title,
       );
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Заметка сохранена: $path')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Заметка сохранена: ${AndroidGraphFiles.displayPath(path)}',
+            ),
+          ),
+        );
       }
     } catch (error) {
       if (mounted) {
@@ -789,7 +802,11 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Копия заметки сохранена: $path')),
+          SnackBar(
+            content: Text(
+              'Копия заметки сохранена: ${AndroidGraphFiles.displayPath(path)}',
+            ),
+          ),
         );
       }
     } catch (error) {

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:notes_api/notes_api.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
+import 'vault_files.dart';
 
 class ObsidianVault
     implements
@@ -15,9 +16,15 @@ class ObsidianVault
         MarkdownNoteSaveApi,
         MarkdownNoteDeleteApi,
         MarkdownNoteRenameApi {
-  ObsidianVault({Stream<FileSystemEvent> Function(Directory)? watchDirectory})
-    : _watchDirectory = watchDirectory ?? ((directory) => directory.watch());
-  final Stream<FileSystemEvent> Function(Directory) _watchDirectory;
+  ObsidianVault({
+    VaultFiles files = const LocalVaultFiles(),
+    Stream<FileSystemEvent> Function(Directory)? watchDirectory,
+  }) : _files = files,
+       _watchDirectory = watchDirectory == null
+           ? files.watch
+           : ((path) => watchDirectory(Directory(path)));
+  final VaultFiles _files;
+  final Stream<FileSystemEvent> Function(String) _watchDirectory;
   final _changes = StreamController<VaultState>.broadcast();
   @override
   VaultState get obsidianState => state;
@@ -98,44 +105,43 @@ class ObsidianVault
           _active &&
           root.isNotEmpty &&
           next.boards != _folders.boards) {
-        final source = Directory(_folderPath(root, _folders.boards));
-        final target = Directory(_folderPath(root, next.boards));
-        final copies = <(File, File, String)>[];
-        if (await source.exists()) {
-          await for (final entity in source.list(followLinks: false)) {
-            if (entity is! File ||
-                p.extension(entity.path) != '.canvas' ||
+        final source = _folderPath(root, _folders.boards);
+        final target = _folderPath(root, next.boards);
+        final copies = <(String, String, String)>[];
+        if (await _files.type(source) == FileSystemEntityType.directory) {
+          for (final entity in await _files.list(source)) {
+            if (entity.type != FileSystemEntityType.file ||
+                p.extension(entity.name) != '.canvas' ||
                 !RegExp(
                   r'^[a-zA-Z0-9_-]+$',
-                ).hasMatch(p.basenameWithoutExtension(entity.path))) {
+                ).hasMatch(p.basenameWithoutExtension(entity.name))) {
               continue;
             }
-            final destination = File(
-              p.join(target.path, p.basename(entity.path)),
-            );
-            final content = await entity.readAsString();
-            if (await destination.exists()) {
-              if (await destination.readAsString() != content) {
+            final previous = p.join(source, entity.name);
+            final destination = p.join(target, entity.name);
+            final content = await _readRequired(previous);
+            final existing = await _files.read(destination);
+            if (existing != null) {
+              if (existing != content) {
                 throw FileSystemException(
                   'В выбранной папке уже есть другая доска',
-                  destination.path,
+                  destination,
                 );
               }
             } else {
-              copies.add((entity, destination, content));
+              copies.add((previous, destination, content));
             }
           }
         }
         for (final copy in copies) {
-          await target.create(recursive: true);
-          await copy.$2.create(exclusive: true);
-          await copy.$2.writeAsString(copy.$3, flush: true);
+          await _files.createDirectory(target);
+          await _files.writeNew(copy.$2, copy.$3);
         }
         for (final copy in copies) {
-          if (await copy.$1.readAsString() != copy.$3) {
+          if (await _files.read(copy.$1) != copy.$3) {
             throw FileSystemException(
               'Исходная доска изменилась во время копирования',
-              copy.$1.path,
+              copy.$1,
             );
           }
         }
@@ -155,18 +161,18 @@ class ObsidianVault
     return _enqueue(() async {
       if (root.isEmpty) throw StateError('Сначала выберите vault.');
       final result = <String>[''];
-      Future<void> visit(Directory directory) async {
-        await for (final entity in directory.list(followLinks: false)) {
-          if (entity is Directory && !p.basename(entity.path).startsWith('.')) {
-            result.add(
-              p.posix.joinAll(p.split(p.relative(entity.path, from: root))),
-            );
-            await visit(entity);
+      Future<void> visit(String directory) async {
+        for (final entity in await _files.list(directory)) {
+          if (entity.type == FileSystemEntityType.directory &&
+              !entity.name.startsWith('.')) {
+            final path = p.join(directory, entity.name);
+            result.add(p.posix.joinAll(p.split(p.relative(path, from: root))));
+            await visit(path);
           }
         }
       }
 
-      await visit(Directory(root));
+      await visit(root);
       result.sort();
       return result;
     });
@@ -235,18 +241,18 @@ class ObsidianVault
 
   Future<void> _scan(String vaultPath, int generation) async {
     try {
-      final directory = Directory(vaultPath);
-      if (!await directory.exists())
+      if (await _files.type(vaultPath) != FileSystemEntityType.directory) {
         throw FileSystemException('Указанная папка не существует', vaultPath);
+      }
       final notes = <VaultNote>[];
-      final directories = <Directory>[];
-      await _scanDirectory(directory, vaultPath, notes, directories);
+      final directories = <String>[];
+      await _scanDirectory(vaultPath, vaultPath, notes, directories);
       final added = await _syncWatchers(directories, vaultPath, generation);
       if (added && _active && generation == _generation) {
         // Capture changes that happened before a newly indexed directory was watched.
         notes.clear();
         directories.clear();
-        await _scanDirectory(directory, vaultPath, notes, directories);
+        await _scanDirectory(vaultPath, vaultPath, notes, directories);
         await _syncWatchers(directories, vaultPath, generation);
       }
       notes.sort((a, b) => a.relativePath.compareTo(b.relativePath));
@@ -266,49 +272,45 @@ class ObsidianVault
   }
 
   Future<void> _scanDirectory(
-    Directory directory,
+    String directory,
     String root,
     List<VaultNote> notes,
-    List<Directory> directories,
+    List<String> directories,
   ) async {
     directories.add(directory);
-    await for (final entity in directory.list(followLinks: false)) {
-      if (p.basename(entity.path).startsWith('.')) continue;
-      if (entity is Directory) {
-        await _scanDirectory(entity, root, notes, directories);
-      } else if (entity is File &&
-          p.extension(entity.path).toLowerCase() == '.md') {
+    for (final entity in await _files.list(directory)) {
+      if (entity.name.startsWith('.')) continue;
+      final path = p.join(directory, entity.name);
+      if (entity.type == FileSystemEntityType.directory) {
+        await _scanDirectory(path, root, notes, directories);
+      } else if (p.extension(entity.name).toLowerCase() == '.md') {
         try {
           notes.add(
             VaultNote(
-              absolutePath: entity.absolute.path,
-              relativePath: p.relative(entity.path, from: root),
-              title: p.basenameWithoutExtension(entity.path),
-              modifiedAt: (await entity.stat()).modified,
-              content:
-                  p.isWithin(
-                    _folderPath(root, _folders.notes),
-                    entity.absolute.path,
-                  )
-                  ? await entity.readAsString()
+              absolutePath: path,
+              relativePath: p.relative(path, from: root),
+              title: p.basenameWithoutExtension(entity.name),
+              modifiedAt: entity.modifiedAt,
+              content: p.isWithin(_folderPath(root, _folders.notes), path)
+                  ? await _readRequired(path)
                   : '',
             ),
           );
         } on FileSystemException {
           // Files can disappear between the directory listing and stat.
-          if (await entity.exists()) rethrow;
+          if (await _files.type(path) == FileSystemEntityType.file) rethrow;
         }
       }
     }
   }
 
   Future<bool> _syncWatchers(
-    List<Directory> directories,
+    List<String> directories,
     String root,
     int generation,
   ) async {
     if (!_active || generation != _generation) return false;
-    final paths = directories.map((directory) => directory.path).toSet();
+    final paths = directories.toSet();
     for (final old
         in _watchers.keys.where((path) => !paths.contains(path)).toList()) {
       await _watchers.remove(old)!.cancel();
@@ -316,8 +318,8 @@ class ObsidianVault
     var added = false;
     for (final directory in directories) {
       if (!_active || generation != _generation) break;
-      if (_watchers.containsKey(directory.path)) continue;
-      _watchers[directory.path] = _watchDirectory(directory).listen(
+      if (_watchers.containsKey(directory)) continue;
+      _watchers[directory] = _watchDirectory(directory).listen(
         (event) {
           final relative = p.relative(event.path, from: root);
           if (p.split(relative).any((part) => part.startsWith('.'))) return;
@@ -396,60 +398,45 @@ class ObsidianVault
       if (root.isEmpty || selection != _vaultSelectionGeneration) {
         throw StateError('The selected vault has changed or is empty.');
       }
-      final directory = Directory(_folderPath(root, _folders.exports));
-      await directory.create(recursive: true);
+      final directory = _folderPath(root, _folders.exports);
+      await _files.createDirectory(directory);
       // Every export is a new snapshot; never overwrite an Obsidian document.
       final id = const Uuid().v4();
-      final file = File(p.join(directory.path, '$sphereId-$id.canvas'));
-      final temporary = File(p.join(directory.path, '.$id.tmp'));
-      try {
-        await temporary.writeAsString(content, flush: true);
-        await temporary.rename(file.path);
-      } finally {
-        if (await temporary.exists()) await temporary.delete();
-      }
-      return file.path;
+      final path = p.join(directory, '$sphereId-$id.canvas');
+      await _files.writeNew(path, content);
+      return path;
     });
   }
+
+  Future<String> _readRequired(String path) async =>
+      await _files.read(path) ??
+      (throw FileSystemException('Файл не найден', path));
 
   @override
   Future<String> readContent(String absolutePath) async {
     _checkActive();
-    return _enqueue(() async {
-      return File(resolveNotePath(absolutePath)).readAsString();
-    });
+    return _enqueue(() => _readRequired(resolveNotePath(absolutePath)));
   }
 
   @override
   Future<void> writeContent(String absolutePath, String content) async {
     _checkActive();
     return _enqueue(() async {
-      final file = File(resolveNotePath(absolutePath));
-      if (!await file.exists())
-        throw FileSystemException('Заметка не найдена', absolutePath);
-      final temporary = File(
-        p.join(
-          file.parent.path,
-          '.' +
-              p.basename(file.path) +
-              '.life-os-' +
-              const Uuid().v4() +
-              '.tmp',
-        ),
-      );
-      try {
-        await temporary.writeAsString(content, flush: true);
-        await temporary.rename(file.path);
-      } finally {
-        if (await temporary.exists()) await temporary.delete();
+      final path = resolveNotePath(absolutePath);
+      final expected = await _readRequired(path);
+      if (!await _files.replace(path, content, expected: expected)) {
+        throw FileSystemException(
+          'Заметка изменилась во время сохранения',
+          path,
+        );
       }
-      final modifiedAt = (await file.stat()).modified;
+      final modifiedAt = DateTime.now();
       _publish(
         VaultState(
           vaultPath: state.vaultPath,
           notes: [
             for (final note in state.notes)
-              if (p.equals(note.absolutePath, file.absolute.path))
+              if (p.equals(note.absolutePath, p.absolute(path)))
                 VaultNote(
                   absolutePath: note.absolutePath,
                   relativePath: note.relativePath,
@@ -484,20 +471,17 @@ class ObsidianVault
       final target = p.normalize(p.absolute(resolveNotePath(path)));
       if (!p.isWithin(notesFolder, target) ||
           p.extension(target).toLowerCase() != '.md' ||
-          await FileSystemEntity.type(target, followLinks: false) !=
+          await _files.type(target, followLinks: false) !=
               FileSystemEntityType.file) {
         throw ArgumentError('Удалять можно только .md файлы из папки Notes.');
       }
-      final file = File(target);
-      final resolvedFolder = await Directory(
-        notesFolder,
-      ).resolveSymbolicLinks();
-      final resolvedFile = await file.resolveSymbolicLinks();
+      final resolvedFolder = await _files.canonicalPath(notesFolder);
+      final resolvedFile = await _files.canonicalPath(target);
       if (!p.isWithin(resolvedFolder, resolvedFile)) {
         throw ArgumentError('Файл находится за пределами папки Notes.');
       }
       checkSelection();
-      await file.delete();
+      await _files.delete(target);
       _publish(
         VaultState(
           vaultPath: state.vaultPath,
@@ -526,19 +510,18 @@ class ObsidianVault
           .replaceAll(String.fromCharCode(92), '_');
       if (sanitized.isEmpty || sanitized == '.' || sanitized == '..')
         throw ArgumentError.value(title, 'title');
-      final directory = Directory(_folderPath(root, _folders.notes));
-      await directory.create(recursive: true);
+      final directory = _folderPath(root, _folders.notes);
+      await _files.createDirectory(directory);
       final stem = p.extension(sanitized).toLowerCase() == '.md'
           ? p.basenameWithoutExtension(sanitized)
           : sanitized;
-      final file = File(p.join(directory.path, '$stem.md'));
-      await file.create(exclusive: true);
-      await file.writeAsString(content, flush: true);
+      final path = p.join(directory, '$stem.md');
+      await _files.writeNew(path, content);
       final note = VaultNote(
-        absolutePath: file.absolute.path,
-        relativePath: p.relative(file.path, from: state.vaultPath),
+        absolutePath: path,
+        relativePath: p.relative(path, from: state.vaultPath),
         title: sanitized,
-        modifiedAt: (await file.stat()).modified,
+        modifiedAt: DateTime.now(),
         content: content,
       );
       _publish(
@@ -591,17 +574,17 @@ class ObsidianVault
     final root = state.vaultPath;
     final selection = _vaultSelectionGeneration;
     if (root.isEmpty) return;
-    final directory = Directory(_folderPath(root, folders.boards));
-    if (!await directory.exists()) return;
-    await for (final file in directory.list(followLinks: false)) {
-      if (file is! File ||
-          p.extension(file.path) != '.canvas' ||
+    final directory = _folderPath(root, folders.boards);
+    if (await _files.type(directory) != FileSystemEntityType.directory) return;
+    for (final file in await _files.list(directory)) {
+      if (file.type != FileSystemEntityType.file ||
+          p.extension(file.name) != '.canvas' ||
           !RegExp(
             r'^[a-zA-Z0-9_-]+$',
-          ).hasMatch(p.basenameWithoutExtension(file.path))) {
+          ).hasMatch(p.basenameWithoutExtension(file.name))) {
         continue;
       }
-      final raw = await file.readAsString();
+      final raw = await _readRequired(p.join(directory, file.name));
       final updated = _rewriteNotePaths(
         raw,
         root,
@@ -611,7 +594,7 @@ class ObsidianVault
       final board = _VaultCanvasBoard(
         this,
         root,
-        p.basenameWithoutExtension(file.path),
+        p.basenameWithoutExtension(file.name),
         selection,
       );
       await board._write(updated, expected: raw);
@@ -691,24 +674,21 @@ class ObsidianVault
       }
       final next = p.join(p.dirname(previous), '$stem.md');
       if (p.equals(previous, next)) return previous;
-      final original = File(previous);
-      final content = await original.readAsString();
-      final destination = File(next);
-      await destination.create(exclusive: true);
-      await destination.writeAsString(content, flush: true);
+      final content = await _readRequired(previous);
+      await _files.writeNew(next, content);
       try {
         await _remapBoardReferences(previous, next);
         await updateReferences?.call(previous, next);
         if (selection != _vaultSelectionGeneration) {
           throw StateError('Хранилище изменено.');
         }
-        if (await original.readAsString() != content) {
+        if (await _files.read(previous) != content) {
           throw StateError(
             'Исходная заметка изменилась во время переименования.',
           );
         }
         _registerRenamedPath(previous, next);
-        await original.delete();
+        await _files.delete(previous);
       } catch (error) {
         throw FileSystemException(
           'Переименование не завершено. Исходник сохранён, новая копия: $next. $error',
@@ -733,14 +713,13 @@ class ObsidianVault
       throw ArgumentError('Укажите имя заметки.');
     }
     return _enqueue(() async {
-      final folder = Directory(p.normalize(directory));
-      if (!await folder.exists()) {
-        throw FileSystemException('Папка не найдена', folder.path);
+      final folder = p.normalize(directory);
+      if (await _files.type(folder) != FileSystemEntityType.directory) {
+        throw FileSystemException('Папка не найдена', folder);
       }
-      final file = File(p.join(folder.path, '$stem.md'));
-      await file.create(exclusive: true);
-      await file.writeAsString(text, flush: true);
-      return file.path;
+      final path = p.join(folder, '$stem.md');
+      await _files.writeNew(path, text);
+      return path;
     });
   }
 
@@ -776,12 +755,9 @@ class _VaultCanvasBoard implements CanvasBoardSession {
   final String sphereId;
 
   Future<String> _backupPath(String kind) async {
-    final directory = Directory(vault._folderPath(root, vault.folders.backups));
-    await directory.create(recursive: true);
-    return p.join(
-      directory.path,
-      '$sphereId.$kind-${const Uuid().v4()}.canvas',
-    );
+    final directory = vault._folderPath(root, vault.folders.backups);
+    await vault._files.createDirectory(directory);
+    return p.join(directory, '$sphereId.$kind-${const Uuid().v4()}.canvas');
   }
 
   void _checkSelection() {
@@ -812,10 +788,7 @@ class _VaultCanvasBoard implements CanvasBoardSession {
     return vault.resolveNotePath(result);
   }
 
-  Future<String?> _read() async {
-    final file = File(path);
-    return await file.exists() ? file.readAsString() : null;
-  }
+  Future<String?> _read() => vault._files.read(path);
 
   @override
   Future<String?> read() {
@@ -842,31 +815,17 @@ class _VaultCanvasBoard implements CanvasBoardSession {
 
   Future<void> _write(String content, {required String? expected}) async {
     _checkSelection();
-    final directory = Directory(p.dirname(path));
-    await directory.create(recursive: true);
-    final temporary = File(p.join(directory.path, '.${const Uuid().v4()}.tmp'));
-    try {
-      await temporary.writeAsString(content, flush: true);
-      // Compare complete bytes-as-text immediately before replacement, not mtimes.
-      if (await _read() != expected) {
-        final recovery = await _backupPath('conflict');
-        await temporary.rename(recovery);
-        throw CanvasBoardConflict(recovery);
-      }
-      if (expected == null) {
-        // Keep the initial migrated layout independently of future cache writes.
-        await File(
-          await _backupPath('migration'),
-        ).writeAsString(content, flush: true);
-      }
-      if (await _read() != expected) {
-        final recovery = await _backupPath('conflict');
-        await temporary.rename(recovery);
-        throw CanvasBoardConflict(recovery);
-      }
-      await temporary.rename(path);
-    } finally {
-      if (await temporary.exists()) await temporary.delete();
+    final files = vault._files;
+    if (await _read() == content && content == expected) return;
+    await files.createDirectory(p.dirname(path));
+    if (expected == null && await _read() == null) {
+      // Keep the initial migrated layout independently of future cache writes.
+      await files.writeNew(await _backupPath('migration'), content);
+    }
+    if (!await files.replace(path, content, expected: expected)) {
+      final recovery = await _backupPath('conflict');
+      await files.writeNew(recovery, content);
+      throw CanvasBoardConflict(recovery);
     }
   }
 }

@@ -1,5 +1,6 @@
 import 'package:graph_api/graph_api.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart'
+    show kIsWeb, defaultTargetPlatform, TargetPlatform;
 import 'package:sync_plugin/sync_logic.dart';
 import 'package:sync_plugin/sync_native.dart';
 import 'package:life_os/features/sync/data/secure_sync_secrets.dart';
@@ -40,6 +41,7 @@ import 'package:life_os/features/tasks/data/telegram_task_queries.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
 import 'package:life_os/features/lifegraph/data/graph_storage_repository.dart';
+import 'package:life_os/features/lifegraph/data/android_graph_files.dart';
 import 'package:life_os/features/settings/settings_service.dart';
 import 'package:life_os/features/projects/data/projects_dao.dart';
 import 'package:life_os/features/projects/data/projects_repository.dart';
@@ -109,7 +111,13 @@ class DependencyContainer {
     goalsRepository = GoalsRepository(goalsDao);
     habitsRepository = HabitsRepository(habitsDao);
     workLogsRepository = WorkLogsRepository(workLogsDao);
-    obsidianRepository = enableObsidian ? ObsidianVault() : null;
+    final graphFiles =
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+        ? const AndroidGraphFiles()
+        : const LocalVaultFiles();
+    obsidianRepository = enableObsidian
+        ? ObsidianVault(files: graphFiles)
+        : null;
     ui = PluginUiRegistry();
     navigation = PluginNavigationController(ui);
     syncPlugin = enableSync && !kIsWeb
@@ -126,6 +134,7 @@ class DependencyContainer {
       target: SettingsService.graphStorageTarget,
       vaultFolders: SettingsService.graphFolders,
       obsidian: obsidianRepository,
+      files: graphFiles,
       onNoteRenamed: graphNotesRepository.renameSource,
       beforeSwitch: () async {
         await Future.wait([

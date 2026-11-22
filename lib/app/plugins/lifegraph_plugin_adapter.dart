@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:lifegraph_plugin/lifegraph_plugin.dart';
 import 'package:graph_api/graph_api.dart';
 import 'package:graph_ui/graph_ui.dart';
@@ -10,9 +11,12 @@ import 'package:tasks_api/tasks_api.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_folders_form.dart';
 import 'package:life_os/features/lifegraph/data/graph_storage_settings_adapter.dart';
+import 'package:life_os/features/lifegraph/data/android_graph_files.dart';
 import 'package:life_os/features/settings/settings_service.dart';
 import 'package:lifegraph_plugin/graph_storage_settings.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_directory_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 LifeGraphPlugin createLifeGraphPlugin({
   required SpheresApi spheres,
@@ -51,6 +55,14 @@ LifeGraphPlugin createLifeGraphPlugin({
     initialTarget: SettingsService.graphStorageTarget.value,
     vaultPath: SettingsService.obsidianVaultPath.value,
     pickDirectory: pickGraphDirectory,
+    pickSharedFolder: !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+        ? AndroidGraphFiles.pickFolder
+        : null,
+    localAppDirectory:
+        !kIsWeb && defaultTargetPlatform == TargetPlatform.android
+        ? () async =>
+              p.join((await getApplicationDocumentsDirectory()).path, 'Pulse')
+        : null,
     saveTarget: selectStorageTarget == null
         ? null
         : (target) async {

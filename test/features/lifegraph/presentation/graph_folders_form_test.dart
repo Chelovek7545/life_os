@@ -46,6 +46,36 @@ void main() {
     expect(saved!.localPath, r'C:\Pulse');
     expect(folderSaves, 0);
   });
+  testWidgets('device storage replaces the old manually selected folder', (
+    tester,
+  ) async {
+    GraphStorageTarget? saved;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: GraphFoldersForm(
+            initial: const VaultFolders(),
+            initialTarget: const GraphStorageTarget(
+              mode: GraphStorageMode.local,
+              localPath: '/storage/emulated/0/Pulse',
+            ),
+            listFolders: () async => [],
+            save: (_) async {},
+            saveTarget: (target) async => saved = target,
+            localAppDirectory: () async => '/data/user/0/app/app_flutter/Pulse',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('В хранилище Pulse на устройстве'), findsOneWidget);
+    expect(find.byKey(const ValueKey('graph-local-root')), findsNothing);
+    await tester.tap(find.text('Сохранить папки'));
+    await tester.pumpAndSettle();
+
+    expect(saved?.mode, GraphStorageMode.local);
+    expect(saved?.localPath, '/data/user/0/app/app_flutter/Pulse');
+  });
   test('storage mode and single root survive settings reload', () async {
     final previous = SettingsService.graphStorageTarget.value;
     SharedPreferences.setMockInitialValues({});
@@ -65,6 +95,50 @@ void main() {
       SettingsService.graphStorageTarget.value = previous;
     }
   });
+  testWidgets(
+    'a shared folder is required and cancellation keeps the current choice',
+    (tester) async {
+      const folder = GraphStorageTarget(
+        mode: GraphStorageMode.sharedFolder,
+        localPath: '/.pulse-android-folder/identifier',
+        folderName: 'Мой vault',
+      );
+      GraphStorageTarget? saved;
+      var pickerCalls = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: GraphFoldersForm(
+              initial: const VaultFolders(),
+              listFolders: () async => [],
+              save: (_) async {},
+              saveTarget: (target) async => saved = target,
+              pickSharedFolder: () async => ++pickerCalls == 1 ? folder : null,
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('graph-storage-mode')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('В выбранной папке').last);
+      await tester.pumpAndSettle();
+      final save = find.widgetWithText(FilledButton, 'Сохранить папки');
+      expect(tester.widget<FilledButton>(save).onPressed, isNull);
+
+      await tester.tap(find.text('Выбрать папку'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Мой vault'));
+      await tester.pumpAndSettle();
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(saved, same(folder));
+      expect(
+        GraphStorageTarget.fromJson(folder.toJson()).toJson(),
+        folder.toJson(),
+      );
+    },
+  );
   testWidgets(
     'folder browser selects a directory and form saves each category',
     (tester) async {

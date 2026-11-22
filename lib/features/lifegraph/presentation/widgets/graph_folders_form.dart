@@ -11,6 +11,8 @@ class GraphFoldersForm extends StatefulWidget {
     this.initialTarget = const GraphStorageTarget(),
     this.saveTarget,
     this.pickDirectory,
+    this.localAppDirectory,
+    this.pickSharedFolder,
     this.vaultPath = '',
   });
   final VaultFolders initial;
@@ -19,6 +21,8 @@ class GraphFoldersForm extends StatefulWidget {
   final GraphStorageTarget initialTarget;
   final Future<void> Function(GraphStorageTarget)? saveTarget;
   final Future<String?> Function()? pickDirectory;
+  final Future<String> Function()? localAppDirectory;
+  final Future<GraphStorageTarget?> Function()? pickSharedFolder;
   final String vaultPath;
   @override
   State<GraphFoldersForm> createState() => _GraphFoldersFormState();
@@ -32,8 +36,13 @@ class _GraphFoldersFormState extends State<GraphFoldersForm> {
     widget.initial.backups,
   ].map((text) => TextEditingController(text: text)).toList();
   bool _saving = false;
+  bool _picking = false;
   String? _error;
   late GraphStorageMode _mode = widget.initialTarget.mode;
+  late GraphStorageTarget? _sharedFolder =
+      widget.initialTarget.mode == GraphStorageMode.sharedFolder
+      ? widget.initialTarget
+      : null;
   late final _root = TextEditingController(
     text: widget.initialTarget.localPath,
   );
@@ -94,9 +103,17 @@ class _GraphFoldersFormState extends State<GraphFoldersForm> {
     });
     try {
       if (widget.saveTarget != null) {
-        await widget.saveTarget!(
-          GraphStorageTarget(mode: _mode, localPath: _root.text.trim()),
-        );
+        final localAppDirectory = widget.localAppDirectory;
+        final localPath =
+            _mode == GraphStorageMode.local && localAppDirectory != null
+            ? await localAppDirectory()
+            : _root.text.trim();
+        if (!mounted) return;
+        final target = _mode == GraphStorageMode.sharedFolder
+            ? _sharedFolder ??
+                  (throw StateError('Выберите папку для файлов графа.'))
+            : GraphStorageTarget(mode: _mode, localPath: localPath);
+        await widget.saveTarget!(target);
       }
       if (_mode == GraphStorageMode.obsidian) {
         await widget.save(
@@ -120,6 +137,21 @@ class _GraphFoldersFormState extends State<GraphFoldersForm> {
     }
   }
 
+  Future<void> _chooseSharedFolder() async {
+    setState(() {
+      _picking = true;
+      _error = null;
+    });
+    try {
+      final selected = await widget.pickSharedFolder!();
+      if (mounted && selected != null) setState(() => _sharedFolder = selected);
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.all(16),
@@ -134,24 +166,55 @@ class _GraphFoldersFormState extends State<GraphFoldersForm> {
             key: const ValueKey('graph-storage-mode'),
             initialValue: _mode,
             decoration: const InputDecoration(labelText: 'Где хранить файлы'),
-            items: const [
-              DropdownMenuItem(
+            items: [
+              const DropdownMenuItem(
                 value: GraphStorageMode.obsidian,
                 child: Text('В vault Obsidian'),
               ),
               DropdownMenuItem(
                 value: GraphStorageMode.local,
-                child: Text('В папке Pulse на компьютере'),
+                child: Text(
+                  widget.localAppDirectory == null
+                      ? 'В папке Pulse на компьютере'
+                      : 'В хранилище Pulse на устройстве',
+                ),
               ),
+              if (widget.pickSharedFolder != null ||
+                  _mode == GraphStorageMode.sharedFolder)
+                const DropdownMenuItem(
+                  value: GraphStorageMode.sharedFolder,
+                  child: Text('В выбранной папке'),
+                ),
             ],
-            onChanged: _saving
+            onChanged: _saving || _picking
                 ? null
                 : (value) {
                     if (value != null) setState(() => _mode = value);
                   },
           ),
           const SizedBox(height: 12),
-          if (_mode == GraphStorageMode.local) ...[
+          if (_mode == GraphStorageMode.sharedFolder) ...[
+            OutlinedButton.icon(
+              onPressed: _saving || _picking || widget.pickSharedFolder == null
+                  ? null
+                  : _chooseSharedFolder,
+              icon: const Icon(Icons.folder_open_outlined),
+              label: Text(
+                _sharedFolder?.folderName.isNotEmpty == true
+                    ? _sharedFolder!.folderName
+                    : 'Выбрать папку',
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Pulse будет сохранять сюда доски, заметки, экспорты и резервные копии.',
+            ),
+          ] else if (_mode == GraphStorageMode.local &&
+              widget.localAppDirectory != null)
+            const Text(
+              'Доски, новые заметки графа, экспорты и копии будут храниться во внутренней папке приложения.',
+            )
+          else if (_mode == GraphStorageMode.local) ...[
             TextField(
               key: const ValueKey('graph-local-root'),
               controller: _root,
@@ -223,7 +286,13 @@ class _GraphFoldersFormState extends State<GraphFoldersForm> {
           ),
         const SizedBox(height: 12),
         FilledButton(
-          onPressed: _saving ? null : _save,
+          onPressed:
+              _saving ||
+                  _picking ||
+                  (_mode == GraphStorageMode.sharedFolder &&
+                      _sharedFolder == null)
+              ? null
+              : _save,
           child: const Text('Сохранить папки'),
         ),
       ],
