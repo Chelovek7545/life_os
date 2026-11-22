@@ -30,6 +30,7 @@ class _Control implements LocalSyncControl {
   LocalSyncState state = LocalSyncState();
   final events = StreamController<LocalSyncState>.broadcast();
   final calls = <String>[];
+  List<String> localAddresses = ['192.168.1.2'];
   Future<void> Function(String)? exchange;
   Map<String, List<SyncRevision>> variants = {};
   Set<String>? resolvedBasis;
@@ -42,7 +43,7 @@ class _Control implements LocalSyncControl {
   }
 
   @override
-  Future<List<String>> addresses() async => ['192.168.1.2'];
+  Future<List<String>> addresses() async => localAddresses;
   @override
   Future<void> createSpace() async {
     calls.add('create');
@@ -239,6 +240,26 @@ void main() {
       expect(find.text('Приём по локальной сети'), findsOneWidget);
     },
   );
+
+  testWidgets('invitation uses the chosen IP when several are available', (
+    tester,
+  ) async {
+    control.state = LocalSyncState(enrolled: true);
+    control.localAddresses = ['10.6.7.1', '192.168.1.8'];
+    await show(tester, width: 360);
+
+    final host = tester.widget<TextField>(find.byType(TextField));
+    expect(host.controller!.text, isEmpty);
+    await tester.tap(find.byTooltip('Выбрать локальный IP'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('192.168.1.8'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Пригласить устройство'));
+    await tester.pumpAndSettle();
+
+    expect(control.calls, ['invite:192.168.1.8']);
+  });
+
   testWidgets(
     'narrow layout shows approval, pending and busy state without an overflow',
     (tester) async {

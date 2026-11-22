@@ -12,17 +12,24 @@ class SyncSettingsPanel extends StatefulWidget {
 }
 
 class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
-  final _host = TextEditingController(text: '127.0.0.1');
+  final _host = TextEditingController();
   final _invitation = TextEditingController();
+  List<String> _addresses = const [];
   String? _error;
   late final int _generation;
   @override
   void initState() {
     super.initState();
     _generation = widget.control.generation;
+    final endpoint = widget.control.state.endpoint;
+    if (endpoint != null) {
+      _host.text = Uri.parse(endpoint).host;
+    }
     widget.control.addresses().then((addresses) {
-      if (mounted && addresses.isNotEmpty && _host.text == '127.0.0.1') {
-        setState(() => _host.text = addresses.first);
+      if (!mounted || _generation != widget.control.generation) return;
+      setState(() => _addresses = addresses.toSet().toList());
+      if (_addresses.length == 1 && _host.text.isEmpty) {
+        _host.text = _addresses.single;
       }
     }, onError: (Object _) {});
   }
@@ -453,9 +460,20 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
             TextField(
               controller: _host,
               enabled: !s.busy,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'IP этого устройства',
                 helperText: 'Адрес Wi-Fi или Ethernet в локальной сети',
+                suffixIcon: _addresses.length > 1
+                    ? PopupMenuButton<String>(
+                        enabled: !s.busy,
+                        tooltip: 'Выбрать локальный IP',
+                        onSelected: (address) => _host.text = address,
+                        itemBuilder: (_) => [
+                          for (final address in _addresses)
+                            PopupMenuItem(value: address, child: Text(address)),
+                        ],
+                      )
+                    : null,
               ),
             ),
             const SizedBox(height: 12),
