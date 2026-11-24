@@ -8,13 +8,18 @@ part 'habits_dao.g.dart';
 
 @DriftAccessor(tables: [Habits, HabitEntries])
 class HabitsDao extends DatabaseAccessor<AppDatabase> with _$HabitsDaoMixin {
-  HabitsDao(super.db);
+  HabitsDao(super.db, {this.capture});
+
+  final Future<void> Function(Future<void> Function())? capture;
+
+  Future<void> _write(Future<void> Function() action) =>
+      capture?.call(action) ?? transaction(action);
 
   // =============== HABITS: CREATE ===============
 
-  Future<void> createHabit(HabitsCompanion habit) async {
+  Future<void> createHabit(HabitsCompanion habit) => _write(() async {
     await into(habits).insert(habit);
-  }
+  });
 
   // =============== HABITS: READ ===============
 
@@ -46,26 +51,26 @@ class HabitsDao extends DatabaseAccessor<AppDatabase> with _$HabitsDaoMixin {
 
   // =============== HABITS: UPDATE ===============
 
-  Future<void> updateHabit(Habit habit) async {
+  Future<void> updateHabit(Habit habit) => _write(() async {
     await update(habits).replace(habit.toDrift());
-  }
+  });
 
-  Future<void> archiveHabit(String id) async {
+  Future<void> archiveHabit(String id) => _write(() async {
     await (update(habits)..where((h) => h.id.equals(id))).write(
       HabitsCompanion(
         isArchived: const Value(true),
         updatedAt: Value(DateTime.now()),
       ),
     );
-  }
+  });
 
   // =============== HABITS: DELETE ===============
 
-  Future<void> deleteHabit(String id) async {
+  Future<void> deleteHabit(String id) => _write(() async {
     // Удаляем записи явно (drift не включает PRAGMA foreign_keys по умолчанию).
     await (delete(habitEntries)..where((e) => e.habitId.equals(id))).go();
     await (delete(habits)..where((h) => h.id.equals(id))).go();
-  }
+  });
 
   // =============== ENTRIES ===============
 
@@ -89,7 +94,7 @@ class HabitsDao extends DatabaseAccessor<AppDatabase> with _$HabitsDaoMixin {
     String habitId,
     String dateKey,
     HabitEntryStatus status,
-  ) async {
+  ) => _write(() async {
     final existing = await getEntry(habitId, dateKey);
     if (existing == null) {
       await into(habitEntries).insert(
@@ -116,5 +121,5 @@ class HabitsDao extends DatabaseAccessor<AppDatabase> with _$HabitsDaoMixin {
         ),
       );
     }
-  }
+  });
 }

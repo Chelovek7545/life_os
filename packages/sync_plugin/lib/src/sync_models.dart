@@ -1,9 +1,14 @@
 import 'dart:convert';
+import 'dart:math' show min;
 import 'task_sync_codec.dart';
 import 'hierarchy_sync_codec.dart';
 import 'sync_payload.dart';
+import 'sticker_sync_codec.dart';
 
 class SyncRevision {
+  static const supportedSchema = 9;
+  static const maxPayloadBytes = 1024 * 1024;
+
   SyncRevision({
     required this.id,
     required this.deviceId,
@@ -29,7 +34,7 @@ class SyncRevision {
   bool get deleted => payload == null;
 
   void validate() {
-    if (schemaVersion < 1 || schemaVersion > 4) {
+    if (schemaVersion < 1 || schemaVersion > supportedSchema) {
       throw UnsupportedError('Unknown sync schema.');
     }
     if (!SyncPayload.types.contains(entityType) ||
@@ -37,6 +42,12 @@ class SyncRevision {
             .skip(1)
             .any((type) => entityId.startsWith('$type/')) ||
         (schemaVersion < 3 && !['task', 'workLog'].contains(entityType)) ||
+        (schemaVersion < 5 && SyncPayload.schema5Types.contains(entityType)) ||
+        (schemaVersion < 6 && entityType == 'sticker') ||
+        (entityType == 'canvasNode' &&
+            (schemaVersion < 8 || payload == null)) ||
+        (entityType == 'canvasBoard' &&
+            (schemaVersion < 9 || payload == null)) ||
         (schemaVersion == 1 &&
             (entityType != 'task' ||
                 groupId != null ||
@@ -66,7 +77,7 @@ class SyncRevision {
       throw const FormatException('Invalid revision identity or parents.');
     }
     if (payload != null &&
-        (utf8.encode(payload!).length > 1024 * 1024 ||
+        (utf8.encode(payload!).length > maxPayloadBytes ||
             SyncPayload.payloadId(entityType, payload!) != entityId)) {
       throw const FormatException('Invalid revision payload.');
     }
@@ -84,6 +95,12 @@ class SyncRevision {
       if (schemaVersion == 1 && task.parentTaskId != null) {
         throw const FormatException('Task relationships require schema 2.');
       }
+    }
+    if (entityType == 'sticker' &&
+        payload != null &&
+        schemaVersion < 7 &&
+        SyncSticker.decode(payload!).markdownPath != null) {
+      throw const FormatException('Markdown stickers require schema 7.');
     }
   }
 
@@ -142,7 +159,10 @@ class SyncGraph {
         if (parent != null && parent.key != r.key) {
           throw const FormatException('Parent belongs to another entity.');
         }
-        if (parent != null && parent.deleted && !r.deleted) {
+        if (parent != null &&
+            parent.deleted &&
+            !r.deleted &&
+            !SyncPayload.externalNotes.contains(r.entityType)) {
           throw const FormatException('Deleted IDs cannot be restored.');
         }
       }
@@ -289,6 +309,11 @@ class SyncGraph {
   SyncRevision? winner(String key) {
     final versions = heads[key] ?? [];
     if (versions.isEmpty) return null;
+    if (SyncPayload.canvasTypes.contains(versions.first.entityType)) {
+      return versions.reduce(
+        (a, b) => a.deviceId.compareTo(b.deviceId) <= 0 ? a : b,
+      );
+    }
     return versions.firstWhere((r) => r.deleted, orElse: () => versions.first);
   }
 }
@@ -314,29 +339,123 @@ class SyncBatch {
   int get cursor => entries.isEmpty ? after : entries.last.sequence;
 }
 
+enum SyncSection {
+  notes,
+  tasks,
+  projects,
+  graph,
+  habits;
+
+  static SyncSection forEntity(String type) => switch (type) {
+    'note' => notes,
+    'task' || 'workLog' || 'tag' => tasks,
+    'project' => projects,
+    'goal' || 'sphere' || 'sticker' || 'canvasNode' || 'canvasBoard' => graph,
+    'habit' || 'habitEntry' => habits,
+    _ => throw const FormatException('Unknown sync section.'),
+  };
+}
+
+class SyncFeedPlan {
+  SyncFeedPlan(this.through, Map<SyncSection, int> counts)
+    : counts = Map.unmodifiable(counts);
+
+  final int through;
+  final Map<SyncSection, int> counts;
+}
+
+class SyncTransferProgress {
+  SyncTransferProgress(
+    Map<SyncSection, int> planned,
+    Map<SyncSection, int> transferred,
+    Iterable<SyncSection> active,
+  ) : planned = Map.unmodifiable(planned),
+      transferred = Map.unmodifiable(transferred),
+      active = Set.unmodifiable(active);
+
+  final Map<SyncSection, int> planned;
+  final Map<SyncSection, int> transferred;
+  final Set<SyncSection> active;
+  int get total => planned.values.fold(0, (sum, count) => sum + count);
+  int get done => transferred.values.fold(0, (sum, count) => sum + count);
+}
+
 abstract interface class SyncStore {
   Future<SyncIdentity> identity();
+  Future<SyncFeedPlan> planFeed({required int after});
   Future<SyncBatch> readFeed({int after = 0, int limit = 100});
   Future<int> receivedCursor(String deviceId);
   Future<void> receive(SyncBatch batch);
 }
 
 class SyncEngine {
-  // A transport-independent session. Network authentication belongs to stage 3.
-  Future<void> exchange(SyncStore a, SyncStore b) async {
-    await _transfer(a, b);
-    await _transfer(b, a);
-  }
-
-  Future<void> _transfer(SyncStore source, SyncStore target) async {
-    var cursor = await target.receivedCursor(
-      (await source.identity()).deviceId,
-    );
-    while (true) {
-      final batch = await source.readFeed(after: cursor);
-      if (batch.entries.isEmpty) return;
-      await target.receive(batch);
-      cursor = batch.cursor;
+  Future<void> exchange(
+    SyncStore a,
+    SyncStore b, {
+    void Function(SyncTransferProgress)? onProgress,
+  }) async {
+    final outgoing = await b.receivedCursor((await a.identity()).deviceId);
+    final incoming = await a.receivedCursor((await b.identity()).deviceId);
+    final local = await a.planFeed(after: outgoing);
+    final remote = await b.planFeed(after: incoming);
+    for (final (cursor, plan) in [(outgoing, local), (incoming, remote)]) {
+      if (plan.through < cursor ||
+          plan.counts.values.any((count) => count < 0) ||
+          plan.counts.values.fold<int>(0, (sum, count) => sum + count) !=
+              plan.through - cursor) {
+        throw const FormatException('Invalid sync plan.');
+      }
     }
+
+    final planned = {
+      for (final section in SyncSection.values)
+        section: (local.counts[section] ?? 0) + (remote.counts[section] ?? 0),
+    };
+    final transferred = <SyncSection, int>{};
+    void emit(Iterable<SyncSection> active) =>
+        onProgress?.call(SyncTransferProgress(planned, transferred, active));
+
+    Future<void> transfer(
+      SyncStore source,
+      SyncStore target,
+      int cursor,
+      SyncFeedPlan plan,
+    ) async {
+      final remaining = Map.of(plan.counts);
+      while (cursor < plan.through) {
+        final batch = await source.readFeed(
+          after: cursor,
+          limit: min(100, plan.through - cursor),
+        );
+        if (batch.entries.isEmpty || batch.cursor > plan.through) {
+          throw const FormatException('Incomplete planned sync feed.');
+        }
+        final counts = <SyncSection, int>{};
+        for (final entry in batch.entries) {
+          final section = SyncSection.forEntity(entry.revision.entityType);
+          counts.update(section, (count) => count + 1, ifAbsent: () => 1);
+        }
+        for (final entry in counts.entries) {
+          final pending = (remaining[entry.key] ?? 0) - entry.value;
+          if (pending < 0) throw const FormatException('Sync plan changed.');
+          remaining[entry.key] = pending;
+        }
+        emit(counts.keys);
+        await target.receive(batch);
+        for (final entry in counts.entries) {
+          transferred.update(
+            entry.key,
+            (count) => count + entry.value,
+            ifAbsent: () => entry.value,
+          );
+        }
+        emit(const []);
+        cursor = batch.cursor;
+      }
+    }
+
+    emit(const []);
+    await transfer(a, b, outgoing, local);
+    await transfer(b, a, incoming, remote);
   }
 }

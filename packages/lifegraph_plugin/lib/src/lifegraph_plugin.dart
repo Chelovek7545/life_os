@@ -48,6 +48,7 @@ class LifeGraphPlugin {
     required Future<void> Function(Task) completeTask,
     this._vault,
     this.rootKind = 'sphere',
+    this.ensureAllBoards = false,
     Set<String> dependencies = const {},
     this.storageSettings,
     GraphStorageSettingsBuilder? storageSettingsBuilder,
@@ -123,6 +124,7 @@ class LifeGraphPlugin {
   final GraphCommandRegistry _commands;
   final VaultNotesApi? _vault;
   final String rootKind;
+  final bool ensureAllBoards;
   final GraphStorageSettings? storageSettings;
   final PluginUiRegistry _ui;
   late final List<AppPlugin> plugins;
@@ -182,6 +184,7 @@ class _LifeGraphLifecycle implements AppPlugin {
       tasksRepository: module._tasks,
       positionsRepository: module._positions,
       notesRepository: module._notes,
+      ensureAllBoards: module.ensureAllBoards,
       graphBuilder: builder,
       nodePresentations: module._presentations,
       nodeEditors: module._editors,

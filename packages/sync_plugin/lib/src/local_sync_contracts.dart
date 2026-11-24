@@ -47,6 +47,9 @@ class LanSyncOptions {
 
 class LocalSyncException implements Exception {
   const LocalSyncException(this.message);
+  static const missingLocalIp = LocalSyncException(
+    'Укажите IP этого устройства. Выберите адрес Wi-Fi или Ethernet.',
+  );
   final String message;
   @override
   String toString() => message;
@@ -69,6 +72,15 @@ class LocalSyncPending {
   final Set<String> basis;
 }
 
+enum LocalSyncPhase { connecting, transferring, applying, complete, failed }
+
+class LocalSyncRun {
+  const LocalSyncRun(this.peerId, this.phase, [this.transfer]);
+  final String peerId;
+  final LocalSyncPhase phase;
+  final SyncTransferProgress? transfer;
+}
+
 class LocalSyncState {
   LocalSyncState({
     this.listening = false,
@@ -76,19 +88,32 @@ class LocalSyncState {
     this.enrolled = false,
     this.endpoint,
     this.deviceId,
+    this.deviceName = 'Это устройство',
     this.invitation,
     this.awaitingApproval,
+    this.joining = false,
+    this.confirmingDevice,
     this.error,
     this.lastSync,
+    this.run,
+    this.notesNeedFolder = false,
     Iterable<LocalSyncPeer> peers = const [],
+    Iterable<LocalSyncPeer> unverifiedPeers = const [],
     this.conflictCount = 0,
     this.pendingCount = 0,
-  }) : peers = List.unmodifiable(peers);
+  }) : peers = List.unmodifiable(peers),
+       unverifiedPeers = List.unmodifiable(unverifiedPeers);
   final bool listening, busy, enrolled;
   final String? endpoint, invitation, error, deviceId;
+  final String deviceName;
   final LocalSyncPeer? awaitingApproval;
+  final bool joining;
+  final String? confirmingDevice;
   final List<LocalSyncPeer> peers;
+  final List<LocalSyncPeer> unverifiedPeers;
   final DateTime? lastSync;
+  final LocalSyncRun? run;
+  final bool notesNeedFolder;
   final int conflictCount, pendingCount;
 }
 
@@ -111,6 +136,7 @@ abstract interface class LocalSyncControl {
   Future<void> join(String invitation, String host);
   Future<void> approve(String id);
   Future<void> reject(String id);
+  Future<void> verifyPair(String id);
   Future<void> synchronize(String id);
   Future<void> revoke(String id);
   Future<Map<String, List<SyncRevision>>> conflicts();

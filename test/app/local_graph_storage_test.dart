@@ -1,9 +1,16 @@
+import 'dart:convert';
 import 'dart:io';
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:graph_api/graph_api.dart';
 import 'package:life_os/app/dependency_container.dart';
+import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/settings/settings_service.dart';
+import 'package:lifegraph_plugin/canvas_board.dart';
 import 'package:lifegraph_plugin/graph_storage_settings.dart';
+import 'package:notes_api/notes_api.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:spheres_api/spheres_api.dart';
 import '../support/test_app.dart';
 
@@ -32,6 +39,101 @@ void main() {
     }
     await temporary.delete(recursive: true);
   });
+
+  test(
+    'default Canvas root migrates unopened graphs and creates new boards',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      SettingsService.graphStorageTarget.value = const GraphStorageTarget();
+      final root = p.join(temporary.path, 'Pulse');
+      final container = DependencyContainer(
+        database: AppDatabase(NativeDatabase.memory()),
+        defaultGraphRoot: () async => root,
+        enableObsidian: false,
+        enableTelegram: false,
+      );
+      app = container;
+      final old = Sphere.create(name: 'Прежний граф');
+      await container.spheresRepository.addSphere(old);
+      await container.graphPositionsRepository.savePositions(old.id, {
+        old.id: const GraphPoint(310, 420),
+      });
+      await container.graphPositionsRepository.saveLastSphereId('last-viewed');
+      await container.graphNotesRepository.saveNotes(old.id, [
+        const CanvasNote(
+          document: NoteDocument(id: 'legacy-sticker', text: 'Прежняя запись'),
+          x: 30,
+          y: 40,
+          width: 220,
+          height: 150,
+          index: 0,
+        ),
+      ]);
+
+      await container.init();
+      final path = p.join(root, 'Boards', '${old.id}.canvas');
+      final migrated = CanvasBoardDocument(await File(path).readAsString());
+      final sphereNode = migrated.nodes.singleWhere(
+        (node) => migrated.entityId(node) == old.id,
+      );
+      expect(sphereNode['x'], 310);
+      expect(sphereNode['y'], 420);
+      expect(migrated.stickers.single.id, 'legacy-sticker');
+      expect(migrated.stickers.single.text, 'Прежняя запись');
+      expect(
+        await container.graphPositionsRepository.loadLastSphereId(),
+        'last-viewed',
+      );
+
+      final pulse = container.lifeGraphPlugin.viewModel;
+      final graph = await pulse.openGraph(old.id);
+      await graph.graphStream.firstWhere((nodes) => nodes.isNotEmpty);
+      await graph.flush();
+      final session = await container.graphStorageRepository.openCanvasBoard(
+        old.id,
+      );
+      final current = (await session.read())!;
+      final board = CanvasBoardDocument(
+        jsonEncode(
+          CanvasBoardDocument(current).applyNodeGeometry({
+            old.id: (x: 620, y: 740, width: 300, height: 190),
+          }),
+        ),
+      );
+      await session.write(
+        jsonEncode(
+          board.applyStickers({
+            'legacy-sticker': const CanvasNote(
+              document: NoteDocument(
+                id: 'legacy-sticker',
+                text: 'После обмена',
+              ),
+              x: 90,
+              y: 80,
+              width: 220,
+              height: 150,
+              index: 0,
+            ),
+          }),
+        ),
+        expected: current,
+      );
+      await pulse.refreshSyncedCanvas({old.id});
+      expect(graph.notes.single.text, 'После обмена');
+      expect(graph.graph.single.position.dx, 620);
+      expect(graph.graph.single.position.dy, 740);
+      expect(graph.graph.single.size.width, 300);
+      expect(graph.graph.single.size.height, 190);
+
+      await pulse.createSphere(name: 'Новый граф');
+      final fresh = (await container.spheresRepository.getAllSpheres())
+          .singleWhere((sphere) => sphere.id != old.id);
+      expect(
+        await File(p.join(root, 'Boards', '${fresh.id}.canvas')).exists(),
+        isTrue,
+      );
+    },
+  );
   test('Resources deletes only current Notes files without Obsidian', () async {
     app = await createTestApp(enableObsidian: false);
     final resources = app!.resourcesViewModel;

@@ -2,11 +2,25 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:habits_api/habits_api.dart';
 import 'package:life_os/core/database/database.dart';
+import 'package:life_os/features/habits/data/habit_model_extension.dart';
+import 'package:life_os/features/habits/data/habits_dao.dart';
+import 'package:life_os/features/lifegraph/data/graph_notes_repository.dart';
+import 'package:life_os/features/lifegraph/data/graph_storage_repository.dart';
 import 'package:life_os/features/sync/data/drift_sync_store.dart';
+import 'package:life_os/features/sync/data/sync_canvas_boards.dart';
+import 'package:life_os/features/sync/data/sync_markdown_files.dart';
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/tasks_repository.dart';
+import 'package:lifegraph_plugin/graph_storage_settings.dart';
+import 'package:lifegraph_plugin/canvas_board.dart';
+import 'package:notes_api/notes_api.dart';
+import 'package:obsidian_plugin/obsidian_plugin.dart';
+import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sync_plugin/sync_logic.dart';
 import 'package:sync_plugin/sync_native.dart';
 import 'package:tasks_api/tasks_api.dart';
@@ -74,6 +88,9 @@ class _GateStore implements SyncStore {
   Future<SyncBatch> readFeed({int after = 0, int limit = 100}) =>
       inner.readFeed(after: after, limit: limit);
   @override
+  Future<SyncFeedPlan> planFeed({required int after}) =>
+      inner.planFeed(after: after);
+  @override
   Future<int> receivedCursor(String deviceId) => inner.receivedCursor(deviceId);
   @override
   Future<void> receive(SyncBatch batch) async {
@@ -137,6 +154,39 @@ void main() {
       client.close(force: true);
     }
   }
+
+  test(
+    'both devices publish the names exchanged during completed pairing',
+    () async {
+      await b.stop();
+      b = LanSyncService(
+        data: bData,
+        secrets: bSecrets,
+        deviceName: 'android',
+        resolveDeviceName: () async => 'Redmi Pad Pro',
+        options: options(certB),
+      );
+      await b.start();
+      await a.createSpace();
+      await a.invite('127.0.0.1');
+      final pending = a.states.firstWhere((s) => s.awaitingApproval != null);
+      final joining = b.join(a.state.invitation!, '127.0.0.1');
+      final request = (await pending).awaitingApproval!;
+      expect(request.name, 'Redmi Pad Pro');
+      expect(a.state.peers, isEmpty);
+      expect(b.state.peers, isEmpty);
+      final confirming = a.states.firstWhere((s) => s.confirmingDevice != null);
+      await a.approve(request.id);
+      final confirmation = await confirming;
+      expect(confirmation.confirmingDevice, 'Redmi Pad Pro');
+      expect(confirmation.peers, isEmpty);
+      await joining;
+      expect(a.state.confirmingDevice, isNull);
+      expect(a.state.peers.single.name, 'Redmi Pad Pro');
+      expect(b.state.peers.single.name, 'Computer');
+      await b.synchronize(b.state.peers.single.id);
+    },
+  );
 
   test(
     'anonymous requests and forged batch identities never access data',
@@ -217,6 +267,29 @@ void main() {
     },
   );
   test(
+    'legacy pairs require a one-time network check before exchanging data',
+    () async {
+      await pair();
+      final old = jsonDecode(aSecrets.value!) as Map<String, dynamic>;
+      final saved = (old['peers'] as List).single as Map<String, dynamic>;
+      saved.remove('verified');
+      aSecrets.value = jsonEncode(old);
+      await a.stop();
+      await a.start();
+      final id = a.state.unverifiedPeers.single.id;
+      expect(a.state.peers, isEmpty);
+      await expectLater(a.synchronize(id), throwsA(isA<LocalSyncException>()));
+      await a.verifyPair(id);
+      expect(a.state.unverifiedPeers, isEmpty);
+      expect(a.state.peers.single.id, id);
+      await a.synchronize(id);
+      await a.stop();
+      await a.start();
+      expect(a.state.peers.single.id, id);
+    },
+  );
+
+  test(
     'a populated independent database is preserved and cannot join automatically',
     () async {
       final repo = TasksRepository(TasksDao(bDb, journal: bData));
@@ -250,6 +323,7 @@ void main() {
       expect(await aDb.select(aDb.tasks).get(), isEmpty);
       expect(await repo.getById(task.id), isNotNull);
       expect((jsonDecode(aSecrets.value!)['peers'] as List), isEmpty);
+      expect(b.state.peers, isEmpty);
     },
   );
   test(
@@ -411,6 +485,520 @@ void main() {
   });
 
   test(
+    'LAN sync transfers habits, daily entries and Markdown with committed progress',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('pulse_sync_');
+      addTearDown(() async {
+        expect(
+          p.isWithin(
+            await Directory.systemTemp.resolveSymbolicLinks(),
+            await directory.resolveSymbolicLinks(),
+          ),
+          isTrue,
+        );
+        await directory.delete(recursive: true);
+      });
+      Future<GraphStorageRepository> storageFor(String name) async {
+        final target = ValueNotifier(
+          GraphStorageTarget(
+            mode: GraphStorageMode.local,
+            localPath: p.join(directory.path, name),
+          ),
+        );
+        final folders = ValueNotifier(const VaultFolders());
+        final storage = GraphStorageRepository(
+          target: target,
+          vaultFolders: folders,
+          beforeSwitch: () async {},
+        );
+        addTearDown(() async {
+          await storage.dispose();
+          target.dispose();
+          folders.dispose();
+        });
+        await storage.start();
+        return storage;
+      }
+
+      final filesA = await storageFor('pc');
+      final filesB = await storageFor('tablet');
+      await filesB.selectTarget(
+        const GraphStorageTarget(),
+        copyExisting: false,
+      );
+      await a.stop();
+      await b.stop();
+      a = LanSyncService(
+        data: aData,
+        secrets: aSecrets,
+        options: options(certA),
+        reconcileNotes: SyncMarkdownFiles(
+          aData,
+          filesA,
+          flushEdits: () async {},
+        ).reconcile,
+      );
+      b = LanSyncService(
+        data: bData,
+        secrets: bSecrets,
+        options: options(certB),
+        reconcileNotes: SyncMarkdownFiles(
+          bData,
+          filesB,
+          flushEdits: () async {},
+        ).reconcile,
+      );
+      await a.start();
+      await b.start();
+
+      final habitsA = HabitsDao(aDb, capture: aData.trackHabit);
+      final habitsB = HabitsDao(bDb, capture: bData.trackHabit);
+      final habit = Habit.create(title: 'Чтение', type: const EveningHabit());
+      await habitsA.createHabit(habit.toDrift());
+      const day = '2026-11-22';
+      await habitsA.setEntryStatus(habit.id, day, HabitEntryStatus.completed);
+      final original = await filesA.createNote('Тема', '# Текст с ПК');
+      final received = File(
+        p.join(directory.path, 'tablet', 'Notes', 'Тема.md'),
+      );
+      await File(
+        p.join(directory.path, 'pc', 'external.md'),
+      ).writeAsString('external');
+      await pair();
+
+      final runs = <LocalSyncRun>[];
+      final changes = b.states.listen((state) {
+        if (state.run case final run?) runs.add(run);
+      });
+      addTearDown(changes.cancel);
+      final peer = b.state.peers.single.id;
+      await b.synchronize(peer);
+      expect((await habitsB.getAllHabits()).single.title, habit.title);
+      expect(
+        (await habitsB.getEntry(habit.id, day))!.status,
+        HabitEntryStatus.completed,
+      );
+      expect(await received.exists(), isFalse);
+      expect(b.state.notesNeedFolder, isTrue);
+      expect(
+        await File(p.join(directory.path, 'tablet', 'external.md')).exists(),
+        isFalse,
+      );
+      expect(
+        runs.map((run) => run.phase),
+        containsAllInOrder([
+          LocalSyncPhase.connecting,
+          LocalSyncPhase.transferring,
+          LocalSyncPhase.applying,
+          LocalSyncPhase.complete,
+        ]),
+      );
+      expect(b.state.run!.transfer!.planned[SyncSection.habits], 2);
+      expect(b.state.run!.transfer!.transferred[SyncSection.notes], 1);
+      expect(b.state.run!.transfer!.done, b.state.run!.transfer!.total);
+
+      await filesB.selectTarget(
+        GraphStorageTarget(
+          mode: GraphStorageMode.local,
+          localPath: p.join(directory.path, 'tablet'),
+        ),
+      );
+      await b.synchronize(peer);
+      expect(b.state.notesNeedFolder, isFalse);
+      expect(await received.readAsString(), '# Текст с ПК');
+      expect(filesB.graphMarkdownState.notes.single.title, 'Тема');
+
+      const nextDay = '2026-11-23';
+      await habitsA.setEntryStatus(habit.id, nextDay, HabitEntryStatus.skipped);
+      await habitsB.setEntryStatus(
+        habit.id,
+        nextDay,
+        HabitEntryStatus.completed,
+      );
+      await filesA.writeContent(original.absolutePath, 'Правка ПК');
+      await filesB.writeContent(received.path, 'Правка планшета');
+      await b.synchronize(peer);
+      expect(await received.readAsString(), 'Правка планшета');
+      expect(await filesA.readContent(original.absolutePath), 'Правка ПК');
+      expect(await bDb.select(bDb.habitEntries).get(), hasLength(2));
+      final conflicts = await b.conflicts();
+      final noteConflict = conflicts.values.singleWhere(
+        (versions) => versions.first.entityType == 'note',
+      );
+      final entryConflict = conflicts.values.singleWhere(
+        (versions) => versions.first.entityType == 'habitEntry',
+      );
+      final chosenEntry = entryConflict.singleWhere(
+        (version) =>
+            HabitSyncCodec.decodeEntry(version.payload!).status ==
+            HabitEntryStatus.completed,
+      );
+      await b.resolve(
+        chosenEntry,
+        entryConflict.map((version) => version.id).toSet(),
+      );
+      final chosenNote = noteConflict.singleWhere(
+        (version) =>
+            MarkdownSyncNote.decode(version.payload!).text == 'Правка планшета',
+      );
+      await b.resolve(
+        chosenNote,
+        noteConflict.map((version) => version.id).toSet(),
+      );
+      await b.synchronize(peer);
+      expect(
+        await filesA.readContent(original.absolutePath),
+        'Правка планшета',
+      );
+      expect(
+        (await habitsA.getEntry(habit.id, nextDay))!.status,
+        HabitEntryStatus.completed,
+      );
+
+      final renamed = await filesB.renameMarkdownNote(
+        received.path,
+        'Новое имя',
+      );
+      await b.synchronize(peer);
+      final renamedA = File(
+        p.join(directory.path, 'pc', 'Notes', 'Новое имя.md'),
+      );
+      expect(await renamedA.readAsString(), 'Правка планшета');
+      expect(await File(original.absolutePath).exists(), isFalse);
+      await filesB.deleteMarkdownNote(renamed);
+      await habitsB.deleteHabit(habit.id);
+      await b.synchronize(peer);
+      await b.synchronize(peer);
+      expect(await renamedA.exists(), isFalse);
+      expect(await habitsA.getAllHabits(), isEmpty);
+      expect(await aDb.select(aDb.habitEntries).get(), isEmpty);
+      expect(await b.conflicts(), isEmpty);
+    },
+  );
+  test(
+    'LAN sync transfers whole Canvas boards and preserves both conflict versions',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final temporary = await Directory.systemTemp.createTemp(
+        'pulse_board_lan_',
+      );
+      addTearDown(() async {
+        expect(
+          p.isWithin(
+            await Directory.systemTemp.resolveSymbolicLinks(),
+            await temporary.resolveSymbolicLinks(),
+          ),
+          isTrue,
+        );
+        await temporary.delete(recursive: true);
+      });
+      const sphereId = 'test-sphere';
+      const geometry = {'x': 10, 'y': 20, 'width': 160, 'height': 80};
+      final entity = {
+        'id': 'pulse:task',
+        'pulse': {'entityId': 'task'},
+        'type': 'text',
+        'text': 'Задача',
+        ...geometry,
+      };
+      final nodes = [
+        entity,
+        {
+          'id': 'note:text',
+          'pulse': {'noteId': 'text'},
+          'type': 'text',
+          'text': 'С ПК',
+          ...geometry,
+        },
+        {
+          'id': 'note:markdown',
+          'pulse': {'noteId': 'markdown', 'cachedText': 'Устаревший текст'},
+          'type': 'file',
+          'file': 'Notes/Тема.md',
+          ...geometry,
+        },
+        {
+          'id': 'group',
+          'type': 'group',
+          'label': 'Группа',
+          'custom': {'order': 4},
+          ...geometry,
+        },
+        {
+          'id': 'note:external',
+          'type': 'text',
+          'text': 'Локальные данные',
+          'pulse': {
+            'noteId': 'external',
+            'externalPath': p.join(temporary.path, 'personal.md'),
+          },
+          ...geometry,
+        },
+      ];
+      final edges = [
+        {'id': 'custom-edge', 'fromNode': 'group', 'toNode': 'pulse:task'},
+      ];
+      Map<String, Object> document(
+        List<Map<String, Object>> boardNodes,
+        List<Map<String, String>> boardEdges,
+      ) => {
+        'pulse': {'sphereId': sphereId, 'version': 1},
+        'nodes': boardNodes,
+        'edges': boardEdges,
+      };
+      Future<
+        ({CanvasBoardSession session, SyncCanvasBoards sync, String backups})
+      >
+      fixture(String name, DriftSyncStore store, VaultFolders layout) async {
+        final root = await Directory(p.join(temporary.path, name)).create();
+        final vault = ObsidianVault();
+        await vault.openVault(root.path);
+        final target = ValueNotifier(
+          const GraphStorageTarget(mode: GraphStorageMode.obsidian),
+        );
+        final folders = ValueNotifier(layout);
+        final catalog = GraphNotesRepository(prefix: 'boards_$name');
+        final storage = GraphStorageRepository(
+          target: target,
+          vaultFolders: folders,
+          obsidian: vault,
+          beforeSwitch: () async {},
+        );
+        addTearDown(() async {
+          await storage.dispose();
+          await catalog.dispose();
+          await vault.dispose();
+          target.dispose();
+          folders.dispose();
+        });
+        await storage.start();
+        await storage.createNote('Тема', '# Markdown уже есть');
+        return (
+          session: await storage.openCanvasBoard(sphereId),
+          sync: SyncCanvasBoards(store, storage, catalog),
+          backups: p.join(root.path, layout.backups),
+        );
+      }
+
+      final pc = await fixture('pc', aData, const VaultFolders(notes: 'Notes'));
+      final tablet = await fixture(
+        'tablet',
+        bData,
+        const VaultFolders(notes: 'More/Notes'),
+      );
+      await pc.session.write(
+        jsonEncode({
+          ...document(nodes, edges),
+          'custom': {'zoom': 3},
+        }),
+        expected: null,
+      );
+      final refreshed = <String>{};
+      Future<bool> reconcile(
+        SyncCanvasBoards sync, {
+        bool received = false,
+      }) async {
+        await sync.reconcile(
+          [sphereId],
+          refresh: (ids) async => refreshed.addAll(ids),
+          afterReceive: received,
+        );
+        return true;
+      }
+
+      await a.stop();
+      await b.stop();
+      a = LanSyncService(
+        data: aData,
+        secrets: aSecrets,
+        options: options(certA),
+        reconcileNotes: () => reconcile(pc.sync),
+        applyNotes: () => reconcile(pc.sync, received: true),
+      );
+      b = LanSyncService(
+        data: bData,
+        secrets: bSecrets,
+        options: options(certB),
+        reconcileNotes: () => reconcile(tablet.sync),
+        applyNotes: () async {
+          if (await tablet.session.read() == null) {
+            await tablet.session.write(
+              jsonEncode(
+                document([
+                  {...entity, 'x': 999},
+                ], []),
+              ),
+              expected: null,
+            );
+          }
+          return reconcile(tablet.sync, received: true);
+        },
+      );
+      await a.start();
+      await b.start();
+      await pair();
+      final peer = b.state.peers.single.id;
+
+      Future<CanvasBoardDocument> board(CanvasBoardSession session) async =>
+          CanvasBoardDocument((await session.read())!);
+      Future<void> move(CanvasBoardSession session, int x, String group) async {
+        final raw = (await session.read())!;
+        final doc = CanvasBoardDocument(raw);
+        await session.write(
+          jsonEncode({
+            ...doc.data,
+            'nodes': [
+              for (final node in doc.nodes)
+                switch (node['id']) {
+                  'pulse:task' => {...node, 'x': x, 'width': 240},
+                  'group' => {...node, 'label': group},
+                  _ => node,
+                },
+            ],
+          }),
+          expected: raw,
+        );
+      }
+
+      await b.synchronize(peer);
+      expect(b.state.run!.transfer!.transferred[SyncSection.graph], 1);
+      expect(refreshed, {sphereId});
+      final first = await board(tablet.session);
+      expect(
+        first.nodes.map((node) => node['id']),
+        nodes.map((node) => node['id']),
+      );
+      expect(first.nodes[0], entity);
+      expect(first.nodes[1]['text'], 'С ПК');
+      expect(first.nodes[2]['file'], 'More/Notes/Тема.md');
+      expect(first.nodes[3], nodes[3]);
+      expect(first.nodes[4]['text'], 'Локальный файл');
+      expect(first.nodes[4]['pulse'], isNot(contains('externalPath')));
+      expect(first.edges, edges);
+      expect(first.data['custom'], {'zoom': 3});
+      final tabletMd = p.join(
+        temporary.path,
+        'tablet',
+        'More',
+        'Notes',
+        'Тема.md',
+      );
+      expect(
+        first
+            .notes(tablet.session.resolveNote)
+            .singleWhere((note) => note.id == 'markdown')
+            .document
+            .source
+            ?.path,
+        tabletMd,
+      );
+      await b.synchronize(peer);
+      for (final store in [aData, bData]) {
+        expect(
+          (await store.readFeed()).entries.where(
+            (entry) => entry.revision.entityType == 'canvasBoard',
+          ),
+          hasLength(1),
+        );
+      }
+      expect(await b.conflicts(), isEmpty);
+
+      await move(pc.session, -80, 'Правка ПК');
+      await move(tablet.session, 900, 'Правка планшета');
+      await b.synchronize(peer);
+      expect(
+        (await board(pc.session)).nodes[0]['x'],
+        (await board(tablet.session)).nodes[0]['x'],
+      );
+      final versions = (await b.conflicts()).values.single;
+      expect(versions, hasLength(2));
+      expect(
+        versions.every((version) => version.entityType == 'canvasBoard'),
+        isTrue,
+      );
+      int position(SyncRevision revision) =>
+          (SyncCanvasBoard.decode(revision.payload!).document['nodes'] as List)
+                  .first['x']
+              as int;
+      expect(versions.map(position), unorderedEquals([-80, 900]));
+      final selected = versions.singleWhere(
+        (version) => position(version) == 900,
+      );
+      await b.resolve(selected, versions.map((version) => version.id).toSet());
+      await b.synchronize(peer);
+      for (final session in [pc.session, tablet.session]) {
+        final synced = await board(session);
+        expect(synced.nodes[0]['x'], 900);
+        expect(synced.nodes[0]['width'], 240);
+        expect(synced.nodes[3]['label'], 'Правка планшета');
+        expect(synced.edges, edges);
+      }
+      final backups = await Directory(pc.backups)
+          .list()
+          .where((file) => p.basename(file.path).startsWith('$sphereId.sync-'))
+          .cast<File>()
+          .asyncMap((file) => file.readAsString())
+          .toList();
+      expect(
+        backups.map((raw) => CanvasBoardDocument(raw).nodes[0]['x']),
+        contains(-80),
+      );
+
+      final raw = (await tablet.session.read())!;
+      final changed = CanvasBoardDocument(raw);
+      await tablet.session.write(
+        jsonEncode({
+          ...changed.data,
+          'nodes': changed.nodes
+              .where((node) => node['id'] != 'note:markdown')
+              .toList(),
+          'edges': [],
+        }),
+        expected: raw,
+      );
+      await b.synchronize(peer);
+      await b.synchronize(peer);
+      expect(
+        (await board(pc.session)).nodes.map((node) => node['id']),
+        isNot(contains('note:markdown')),
+      );
+      expect((await board(pc.session)).edges, isEmpty);
+      expect(await File(tabletMd).readAsString(), '# Markdown уже есть');
+      expect(await b.conflicts(), isEmpty);
+    },
+  );
+
+  test('missing local or peer IP is reported before pairing', () async {
+    for (final request in [
+      () => a.listen('  '),
+      () => a.invite(''),
+      () => a.join('invalid invitation', ''),
+    ]) {
+      await expectLater(
+        request(),
+        throwsA(same(LocalSyncException.missingLocalIp)),
+      );
+    }
+    expect(a.state.listening, isFalse);
+    await a.createSpace();
+    await a.invite('127.0.0.1');
+    final invitation =
+        jsonDecode(utf8.decode(base64Url.decode(a.state.invitation!)))
+            as Map<String, dynamic>;
+    invitation.remove('endpoint');
+    await expectLater(
+      b.join(base64UrlEncode(utf8.encode(jsonEncode(invitation))), '127.0.0.1'),
+      throwsA(
+        isA<LocalSyncException>().having(
+          (error) => error.message,
+          'message',
+          contains('Не указан IP второго устройства'),
+        ),
+      ),
+    );
+    expect(b.state.listening, isFalse);
+  });
+  test(
     'TLS pairing requires approval and synchronizes data in both directions',
     () async {
       expect(a.state.listening, isFalse);
@@ -514,6 +1102,9 @@ void main() {
       await joining;
       expect(await bData.existingIdentity(), isNull);
       expect((await bDb.select(bDb.tasks).get()).single.id, task.id);
+      expect(a.state.peers, isEmpty);
+      expect(b.state.peers, isEmpty);
+      expect((jsonDecode(aSecrets.value!)['peers'] as List), isEmpty);
     },
   );
   test(

@@ -156,7 +156,7 @@ class LifeGraphViewModel {
     await notesRepository.saveNotes(snapshot.sphereId, snapshot.notes);
   }
 
-  Future<void> _openBoard(String sphereId) async {
+  Future<void> _openBoard(String sphereId, {bool onlyIfMissing = false}) async {
     _board = null;
     _boardBuildFailure = null;
     _boardOrigin = Offset.zero;
@@ -172,6 +172,7 @@ class LifeGraphViewModel {
       sphereId,
     );
     final raw = await session.read();
+    if (onlyIfMissing && raw != null) return;
     final document = CanvasBoardDocument(raw ?? '{"nodes":[],"edges":[]}');
     document.validateScope(sphereId);
     _board = _CanvasBoardState(session, raw, document);
@@ -180,13 +181,22 @@ class LifeGraphViewModel {
 
   void _readBoardLayout(CanvasBoardDocument document) {
     double minX = 0, minY = 0, maxX = worldSize, maxY = worldSize;
-    for (final node in document.nodes) {
-      final x = (node['x'] as num).toDouble(),
-          y = (node['y'] as num).toDouble();
+    final geometry = document.entityGeometry;
+    for (final (x: x, y: y, width: width, height: height) in [
+      ...geometry.values,
+      for (final node in document.nodes)
+        if (document.entityId(node) == null)
+          (
+            x: (node['x'] as num).toDouble(),
+            y: (node['y'] as num).toDouble(),
+            width: (node['width'] as num).toDouble(),
+            height: (node['height'] as num).toDouble(),
+          ),
+    ]) {
       if (x - worldMargin < minX) minX = x - worldMargin;
       if (y - worldMargin < minY) minY = y - worldMargin;
-      final right = x + (node['width'] as num).toDouble() + worldMargin;
-      final bottom = y + (node['height'] as num).toDouble() + worldMargin;
+      final right = x + width + worldMargin;
+      final bottom = y + height + worldMargin;
       if (right > maxX) maxX = right;
       if (bottom > maxY) maxY = bottom;
     }
@@ -195,16 +205,10 @@ class LifeGraphViewModel {
     _positions.clear();
     _restoreStandalonePositions();
     _boardSizes.clear();
-    for (final node in document.nodes) {
-      final id = document.entityId(node);
-      if (id == null) continue;
-      _positions[id] =
-          Offset((node['x'] as num).toDouble(), (node['y'] as num).toDouble()) -
-          _boardOrigin;
-      _boardSizes[id] = Size(
-        (node['width'] as num).toDouble(),
-        (node['height'] as num).toDouble(),
-      );
+    for (final entry in geometry.entries) {
+      final value = entry.value;
+      _positions[entry.key] = Offset(value.x, value.y) - _boardOrigin;
+      _boardSizes[entry.key] = Size(value.width, value.height);
     }
   }
 
@@ -226,14 +230,57 @@ class LifeGraphViewModel {
     final previous = _board!;
     final raw = await previous.session.read();
     if (raw == null) throw StateError('Файл Canvas удалён.');
+    await _useCanvasBoard(sphereId, previous.session, raw);
+  });
+
+  Future<void> _useCanvasBoard(
+    String sphereId,
+    CanvasBoardSession session,
+    String raw,
+  ) async {
     final document = CanvasBoardDocument(raw);
     document.validateScope(sphereId);
-    _board = _CanvasBoardState(previous.session, raw, document);
+    _board = _CanvasBoardState(session, raw, document);
     _readBoardLayout(document);
     await _loadNotes(sphereId);
     _graphSubject.add(_toViewNodes(_domainNodes));
     saveStatus.value = GraphSaveStatus.saved;
+  }
+
+  Future<void> refreshSyncedCanvas(Set<String> sphereIds) => _enqueue(() async {
+    final sphereId = _currentSphereId;
+    final board = _board;
+    if (sphereId == null || !sphereIds.contains(sphereId) || board == null) {
+      return;
+    }
+    await _flush();
+    final raw = await board.session.read();
+    if (raw != null && raw != board.raw) {
+      await _useCanvasBoard(sphereId, board.session, raw);
+    }
   });
+
+  Future<void> createMissingCanvasBoard(String sphereId) async {
+    if (_currentSphereId != null) {
+      throw StateError('Для создания Canvas нужна отдельная модель графа.');
+    }
+    await _openBoard(sphereId, onlyIfMissing: true);
+    if (_board == null) return;
+    await _loadPositions(sphereId);
+    await _loadNotes(sphereId);
+    final nodes = await graphBuilder
+        .watchGraph(
+          sphereId,
+          standaloneIds: Stream.value(_standalonePositions.value.keys.toSet()),
+        )
+        .first;
+    if (nodes.isEmpty) return;
+    _currentSphereId = sphereId;
+    _domainNodes = nodes.map(GraphNode.fromData).toList(growable: false);
+    _graphSubject.add(_toViewNodes(_domainNodes));
+    _scheduleBoard();
+    await _flush();
+  }
 
   List<VaultNote> get vaultNotes => obsidianRepository?.state.notes ?? const [];
   List<VaultNote> get markdownLibraryNotes {

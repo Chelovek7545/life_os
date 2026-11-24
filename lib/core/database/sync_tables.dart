@@ -32,3 +32,13 @@ class SyncEntityHeads extends Table {
   @override
   Set<Column> get primaryKey => {entityKey};
 }
+
+@DataClassName('SyncNoteCheckpoint')
+class SyncNoteCheckpoints extends Table {
+  TextColumn get scope => text()();
+  TextColumn get noteId => text()();
+  TextColumn get revisionId => text()();
+
+  @override
+  Set<Column> get primaryKey => {scope, noteId};
+}

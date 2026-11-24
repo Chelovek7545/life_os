@@ -412,6 +412,47 @@ class ObsidianVault
       await _files.read(path) ??
       (throw FileSystemException('Файл не найден', path));
 
+  Future<bool> withMarkdownSyncFolder(
+    Future<void> Function(MarkdownSyncFolder folder) action,
+  ) {
+    final root = state.vaultPath;
+    final selection = _vaultSelectionGeneration;
+    final relative = folders.notes;
+    if (!_active || root.isEmpty || relative.isEmpty)
+      return Future.value(false);
+    return _enqueue(() async {
+      void check() {
+        _checkActive();
+        if (selection != _vaultSelectionGeneration ||
+            relative != folders.notes) {
+          throw StateError('Папка заметок изменилась во время обмена.');
+        }
+      }
+
+      check();
+      if (await _files.type(root) != FileSystemEntityType.directory) {
+        return false;
+      }
+      final folder = MarkdownSyncFolder._(
+        _files,
+        root,
+        p.posix.split(relative),
+        check,
+      );
+      try {
+        await action(folder);
+        check();
+        return true;
+      } finally {
+        if (folder._changed &&
+            _active &&
+            selection == _vaultSelectionGeneration) {
+          await _scan(root, _generation);
+        }
+      }
+    });
+  }
+
   @override
   Future<String> readContent(String absolutePath) async {
     _checkActive();
@@ -744,6 +785,112 @@ class ObsidianVault
   }
 }
 
+class MarkdownSyncFolder {
+  MarkdownSyncFolder._(this._files, this._root, this._parts, this._check);
+
+  final VaultFiles _files;
+  final String _root;
+  final List<String> _parts;
+  final void Function() _check;
+  bool _changed = false;
+
+  String get scope => p.canonicalize(p.joinAll([_root, ..._parts]));
+
+  Future<bool> _directories(
+    List<String> segments, {
+    required bool create,
+  }) async {
+    var directory = _root;
+    for (final segment in segments) {
+      _check();
+      directory = p.join(directory, segment);
+      final type = await _files.type(directory, followLinks: false);
+      if (type == FileSystemEntityType.notFound) {
+        if (!create) return false;
+        await _files.createDirectory(directory);
+      } else if (type != FileSystemEntityType.directory) {
+        throw FileSystemException('Путь заметки занят', directory);
+      }
+    }
+    return true;
+  }
+
+  Future<({bool exists, Map<String, String> files})> read() async {
+    final files = <String, String>{};
+    final exists = await _directories(_parts, create: false);
+    Future<void> visit(String directory, List<String> parents) async {
+      for (final entry in await _files.list(directory)) {
+        _check();
+        if (entry.name.startsWith('.') ||
+            p.posix.basename(entry.name) != entry.name ||
+            p.windows.basename(entry.name) != entry.name) {
+          continue;
+        }
+        final path = p.join(directory, entry.name);
+        final segments = [...parents, entry.name];
+        final type = await _files.type(path, followLinks: false);
+        if (type == FileSystemEntityType.directory) {
+          await visit(path, segments);
+        } else if (type == FileSystemEntityType.file &&
+            p.extension(path).toLowerCase() == '.md') {
+          final text = await _files.read(path);
+          if (text != null) files[p.posix.joinAll(segments)] = text;
+        }
+      }
+    }
+
+    if (exists) await visit(p.joinAll([_root, ..._parts]), const []);
+    _check();
+    return (exists: exists, files: files);
+  }
+
+  Future<void> write(
+    String relative,
+    String? content, {
+    required String? expected,
+  }) async {
+    final segments = p.posix.split(relative);
+    if (p.posix.isAbsolute(relative) ||
+        p.posix.normalize(relative) != relative ||
+        segments.any(
+          (segment) =>
+              segment.startsWith('.') ||
+              p.windows.basename(segment) != segment ||
+              segment.contains(':'),
+        ) ||
+        p.posix.extension(relative).toLowerCase() != '.md') {
+      throw const FormatException('Invalid Markdown path.');
+    }
+    final parents = [..._parts, ...segments.take(segments.length - 1)];
+    final available = await _directories(parents, create: content != null);
+    final path = p.joinAll([_root, ...parents, segments.last]);
+    _check();
+    final type = available
+        ? await _files.type(path, followLinks: false)
+        : FileSystemEntityType.notFound;
+    if (type != FileSystemEntityType.notFound &&
+        type != FileSystemEntityType.file) {
+      throw FileSystemException('Путь заметки занят', path);
+    }
+    final actual = type == FileSystemEntityType.file
+        ? await _files.read(path)
+        : null;
+    if (actual == content) return;
+    _check();
+    if (actual != expected) {
+      throw FileSystemException('Заметка изменилась во время обмена', path);
+    }
+    if (content == null) {
+      await _files.delete(path);
+    } else if (actual == null) {
+      await _files.writeNew(path, content);
+    } else if (!await _files.replace(path, content, expected: expected)) {
+      throw FileSystemException('Заметка изменилась во время обмена', path);
+    }
+    _changed = true;
+  }
+}
+
 class _VaultCanvasBoard implements CanvasBoardSession {
   _VaultCanvasBoard(this.vault, this.root, this.sphereId, this.selection);
   final ObsidianVault vault;
@@ -800,7 +947,11 @@ class _VaultCanvasBoard implements CanvasBoardSession {
   }
 
   @override
-  Future<void> write(String content, {required String? expected}) {
+  Future<void> write(
+    String content, {
+    required String? expected,
+    bool backupPrevious = false,
+  }) {
     vault._checkActive();
     return vault._enqueue(() async {
       _checkSelection();
@@ -809,11 +960,16 @@ class _VaultCanvasBoard implements CanvasBoardSession {
         expected: expected == null
             ? null
             : vault._rebaseRenamedNotes(expected, root),
+        backupPrevious: backupPrevious,
       );
     });
   }
 
-  Future<void> _write(String content, {required String? expected}) async {
+  Future<void> _write(
+    String content, {
+    required String? expected,
+    bool backupPrevious = false,
+  }) async {
     _checkSelection();
     final files = vault._files;
     if (await _read() == content && content == expected) return;
@@ -821,6 +977,8 @@ class _VaultCanvasBoard implements CanvasBoardSession {
     if (expected == null && await _read() == null) {
       // Keep the initial migrated layout independently of future cache writes.
       await files.writeNew(await _backupPath('migration'), content);
+    } else if (backupPrevious && expected != null) {
+      await files.writeNew(await _backupPath('sync'), expected);
     }
     if (!await files.replace(path, content, expected: expected)) {
       final recovery = await _backupPath('conflict');

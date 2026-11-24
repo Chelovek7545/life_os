@@ -26,6 +26,7 @@ class GraphStorageRepository
     required this.beforeSwitch,
     this.obsidian,
     this.onNoteRenamed,
+    this.defaultLocalRoot,
     this.files = const LocalVaultFiles(),
   });
   final ValueListenable<GraphStorageTarget> target;
@@ -33,6 +34,7 @@ class GraphStorageRepository
   final Future<void> Function() beforeSwitch;
   final ObsidianVault? obsidian;
   final Future<void> Function(String previous, String next)? onNoteRenamed;
+  final Future<String> Function()? defaultLocalRoot;
   final VaultFiles files;
   final _noteRenames = StreamController<NotePathChange>.broadcast();
   StreamSubscription<NotePathChange>? _activeRenames;
@@ -75,6 +77,7 @@ class GraphStorageRepository
   ObsidianVault? _active;
   VaultFolders? _standbyFolders;
   GraphStorageTarget? _selected;
+  GraphStorageTarget? get effectiveTarget => _selected;
   Future<void> _tail = Future.value();
   bool _accepting = false;
   int _generation = 0;
@@ -168,6 +171,15 @@ class GraphStorageRepository
     final result = _tail.then((_) async {
       if (generation != _generation) {
         throw StateError('Выбор хранилища устарел.');
+      }
+      if (!copyExisting &&
+          choice.mode == GraphStorageMode.obsidian &&
+          (obsidian?.state.vaultPath.isEmpty ?? true) &&
+          defaultLocalRoot != null) {
+        choice = GraphStorageTarget(
+          mode: GraphStorageMode.local,
+          localPath: await defaultLocalRoot!(),
+        );
       }
       if (_selected?.mode == choice.mode &&
           _selected?.localPath == choice.localPath) {
@@ -513,6 +525,25 @@ class GraphStorageRepository
     ]);
   }
 
+  Future<bool> withMarkdownSyncFolder(
+    Future<void> Function(MarkdownSyncFolder folder) action,
+  ) => withSyncStorage(
+    () async => await _active?.withMarkdownSyncFolder(action) ?? false,
+  );
+
+  Future<T> withSyncStorage<T>(Future<T> Function() action) {
+    _check();
+    final generation = _generation;
+    final operation = _tail.then((_) async {
+      if (!_accepting || generation != _generation) {
+        throw StateError('Хранилище заметок изменилось.');
+      }
+      return action();
+    });
+    _tail = operation.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return operation;
+  }
+
   ObsidianVault _reader(String path) {
     _check();
     final source = obsidian;
@@ -667,10 +698,16 @@ class _GraphBoardSession implements CanvasBoardSession {
   }
 
   @override
-  Future<void> write(String content, {required String? expected}) =>
-      _write(content, expected);
-  Future<void> _write(String content, String? expected) async {
+  Future<void> write(
+    String content, {
+    required String? expected,
+    bool backupPrevious = false,
+  }) async {
     ensureActive();
-    await inner.write(content, expected: expected);
+    await inner.write(
+      content,
+      expected: expected,
+      backupPrevious: backupPrevious,
+    );
   }
 }

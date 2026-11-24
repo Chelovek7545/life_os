@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:math' show max;
 import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
+import 'package:life_os/features/habits/data/habit_model_extension.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 import 'package:life_os/features/tasks/data/extensions/work_log_model_extension.dart';
 import 'package:life_os/features/tasks/data/task_mutation_journal.dart';
@@ -13,6 +14,8 @@ import 'package:life_os/features/projects/data/extensions/project_model_extensio
 import 'package:life_os/features/goals/data/goal_model_extension.dart';
 import 'package:life_os/features/spheres/data/sphere_model_extension.dart';
 import 'package:life_os/features/tasks/data/extensions/tag_model_extension.dart';
+
+part 'drift_note_journal.dart';
 
 class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
   DriftSyncStore(this.db);
@@ -37,6 +40,8 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
       'goals',
       'spheres',
       'tags',
+      'habits',
+      'habit_entries',
     ]) {
       if ((await db.customSelect('SELECT 1 FROM $table LIMIT 1').get())
           .isNotEmpty) {
@@ -119,14 +124,25 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
   }
 
   @override
-  Future<void> resolve(SyncRevision chosen, Set<String> expected) => _write(
-    chosen.key,
-    chosen.payload,
-    expectedHeads: expected,
-    resolveConflict: true,
-  );
+  Future<void> resolve(SyncRevision chosen, Set<String> expected) =>
+      SyncPayload.externalEntities.contains(chosen.entityType)
+      ? _resolveNote(chosen, expected)
+      : _write(
+          chosen.key,
+          chosen.payload,
+          expectedHeads: expected,
+          resolveConflict: true,
+        );
 
   static int _version(String type, String? payload, {bool grouped = false}) {
+    if (type == 'canvasBoard') return 9;
+    if (type == 'canvasNode') return 8;
+    if (type == 'sticker') {
+      return payload != null && SyncSticker.decode(payload).markdownPath != null
+          ? 7
+          : 6;
+    }
+    if (SyncPayload.schema5Types.contains(type)) return 5;
     if (!['task', 'workLog'].contains(type)) return 3;
     if (type == 'workLog') return 2;
     if (payload != null) {
@@ -158,18 +174,19 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
       batch.deleteAll(db.syncEntityHeads);
       batch.insertAll(db.syncEntityHeads, [
         for (final key in {...graph.heads.keys, ...pendingKeys})
-          SyncEntityHeadRow(
-            entityKey: key,
-            revisionId: graph.heads[key]?.length == 1
-                ? graph.heads[key]!.single.id
-                : null,
-            payload: graph.heads[key]?.length == 1
-                ? graph.heads[key]!.single.payload
-                : null,
-            blocked:
-                pendingKeys.contains(key) ||
-                (graph.heads[key]?.length ?? 0) > 1,
-          ),
+          if (!SyncPayload.externalEntities.contains(SyncPayload.typeOf(key)))
+            SyncEntityHeadRow(
+              entityKey: key,
+              revisionId: graph.heads[key]?.length == 1
+                  ? graph.heads[key]!.single.id
+                  : null,
+              payload: graph.heads[key]?.length == 1
+                  ? graph.heads[key]!.single.payload
+                  : null,
+              blocked:
+                  pendingKeys.contains(key) ||
+                  (graph.heads[key]?.length ?? 0) > 1,
+            ),
         _marker(hasPending: pendingKeys.isNotEmpty),
       ]);
     });
@@ -313,12 +330,31 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
   Future<SyncGraph> state() async => SyncGraph(await _revisions());
   Future<List<SyncRevision>> heads(String key) async =>
       List.unmodifiable((await state()).heads[key] ?? []);
-  Future<Map<String, List<SyncRevision>>> readConflicts() async =>
-      Map.unmodifiable({
-        for (final entry in (await state()).heads.entries)
-          if (entry.value.length > 1)
-            entry.key: List<SyncRevision>.unmodifiable(entry.value),
-      });
+  Future<Map<String, List<SyncRevision>>> readConflicts() async {
+    final graph = await state();
+    final boards = {
+      for (final key in graph.heads.keys)
+        if (SyncPayload.typeOf(key) == 'canvasBoard')
+          canvasScopePrefix(
+            SyncCanvasBoard.decode(graph.winner(key)!.payload!).sphereId,
+          ),
+    };
+    bool superseded(SyncRevision revision) =>
+        (revision.entityType == 'sticker' ||
+            revision.entityType == 'canvasNode') &&
+        boards.contains(
+          revision.entityId.substring(0, revision.entityId.indexOf('/') + 1),
+        );
+    return Map.unmodifiable({
+      for (final entry in graph.heads.entries)
+        if (entry.value.length > 1 &&
+            !superseded(entry.value.first) &&
+            (!SyncPayload.canvasTypes.contains(entry.value.first.entityType) ||
+                entry.value.map((revision) => revision.payload).toSet().length >
+                    1))
+          entry.key: List<SyncRevision>.unmodifiable(entry.value),
+    });
+  }
 
   Future<List<SyncRevision>> readPending() async {
     final revisions = await _revisions();
@@ -413,11 +449,18 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
         'sphere/${row.id}': HierarchySyncCodec.sphere(row.toDomain()),
       for (final tag in tags.values)
         'tag/${tag.syncId}': HierarchySyncCodec.tag(tag),
+      for (final row in await db.select(db.habits).get())
+        'habit/${row.id}': HabitSyncCodec.habit(row.toDomain()),
+      for (final row in await db.select(db.habitEntries).get())
+        'habitEntry/${HabitSyncCodec.entryId(row.habitId, row.dateKey)}':
+            HabitSyncCodec.entry(row.toDomain()),
     };
   }
 
   void _assertSnapshot(Map<String, String> snapshot, SyncGraph graph) {
     for (final key in {...snapshot.keys, ...graph.heads.keys}) {
+      if (SyncPayload.externalEntities.contains(SyncPayload.typeOf(key)))
+        continue;
       if (snapshot[key] != graph.winner(key)?.payload) {
         throw StateError(
           'Untracked local changes; refusing to overwrite $key.',
@@ -567,6 +610,8 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
 
   @override
   Future<T> trackGraph<T>(Future<T> Function() write) => _capture(write);
+
+  Future<void> trackHabit(Future<void> Function() write) => _capture(write);
 
   Future<String?> _statusPayload(String type, String id) async {
     if (type == 'workLog') {
@@ -928,6 +973,47 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
           );
         }
       }
+    } else if (type == 'habit') {
+      if (payload == null) {
+        await (db.delete(db.habits)..where((r) => r.id.equals(id))).go();
+      } else {
+        await db
+            .into(db.habits)
+            .insertOnConflictUpdate(
+              HabitSyncCodec.decodeHabit(payload).toDrift(),
+            );
+      }
+    } else if (type == 'habitEntry') {
+      final separator = id.lastIndexOf('/');
+      if (separator <= 0) {
+        throw const FormatException('Invalid habit entry ID.');
+      }
+      final habitId = id.substring(0, separator);
+      final day = id.substring(separator + 1);
+      if (payload == null) {
+        await (db.delete(db.habitEntries)
+              ..where((r) => r.habitId.equals(habitId) & r.dateKey.equals(day)))
+            .go();
+      } else {
+        final entry = HabitSyncCodec.decodeEntry(payload);
+        final existing =
+            await (db.select(db.habitEntries)..where(
+                  (r) => r.habitId.equals(habitId) & r.dateKey.equals(day),
+                ))
+                .getSingleOrNull();
+        await db
+            .into(db.habitEntries)
+            .insertOnConflictUpdate(
+              HabitEntriesCompanion.insert(
+                id: existing?.id ?? const Uuid().v4(),
+                habitId: habitId,
+                dateKey: day,
+                status: entry.status,
+                createdAt: entry.createdAt,
+                completedAt: Value(entry.completedAt),
+              ),
+            );
+      }
     } else {
       throw const FormatException('Unknown entity type.');
     }
@@ -945,6 +1031,8 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
       'tag',
       'task',
       'workLog',
+      'habit',
+      'habitEntry',
     ]) {
       for (final revision in live.values.where((r) => r.entityType == type)) {
         await _applyPayload(type, revision.entityId, revision.payload);
@@ -953,6 +1041,8 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
     // The snapshot contains local integer tag IDs only while building portable keys.
     final local = await _snapshot();
     for (final type in [
+      'habitEntry',
+      'habit',
       'workLog',
       'task',
       'project',
@@ -967,6 +1057,31 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
       }
     }
   }
+
+  @override
+  Future<SyncFeedPlan> planFeed({
+    required int after,
+  }) => db.transaction(() async {
+    if (after < 0) throw ArgumentError.value(after, 'after');
+    final rows = await db
+        .customSelect(
+          r"SELECT coalesce(json_extract(body, '$.entityType'), 'task') AS type, "
+          'count(*) AS amount, max(sequence) AS last_sequence '
+          'FROM sync_revisions WHERE sequence > ? GROUP BY type',
+          variables: [Variable(after)],
+          readsFrom: {db.syncRevisions},
+        )
+        .get();
+    var through = after;
+    final counts = <SyncSection, int>{};
+    for (final row in rows) {
+      final section = SyncSection.forEntity(row.read<String>('type'));
+      final amount = row.read<int>('amount');
+      counts.update(section, (total) => total + amount, ifAbsent: () => amount);
+      through = max(through, row.read<int>('last_sequence'));
+    }
+    return SyncFeedPlan(through, counts);
+  });
 
   @override
   Future<SyncBatch> readFeed({int after = 0, int limit = 100}) =>
@@ -1048,10 +1163,14 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
     }
     // Rebuild only when the projection changed; pending deliveries do not touch data.
     if (jsonEncode({
-          for (final k in before.heads.keys) k: before.winner(k)?.payload,
+          for (final k in before.heads.keys)
+            if (!SyncPayload.externalEntities.contains(SyncPayload.typeOf(k)))
+              k: before.winner(k)?.payload,
         }) !=
         jsonEncode({
-          for (final k in after.heads.keys) k: after.winner(k)?.payload,
+          for (final k in after.heads.keys)
+            if (!SyncPayload.externalEntities.contains(SyncPayload.typeOf(k)))
+              k: after.winner(k)?.payload,
         })) {
       await _materialize(after);
     }

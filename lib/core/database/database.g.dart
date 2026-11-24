@@ -5638,6 +5638,274 @@ class SyncEntityHeadsCompanion extends UpdateCompanion<SyncEntityHeadRow> {
   }
 }
 
+class $SyncNoteCheckpointsTable extends SyncNoteCheckpoints
+    with TableInfo<$SyncNoteCheckpointsTable, SyncNoteCheckpoint> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncNoteCheckpointsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _scopeMeta = const VerificationMeta('scope');
+  @override
+  late final GeneratedColumn<String> scope = GeneratedColumn<String>(
+    'scope',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteIdMeta = const VerificationMeta('noteId');
+  @override
+  late final GeneratedColumn<String> noteId = GeneratedColumn<String>(
+    'note_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _revisionIdMeta = const VerificationMeta(
+    'revisionId',
+  );
+  @override
+  late final GeneratedColumn<String> revisionId = GeneratedColumn<String>(
+    'revision_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [scope, noteId, revisionId];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_note_checkpoints';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncNoteCheckpoint> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('scope')) {
+      context.handle(
+        _scopeMeta,
+        scope.isAcceptableOrUnknown(data['scope']!, _scopeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_scopeMeta);
+    }
+    if (data.containsKey('note_id')) {
+      context.handle(
+        _noteIdMeta,
+        noteId.isAcceptableOrUnknown(data['note_id']!, _noteIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_noteIdMeta);
+    }
+    if (data.containsKey('revision_id')) {
+      context.handle(
+        _revisionIdMeta,
+        revisionId.isAcceptableOrUnknown(data['revision_id']!, _revisionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_revisionIdMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {scope, noteId};
+  @override
+  SyncNoteCheckpoint map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncNoteCheckpoint(
+      scope: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}scope'],
+      )!,
+      noteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note_id'],
+      )!,
+      revisionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}revision_id'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncNoteCheckpointsTable createAlias(String alias) {
+    return $SyncNoteCheckpointsTable(attachedDatabase, alias);
+  }
+}
+
+class SyncNoteCheckpoint extends DataClass
+    implements Insertable<SyncNoteCheckpoint> {
+  final String scope;
+  final String noteId;
+  final String revisionId;
+  const SyncNoteCheckpoint({
+    required this.scope,
+    required this.noteId,
+    required this.revisionId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['scope'] = Variable<String>(scope);
+    map['note_id'] = Variable<String>(noteId);
+    map['revision_id'] = Variable<String>(revisionId);
+    return map;
+  }
+
+  SyncNoteCheckpointsCompanion toCompanion(bool nullToAbsent) {
+    return SyncNoteCheckpointsCompanion(
+      scope: Value(scope),
+      noteId: Value(noteId),
+      revisionId: Value(revisionId),
+    );
+  }
+
+  factory SyncNoteCheckpoint.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncNoteCheckpoint(
+      scope: serializer.fromJson<String>(json['scope']),
+      noteId: serializer.fromJson<String>(json['noteId']),
+      revisionId: serializer.fromJson<String>(json['revisionId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'scope': serializer.toJson<String>(scope),
+      'noteId': serializer.toJson<String>(noteId),
+      'revisionId': serializer.toJson<String>(revisionId),
+    };
+  }
+
+  SyncNoteCheckpoint copyWith({
+    String? scope,
+    String? noteId,
+    String? revisionId,
+  }) => SyncNoteCheckpoint(
+    scope: scope ?? this.scope,
+    noteId: noteId ?? this.noteId,
+    revisionId: revisionId ?? this.revisionId,
+  );
+  SyncNoteCheckpoint copyWithCompanion(SyncNoteCheckpointsCompanion data) {
+    return SyncNoteCheckpoint(
+      scope: data.scope.present ? data.scope.value : this.scope,
+      noteId: data.noteId.present ? data.noteId.value : this.noteId,
+      revisionId: data.revisionId.present
+          ? data.revisionId.value
+          : this.revisionId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncNoteCheckpoint(')
+          ..write('scope: $scope, ')
+          ..write('noteId: $noteId, ')
+          ..write('revisionId: $revisionId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(scope, noteId, revisionId);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncNoteCheckpoint &&
+          other.scope == this.scope &&
+          other.noteId == this.noteId &&
+          other.revisionId == this.revisionId);
+}
+
+class SyncNoteCheckpointsCompanion extends UpdateCompanion<SyncNoteCheckpoint> {
+  final Value<String> scope;
+  final Value<String> noteId;
+  final Value<String> revisionId;
+  final Value<int> rowid;
+  const SyncNoteCheckpointsCompanion({
+    this.scope = const Value.absent(),
+    this.noteId = const Value.absent(),
+    this.revisionId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncNoteCheckpointsCompanion.insert({
+    required String scope,
+    required String noteId,
+    required String revisionId,
+    this.rowid = const Value.absent(),
+  }) : scope = Value(scope),
+       noteId = Value(noteId),
+       revisionId = Value(revisionId);
+  static Insertable<SyncNoteCheckpoint> custom({
+    Expression<String>? scope,
+    Expression<String>? noteId,
+    Expression<String>? revisionId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (scope != null) 'scope': scope,
+      if (noteId != null) 'note_id': noteId,
+      if (revisionId != null) 'revision_id': revisionId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncNoteCheckpointsCompanion copyWith({
+    Value<String>? scope,
+    Value<String>? noteId,
+    Value<String>? revisionId,
+    Value<int>? rowid,
+  }) {
+    return SyncNoteCheckpointsCompanion(
+      scope: scope ?? this.scope,
+      noteId: noteId ?? this.noteId,
+      revisionId: revisionId ?? this.revisionId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (scope.present) {
+      map['scope'] = Variable<String>(scope.value);
+    }
+    if (noteId.present) {
+      map['note_id'] = Variable<String>(noteId.value);
+    }
+    if (revisionId.present) {
+      map['revision_id'] = Variable<String>(revisionId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncNoteCheckpointsCompanion(')
+          ..write('scope: $scope, ')
+          ..write('noteId: $noteId, ')
+          ..write('revisionId: $revisionId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5656,6 +5924,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $SyncEntityHeadsTable syncEntityHeads = $SyncEntityHeadsTable(
     this,
   );
+  late final $SyncNoteCheckpointsTable syncNoteCheckpoints =
+      $SyncNoteCheckpointsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -5674,6 +5944,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     syncRevisions,
     syncCursors,
     syncEntityHeads,
+    syncNoteCheckpoints,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -9505,6 +9776,186 @@ typedef $$SyncEntityHeadsTableProcessedTableManager =
       SyncEntityHeadRow,
       PrefetchHooks Function()
     >;
+typedef $$SyncNoteCheckpointsTableCreateCompanionBuilder =
+    SyncNoteCheckpointsCompanion Function({
+      required String scope,
+      required String noteId,
+      required String revisionId,
+      Value<int> rowid,
+    });
+typedef $$SyncNoteCheckpointsTableUpdateCompanionBuilder =
+    SyncNoteCheckpointsCompanion Function({
+      Value<String> scope,
+      Value<String> noteId,
+      Value<String> revisionId,
+      Value<int> rowid,
+    });
+
+class $$SyncNoteCheckpointsTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncNoteCheckpointsTable> {
+  $$SyncNoteCheckpointsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get scope => $composableBuilder(
+    column: $table.scope,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get noteId => $composableBuilder(
+    column: $table.noteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get revisionId => $composableBuilder(
+    column: $table.revisionId,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncNoteCheckpointsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncNoteCheckpointsTable> {
+  $$SyncNoteCheckpointsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get scope => $composableBuilder(
+    column: $table.scope,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get noteId => $composableBuilder(
+    column: $table.noteId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get revisionId => $composableBuilder(
+    column: $table.revisionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncNoteCheckpointsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncNoteCheckpointsTable> {
+  $$SyncNoteCheckpointsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get scope =>
+      $composableBuilder(column: $table.scope, builder: (column) => column);
+
+  GeneratedColumn<String> get noteId =>
+      $composableBuilder(column: $table.noteId, builder: (column) => column);
+
+  GeneratedColumn<String> get revisionId => $composableBuilder(
+    column: $table.revisionId,
+    builder: (column) => column,
+  );
+}
+
+class $$SyncNoteCheckpointsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncNoteCheckpointsTable,
+          SyncNoteCheckpoint,
+          $$SyncNoteCheckpointsTableFilterComposer,
+          $$SyncNoteCheckpointsTableOrderingComposer,
+          $$SyncNoteCheckpointsTableAnnotationComposer,
+          $$SyncNoteCheckpointsTableCreateCompanionBuilder,
+          $$SyncNoteCheckpointsTableUpdateCompanionBuilder,
+          (
+            SyncNoteCheckpoint,
+            BaseReferences<
+              _$AppDatabase,
+              $SyncNoteCheckpointsTable,
+              SyncNoteCheckpoint
+            >,
+          ),
+          SyncNoteCheckpoint,
+          PrefetchHooks Function()
+        > {
+  $$SyncNoteCheckpointsTableTableManager(
+    _$AppDatabase db,
+    $SyncNoteCheckpointsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncNoteCheckpointsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncNoteCheckpointsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$SyncNoteCheckpointsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> scope = const Value.absent(),
+                Value<String> noteId = const Value.absent(),
+                Value<String> revisionId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncNoteCheckpointsCompanion(
+                scope: scope,
+                noteId: noteId,
+                revisionId: revisionId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String scope,
+                required String noteId,
+                required String revisionId,
+                Value<int> rowid = const Value.absent(),
+              }) => SyncNoteCheckpointsCompanion.insert(
+                scope: scope,
+                noteId: noteId,
+                revisionId: revisionId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncNoteCheckpointsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncNoteCheckpointsTable,
+      SyncNoteCheckpoint,
+      $$SyncNoteCheckpointsTableFilterComposer,
+      $$SyncNoteCheckpointsTableOrderingComposer,
+      $$SyncNoteCheckpointsTableAnnotationComposer,
+      $$SyncNoteCheckpointsTableCreateCompanionBuilder,
+      $$SyncNoteCheckpointsTableUpdateCompanionBuilder,
+      (
+        SyncNoteCheckpoint,
+        BaseReferences<
+          _$AppDatabase,
+          $SyncNoteCheckpointsTable,
+          SyncNoteCheckpoint
+        >,
+      ),
+      SyncNoteCheckpoint,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -9534,4 +9985,6 @@ class $AppDatabaseManager {
       $$SyncCursorsTableTableManager(_db, _db.syncCursors);
   $$SyncEntityHeadsTableTableManager get syncEntityHeads =>
       $$SyncEntityHeadsTableTableManager(_db, _db.syncEntityHeads);
+  $$SyncNoteCheckpointsTableTableManager get syncNoteCheckpoints =>
+      $$SyncNoteCheckpointsTableTableManager(_db, _db.syncNoteCheckpoints);
 }

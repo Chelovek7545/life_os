@@ -16,6 +16,7 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
   final _invitation = TextEditingController();
   List<String> _addresses = const [];
   String? _error;
+  bool _ipMissing = false;
   late final int _generation;
   @override
   void initState() {
@@ -29,7 +30,7 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
       if (!mounted || _generation != widget.control.generation) return;
       setState(() => _addresses = addresses.toSet().toList());
       if (_addresses.length == 1 && _host.text.isEmpty) {
-        _host.text = _addresses.single;
+        _setHost(_addresses.single);
       }
     }, onError: (Object _) {});
   }
@@ -57,10 +58,59 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
     }
   }
 
-  String _label(SyncRevision r) {
+  void _setHost(String address) {
+    _host.text = address;
+    _clearIpError(address);
+  }
+
+  void _clearIpError(String value) {
+    if (_ipMissing && value.trim().isNotEmpty) {
+      setState(() => _ipMissing = false);
+    }
+  }
+
+  Future<void> _withHost(Future<void> Function(String) action) =>
+      _run(() async {
+        final host = _host.text.trim();
+        if (host.isEmpty) {
+          setState(() => _ipMissing = true);
+          return;
+        }
+        await action(host);
+      });
+
+  String _stickerDetails(SyncRevision revision) {
+    final sticker = SyncSticker.decode(revision.payload!);
+    return sticker.markdownPath ?? sticker.text;
+  }
+
+  String _label(SyncRevision r, [Map<String, String> names = const {}]) {
     if (r.deleted) return 'Удаление';
+    if (r.entityType == 'canvasBoard') {
+      final board = SyncCanvasBoard.decode(r.payload!);
+      final name = names[SyncPayload.key('sphere', board.sphereId)];
+      return name == null ? 'Доска Canvas' : 'Доска «$name»';
+    }
+    if (r.entityType == 'canvasNode') {
+      final placement = SyncCanvasPlacement.decode(r.payload!);
+      for (final type in ['task', 'project', 'goal', 'sphere']) {
+        final name = names[SyncPayload.key(type, placement.nodeId)];
+        if (name != null) return 'Положение узла «$name»';
+      }
+      return 'Положение узла';
+    }
+    if (r.entityType == 'sticker') {
+      final title = _stickerDetails(r).trim().split('\n').first;
+      return title.isEmpty ? 'Стикер' : title;
+    }
     final m = jsonDecode(r.payload!) as Map<String, dynamic>;
-    return (m['title'] ?? m['name'] ?? m['description'] ?? 'Запись').toString();
+    return (m['title'] ??
+            m['path'] ??
+            m['dateKey'] ??
+            m['name'] ??
+            m['description'] ??
+            'Запись')
+        .toString();
   }
 
   Future<void> _pending() async {
@@ -315,12 +365,17 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                         (r) => !r.deleted,
                         orElse: () => entry.value.first,
                       ),
+                      names,
                     ),
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   if (entry.value.any((r) => r.deleted))
-                    const Text(
-                      'Сохранено удаление и варианты текста. Восстановление выполняется отдельной копией.',
+                    Text(
+                      SyncPayload.externalNotes.contains(
+                            entry.value.first.entityType,
+                          )
+                          ? 'Одна версия удалена. Выберите текст или подтвердите удаление.'
+                          : 'Сохранено удаление и варианты текста. Восстановление выполняется отдельной копией.',
                     ),
                   for (final revision in entry.value)
                     Card(
@@ -329,18 +384,29 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(_label(revision)),
+                            Text(_label(revision, names)),
                             ..._details(revision, names),
                             if (revision.payload != null) ...[
-                              Text(
-                                (jsonDecode(revision.payload!)
-                                            as Map<
-                                              String,
-                                              dynamic
-                                            >)['description']
-                                        ?.toString() ??
-                                    '',
-                              ),
+                              if (SyncPayload.externalNotes.contains(
+                                revision.entityType,
+                              ))
+                                ExpansionTile(
+                                  title: const Text('Содержимое'),
+                                  children: [
+                                    SelectableText(
+                                      revision.entityType == 'sticker'
+                                          ? _stickerDetails(revision)
+                                          : MarkdownSyncNote.decode(
+                                              revision.payload!,
+                                            ).text,
+                                    ),
+                                  ],
+                                )
+                              else if ((jsonDecode(revision.payload!)
+                                      as Map<String, dynamic>)['description']
+                                  case final String description
+                                  when description.isNotEmpty)
+                                Text(description),
                               Text(
                                 revision.deviceId ==
                                         widget.control.state.deviceId
@@ -351,7 +417,10 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                             ],
                             FilledButton(
                               onPressed:
-                                  !revision.deleted &&
+                                  !SyncPayload.externalNotes.contains(
+                                        revision.entityType,
+                                      ) &&
+                                      !revision.deleted &&
                                       entry.value.any((r) => r.deleted)
                                   ? null
                                   : () {
@@ -391,6 +460,21 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
 
   List<Widget> _details(SyncRevision r, Map<String, String> names) {
     if (r.payload == null) return [];
+    if (r.entityType == 'canvasBoard') {
+      final board = SyncCanvasBoard.decode(r.payload!);
+      final nodes = board.document['nodes'] as List;
+      final edges = board.document['edges'] as List;
+      return [Text('Карточек ${nodes.length} · Связей ${edges.length}')];
+    }
+    if (r.entityType == 'canvasNode') {
+      final placement = SyncCanvasPlacement.decode(r.payload!);
+      final sphere = names[SyncPayload.key('sphere', placement.sphereId)];
+      return [
+        if (sphere != null) Text('Граф «$sphere»'),
+        Text('X ${placement.x}, Y ${placement.y}'),
+        Text('Размер ${placement.width} × ${placement.height}'),
+      ];
+    }
     final m = jsonDecode(r.payload!) as Map<String, dynamic>;
     const labels = {
       'status': 'Статус',
@@ -398,6 +482,7 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
       'endsAt': 'Окончание',
       'dueDate': 'Срок',
       'date': 'Дата',
+      'dateKey': 'День',
       'startedAt': 'Начало работы',
       'endedAt': 'Конец работы',
       'isArchived': 'В архиве',
@@ -407,6 +492,9 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
       'notStarted': 'Не начата',
       'inProgress': 'В работе',
       'done': 'Выполнена',
+      'completed': 'Выполнено',
+      'pending': 'Ожидает',
+      'skipped': 'Пропущено',
     };
     const relations = {
       'parentTaskId': 'Родительская задача',
@@ -415,6 +503,7 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
       'parentProjectId': 'Родительский проект',
       'goalId': 'Цель',
       'sphereId': 'Сфера',
+      'habitId': 'Привычка',
     };
     const types = {
       'parentTaskId': 'task',
@@ -423,6 +512,7 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
       'parentProjectId': 'project',
       'goalId': 'goal',
       'sphereId': 'sphere',
+      'habitId': 'habit',
     };
     return [
       for (final entry in labels.entries)
@@ -454,20 +544,39 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Обмен между доверенными устройствами в одной сети. Привычки, заметки и файлы пока не передаются.',
+              'Обмен в одной сети передаёт задачи, проекты, сферы, цели, привычки, доски Canvas и Markdown из папки Notes.',
             ),
+            if (s.joining)
+              const Text(
+                'Завершаем сопряжение. Подтвердите запрос на втором устройстве.',
+              )
+            else if (s.confirmingDevice case final name?)
+              Text('Ожидаем завершения подключения от «$name».')
+            else if (s.peers.isEmpty &&
+                s.awaitingApproval == null &&
+                s.unverifiedPeers.isEmpty)
+              const Text('Подключённых устройств пока нет.'),
+            if (s.notesNeedFolder)
+              const Text(
+                'Выберите папку Notes в настройках графа на устройствах.',
+              ),
             const SizedBox(height: 12),
             TextField(
               controller: _host,
               enabled: !s.busy,
+              onChanged: _clearIpError,
               decoration: InputDecoration(
                 labelText: 'IP этого устройства',
                 helperText: 'Адрес Wi-Fi или Ethernet в локальной сети',
+                errorText: _ipMissing
+                    ? LocalSyncException.missingLocalIp.message
+                    : null,
+                errorMaxLines: 3,
                 suffixIcon: _addresses.length > 1
                     ? PopupMenuButton<String>(
                         enabled: !s.busy,
                         tooltip: 'Выбрать локальный IP',
-                        onSelected: (address) => _host.text = address,
+                        onSelected: _setHost,
                         itemBuilder: (_) => [
                           for (final address in _addresses)
                             PopupMenuItem(value: address, child: Text(address)),
@@ -496,11 +605,9 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
               TextButton(
                 onPressed: s.busy
                     ? null
-                    : () => _run(
-                        () => widget.control.join(
-                          _invitation.text.trim(),
-                          _host.text.trim(),
-                        ),
+                    : () => _withHost(
+                        (host) =>
+                            widget.control.join(_invitation.text.trim(), host),
                       ),
                 child: const Text('Присоединиться с пустой базой'),
               ),
@@ -509,18 +616,14 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Приём по локальной сети'),
                 subtitle: Text(
-                  s.listening
-                      ? 'Устройство доступно для подключённых устройств'
-                      : 'Приём остановлен',
+                  s.listening ? 'Приём включён' : 'Приём остановлен',
                 ),
                 value: s.listening,
                 onChanged: s.busy
                     ? null
-                    : (on) => _run(
-                        () => on
-                            ? widget.control.listen(_host.text.trim())
-                            : widget.control.closeListener(),
-                      ),
+                    : (on) => on
+                          ? _withHost(widget.control.listen)
+                          : _run(widget.control.closeListener),
               ),
               if (s.endpoint != null)
                 SelectableText(
@@ -541,10 +644,10 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                   TextButton(
                     onPressed: s.busy
                         ? null
-                        : () => _run(
-                            () => widget.control.join(
+                        : () => _withHost(
+                            (host) => widget.control.join(
                               _invitation.text.trim(),
-                              _host.text.trim(),
+                              host,
                             ),
                           ),
                     child: const Text('Подключить устройство'),
@@ -552,10 +655,12 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                 ],
               ),
               OutlinedButton.icon(
-                onPressed: s.busy
+                onPressed:
+                    s.busy ||
+                        s.awaitingApproval != null ||
+                        s.confirmingDevice != null
                     ? null
-                    : () =>
-                          _run(() => widget.control.invite(_host.text.trim())),
+                    : () => _withHost(widget.control.invite),
                 icon: const Icon(Icons.person_add_alt),
                 label: const Text('Пригласить устройство'),
               ),
@@ -622,7 +727,7 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                   ),
                 ),
               ),
-            for (final peer in s.peers)
+            for (final peer in [...s.unverifiedPeers, ...s.peers])
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 child: Column(
@@ -639,15 +744,25 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                     Wrap(
                       spacing: 8,
                       children: [
-                        FilledButton.icon(
-                          onPressed: s.busy
-                              ? null
-                              : () => _run(
-                                  () => widget.control.synchronize(peer.id),
-                                ),
-                          icon: const Icon(Icons.sync),
-                          label: const Text('Синхронизировать'),
-                        ),
+                        if (s.unverifiedPeers.contains(peer))
+                          OutlinedButton(
+                            onPressed: s.busy
+                                ? null
+                                : () => _run(
+                                    () => widget.control.verifyPair(peer.id),
+                                  ),
+                            child: const Text('Проверить сопряжение'),
+                          )
+                        else
+                          FilledButton.icon(
+                            onPressed: s.busy
+                                ? null
+                                : () => _run(
+                                    () => widget.control.synchronize(peer.id),
+                                  ),
+                            icon: const Icon(Icons.sync),
+                            label: const Text('Синхронизировать'),
+                          ),
                         TextButton(
                           onPressed: s.busy
                               ? null

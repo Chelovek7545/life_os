@@ -13,3 +13,5 @@ dependencies:
   projects_api: ^0.1.0
   goals_api: ^0.1.0
   spheres_api: ^0.1.0
+  habits_api: ^0.1.0
+  path: ^1.9.1

@@ -164,6 +164,7 @@ class HabitEntries extends Table {
     SyncRevisions,
     SyncCursors,
     SyncEntityHeads,
+    SyncNoteCheckpoints,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -177,7 +178,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   Future<void> _createSyncProjectionTriggers() async {
     for (final event in ['INSERT', 'UPDATE', 'DELETE']) {
@@ -200,20 +201,26 @@ class AppDatabase extends _$AppDatabase {
       onCreate: (Migrator m) async {
         await m.createAll();
         await _createSyncProjectionTriggers();
-        await customStatement('CREATE UNIQUE INDEX tags_sync_id_unique ON tags(sync_id)');
+        await customStatement(
+          'CREATE UNIQUE INDEX tags_sync_id_unique ON tags(sync_id)',
+        );
       },
       onUpgrade: (Migrator m, int from, int to) async {
+        if (from < 15) await m.createTable(syncNoteCheckpoints);
         if (from < 14) {
           // Миграция могла добавить колонку до обновления user_version.
           final columns = await customSelect('PRAGMA table_info(tasks)').get();
           final hasPredecessor = columns.any(
             (column) => column.read<String>('name') == 'predecessor_task_id',
           );
-          if (!hasPredecessor) await m.addColumn(tasks, tasks.predecessorTaskId);
+          if (!hasPredecessor)
+            await m.addColumn(tasks, tasks.predecessorTaskId);
         }
         if (from < 12) {
           await m.addColumn(tags, tags.syncId);
-          await customStatement('CREATE UNIQUE INDEX tags_sync_id_unique ON tags(sync_id)');
+          await customStatement(
+            'CREATE UNIQUE INDEX tags_sync_id_unique ON tags(sync_id)',
+          );
         }
         if (from < 11) {
           await m.createTable(syncIdentities);

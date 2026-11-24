@@ -1,9 +1,35 @@
+import 'canvas_placement_sync_codec.dart';
+import 'canvas_board_sync_codec.dart';
 import 'hierarchy_sync_codec.dart';
+import 'habit_sync_codec.dart';
+import 'markdown_sync_codec.dart';
+import 'sticker_sync_codec.dart';
 import 'task_sync_codec.dart';
 import 'work_log_sync_codec.dart';
 
 class SyncPayload {
-  static const types = ['task', 'workLog', 'project', 'goal', 'sphere', 'tag'];
+  static const types = [
+    'task',
+    'workLog',
+    'project',
+    'goal',
+    'sphere',
+    'tag',
+    'habit',
+    'habitEntry',
+    'note',
+    'sticker',
+    'canvasNode',
+    'canvasBoard',
+  ];
+  static const schema5Types = {'habit', 'habitEntry', 'note'};
+  static const externalNotes = {'note', 'sticker'};
+  static const externalEntities = {
+    ...externalNotes,
+    'canvasNode',
+    'canvasBoard',
+  };
+  static const canvasTypes = {'canvasNode', 'canvasBoard'};
   static String key(String type, String id) {
     if (!types.contains(type)) {
       throw const FormatException('Unsupported entity type.');
@@ -27,9 +53,18 @@ class SyncPayload {
     'goal' => HierarchySyncCodec.decodeGoal(text).id,
     'sphere' => HierarchySyncCodec.decodeSphere(text).id,
     'tag' => HierarchySyncCodec.decodeTag(text).syncId!,
+    'habit' => HabitSyncCodec.decodeHabit(text).id,
+    'habitEntry' => HabitSyncCodec.decodeEntry(text).id,
+    'note' => MarkdownSyncNote.decode(text).id,
+    'sticker' => SyncSticker.decode(text).id,
+    'canvasNode' => SyncCanvasPlacement.decode(text).id,
+    'canvasBoard' => SyncCanvasBoard.decode(text).id,
     _ => throw const FormatException('Unsupported entity type.'),
   };
   static List<String> dependencies(String type, String text) {
+    if (type == 'habitEntry') {
+      return [key('habit', HabitSyncCodec.decodeEntry(text).habitId)];
+    }
     if (type == 'task') {
       final t = TaskSyncCodec.decode(text);
       if (t.parentTaskId != null && typeOf(t.parentTaskId!) != 'task') {

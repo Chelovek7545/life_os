@@ -24,7 +24,11 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     required LocalSyncData data,
     required SyncSecretStore secrets,
     String deviceName = 'Устройство',
+    Future<String?> Function()? resolveDeviceName,
     LanSyncOptions options = const LanSyncOptions(),
+    Future<bool> Function()? reconcileNotes,
+    Future<bool> Function()? applyNotes,
+    Set<String> dependencies = const {},
   });
   Never _unsupported() =>
       throw UnsupportedError('LAN sync is available only on native platforms.');
@@ -56,6 +60,8 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   Future<void> approve(String id) async => _unsupported();
   @override
   Future<void> reject(String id) async => _unsupported();
+  @override
+  Future<void> verifyPair(String id) async => _unsupported();
   @override
   Future<void> synchronize(String id) async => _unsupported();
   @override

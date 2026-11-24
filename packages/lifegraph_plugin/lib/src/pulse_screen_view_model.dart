@@ -24,6 +24,7 @@ class PulseScreenViewModel {
     required this.nodeEditors,
     required this.commands,
     required this.obsidianRepository,
+    this.ensureAllBoards = false,
   });
   final SpheresApi spheresRepository;
   final GoalsQueries goalsRepository;
@@ -36,6 +37,9 @@ class PulseScreenViewModel {
   final GraphEditorRegistry nodeEditors;
   final GraphCommandRegistry commands;
   final VaultNotesApi? obsidianRepository;
+  final bool ensureAllBoards;
+  final _ensuredBoards = <String>{};
+  String? _ensuredRoot;
   final _graphs = <LifeGraphViewModel>{};
   final _subscriptions = <StreamSubscription<dynamic>>[];
   final _spheres = BehaviorSubject<List<Sphere>>.seeded(const []);
@@ -58,12 +62,17 @@ class PulseScreenViewModel {
   Future<void> _operations = Future.value();
   Future<void>? _closing;
 
-  void _listen<T>(Stream<List<T>> source, BehaviorSubject<List<T>> target) {
+  void _listen<T>(
+    Stream<List<T>> source,
+    BehaviorSubject<List<T>> target, {
+    void Function(List<T>)? onItems,
+  }) {
     _subscriptions.add(
       source.listen((items) {
         if (_disposed) return;
         target.add(List.unmodifiable(items));
         if (identical(target, _spheres)) _initialized = true;
+        onItems?.call(items);
       }, onError: (Object error) => debugPrint('Pulse source error: $error')),
     );
   }
@@ -72,7 +81,23 @@ class PulseScreenViewModel {
     if (!_accepting) throw StateError('Pulse module is closed.');
     if (_started) return;
     _started = true;
-    _listen(spheresRepository.watchAllSpheres(), _spheres);
+    if (ensureAllBoards) {
+      await _ensureBoards(await spheresRepository.getAllSpheres());
+    }
+    _listen(
+      spheresRepository.watchAllSpheres(),
+      _spheres,
+      onItems: (items) {
+        if (ensureAllBoards && _accepting) {
+          unawaited(
+            _enqueue(() => _ensureBoards(items)).catchError(
+              (Object error) =>
+                  debugPrint('Canvas initialization failed: $error'),
+            ),
+          );
+        }
+      },
+    );
     _listen(goalsRepository.watchAllGoals(), _goals);
     _listen(tasksRepository.watchTasks(), _tasks);
     _listen(projectsRepository.watchAllProjects(), _projects);
@@ -89,13 +114,13 @@ class PulseScreenViewModel {
   }
 
   Future<void> createSphere({required String name, String color = '#FFB59C'}) =>
-      _enqueue(
-        () => spheresRepository.addSphere(
-          Sphere.create(name: name, color: color),
-        ),
-      );
+      _enqueue(() async {
+        final sphere = Sphere.create(name: name, color: color);
+        await spheresRepository.addSphere(sphere);
+        if (ensureAllBoards) await _ensureBoards([sphere]);
+      });
 
-  Future<LifeGraphViewModel> openGraph(String sphereId) => _enqueue(() async {
+  LifeGraphViewModel _newGraph() {
     late final LifeGraphViewModel model;
     model = LifeGraphViewModel(
       onDisposed: () => _graphs.remove(model),
@@ -108,6 +133,43 @@ class PulseScreenViewModel {
       commands: commands,
       obsidianRepository: obsidianRepository,
     );
+    return model;
+  }
+
+  Future<void> ensureCanvasBoards() => _enqueue(() async {
+    if (ensureAllBoards) {
+      await _ensureBoards(await spheresRepository.getAllSpheres());
+    }
+  });
+
+  Future<void> _ensureBoards(Iterable<Sphere> spheres) async {
+    final vault = obsidianRepository;
+    if (vault is! VaultCanvasBoardsApi ||
+        vault == null ||
+        vault.state.vaultPath.isEmpty ||
+        vault.state.error != null) {
+      return;
+    }
+    final root = vault.state.vaultPath;
+    if (_ensuredRoot != root) {
+      _ensuredRoot = root;
+      _ensuredBoards.clear();
+    }
+    for (final sphere in spheres) {
+      if (!_accepting || vault.state.vaultPath != root) return;
+      if (_ensuredBoards.contains(sphere.id)) continue;
+      final model = _newGraph();
+      try {
+        await model.createMissingCanvasBoard(sphere.id);
+        _ensuredBoards.add(sphere.id);
+      } finally {
+        await model.dispose();
+      }
+    }
+  }
+
+  Future<LifeGraphViewModel> openGraph(String sphereId) => _enqueue(() async {
+    final model = _newGraph();
     _graphs.add(model);
     try {
       await model.switchSphere(sphereId);
@@ -122,6 +184,17 @@ class PulseScreenViewModel {
 
   Future<void> closeGraphs() =>
       Future.wait([for (final graph in _graphs.toList()) graph.dispose()]);
+
+  Future<void> flushGraphs() => _enqueue(() async {
+    await Future.wait([for (final graph in _graphs.toList()) graph.flush()]);
+  });
+
+  Future<void> refreshSyncedCanvas(Set<String> sphereIds) => _enqueue(() async {
+    await Future.wait([
+      for (final graph in _graphs.toList())
+        graph.refreshSyncedCanvas(sphereIds),
+    ]);
+  });
   Future<void> dispose() => _closing ??= _dispose();
   Future<void> _dispose() async {
     _accepting = false;

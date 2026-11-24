@@ -83,7 +83,7 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 14);
+      expect(version.read<int>('user_version'), 15);
     } finally {
       await upgraded.close();
     }

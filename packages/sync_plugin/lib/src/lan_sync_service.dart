@@ -9,6 +9,7 @@ import 'package:plugin_runtime/plugin_runtime.dart';
 import 'package:uuid/uuid.dart';
 import 'local_sync_contracts.dart';
 import 'sync_models.dart';
+import 'sync_payload.dart';
 
 String localSyncDeviceName() {
   final host = Platform.localHostname.trim();
@@ -69,8 +70,24 @@ bool _isLan(String host) {
       : (b[0] & 0xfe) == 0xfc;
 }
 
+String _requireLocalIp(String input) {
+  final host = input.trim();
+  if (host.isEmpty) throw LocalSyncException.missingLocalIp;
+  if (!_isLan(host)) {
+    throw const LocalSyncException(
+      'Выберите локальный IP-адрес этого устройства.',
+    );
+  }
+  return host;
+}
+
 Uri _endpoint(String text) {
   final u = Uri.parse(text);
+  if (u.host.isEmpty && (text.trim().isEmpty || u.hasAuthority)) {
+    throw const LocalSyncException(
+      'Не указан IP второго устройства. Укажите его в Pulse и создайте новое приглашение.',
+    );
+  }
   if (u.scheme != 'https' ||
       !_isLan(u.host) ||
       u.userInfo.isNotEmpty ||
@@ -101,8 +118,19 @@ String _id(Object? value) {
 }
 
 class _Peer {
-  _Peer(this.id, this.name, this.endpoint, this.pin, this.token);
+  _Peer(
+    this.id,
+    this.name,
+    this.endpoint,
+    this.pin,
+    this.token, {
+    this.invitationHash,
+    this.verified = false,
+  });
   final String id, name, endpoint, pin, token;
+  final String? invitationHash;
+  final bool verified;
+  bool get confirmed => invitationHash == null;
   LocalSyncPeer get summary =>
       LocalSyncPeer(id: id, name: name, endpoint: endpoint, fingerprint: pin);
   Map<String, Object?> toJson() => {
@@ -111,6 +139,8 @@ class _Peer {
     'endpoint': endpoint,
     'pin': pin,
     'token': token,
+    if (invitationHash != null) 'invitationHash': invitationHash,
+    if (verified) 'verified': true,
   };
   factory _Peer.fromJson(Map<String, dynamic> m) {
     final token = m['token'] as String;
@@ -127,8 +157,17 @@ class _Peer {
       _endpoint(m['endpoint'] as String).toString(),
       _pin(m['pin']),
       token,
+      invitationHash: m['invitationHash'] as String?,
+      verified: m['verified'] == true,
     );
   }
+
+  _Peer confirm([String? checkedName]) =>
+      _Peer(id, checkedName ?? name, endpoint, pin, token, verified: true);
+}
+
+class _PeerNotAuthorized implements Exception {
+  const _PeerNotAuthorized();
 }
 
 class LanSyncService implements AppPlugin, LocalSyncControl {
@@ -136,16 +175,24 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     required this.data,
     required this.secrets,
     this.deviceName = 'Устройство',
+    this.resolveDeviceName,
     this.options = const LanSyncOptions(),
+    this.reconcileNotes,
+    this.applyNotes,
+    this.dependencies = const {},
   });
   final LocalSyncData data;
   final SyncSecretStore secrets;
   final String deviceName;
+  final Future<String?> Function()? resolveDeviceName;
+  String? _advertisedName;
   final LanSyncOptions options;
+  final Future<bool> Function()? reconcileNotes;
+  final Future<bool> Function()? applyNotes;
   @override
   String get id => 'sync.local';
   @override
-  Set<String> get dependencies => const {};
+  final Set<String> dependencies;
   bool _active = false, _busy = false, _enrolled = false;
   int _generation = 0;
   @override
@@ -162,7 +209,12 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   LocalSyncState _state = LocalSyncState();
   String? _advertised, _invitation, _inviteHash, _error;
   DateTime? _inviteDeadline, _lastSync;
+  LocalSyncRun? _run;
+  bool _notesNeedFolder = false;
   _Peer? _pending;
+  _Peer? _approvedPeer;
+  Timer? _confirmationTimer;
+  bool _joining = false;
   String? _approvalId;
   Completer<String>? _approval;
   int _conflictCount = 0, _pendingCount = 0;
@@ -177,8 +229,9 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
       enrolled: _enrolled,
       endpoint: _advertised,
       deviceId: _material?.deviceId,
+      deviceName: _advertisedName ?? deviceName,
       invitation: _invitation,
-      awaitingApproval: _pending == null
+      awaitingApproval: _pending == null || _approval?.isCompleted != false
           ? null
           : LocalSyncPeer(
               id: _approvalId!,
@@ -188,11 +241,36 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
             ),
       error: _error,
       lastSync: _lastSync,
-      peers: _peers.values.map((p) => p.summary),
+      run: _run,
+      notesNeedFolder: _notesNeedFolder,
+      joining: _joining,
+      confirmingDevice: _peers[_approvedPeer?.id]?.confirmed == true
+          ? null
+          : _approvedPeer?.name,
+      peers: _enrolled
+          ? _peers.values.where((p) => p.verified).map((p) => p.summary)
+          : const [],
+      unverifiedPeers: _enrolled
+          ? _peers.values
+                .where((p) => p.confirmed && !p.verified)
+                .map((p) => p.summary)
+          : const [],
       conflictCount: _conflictCount,
       pendingCount: _pendingCount,
     );
     if (!_states.isClosed) _states.add(_state);
+  }
+
+  Future<String> _pairingName(int generation) async {
+    final name = (await resolveDeviceName?.call())?.trim();
+    _live(generation);
+    final value = name == null || name.isEmpty ? deviceName.trim() : name;
+    final end = value.length <= 80
+        ? value.length
+        : value.codeUnitAt(80) >= 0xDC00 && value.codeUnitAt(80) <= 0xDFFF
+        ? 79
+        : 80;
+    return _advertisedName = end == 0 ? 'Устройство' : value.substring(0, end);
   }
 
   void _live(int generation) {
@@ -254,6 +332,8 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     _active = true;
     _busy = false;
     _error = null;
+    _run = null;
+    _notesNeedFolder = false;
     if (_states.isClosed) _states = StreamController.broadcast();
     final generation = _generation;
     try {
@@ -362,11 +442,6 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   }
 
   Future<void> _listen(String host, int generation) async {
-    if (!_isLan(host)) {
-      throw const LocalSyncException(
-        'Выберите локальный IP-адрес этого устройства.',
-      );
-    }
     await _load(generation);
     _live(generation);
     if (_server == null) {
@@ -411,7 +486,8 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   }
 
   @override
-  Future<void> listen(String host) => _accept((g) => _listen(host, g));
+  Future<void> listen(String host) =>
+      _accept((g) => _listen(_requireLocalIp(host), g));
   Future<void> _closeListener() async {
     _inviteHash = null;
     _invitation = null;
@@ -423,6 +499,7 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     }
     _pending = null;
     _approval = null;
+    _clearApprovedPeer();
     final server = _server;
     _server = null;
     _advertised = null;
@@ -435,22 +512,42 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     _emit();
   }
 
+  void _clearApprovedPeer() {
+    _confirmationTimer?.cancel();
+    _confirmationTimer = null;
+    _approvedPeer = null;
+  }
+
+  Future<void> _completePair(_Peer peer) => _accept((generation) async {
+    final saved = _peers[peer.id];
+    if (saved != null && saved.confirmed && saved.token == peer.token) return;
+    if (!identical(_approvedPeer, peer)) throw const _PeerNotAuthorized();
+    _confirmationTimer?.cancel();
+    try {
+      await _save({..._peers, peer.id: peer.confirm()}, generation);
+    } finally {
+      _clearApprovedPeer();
+    }
+  });
+
   @override
   Future<void> closeListener() => _accept((_) => _closeListener(), busy: false);
   @override
   Future<void> invite(String host) => _accept((g) async {
+    final localIp = _requireLocalIp(host);
     if (await data.existingIdentity() == null) {
       throw const LocalSyncException(
         'Сначала создайте пространство синхронизации.',
       );
     }
     _live(g);
-    await _listen(host, g);
-    if (_pending != null) {
+    await _listen(localIp, g);
+    if (_pending != null || _approvedPeer != null) {
       throw const LocalSyncException(
         'Сначала подтвердите или отклоните запрос устройства.',
       );
     }
+    await _pairingName(g);
     final identity = (await data.existingIdentity())!;
     final secret = _randomSecret();
     _inviteHash = _hash(secret);
@@ -459,6 +556,7 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
       utf8.encode(
         jsonEncode({
           'protocol': 1,
+          'confirmPairing': true,
           'endpoint': _advertised,
           'fingerprint': _fingerprint(_material!.certificatePem),
           'deviceId': identity.deviceId,
@@ -472,6 +570,17 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   });
   @override
   Future<void> join(String invitation, String host) => _accept((g) async {
+    _joining = true;
+    _emit();
+    try {
+      await _join(invitation, host, g);
+    } finally {
+      _joining = false;
+    }
+  });
+
+  Future<void> _join(String invitation, String host, int g) async {
+    final localIp = _requireLocalIp(host);
     if (invitation.length > 16384) {
       throw const FormatException('Invitation too large.');
     }
@@ -488,13 +597,18 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
         'Приглашение истекло или не поддерживается.',
       );
     }
-    final uri = _endpoint(m['endpoint'] as String);
+    final uri = _endpoint(m['endpoint'] as String? ?? '');
     final pin = _pin(m['fingerprint']);
     final remoteId = _id(m['deviceId']);
     final dataset = _id(m['datasetId']);
     final secret = m['secret'] as String;
     if (secret.length < 40 || secret.length > 128) {
       throw const FormatException('Invalid invitation.');
+    }
+    if (m['confirmPairing'] != true) {
+      throw const LocalSyncException(
+        'Обновите Pulse на обоих устройствах для сопряжения.',
+      );
     }
     final existing = await data.existingIdentity();
     if (existing != null && existing.datasetId != dataset) {
@@ -508,50 +622,84 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
       );
     }
     _live(g);
-    await _listen(host, g);
+    await _listen(localIp, g);
     if (remoteId == _material!.deviceId) {
       throw const LocalSyncException(
         'Нельзя подключить устройство к самому себе.',
       );
     }
-    final response = await _post(
-      uri,
-      pin,
-      '/v1/pair',
-      {
-        'protocol': 1,
-        'secret': secret,
-        'datasetId': dataset,
-        'deviceId': _material!.deviceId,
-        'name': deviceName,
-        'endpoint': _advertised,
-        'pin': _fingerprint(_material!.certificatePem),
-      },
-      g,
-      timeout: options.pairingTimeout + const Duration(seconds: 5),
-    );
-    _live(g);
-    if (response['deviceId'] != remoteId || response['datasetId'] != dataset) {
-      throw const FormatException('Pairing identity mismatch.');
+    var peer = _peers[remoteId];
+    if (peer == null ||
+        peer.invitationHash != _hash(secret) ||
+        peer.endpoint != uri.toString() ||
+        peer.pin != pin) {
+      final response = await _post(
+        uri,
+        pin,
+        '/v1/pair',
+        {
+          'protocol': 1,
+          'confirmPairing': true,
+          'secret': secret,
+          'datasetId': dataset,
+          'deviceId': _material!.deviceId,
+          'name': await _pairingName(g),
+          'endpoint': _advertised,
+          'pin': _fingerprint(_material!.certificatePem),
+        },
+        g,
+        timeout: options.pairingTimeout + const Duration(seconds: 5),
+      );
+      _live(g);
+      if (response['deviceId'] != remoteId ||
+          response['datasetId'] != dataset) {
+        throw const FormatException('Pairing identity mismatch.');
+      }
+      if (response['confirmPairing'] != true) {
+        throw const LocalSyncException(
+          'Обновите Pulse на обоих устройствах для сопряжения.',
+        );
+      }
+      peer = _Peer.fromJson({
+        'id': remoteId,
+        'name': response['name'],
+        'endpoint': uri.toString(),
+        'pin': pin,
+        'token': response['token'],
+        'invitationHash': _hash(secret),
+      });
+      await data.enroll(
+        dataset,
+        _material!.deviceId,
+        requireEmpty: existing == null,
+      );
+      _live(g);
+      _enrolled = true;
+      await _save({..._peers, peer.id: peer}, g);
     }
-    final peer = _Peer.fromJson({
-      'id': remoteId,
-      'name': response['name'],
-      'endpoint': uri.toString(),
-      'pin': pin,
-      'token': response['token'],
-    });
-    // Save trust first. If enrollment fails, a retry cannot export a populated
-    // independent database: every session still verifies the database identity.
-    await _save({..._peers, peer.id: peer}, g);
-    _live(g);
-    await data.enroll(
-      dataset,
-      _material!.deviceId,
-      requireEmpty: existing == null,
-    );
+    try {
+      final confirmation = await _post(
+        uri,
+        pin,
+        '/v1/pair/confirm',
+        {'protocol': 1, 'datasetId': dataset},
+        g,
+        token: peer.token,
+        deviceId: _material!.deviceId,
+      );
+      if (confirmation['confirmed'] != true) {
+        throw const FormatException('Pairing confirmation is missing.');
+      }
+    } on _PeerNotAuthorized {
+      await _save(Map.of(_peers)..remove(peer.id), g);
+      throw const LocalSyncException(
+        'Подтверждение истекло. Создайте новое приглашение.',
+      );
+    }
+    await _save({..._peers, peer.id: peer.confirm()}, g);
     await _refresh();
-  });
+  }
+
   @override
   Future<void> approve(String id) => _accept((g) async {
     final pending = _pending;
@@ -562,9 +710,16 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
         approval.isCompleted) {
       throw const LocalSyncException('Запрос уже закрыт.');
     }
-    await _save({..._peers, pending.id: pending}, g);
     _live(g);
-    if (!approval.isCompleted) approval.complete(pending.token);
+    _approvedPeer = pending;
+    _confirmationTimer = Timer(options.pairingTimeout, () {
+      if (!identical(_approvedPeer, pending)) return;
+      _clearApprovedPeer();
+      _error =
+          'Второе устройство не завершило подключение. Создайте новое приглашение.';
+      _emit();
+    });
+    approval.complete(pending.token);
   });
   @override
   Future<void> reject(String id) => _accept((_) async {
@@ -585,34 +740,93 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   });
   void _trusted(_Peer peer, int generation) {
     _live(generation);
-    if (_peers[peer.id]?.token != peer.token) {
+    final saved = _peers[peer.id];
+    if (saved == null || !saved.confirmed || saved.token != peer.token) {
       throw const LocalSyncException('Доступ устройства отозван.');
     }
   }
 
   @override
-  Future<void> synchronize(String id) => _accept((g) async {
+  Future<void> verifyPair(String id) => _accept((g) async {
     await _load(g);
     final peer = _peers[id];
-    if (peer == null) {
+    if (peer == null || !peer.confirmed) {
       throw const LocalSyncException('Устройство не подключено.');
     }
+    if (peer.verified) return;
+    final identity = await _syncIdentity();
+    String? name;
+    try {
+      name = await _RemoteStore(this, peer, g, identity).hello();
+    } on _PeerNotAuthorized {
+      await _removeUntrustedPeer(id, g);
+    }
+    _trusted(peer, g);
+    await _save({..._peers, id: peer.confirm(name)}, g);
+  });
+
+  Future<SyncIdentity> _syncIdentity() async {
     final identity = await data.existingIdentity();
     if (identity == null || identity.deviceId != _material!.deviceId) {
       throw const LocalSyncException(
         'Сначала завершите подключение пространства.',
       );
     }
-    final remote = _RemoteStore(this, peer, g, identity);
-    await remote.hello();
-    _trusted(peer, g);
-    await SyncEngine().exchange(
-      _GuardedStore(data.store, () => _trusted(peer, g)),
-      remote,
+    return identity;
+  }
+
+  Future<Never> _removeUntrustedPeer(String id, int generation) async {
+    await _save(Map.of(_peers)..remove(id), generation);
+    throw const LocalSyncException(
+      'Второе устройство не подтвердило доступ. Выполните сопряжение заново.',
     );
-    _trusted(peer, g);
-    _lastSync = DateTime.now();
-    await _refresh();
+  }
+
+  @override
+  Future<void> synchronize(String id) => _accept((g) async {
+    await _load(g);
+    final peer = _peers[id];
+    if (peer == null || !peer.verified) {
+      throw const LocalSyncException('Устройство не подключено.');
+    }
+    final identity = await _syncIdentity();
+    final remote = _RemoteStore(this, peer, g, identity);
+    void update(LocalSyncPhase phase, [SyncTransferProgress? transfer]) {
+      if (!_active || g != _generation) return;
+      _run = LocalSyncRun(id, phase, transfer ?? _run?.transfer);
+      _emit();
+    }
+
+    _run = LocalSyncRun(id, LocalSyncPhase.connecting);
+    _notesNeedFolder = false;
+    _emit();
+    try {
+      await remote.hello();
+      _trusted(peer, g);
+      await reconcileNotes?.call();
+      _trusted(peer, g);
+      await SyncEngine().exchange(
+        _GuardedStore(data.store, () => _trusted(peer, g)),
+        remote,
+        onProgress: (progress) => update(LocalSyncPhase.transferring, progress),
+      );
+      _trusted(peer, g);
+      update(LocalSyncPhase.applying);
+      final localNotesReady =
+          await (applyNotes ?? reconcileNotes)?.call() ?? true;
+      final remoteNotesReady = await remote.finish();
+      _trusted(peer, g);
+      _notesNeedFolder = !localNotesReady || !remoteNotesReady;
+      _lastSync = DateTime.now();
+      await _refresh();
+      update(LocalSyncPhase.complete);
+    } on _PeerNotAuthorized {
+      update(LocalSyncPhase.failed);
+      await _removeUntrustedPeer(id, g);
+    } catch (_) {
+      update(LocalSyncPhase.failed);
+      rethrow;
+    }
   });
   @override
   Future<Map<String, List<SyncRevision>>> conflicts() => data.conflicts();
@@ -635,7 +849,15 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   Future<void> resolve(SyncRevision chosen, Set<String> expected) =>
       _accept((g) async {
         _live(g);
+        if (SyncPayload.externalEntities.contains(chosen.entityType)) {
+          await reconcileNotes?.call();
+          _live(g);
+        }
         await data.resolve(chosen, expected);
+        if (SyncPayload.externalEntities.contains(chosen.entityType)) {
+          _live(g);
+          await (applyNotes ?? reconcileNotes)?.call();
+        }
         await _refresh();
       });
 
@@ -679,25 +901,34 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
         }
         request.write(jsonEncode(body));
         final response = await request.close();
+        final cert = response.certificate;
+        if (cert == null || sha256.convert(cert.der).toString() != pin) {
+          throw const LocalSyncException('Сертификат устройства изменился.');
+        }
+        if (response.statusCode == 403 && token != null) {
+          throw const _PeerNotAuthorized();
+        }
+        if (response.statusCode == 409 &&
+            (path == '/v1/plan' || path == '/v1/finish')) {
+          throw const LocalSyncException(
+            'Не удалось прочитать или сохранить заметки или Canvas на втором устройстве.',
+          );
+        }
         if (response.statusCode != 200) {
           throw const LocalSyncException(
             'Устройство отклонило запрос. Проверьте приглашение и доступ.',
           );
         }
-        final cert = response.certificate;
-        if (cert == null || sha256.convert(cert.der).toString() != pin) {
-          throw const LocalSyncException('Сертификат устройства изменился.');
-        }
         return await _read(response);
       }()).timeout(timeout ?? options.timeout);
     } on SocketException {
       throw const LocalSyncException(
-        'Устройство недоступно. Проверьте, что Pulse открыт, приём включён '
-        'и оба устройства подключены к одной сети.',
+        'Устройство недоступно. Проверьте IP второго устройства, общую сеть '
+        'и включён ли приём в Pulse.',
       );
     } on TimeoutException {
       throw const LocalSyncException(
-        'Устройство не ответило вовремя. Проверьте сеть и повторите обмен.',
+        'Устройство не ответило вовремя. Проверьте его IP и подключение к сети.',
       );
     } finally {
       _clients.remove(client);
@@ -724,13 +955,15 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
       }
       Map<String, Object?> result;
       if (request.uri.path == '/v1/pair') {
-        if (_inviteHash == null ||
+        if (body['confirmPairing'] != true ||
+            _inviteHash == null ||
             _inviteDeadline == null ||
             !DateTime.now().isBefore(_inviteDeadline!) ||
             body['secret'] is! String ||
             _hash(body['secret'] as String) != _inviteHash ||
             body['datasetId'] != identity.datasetId ||
-            _pending != null) {
+            _pending != null ||
+            _approvedPeer != null) {
           throw const LocalSyncException(
             'Приглашение истекло или уже использовано.',
           );
@@ -759,8 +992,9 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
           result = {
             'deviceId': identity.deviceId,
             'datasetId': identity.datasetId,
-            'name': deviceName,
+            'name': _advertisedName ?? deviceName,
             'token': token,
+            'confirmPairing': true,
           };
         } finally {
           if (identical(_approval, approval)) {
@@ -770,36 +1004,56 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
           }
         }
       } else {
-        final peer = _peers[request.headers.value('X-Life-Device')];
+        final id = request.headers.value('X-Life-Device');
+        final completing = request.uri.path == '/v1/pair/confirm';
+        final approved = _approvedPeer;
+        final peer = completing && approved != null && approved.id == id
+            ? approved
+            : _peers[id];
         final auth = request.headers.value(HttpHeaders.authorizationHeader);
         if (peer == null ||
             auth == null ||
             _hash(auth) != _hash('Bearer ${peer.token}')) {
+          if (auth != null && id != null) throw const _PeerNotAuthorized();
           throw const LocalSyncException('Устройство не авторизовано.');
         }
-        _trusted(peer, generation);
+        if (!completing) _trusted(peer, generation);
         if (body['datasetId'] != identity.datasetId) {
           throw const LocalSyncException(
             'Устройства принадлежат разным пространствам.',
           );
         }
         switch (request.uri.path) {
+          case '/v1/pair/confirm':
+            await _completePair(peer);
+            result = {'confirmed': true};
           case '/v1/hello':
             result = {
               'deviceId': identity.deviceId,
               'datasetId': identity.datasetId,
-              'schema': 3,
+              'schema': SyncRevision.supportedSchema,
+              'name': _advertisedName ?? await _pairingName(generation),
             };
           case '/v1/cursor':
             if (body['deviceId'] != peer.id) {
               throw const FormatException('Wrong cursor owner.');
             }
             result = {'cursor': await data.store.receivedCursor(peer.id)};
+          case '/v1/plan':
+            await _reconcilePeerNotes(request, peer, generation);
+            final plan = await data.store.planFeed(after: body['after'] as int);
+            result = {
+              'through': plan.through,
+              'counts': {
+                for (final entry in plan.counts.entries)
+                  entry.key.name: entry.value,
+              },
+            };
           case '/v1/pull':
             result = _encodeBatch(
               await data.store.readFeed(
                 after: body['after'] as int,
-                limit: 100,
+                limit: body['limit'] as int? ?? 100,
               ),
             );
           case '/v1/push':
@@ -810,9 +1064,19 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
             }
             _trusted(peer, generation);
             await data.store.receive(batch);
-            _lastSync = DateTime.now();
             await _refresh();
             result = {'cursor': batch.cursor};
+          case '/v1/finish':
+            final ready = await _reconcilePeerNotes(
+              request,
+              peer,
+              generation,
+              apply: true,
+            );
+            _notesNeedFolder = !ready;
+            _lastSync = DateTime.now();
+            await _refresh();
+            result = {'notesReady': ready};
           default:
             throw const FormatException('Unknown request.');
         }
@@ -821,13 +1085,33 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
       request.response.headers.contentType = ContentType.json;
       request.response.write(jsonEncode(result));
       await request.response.close();
-    } catch (_) {
+    } catch (error) {
       try {
-        request.response.statusCode = 400;
+        if (request.response.statusCode != 409) {
+          request.response.statusCode = error is _PeerNotAuthorized ? 403 : 400;
+        }
         request.response.write('{"error":"request_rejected"}');
         await request.response.close();
       } catch (_) {}
     }
+  }
+
+  Future<bool> _reconcilePeerNotes(
+    HttpRequest request,
+    _Peer peer,
+    int generation, {
+    bool apply = false,
+  }) async {
+    bool ready;
+    try {
+      final action = apply ? applyNotes ?? reconcileNotes : reconcileNotes;
+      ready = await action?.call() ?? true;
+    } catch (_) {
+      request.response.statusCode = 409;
+      rethrow;
+    }
+    _trusted(peer, generation);
+    return ready;
   }
 
   @override
@@ -901,6 +1185,12 @@ class _GuardedStore implements SyncStore {
   }
 
   @override
+  Future<SyncFeedPlan> planFeed({required int after}) {
+    check();
+    return inner.planFeed(after: after);
+  }
+
+  @override
   Future<SyncBatch> readFeed({int after = 0, int limit = 100}) {
     check();
     return inner.readFeed(after: after, limit: limit);
@@ -938,15 +1228,32 @@ class _RemoteStore implements SyncStore {
     );
   }
 
-  Future<void> hello() async {
+  Future<String?> hello() async {
     final result = await _call('/v1/hello', {});
     if (result['deviceId'] != peer.id ||
         result['datasetId'] != local.datasetId ||
-        result['schema'] != 3) {
+        result['schema'] != SyncRevision.supportedSchema) {
       throw const LocalSyncException(
-        'Версии приложения или пространство не совпадают.',
+        'Установите одинаковую версию Pulse на обоих устройствах.',
       );
     }
+    final name = result['name'];
+    return name is String && name.trim().isNotEmpty && name.length <= 80
+        ? name
+        : null;
+  }
+
+  Future<bool> finish() async =>
+      (await _call('/v1/finish', {}))['notesReady'] as bool;
+
+  @override
+  Future<SyncFeedPlan> planFeed({required int after}) async {
+    final result = await _call('/v1/plan', {'after': after});
+    final counts = result['counts'] as Map<String, dynamic>;
+    return SyncFeedPlan(result['through'] as int, {
+      for (final entry in counts.entries)
+        SyncSection.values.byName(entry.key): entry.value as int,
+    });
   }
 
   @override
@@ -954,7 +1261,9 @@ class _RemoteStore implements SyncStore {
       SyncIdentity(local.datasetId, peer.id);
   @override
   Future<SyncBatch> readFeed({int after = 0, int limit = 100}) async {
-    final batch = _decodeBatch(await _call('/v1/pull', {'after': after}));
+    final batch = _decodeBatch(
+      await _call('/v1/pull', {'after': after, 'limit': limit}),
+    );
     if (batch.source.deviceId != peer.id ||
         batch.source.datasetId != local.datasetId ||
         batch.after != after) {

@@ -69,7 +69,11 @@ abstract interface class CanvasBoardSession {
   String notePath(String absolutePath);
   String resolveNote(String relativePath);
   Future<String?> read();
-  Future<void> write(String content, {required String? expected});
+  Future<void> write(
+    String content, {
+    required String? expected,
+    bool backupPrevious = false,
+  });
 }
 
 class CanvasBoardConflict implements Exception {

@@ -32,8 +32,10 @@ LifeGraphPlugin createLifeGraphPlugin({
   required PluginUiRegistry ui,
   required Future<void> Function(Task) completeTask,
   required Set<String> dependencies,
+  bool ensureAllBoards = false,
   VaultNotesApi? vault,
   Future<void> Function(GraphStorageTarget)? selectStorageTarget,
+  GraphStorageTarget? Function()? currentStorageTarget,
 }) => LifeGraphPlugin(
   spheres: spheres,
   goals: goals,
@@ -49,10 +51,13 @@ LifeGraphPlugin createLifeGraphPlugin({
   completeTask: completeTask,
   vault: vault,
   dependencies: dependencies,
+  ensureAllBoards: ensureAllBoards,
   storageSettings: AppGraphStorageSettings(),
   storageSettingsBuilder: (_, isActive) => GraphFoldersForm(
     initial: SettingsService.graphFolders.value,
-    initialTarget: SettingsService.graphStorageTarget.value,
+    initialTarget:
+        currentStorageTarget?.call() ??
+        SettingsService.graphStorageTarget.value,
     vaultPath: SettingsService.obsidianVaultPath.value,
     pickDirectory: pickGraphDirectory,
     pickSharedFolder: !kIsWeb && defaultTargetPlatform == TargetPlatform.android

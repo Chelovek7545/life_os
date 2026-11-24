@@ -81,6 +81,11 @@ class _Control implements LocalSyncControl {
   }
 
   @override
+  Future<void> verifyPair(String id) async {
+    calls.add('verify:$id');
+  }
+
+  @override
   Future<void> synchronize(String id) async {
     calls.add('sync:$id');
     await exchange?.call(id);
@@ -119,7 +124,22 @@ void main() {
     control.exchange = (_) async {
       final result = Completer<void>();
       checks.add(result);
-      control.emit(LocalSyncState(enrolled: true, busy: true, peers: [peer]));
+      control.emit(
+        LocalSyncState(
+          enrolled: true,
+          busy: true,
+          peers: [peer],
+          run: LocalSyncRun(
+            peer.id,
+            LocalSyncPhase.transferring,
+            SyncTransferProgress(
+              {SyncSection.notes: 1, SyncSection.habits: 2},
+              {SyncSection.notes: 1},
+              [SyncSection.habits],
+            ),
+          ),
+        ),
+      );
       try {
         await result.future;
         control.emit(
@@ -161,15 +181,25 @@ void main() {
     expect(find.text('Телефон'), findsOneWidget);
     expect(find.text('В этом сеансе обмена ещё не было.'), findsOneWidget);
     final sync = find.widgetWithText(FilledButton, 'Синхронизировать');
+    await tester.ensureVisible(sync);
     await tester.tap(sync);
     await tester.pump();
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(
+      tester
+          .widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator))
+          .value,
+      .25,
+    );
+    expect(find.text('Заметки'), findsOneWidget);
+    expect(find.text('Привычки'), findsOneWidget);
     expect(tester.widget<FilledButton>(sync).onPressed, isNull);
     checks.single.completeError(
       const LocalSyncException('Устройство недоступно.'),
     );
     await tester.pumpAndSettle();
     expect(find.text('Устройство недоступно.'), findsOneWidget);
+    await tester.ensureVisible(sync);
     await tester.tap(sync);
     await tester.pump();
     checks.last.complete();
@@ -191,11 +221,9 @@ void main() {
     );
     await tester.tap(find.byTooltip('Локальная синхронизация'));
     await tester.pumpAndSettle();
-    expect(
-      find.text('Подключите свои устройства в настройках.'),
-      findsOneWidget,
-    );
-    await tester.tap(find.widgetWithText(TextButton, 'Настройки'));
+    expect(find.text('Подключённых устройств пока нет.'), findsOneWidget);
+    expect(find.text('Синхронизировать'), findsNothing);
+    await tester.tap(find.widgetWithText(TextButton, 'Подключить устройство'));
     await tester.pumpAndSettle();
     expect(find.byType(SyncSettingsPanel), findsOneWidget);
     expect(
@@ -203,6 +231,44 @@ void main() {
       findsOneWidget,
     );
     expect(control.calls, isEmpty);
+  });
+
+  testWidgets('pairing exposes the sync action only after confirmation', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: SyncQuickAction(control: control)),
+      ),
+    );
+    await tester.tap(find.byTooltip('Локальная синхронизация'));
+    await tester.pumpAndSettle();
+    const tablet = LocalSyncPeer(
+      id: 'tablet',
+      name: 'Redmi Pad Pro',
+      endpoint: 'https://192.168.1.3:48766/',
+      fingerprint: 'fingerprint',
+    );
+    control.emit(LocalSyncState(enrolled: true, awaitingApproval: tablet));
+    await tester.pumpAndSettle();
+    expect(find.text('Redmi Pad Pro запрашивает подключение.'), findsOneWidget);
+    expect(find.text('Подтвердить подключение'), findsOneWidget);
+    expect(find.text('Синхронизировать'), findsNothing);
+
+    control.emit(LocalSyncState(enrolled: true, confirmingDevice: tablet.name));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Ожидаем завершения подключения от «Redmi Pad Pro».'),
+      findsOneWidget,
+    );
+    expect(find.text('Синхронизировать'), findsNothing);
+
+    control.emit(LocalSyncState(enrolled: true, peers: [tablet]));
+    await tester.pumpAndSettle();
+    expect(find.text(tablet.name), findsOneWidget);
+    expect(find.text('Сопряжено'), findsNothing);
+    final sync = find.widgetWithText(FilledButton, 'Синхронизировать');
+    expect(tester.widget<FilledButton>(sync).onPressed, isNotNull);
   });
 
   Future<void> show(WidgetTester tester, {double width = 800}) async {
@@ -223,6 +289,23 @@ void main() {
       await tester.pumpAndSettle();
     }
   }
+
+  testWidgets('a saved legacy device must be verified before sync', (
+    tester,
+  ) async {
+    const tablet = LocalSyncPeer(
+      id: 'tablet',
+      name: 'Планшет',
+      endpoint: 'https://192.168.1.3:48766/',
+      fingerprint: 'fingerprint',
+    );
+    control.state = LocalSyncState(enrolled: true, unverifiedPeers: [tablet]);
+    await show(tester);
+    expect(find.text('Синхронизировать'), findsNothing);
+    await tester.tap(find.text('Проверить сопряжение'));
+    await tester.pumpAndSettle();
+    expect(control.calls, ['verify:tablet']);
+  });
 
   testWidgets(
     'fresh setup uses explicit enrollment and preserves the local address',
@@ -250,10 +333,18 @@ void main() {
 
     final host = tester.widget<TextField>(find.byType(TextField));
     expect(host.controller!.text, isEmpty);
+    await tester.tap(find.text('Пригласить устройство'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(LocalSyncException.missingLocalIp.message),
+      findsOneWidget,
+    );
+    expect(control.calls, isEmpty);
     await tester.tap(find.byTooltip('Выбрать локальный IP'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('192.168.1.8'));
     await tester.pumpAndSettle();
+    expect(find.text(LocalSyncException.missingLocalIp.message), findsNothing);
     await tester.tap(find.text('Пригласить устройство'));
     await tester.pumpAndSettle();
 

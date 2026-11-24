@@ -4,8 +4,13 @@ import 'package:flutter/foundation.dart'
 import 'package:sync_plugin/sync_logic.dart';
 import 'package:sync_plugin/sync_native.dart';
 import 'package:life_os/features/sync/data/secure_sync_secrets.dart';
+import 'package:life_os/features/sync/data/sync_device_name.dart';
 import 'plugins/sync_plugin_adapter.dart';
 import 'package:life_os/features/sync/data/drift_sync_store.dart';
+import 'package:life_os/features/sync/data/sync_markdown_files.dart';
+import 'package:life_os/features/sync/data/sync_canvas_boards.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:agent_bridge/agent_bridge.dart';
 import 'package:agent_bridge/local_assistant.dart';
 import 'plugins/assistant_plugin_adapter.dart';
@@ -59,6 +64,7 @@ import 'package:life_os/features/tasks/data/work_logs_repository.dart';
 class DependencyContainer {
   DependencyContainer({
     AppDatabase? database,
+    Future<String> Function()? defaultGraphRoot,
     this.experimentalSyncDatasetId,
     this.enableSync = const bool.fromEnvironment(
       'ENABLE_SYNC',
@@ -88,6 +94,15 @@ class DependencyContainer {
     Iterable<GraphModule> graphModules = const [],
     Iterable<UiModuleSpec> uiModules = const [],
   }) : database = database ?? AppDatabase() {
+    final resolveGraphRoot = kIsWeb
+        ? null
+        : defaultGraphRoot ??
+              (database == null
+                  ? () async => p.join(
+                      (await getApplicationDocumentsDirectory()).path,
+                      'Pulse',
+                    )
+                  : null);
     final extraGraphModules = List<GraphModule>.of(graphModules);
     // Enrollment is persistent: omitting the bootstrap option on restart must
     // not silently disable the journal of an already enrolled database.
@@ -96,7 +111,7 @@ class DependencyContainer {
     projectsDao = ProjectsDao(this.database, journal: taskSyncStore);
     spheresDao = SpheresDao(this.database, journal: taskSyncStore);
     goalsDao = GoalsDao(this.database, journal: taskSyncStore);
-    habitsDao = HabitsDao(this.database);
+    habitsDao = HabitsDao(this.database, capture: taskSyncStore.trackHabit);
     workLogsDao = WorkLogsDao(this.database, journal: taskSyncStore);
     tasksRepository = TasksRepository(tasksDAO);
     mcpPlugin = enableMcp
@@ -120,14 +135,6 @@ class DependencyContainer {
         : null;
     ui = PluginUiRegistry();
     navigation = PluginNavigationController(ui);
-    syncPlugin = enableSync && !kIsWeb
-        ? LanSyncService(
-            deviceName: localSyncDeviceName(),
-            data: taskSyncStore,
-            secrets: syncSecrets ?? SecureSyncSecrets(),
-            options: syncOptions,
-          )
-        : null;
     graphPositionsRepository = GraphPositionsRepository();
     graphNotesRepository = GraphNotesRepository();
     graphStorageRepository = GraphStorageRepository(
@@ -135,6 +142,7 @@ class DependencyContainer {
       vaultFolders: SettingsService.graphFolders,
       obsidian: obsidianRepository,
       files: graphFiles,
+      defaultLocalRoot: resolveGraphRoot,
       onNoteRenamed: graphNotesRepository.renameSource,
       beforeSwitch: () async {
         await Future.wait([
@@ -186,6 +194,8 @@ class DependencyContainer {
       commands: graphCommands,
       ui: ui,
       vault: graphStorageRepository,
+      ensureAllBoards: resolveGraphRoot != null,
+      currentStorageTarget: () => graphStorageRepository.effectiveTarget,
       selectStorageTarget: graphStorageRepository.selectTarget,
       completeTask: (task) => tasksPlugin.viewModel.toggleTask(task),
       dependencies: {
@@ -205,6 +215,48 @@ class DependencyContainer {
       ui: ui,
       dependencies: {'graph.storage'},
     );
+    Future<bool> reconcileFiles({bool afterReceive = false}) async {
+      final pulse = lifeGraphPlugin.viewModel;
+      await pulse.ensureCanvasBoards();
+      final ready = await SyncMarkdownFiles(
+        taskSyncStore,
+        graphStorageRepository,
+        flushEdits: () async {
+          await Future.wait([
+            pulse.flushGraphs(),
+            resourcesPlugin.viewModel.flush(),
+          ]);
+        },
+      ).reconcile();
+      final spheres = await spheresRepository.getAllSpheres();
+      await SyncCanvasBoards(
+        taskSyncStore,
+        graphStorageRepository,
+        graphNotesRepository,
+      ).reconcile(
+        spheres.map((sphere) => sphere.id),
+        refresh: pulse.refreshSyncedCanvas,
+        afterReceive: afterReceive,
+      );
+      return ready;
+    }
+
+    syncPlugin = enableSync && !kIsWeb
+        ? LanSyncService(
+            deviceName: localSyncDeviceName(),
+            resolveDeviceName: readSyncDeviceName,
+            data: taskSyncStore,
+            secrets: syncSecrets ?? SecureSyncSecrets(),
+            options: syncOptions,
+            dependencies: {
+              'graph.storage',
+              'lifegraph.screen',
+              'resources.screen',
+            },
+            reconcileNotes: reconcileFiles,
+            applyNotes: () => reconcileFiles(afterReceive: true),
+          )
+        : null;
     localBotService = enableTelegram
         ? LocalBotService(
             settings: AppTelegramSettings(),
@@ -348,8 +400,11 @@ class DependencyContainer {
   }
 
   Future<void> _initialize() async {
-    if (experimentalSyncDatasetId != null) {
-      await taskSyncStore.initialize(experimentalSyncDatasetId!);
+    final syncDataset =
+        experimentalSyncDatasetId ??
+        (await taskSyncStore.existingIdentity())?.datasetId;
+    if (syncDataset != null) {
+      await taskSyncStore.initialize(syncDataset);
     }
     await graphNotesRepository.init();
     await plugins.start();
