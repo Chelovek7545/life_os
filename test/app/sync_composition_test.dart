@@ -114,6 +114,10 @@ void main() {
       expect(app.plugins.states.containsKey('sync.local'), isTrue);
       expect(app.ui.settings.any((s) => s.id == 'sync.local.settings'), isTrue);
       expect(syncPanels(app), ['sync.local.quick']);
+      expect(
+        app.ui.panelsFor('app.overlays').map((panel) => panel.id),
+        contains('sync.local.completion'),
+      );
       expect(app.syncPlugin!.state.listening, isFalse);
       expect(await app.taskSyncStore.existingIdentity(), isNull);
       await app.syncPlugin!.createSpace();

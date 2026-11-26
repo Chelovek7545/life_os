@@ -37,6 +37,18 @@ class MemorySyncSecrets implements SyncSecretStore {
   }
 }
 
+class _MemoryNetworkSettings implements SyncNetworkSettings {
+  SyncNetworkPreference value = (address: null, listening: false);
+
+  @override
+  Future<SyncNetworkPreference> read() async => value;
+
+  @override
+  Future<void> write(SyncNetworkPreference preference) async {
+    value = preference;
+  }
+}
+
 class _NetworkBinding extends AutomatedTestWidgetsFlutterBinding {
   @override
   bool get overrideHttpClient => false;
@@ -365,6 +377,47 @@ void main() {
     },
   );
   test(
+    'startup restores the selected address and listener preference',
+    () async {
+      await a.stop();
+      final settings = _MemoryNetworkSettings();
+      var addresses = ['192.168.10.2', '192.168.20.2'];
+      a = LanSyncService(
+        data: aData,
+        secrets: aSecrets,
+        networkSettings: settings,
+        options: LanSyncOptions(
+          port: 0,
+          bindAddress: '127.0.0.1',
+          addressProvider: () async => addresses,
+          identityFactory: (id) async =>
+              SyncTlsMaterial(id, certA.certificatePem, certA.privateKeyPem),
+        ),
+      );
+      await a.start();
+      expect(a.state.localAddress, addresses.first);
+      expect(a.state.listening, isFalse);
+      await a.createSpace();
+      await a.listen(addresses.last);
+      await a.stop();
+      await a.start();
+      expect(a.state.localAddress, addresses.last);
+      expect(Uri.parse(a.state.endpoint!).host, addresses.last);
+      expect(a.state.listening, isTrue);
+
+      addresses = ['192.168.10.3'];
+      await a.stop();
+      await a.start();
+      expect(Uri.parse(a.state.endpoint!).host, addresses.single);
+      await a.closeListener();
+      await a.stop();
+      await a.start();
+      expect(a.state.localAddress, addresses.single);
+      expect(a.state.listening, isFalse);
+    },
+  );
+
+  test(
     'stop rejects pending approval; an old approval cannot authorize a new request',
     () async {
       await a.createSpace();
@@ -406,12 +459,16 @@ void main() {
       throwsA(anything),
     );
     await gated.gate.started.future.timeout(const Duration(seconds: 5));
+    expect(b.state.busy, isTrue);
+    expect(b.state.run?.phase, LocalSyncPhase.transferring);
+    expect(b.state.run?.transfer?.active, {SyncSection.tasks});
     var stopped = false;
     final stopping = b.stop().then((_) => stopped = true);
     await Future<void>.delayed(Duration.zero);
     expect(stopped, isFalse);
     gated.gate.release.complete();
     await stopping.timeout(const Duration(seconds: 5));
+    expect(b.state.run?.phase, LocalSyncPhase.failed);
     await syncing;
     expect(stopped, isTrue);
     expect((await bDb.select(bDb.tasks).get()).single.id, task.id);
@@ -571,6 +628,15 @@ void main() {
         if (state.run case final run?) runs.add(run);
       });
       addTearDown(changes.cancel);
+      final mirrored = <LocalSyncRun>[];
+      final mirrorChanges = a.states.listen((state) {
+        if (state.run case final run?) {
+          if (mirrored.isEmpty || !identical(mirrored.last, run)) {
+            mirrored.add(run);
+          }
+        }
+      });
+      addTearDown(mirrorChanges.cancel);
       final peer = b.state.peers.single.id;
       await b.synchronize(peer);
       expect((await habitsB.getAllHabits()).single.title, habit.title);
@@ -596,6 +662,21 @@ void main() {
       expect(b.state.run!.transfer!.planned[SyncSection.habits], 2);
       expect(b.state.run!.transfer!.transferred[SyncSection.notes], 1);
       expect(b.state.run!.transfer!.done, b.state.run!.transfer!.total);
+      expect(mirrored.first.phase, LocalSyncPhase.connecting);
+      expect(
+        mirrored.any(
+          (run) => run.transfer?.active.contains(SyncSection.habits) == true,
+        ),
+        isTrue,
+      );
+      expect(mirrored[mirrored.length - 2].phase, LocalSyncPhase.applying);
+      expect(mirrored.last.phase, LocalSyncPhase.complete);
+      expect(a.state.busy, isFalse);
+      expect(a.state.notesNeedFolder, isTrue);
+      expect(
+        a.state.run!.transfer!.transferred,
+        b.state.run!.transfer!.transferred,
+      );
 
       await filesB.selectTarget(
         GraphStorageTarget(

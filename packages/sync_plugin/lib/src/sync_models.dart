@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math' show min;
 import 'task_sync_codec.dart';
@@ -392,7 +393,7 @@ class SyncEngine {
   Future<void> exchange(
     SyncStore a,
     SyncStore b, {
-    void Function(SyncTransferProgress)? onProgress,
+    FutureOr<void> Function(SyncTransferProgress)? onProgress,
   }) async {
     final outgoing = await b.receivedCursor((await a.identity()).deviceId);
     final incoming = await a.receivedCursor((await b.identity()).deviceId);
@@ -412,8 +413,8 @@ class SyncEngine {
         section: (local.counts[section] ?? 0) + (remote.counts[section] ?? 0),
     };
     final transferred = <SyncSection, int>{};
-    void emit(Iterable<SyncSection> active) =>
-        onProgress?.call(SyncTransferProgress(planned, transferred, active));
+    Future<void> emit(Iterable<SyncSection> active) async => await onProgress
+        ?.call(SyncTransferProgress(planned, transferred, active));
 
     Future<void> transfer(
       SyncStore source,
@@ -440,7 +441,7 @@ class SyncEngine {
           if (pending < 0) throw const FormatException('Sync plan changed.');
           remaining[entry.key] = pending;
         }
-        emit(counts.keys);
+        await emit(counts.keys);
         await target.receive(batch);
         for (final entry in counts.entries) {
           transferred.update(
@@ -449,12 +450,12 @@ class SyncEngine {
             ifAbsent: () => entry.value,
           );
         }
-        emit(const []);
+        await emit(const []);
         cursor = batch.cursor;
       }
     }
 
-    emit(const []);
+    await emit(const []);
     await transfer(a, b, outgoing, local);
     await transfer(b, a, incoming, remote);
   }

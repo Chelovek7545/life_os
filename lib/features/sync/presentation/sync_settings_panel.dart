@@ -3,10 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:sync_plugin/sync_logic.dart';
 import 'package:tasks_api/tasks_api.dart' show Wrapped;
+import 'sync_address_field.dart';
+import 'sync_progress.dart';
 
 class SyncSettingsPanel extends StatefulWidget {
-  const SyncSettingsPanel({super.key, required this.control});
+  const SyncSettingsPanel({
+    super.key,
+    required this.control,
+    this.onVisibilityChanged,
+  });
   final LocalSyncControl control;
+  final ValueChanged<bool>? onVisibilityChanged;
   @override
   State<SyncSettingsPanel> createState() => _SyncSettingsPanelState();
 }
@@ -14,29 +21,20 @@ class SyncSettingsPanel extends StatefulWidget {
 class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
   final _host = TextEditingController();
   final _invitation = TextEditingController();
-  List<String> _addresses = const [];
   String? _error;
   bool _ipMissing = false;
   late final int _generation;
   @override
   void initState() {
     super.initState();
+    widget.onVisibilityChanged?.call(true);
     _generation = widget.control.generation;
-    final endpoint = widget.control.state.endpoint;
-    if (endpoint != null) {
-      _host.text = Uri.parse(endpoint).host;
-    }
-    widget.control.addresses().then((addresses) {
-      if (!mounted || _generation != widget.control.generation) return;
-      setState(() => _addresses = addresses.toSet().toList());
-      if (_addresses.length == 1 && _host.text.isEmpty) {
-        _setHost(_addresses.single);
-      }
-    }, onError: (Object _) {});
+    _host.text = syncAddressOf(widget.control.state);
   }
 
   @override
   void dispose() {
+    widget.onVisibilityChanged?.call(false);
     _host.dispose();
     _invitation.dispose();
     super.dispose();
@@ -56,11 +54,6 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
         );
       }
     }
-  }
-
-  void _setHost(String address) {
-    _host.text = address;
-    _clearIpError(address);
   }
 
   void _clearIpError(String value) {
@@ -546,6 +539,15 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
             const Text(
               'Обмен в одной сети передаёт задачи, проекты, сферы, цели, привычки, доски Canvas и Markdown из папки Notes.',
             ),
+            if (s.run case final run?)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: SyncProgress(
+                  run: run,
+                  busy: s.busy,
+                  notesNeedFolder: s.notesNeedFolder,
+                ),
+              ),
             if (s.joining)
               const Text(
                 'Завершаем сопряжение. Подтвердите запрос на втором устройстве.',
@@ -561,29 +563,14 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                 'Выберите папку Notes в настройках графа на устройствах.',
               ),
             const SizedBox(height: 12),
-            TextField(
+            SyncAddressField(
+              control: widget.control,
               controller: _host,
               enabled: !s.busy,
               onChanged: _clearIpError,
-              decoration: InputDecoration(
-                labelText: 'IP этого устройства',
-                helperText: 'Адрес Wi-Fi или Ethernet в локальной сети',
-                errorText: _ipMissing
-                    ? LocalSyncException.missingLocalIp.message
-                    : null,
-                errorMaxLines: 3,
-                suffixIcon: _addresses.length > 1
-                    ? PopupMenuButton<String>(
-                        enabled: !s.busy,
-                        tooltip: 'Выбрать локальный IP',
-                        onSelected: _setHost,
-                        itemBuilder: (_) => [
-                          for (final address in _addresses)
-                            PopupMenuItem(value: address, child: Text(address)),
-                        ],
-                      )
-                    : null,
-              ),
+              errorText: _ipMissing
+                  ? LocalSyncException.missingLocalIp.message
+                  : null,
             ),
             const SizedBox(height: 12),
             if (!s.enrolled) ...[
@@ -612,19 +599,6 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                 child: const Text('Присоединиться с пустой базой'),
               ),
             ] else ...[
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Приём по локальной сети'),
-                subtitle: Text(
-                  s.listening ? 'Приём включён' : 'Приём остановлен',
-                ),
-                value: s.listening,
-                onChanged: s.busy
-                    ? null
-                    : (on) => on
-                          ? _withHost(widget.control.listen)
-                          : _run(widget.control.closeListener),
-              ),
               if (s.endpoint != null)
                 SelectableText(
                   s.endpoint!,
@@ -775,7 +749,7 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                   ],
                 ),
               ),
-            if (s.busy)
+            if (s.busy && s.run == null)
               const Padding(
                 padding: EdgeInsets.all(8),
                 child: LinearProgressIndicator(),

@@ -170,10 +170,15 @@ class _PeerNotAuthorized implements Exception {
   const _PeerNotAuthorized();
 }
 
+class _SyncInUse implements Exception {
+  const _SyncInUse();
+}
+
 class LanSyncService implements AppPlugin, LocalSyncControl {
   LanSyncService({
     required this.data,
     required this.secrets,
+    this.networkSettings,
     this.deviceName = 'Устройство',
     this.resolveDeviceName,
     this.options = const LanSyncOptions(),
@@ -183,6 +188,7 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   });
   final LocalSyncData data;
   final SyncSecretStore secrets;
+  final SyncNetworkSettings? networkSettings;
   final String deviceName;
   final Future<String?> Function()? resolveDeviceName;
   String? _advertisedName;
@@ -208,8 +214,11 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   StreamController<LocalSyncState> _states = StreamController.broadcast();
   LocalSyncState _state = LocalSyncState();
   String? _advertised, _invitation, _inviteHash, _error;
+  String? _localAddress;
   DateTime? _inviteDeadline, _lastSync;
   LocalSyncRun? _run;
+  ({String id, String peerId})? _incoming;
+  Timer? _incomingTimeout;
   bool _notesNeedFolder = false;
   _Peer? _pending;
   _Peer? _approvedPeer;
@@ -225,9 +234,10 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   void _emit() {
     _state = LocalSyncState(
       listening: _server != null,
-      busy: _busy,
+      busy: _busy || _incoming != null,
       enrolled: _enrolled,
       endpoint: _advertised,
+      localAddress: _localAddress,
       deviceId: _material?.deviceId,
       deviceName: _advertisedName ?? deviceName,
       invitation: _invitation,
@@ -291,7 +301,7 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   Future<T> _accept<T>(Future<T> Function(int) action, {bool busy = true}) {
     final generation = _generation;
     _live(generation);
-    if (busy && _busy) {
+    if (busy && (_busy || _incoming != null)) {
       throw const LocalSyncException('Дождитесь завершения текущего обмена.');
     }
     if (busy) _busy = true;
@@ -345,6 +355,13 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     }
     if (!_active || generation != _generation) return;
     await _refresh();
+    try {
+      await _restoreNetwork(generation);
+    } catch (_) {
+      if (!_active || generation != _generation) return;
+      _error ??= 'Не удалось восстановить приём по локальной сети.';
+      _emit();
+    }
   }
 
   Future<void> _load(int generation) async {
@@ -413,11 +430,69 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   }
 
   @override
-  Future<List<String>> addresses() async => [
-    for (final n in await NetworkInterface.list(type: InternetAddressType.IPv4))
-      for (final a in n.addresses)
-        if (_isLan(a.address)) a.address,
-  ];
+  Future<List<String>> addresses() async {
+    final provider = options.addressProvider;
+    if (provider != null) return provider();
+    final interfaces = await NetworkInterface.list(
+      type: InternetAddressType.IPv4,
+    );
+    int rank(String name) {
+      final label = name.toLowerCase();
+      if (RegExp(
+        r'vethernet|virtual|vmware|virtualbox|wsl|docker|vpn|tailscale|wireguard|hyper-v',
+      ).hasMatch(label)) {
+        return 2;
+      }
+      if (RegExp(r'wi-?fi|wlan|ethernet|^en|^eth|беспровод').hasMatch(label)) {
+        return 0;
+      }
+      return 1;
+    }
+
+    final candidates =
+        [
+          for (final network in interfaces)
+            for (final address in network.addresses)
+              if (_isLan(address.address) && !address.isLoopback)
+                (
+                  address: address.address,
+                  rank: address.isLinkLocal ? 3 : rank(network.name),
+                ),
+        ]..sort((a, b) {
+          final priority = a.rank.compareTo(b.rank);
+          return priority == 0 ? a.address.compareTo(b.address) : priority;
+        });
+    return {for (final item in candidates) item.address}.toList();
+  }
+
+  Future<void> _restoreNetwork(int generation) async {
+    final preferred = await networkSettings?.read();
+    final choices = (await addresses()).where(_isLan).toList();
+    _live(generation);
+    final peerNetworks = {
+      for (final peer in _peers.values)
+        Uri.parse(peer.endpoint).host.split('.').take(3).join('.'),
+    };
+    final automatic = choices
+        .where(
+          (host) => peerNetworks.contains(host.split('.').take(3).join('.')),
+        )
+        .firstOrNull;
+    _localAddress = choices.contains(preferred?.address)
+        ? preferred?.address
+        : automatic ?? choices.firstOrNull;
+    _emit();
+    final address = _localAddress;
+    if (preferred?.listening == true && _enrolled && _material != null) {
+      if (address == null) {
+        _error = LocalSyncException.missingLocalIp.message;
+        _emit();
+      } else {
+        await _listen(address, generation);
+      }
+    }
+  }
+
   @override
   Future<void> createSpace() => _accept((g) async {
     await _load(g);
@@ -482,13 +557,25 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
       port: _server!.port,
       path: '/',
     ).toString();
+    _localAddress = host;
     _emit();
   }
 
   @override
-  Future<void> listen(String host) =>
-      _accept((g) => _listen(_requireLocalIp(host), g));
+  Future<void> listen(String host) => _accept((g) async {
+    await _listen(_requireLocalIp(host), g);
+    await _saveNetwork(listening: true);
+  });
+
+  Future<void> _saveNetwork({required bool listening}) async {
+    await networkSettings?.write((
+      address: _localAddress,
+      listening: listening,
+    ));
+  }
+
   Future<void> _closeListener() async {
+    if (_incoming != null) _endIncoming(LocalSyncPhase.failed);
     _inviteHash = null;
     _invitation = null;
     _inviteDeadline = null;
@@ -531,7 +618,13 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   });
 
   @override
-  Future<void> closeListener() => _accept((_) => _closeListener(), busy: false);
+  Future<void> closeListener() => _accept((_) async {
+    try {
+      await _saveNetwork(listening: false);
+    } finally {
+      await _closeListener();
+    }
+  });
   @override
   Future<void> invite(String host) => _accept((g) async {
     final localIp = _requireLocalIp(host);
@@ -542,6 +635,7 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     }
     _live(g);
     await _listen(localIp, g);
+    await _saveNetwork(listening: true);
     if (_pending != null || _approvedPeer != null) {
       throw const LocalSyncException(
         'Сначала подтвердите или отклоните запрос устройства.',
@@ -697,6 +791,7 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
       );
     }
     await _save({..._peers, peer.id: peer.confirm()}, g);
+    await _saveNetwork(listening: true);
     await _refresh();
   }
 
@@ -790,7 +885,13 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
       throw const LocalSyncException('Устройство не подключено.');
     }
     final identity = await _syncIdentity();
-    final remote = _RemoteStore(this, peer, g, identity);
+    final remote = _RemoteStore(
+      this,
+      peer,
+      g,
+      identity,
+      runId: const Uuid().v4(),
+    );
     void update(LocalSyncPhase phase, [SyncTransferProgress? transfer]) {
       if (!_active || g != _generation) return;
       _run = LocalSyncRun(id, phase, transfer ?? _run?.transfer);
@@ -808,13 +909,17 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
       await SyncEngine().exchange(
         _GuardedStore(data.store, () => _trusted(peer, g)),
         remote,
-        onProgress: (progress) => update(LocalSyncPhase.transferring, progress),
+        onProgress: (progress) async {
+          update(LocalSyncPhase.transferring, progress);
+          await remote.progress(progress);
+        },
       );
       _trusted(peer, g);
       update(LocalSyncPhase.applying);
+      await remote.applying();
       final localNotesReady =
           await (applyNotes ?? reconcileNotes)?.call() ?? true;
-      final remoteNotesReady = await remote.finish();
+      final remoteNotesReady = await remote.finish(localNotesReady);
       _trusted(peer, g);
       _notesNeedFolder = !localNotesReady || !remoteNotesReady;
       _lastSync = DateTime.now();
@@ -825,6 +930,7 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
       await _removeUntrustedPeer(id, g);
     } catch (_) {
       update(LocalSyncPhase.failed);
+      await remote.abort();
       rethrow;
     }
   });
@@ -908,6 +1014,11 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
         if (response.statusCode == 403 && token != null) {
           throw const _PeerNotAuthorized();
         }
+        if (response.statusCode == 423) {
+          throw const LocalSyncException(
+            'На втором устройстве уже идёт обмен.',
+          );
+        }
         if (response.statusCode == 409 &&
             (path == '/v1/plan' || path == '/v1/finish')) {
           throw const LocalSyncException(
@@ -934,6 +1045,49 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
       _clients.remove(client);
       client.close(force: true);
     }
+  }
+
+  Future<void> _beginIncoming(_Peer peer, String id, int generation) async {
+    if (_busy || _incoming != null) throw const _SyncInUse();
+    _incoming = (id: id, peerId: peer.id);
+    _run = LocalSyncRun(peer.id, LocalSyncPhase.connecting);
+    _error = null;
+    _notesNeedFolder = false;
+    _touchIncoming();
+    try {
+      if (!peer.verified) {
+        await _save({..._peers, peer.id: peer.confirm()}, generation);
+      }
+    } catch (_) {
+      if (_incoming == (id: id, peerId: peer.id)) {
+        _endIncoming(LocalSyncPhase.failed);
+      }
+      rethrow;
+    }
+    _emit();
+  }
+
+  void _touchIncoming() {
+    _incomingTimeout?.cancel();
+    _incomingTimeout = Timer(options.timeout * 2, () {
+      _endIncoming(LocalSyncPhase.failed);
+    });
+  }
+
+  void _updateIncoming(LocalSyncPhase phase, [SyncTransferProgress? progress]) {
+    final incoming = _incoming!;
+    _run = LocalSyncRun(incoming.peerId, phase, progress ?? _run?.transfer);
+    _emit();
+  }
+
+  void _endIncoming(LocalSyncPhase phase) {
+    final incoming = _incoming;
+    if (incoming == null) return;
+    _incoming = null;
+    _incomingTimeout?.cancel();
+    _incomingTimeout = null;
+    _run = LocalSyncRun(incoming.peerId, phase, _run?.transfer);
+    _emit();
   }
 
   Future<void> _handle(HttpRequest request, int generation) async {
@@ -1023,17 +1177,52 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
             'Устройства принадлежат разным пространствам.',
           );
         }
-        switch (request.uri.path) {
+        final path = request.uri.path;
+        final runId = body['runId'] == null ? null : _id(body['runId']);
+        final inSession =
+            runId != null && _incoming == (id: runId, peerId: peer.id);
+        if (path != '/v1/hello' && path != '/v1/pair/confirm') {
+          if (runId != null || _incoming != null) {
+            if (!inSession) throw const _SyncInUse();
+            _touchIncoming();
+          }
+        }
+        switch (path) {
           case '/v1/pair/confirm':
             await _completePair(peer);
             result = {'confirmed': true};
           case '/v1/hello':
+            final name = _advertisedName ?? await _pairingName(generation);
+            if (runId != null &&
+                body['schema'] == SyncRevision.supportedSchema) {
+              await _beginIncoming(peer, runId, generation);
+            }
             result = {
               'deviceId': identity.deviceId,
               'datasetId': identity.datasetId,
               'schema': SyncRevision.supportedSchema,
-              'name': _advertisedName ?? await _pairingName(generation),
+              'name': name,
+              'progress': true,
             };
+          case '/v1/progress':
+            if (!inSession) {
+              throw const FormatException('Unknown sync session.');
+            }
+            if (body['applying'] == true) {
+              _updateIncoming(LocalSyncPhase.applying);
+            } else {
+              _updateIncoming(
+                LocalSyncPhase.transferring,
+                _decodeProgress(body),
+              );
+            }
+            result = {};
+          case '/v1/abort':
+            if (!inSession) {
+              throw const FormatException('Unknown sync session.');
+            }
+            _endIncoming(LocalSyncPhase.failed);
+            result = {};
           case '/v1/cursor':
             if (body['deviceId'] != peer.id) {
               throw const FormatException('Wrong cursor owner.');
@@ -1044,10 +1233,7 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
             final plan = await data.store.planFeed(after: body['after'] as int);
             result = {
               'through': plan.through,
-              'counts': {
-                for (final entry in plan.counts.entries)
-                  entry.key.name: entry.value,
-              },
+              'counts': _encodeProgressCounts(plan.counts),
             };
           case '/v1/pull':
             result = _encodeBatch(
@@ -1073,9 +1259,14 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
               generation,
               apply: true,
             );
-            _notesNeedFolder = !ready;
-            _lastSync = DateTime.now();
-            await _refresh();
+            if (!inSession || _incoming == (id: runId, peerId: peer.id)) {
+              _notesNeedFolder = !ready || body['notesReady'] == false;
+              _lastSync = DateTime.now();
+              await _refresh();
+              if (inSession && _incoming == (id: runId, peerId: peer.id)) {
+                _endIncoming(LocalSyncPhase.complete);
+              }
+            }
             result = {'notesReady': ready};
           default:
             throw const FormatException('Unknown request.');
@@ -1088,7 +1279,11 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     } catch (error) {
       try {
         if (request.response.statusCode != 409) {
-          request.response.statusCode = error is _PeerNotAuthorized ? 403 : 400;
+          request.response.statusCode = switch (error) {
+            _PeerNotAuthorized() => 403,
+            _SyncInUse() => 423,
+            _ => 400,
+          };
         }
         request.response.write('{"error":"request_rejected"}');
         await request.response.close();
@@ -1147,6 +1342,29 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     await close('states', _states.close);
     if (failures.isNotEmpty) throw PluginLifecycleException(failures);
   }
+}
+
+Map<String, int> _encodeProgressCounts(Map<SyncSection, int> counts) => {
+  for (final entry in counts.entries) entry.key.name: entry.value,
+};
+
+SyncTransferProgress _decodeProgress(Map<String, dynamic> body) {
+  Map<SyncSection, int> counts(Object? value) => {
+    for (final entry in (value as Map<String, dynamic>).entries)
+      SyncSection.values.byName(entry.key): entry.value as int,
+  };
+  final planned = counts(body['planned']);
+  final transferred = counts(body['transferred']);
+  if (planned.values.any((n) => n < 0 || n > 0x7fffffff) ||
+      transferred.entries.any(
+        (entry) => entry.value < 0 || entry.value > (planned[entry.key] ?? 0),
+      )) {
+    throw const FormatException('Invalid sync progress.');
+  }
+  final active = (body['active'] as List<dynamic>).cast<String>().map(
+    SyncSection.values.byName,
+  );
+  return SyncTransferProgress(planned, transferred, active);
 }
 
 Map<String, Object?> _encodeBatch(SyncBatch b) => {
@@ -1210,26 +1428,46 @@ class _GuardedStore implements SyncStore {
 }
 
 class _RemoteStore implements SyncStore {
-  _RemoteStore(this.service, this.peer, this.generation, this.local);
+  _RemoteStore(
+    this.service,
+    this.peer,
+    this.generation,
+    this.local, {
+    this.runId,
+  });
   final LanSyncService service;
   final _Peer peer;
   final int generation;
   final SyncIdentity local;
-  Future<Map<String, dynamic>> _call(String path, Map<String, Object?> body) {
+  final String? runId;
+  bool _mirrorsProgress = false;
+  Future<Map<String, dynamic>> _call(
+    String path,
+    Map<String, Object?> body, {
+    Duration? timeout,
+  }) {
     service._trusted(peer, generation);
     return service._post(
       _endpoint(peer.endpoint),
       peer.pin,
       path,
-      {'protocol': 1, 'datasetId': local.datasetId, ...body},
+      {
+        'protocol': 1,
+        'datasetId': local.datasetId,
+        if (runId != null) 'runId': runId,
+        ...body,
+      },
       generation,
       token: peer.token,
       deviceId: local.deviceId,
+      timeout: timeout,
     );
   }
 
   Future<String?> hello() async {
-    final result = await _call('/v1/hello', {});
+    final result = await _call('/v1/hello', {
+      'schema': SyncRevision.supportedSchema,
+    });
     if (result['deviceId'] != peer.id ||
         result['datasetId'] != local.datasetId ||
         result['schema'] != SyncRevision.supportedSchema) {
@@ -1237,14 +1475,38 @@ class _RemoteStore implements SyncStore {
         'Установите одинаковую версию Pulse на обоих устройствах.',
       );
     }
+    _mirrorsProgress = result['progress'] == true;
     final name = result['name'];
     return name is String && name.trim().isNotEmpty && name.length <= 80
         ? name
         : null;
   }
 
-  Future<bool> finish() async =>
-      (await _call('/v1/finish', {}))['notesReady'] as bool;
+  Future<void> progress(SyncTransferProgress progress) async {
+    if (!_mirrorsProgress) return;
+    await _call('/v1/progress', {
+      'planned': _encodeProgressCounts(progress.planned),
+      'transferred': _encodeProgressCounts(progress.transferred),
+      'active': progress.active.map((section) => section.name).toList(),
+    });
+  }
+
+  Future<void> applying() async {
+    if (_mirrorsProgress) await _call('/v1/progress', {'applying': true});
+  }
+
+  Future<void> abort() async {
+    if (!_mirrorsProgress) return;
+    try {
+      await _call('/v1/abort', {}, timeout: const Duration(seconds: 2));
+    } catch (_) {
+      // The receiver also clears an interrupted session after a timeout.
+    }
+  }
+
+  Future<bool> finish(bool localNotesReady) async =>
+      (await _call('/v1/finish', {'notesReady': localNotesReady}))['notesReady']
+          as bool;
 
   @override
   Future<SyncFeedPlan> planFeed({required int after}) async {

@@ -23,6 +23,7 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   LanSyncService({
     required LocalSyncData data,
     required SyncSecretStore secrets,
+    SyncNetworkSettings? networkSettings,
     String deviceName = 'Устройство',
     Future<String?> Function()? resolveDeviceName,
     LanSyncOptions options = const LanSyncOptions(),

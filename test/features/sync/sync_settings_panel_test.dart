@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
+import 'package:life_os/features/sync/presentation/sync_completion_notice.dart';
 import 'package:life_os/features/sync/presentation/sync_quick_action.dart';
 import 'package:life_os/features/sync/presentation/sync_settings_panel.dart';
 import 'package:sync_plugin/sync_logic.dart';
@@ -223,6 +224,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Подключённых устройств пока нет.'), findsOneWidget);
     expect(find.text('Синхронизировать'), findsNothing);
+    expect(tester.widget<Switch>(find.byType(Switch)).onChanged, isNull);
     await tester.tap(find.widgetWithText(TextButton, 'Подключить устройство'));
     await tester.pumpAndSettle();
     expect(find.byType(SyncSettingsPanel), findsOneWidget);
@@ -320,19 +322,99 @@ void main() {
       await tester.tap(find.text('Создать пространство на этом устройстве'));
       await tester.pumpAndSettle();
       expect(control.calls, ['create']);
-      expect(find.text('Приём по локальной сети'), findsOneWidget);
+      expect(find.text('Приём по локальной сети'), findsNothing);
+      expect(find.text('Пригласить устройство'), findsOneWidget);
     },
   );
+
+  testWidgets('quick sync controls receiving and can change the local IP', (
+    tester,
+  ) async {
+    control.state = LocalSyncState(enrolled: true, localAddress: '192.168.1.2');
+    await tester.binding.setSurfaceSize(const Size(320, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: SyncQuickAction(control: control)),
+      ),
+    );
+    await tester.tap(find.byTooltip('Локальная синхронизация'));
+    await tester.pumpAndSettle();
+    expect(find.text('Подключённых устройств пока нет.'), findsOneWidget);
+    expect(find.text('Приём выключен'), findsOneWidget);
+    final toggle = find.byType(Switch);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(control.calls, ['listen:192.168.1.2']);
+
+    control.emit(
+      LocalSyncState(
+        enrolled: true,
+        localAddress: '192.168.1.2',
+        listening: true,
+        busy: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(toggle).value, isTrue);
+    expect(tester.widget<Switch>(toggle).onChanged, isNull);
+    expect(find.text('Приём включён'), findsOneWidget);
+    control.emit(
+      LocalSyncState(
+        enrolled: true,
+        localAddress: '192.168.1.2',
+        listening: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('IP 192.168.1.2'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '192.168.1.4');
+    await tester.pump();
+    await tester.tap(find.text('Применить'));
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(control.calls, [
+      'listen:192.168.1.2',
+      'listen:192.168.1.4',
+      'close',
+    ]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('quick sync reports when there is no local IP for receiving', (
+    tester,
+  ) async {
+    control.state = LocalSyncState(enrolled: true);
+    control.localAddresses = [];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: SyncQuickAction(control: control)),
+      ),
+    );
+    await tester.tap(find.byTooltip('Локальная синхронизация'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(LocalSyncException.missingLocalIp.message),
+      findsOneWidget,
+    );
+    expect(control.calls, isEmpty);
+  });
 
   testWidgets('invitation uses the chosen IP when several are available', (
     tester,
   ) async {
-    control.state = LocalSyncState(enrolled: true);
+    control.state = LocalSyncState(enrolled: true, localAddress: '192.168.1.8');
     control.localAddresses = ['10.6.7.1', '192.168.1.8'];
     await show(tester, width: 360);
 
     final host = tester.widget<TextField>(find.byType(TextField));
-    expect(host.controller!.text, isEmpty);
+    expect(host.controller!.text, '192.168.1.8');
+    await tester.enterText(find.byType(TextField), '');
     await tester.tap(find.text('Пригласить устройство'));
     await tester.pumpAndSettle();
     expect(
@@ -349,6 +431,75 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(control.calls, ['invite:192.168.1.8']);
+  });
+
+  testWidgets('completion shows one in-app notice only with the panel closed', (
+    tester,
+  ) async {
+    var open = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Stack(
+            children: [
+              SyncQuickAction(
+                control: control,
+                onVisibilityChanged: (value) => open = value,
+              ),
+              SyncCompletionNotice(control: control, isPanelOpen: () => open),
+            ],
+          ),
+        ),
+      ),
+    );
+    const tablet = LocalSyncPeer(
+      id: 'tablet',
+      name: 'Планшет',
+      endpoint: 'https://192.168.1.8:48766/',
+      fingerprint: 'fingerprint',
+    );
+    final done = find.text('Синхронизация завершена успешно.');
+    control.emit(LocalSyncState(enrolled: true, peers: [tablet]));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Локальная синхронизация'));
+    await tester.pumpAndSettle();
+    control.emit(
+      LocalSyncState(
+        enrolled: true,
+        peers: [tablet],
+        run: const LocalSyncRun('tablet', LocalSyncPhase.complete),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('100%'), findsOneWidget);
+    expect(done, findsNothing);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await tester.pumpAndSettle();
+    expect(done, findsNothing);
+
+    control.emit(
+      LocalSyncState(
+        enrolled: true,
+        peers: [tablet],
+        run: const LocalSyncRun('tablet', LocalSyncPhase.failed),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(done, findsNothing);
+
+    final result = LocalSyncState(
+      enrolled: true,
+      peers: [tablet],
+      run: LocalSyncRun('tablet', LocalSyncPhase.complete),
+    );
+    control.emit(result);
+    await tester.pumpAndSettle();
+    expect(done, findsOneWidget);
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pumpAndSettle();
+    control.emit(result);
+    await tester.pumpAndSettle();
+    expect(done, findsNothing);
   });
 
   testWidgets(

@@ -5,12 +5,19 @@ import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:sync_plugin/sync_logic.dart';
 
+import 'sync_address_field.dart';
+import 'sync_progress.dart';
 import 'sync_settings_panel.dart';
 
 class SyncQuickAction extends StatefulWidget {
-  const SyncQuickAction({super.key, required this.control});
+  const SyncQuickAction({
+    super.key,
+    required this.control,
+    this.onVisibilityChanged,
+  });
 
   final LocalSyncControl control;
+  final ValueChanged<bool>? onVisibilityChanged;
 
   @override
   State<SyncQuickAction> createState() => _SyncQuickActionState();
@@ -18,6 +25,16 @@ class SyncQuickAction extends StatefulWidget {
 
 class _SyncQuickActionState extends State<SyncQuickAction> {
   Future<void> _open() async {
+    final changeVisibility = widget.onVisibilityChanged;
+    changeVisibility?.call(true);
+    try {
+      await _openPanel();
+    } finally {
+      changeVisibility?.call(false);
+    }
+  }
+
+  Future<void> _openPanel() async {
     final control = widget.control;
     final generation = control.generation;
     bool isCurrent() =>
@@ -127,28 +144,82 @@ class _QuickSyncDialog extends StatefulWidget {
 
 class _QuickSyncDialogState extends State<_QuickSyncDialog> {
   String? _error;
+  String? _addressDraft;
+  String? _selectedPeerId;
+  bool _runningAction = false;
 
   Future<void> _synchronize(String id) async {
-    final state = widget.control.state;
-    if (!widget.isCurrent() ||
-        state.busy ||
-        !state.peers.any((peer) => peer.id == id)) {
+    if (!widget.control.state.peers.any((peer) => peer.id == id)) return;
+    await _runAction(
+      () => widget.control.synchronize(id),
+      'Не удалось завершить обмен.',
+    );
+  }
+
+  Future<void> _runAction(
+    Future<void> Function() action,
+    String fallback,
+  ) async {
+    if (!widget.isCurrent() || widget.control.state.busy || _runningAction) {
       return;
     }
-    setState(() => _error = null);
+    setState(() {
+      _error = null;
+      _runningAction = true;
+    });
     try {
-      await widget.control.synchronize(id);
+      await action();
     } catch (error) {
       if (!mounted || !widget.isCurrent()) return;
       setState(() {
         _error = error is LocalSyncException
             ? error.message
-            : widget.control.state.error ?? 'Не удалось завершить обмен.';
+            : widget.control.state.error ?? fallback;
       });
+    } finally {
+      if (mounted) setState(() => _runningAction = false);
     }
   }
 
-  String? _selectedPeerId;
+  Future<void> _toggleReceive(bool enabled) => _runAction(() async {
+    final control = widget.control;
+    if (!enabled) {
+      await control.closeListener();
+      return;
+    }
+    var address = _addressDraft ?? syncAddressOf(control.state);
+    if (address.isEmpty) {
+      address = (await control.addresses()).firstOrNull ?? '';
+    }
+    if (!mounted || !widget.isCurrent()) return;
+    if (address.isEmpty) throw LocalSyncException.missingLocalIp;
+    await control.listen(address);
+    _addressDraft = null;
+  }, 'Не удалось изменить приём по локальной сети.');
+
+  Future<void> _editAddress() async {
+    final control = widget.control;
+    if (!widget.isCurrent() || control.state.busy || _runningAction) return;
+    final address = await showDialog<String>(
+      context: context,
+      builder: (_) => _ReceiveAddressDialog(
+        control: control,
+        address: _addressDraft ?? syncAddressOf(control.state),
+      ),
+    );
+    if (address == null || !mounted || !widget.isCurrent()) return;
+    if (control.state.listening) {
+      await _runAction(() async {
+        await control.listen(address);
+        _addressDraft = null;
+      }, 'Не удалось изменить IP для приёма.');
+    } else {
+      setState(() {
+        _addressDraft = address;
+        _error = null;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) => StreamBuilder<LocalSyncState>(
@@ -157,6 +228,7 @@ class _QuickSyncDialogState extends State<_QuickSyncDialog> {
     builder: (context, snapshot) {
       final state = snapshot.data!;
       final available = widget.isCurrent();
+      final busy = state.busy || _runningAction;
       final run = state.run;
       final selectedId = state.busy
           ? run?.peerId ?? _selectedPeerId
@@ -255,6 +327,21 @@ class _QuickSyncDialogState extends State<_QuickSyncDialog> {
                                   ),
                                 ],
                               ),
+                              if (available)
+                                _SyncReceiveCard(
+                                  listening: state.listening,
+                                  enrolled: state.enrolled,
+                                  address:
+                                      _addressDraft ?? syncAddressOf(state),
+                                  onChanged:
+                                      !busy &&
+                                          (state.enrolled || state.listening)
+                                      ? _toggleReceive
+                                      : null,
+                                  onEditAddress: !busy && state.enrolled
+                                      ? _editAddress
+                                      : null,
+                                ),
                               if (!available)
                                 const Text('Откройте панель заново.')
                               else if (peer == null) ...[
@@ -295,13 +382,11 @@ class _QuickSyncDialogState extends State<_QuickSyncDialog> {
                                   ),
                                 ),
                               ] else ...[
-                                Align(
-                                  alignment: AlignmentDirectional.centerStart,
-                                  child: _SyncConnection(
-                                    listening: state.listening,
-                                    connected: connected,
+                                if (connected)
+                                  const Align(
+                                    alignment: AlignmentDirectional.centerStart,
+                                    child: _SyncConnection(),
                                   ),
-                                ),
                                 Row(
                                   spacing: compact ? 6 : 12,
                                   children: [
@@ -341,7 +426,7 @@ class _QuickSyncDialogState extends State<_QuickSyncDialog> {
                                   Align(
                                     alignment: AlignmentDirectional.centerEnd,
                                     child: PopupMenuButton<String>(
-                                      enabled: !state.busy,
+                                      enabled: !busy,
                                       initialValue: peer.id,
                                       tooltip: 'Выбрать устройство',
                                       onSelected: (id) => setState(() {
@@ -363,7 +448,7 @@ class _QuickSyncDialogState extends State<_QuickSyncDialog> {
                                       ),
                                     ),
                                   ),
-                                _SyncProgress(
+                                SyncProgress(
                                   run: currentRun,
                                   busy: state.busy,
                                   notesNeedFolder: state.notesNeedFolder,
@@ -395,7 +480,7 @@ class _QuickSyncDialogState extends State<_QuickSyncDialog> {
                                   ],
                                 ),
                                 FilledButton.tonalIcon(
-                                  onPressed: state.busy
+                                  onPressed: busy
                                       ? null
                                       : () => _synchronize(peer.id),
                                   style: FilledButton.styleFrom(
@@ -440,6 +525,160 @@ class _QuickSyncDialogState extends State<_QuickSyncDialog> {
 
 const _syncWarm = Color(0xFFFFA269);
 const _syncSuccess = Color(0xFF57D995);
+final _syncCardDecoration = BoxDecoration(
+  borderRadius: BorderRadius.circular(18),
+  border: Border.all(color: const Color(0x2AFFFFFF)),
+  gradient: const LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color(0x507E4330), Color(0x2CFFFFFF), Color(0x12FFFFFF)],
+  ),
+);
+
+class _SyncReceiveCard extends StatelessWidget {
+  const _SyncReceiveCard({
+    required this.listening,
+    required this.enrolled,
+    required this.address,
+    required this.onChanged,
+    required this.onEditAddress,
+  });
+
+  final bool listening, enrolled;
+  final String address;
+  final ValueChanged<bool>? onChanged;
+  final VoidCallback? onEditAddress;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: _syncCardDecoration,
+      child: Row(
+        spacing: 10,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: listening
+                  ? _syncWarm.withValues(alpha: .18)
+                  : const Color(0x12FFFFFF),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.wifi_tethering_rounded,
+              size: 20,
+              color: listening ? _syncWarm : colors.onSurfaceVariant,
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: 3,
+              children: [
+                Text(
+                  'Приём по локальной сети',
+                  style: theme.textTheme.titleSmall,
+                ),
+                Text(
+                  listening
+                      ? 'Приём включён'
+                      : enrolled
+                      ? 'Приём выключен'
+                      : 'Сначала создайте пространство',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: listening ? _syncSuccess : colors.onSurfaceVariant,
+                  ),
+                ),
+                if (enrolled)
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextButton.icon(
+                      onPressed: onEditAddress,
+                      style: TextButton.styleFrom(
+                        foregroundColor: _syncWarm,
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(40, 40),
+                        textStyle: theme.textTheme.bodySmall,
+                      ),
+                      icon: const Icon(Icons.edit_outlined, size: 14),
+                      label: Text(
+                        address.isEmpty ? 'Выбрать IP' : 'IP $address',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Semantics(
+            label: 'Приём по локальной сети',
+            child: Switch(
+              value: listening,
+              onChanged: onChanged,
+              activeThumbColor: const Color(0xFF332016),
+              activeTrackColor: _syncWarm,
+              inactiveThumbColor: colors.onSurfaceVariant,
+              inactiveTrackColor: const Color(0x28FFFFFF),
+              trackOutlineColor: WidgetStateProperty.all(
+                const Color(0x38FFFFFF),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReceiveAddressDialog extends StatefulWidget {
+  const _ReceiveAddressDialog({required this.control, required this.address});
+
+  final LocalSyncControl control;
+  final String address;
+
+  @override
+  State<_ReceiveAddressDialog> createState() => _ReceiveAddressDialogState();
+}
+
+class _ReceiveAddressDialogState extends State<_ReceiveAddressDialog> {
+  late final _address = TextEditingController(text: widget.address);
+
+  @override
+  void dispose() {
+    _address.dispose();
+    super.dispose();
+  }
+
+  void _apply() {
+    final address = _address.text.trim();
+    if (address.isNotEmpty) Navigator.pop(context, address);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('IP для приёма'),
+    content: SyncAddressField(control: widget.control, controller: _address),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Отмена'),
+      ),
+      ListenableBuilder(
+        listenable: _address,
+        builder: (context, _) {
+          return FilledButton(
+            onPressed: _address.text.trim().isEmpty ? null : _apply,
+            child: const Text('Применить'),
+          );
+        },
+      ),
+    ],
+  );
+}
 
 class _SyncEmblem extends StatelessWidget {
   const _SyncEmblem({required this.size});
@@ -473,9 +712,7 @@ class _SyncEmblem extends StatelessWidget {
 }
 
 class _SyncConnection extends StatelessWidget {
-  const _SyncConnection({required this.listening, required this.connected});
-  final bool listening;
-  final bool connected;
+  const _SyncConnection();
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
@@ -488,21 +725,9 @@ class _SyncConnection extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         spacing: 8,
-        children: [
-          Icon(
-            Icons.circle,
-            size: 8,
-            color: connected ? _syncSuccess : Colors.white38,
-          ),
-          Flexible(
-            child: Text(
-              connected
-                  ? 'Прямое соединение · P2P'
-                  : listening
-                  ? 'Приём включён · LAN'
-                  : 'Приём выключен · LAN',
-            ),
-          ),
+        children: const [
+          Icon(Icons.circle, size: 8, color: _syncSuccess),
+          Flexible(child: Text('Прямое соединение · P2P')),
         ],
       ),
     ),
@@ -577,15 +802,7 @@ class _SyncDeviceCard extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     return Container(
       padding: EdgeInsets.all(compact ? 9 : 14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0x2AFFFFFF)),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0x507E4330), Color(0x2CFFFFFF), Color(0x12FFFFFF)],
-        ),
-      ),
+      decoration: _syncCardDecoration,
       child: Row(
         spacing: 10,
         children: [
@@ -615,187 +832,6 @@ class _SyncDeviceCard extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SyncProgress extends StatelessWidget {
-  const _SyncProgress({
-    required this.run,
-    required this.busy,
-    required this.notesNeedFolder,
-  });
-  final LocalSyncRun? run;
-  final bool busy, notesNeedFolder;
-
-  @override
-  Widget build(BuildContext context) {
-    final transfer = run?.transfer;
-    final phase = run?.phase;
-    final overall = switch (phase) {
-      LocalSyncPhase.complete => 1.0,
-      _ when transfer != null => transfer.done / (transfer.total + 1),
-      _ when busy => null,
-      _ => 0.0,
-    };
-    final label = switch (phase) {
-      LocalSyncPhase.connecting => 'Подключение…',
-      LocalSyncPhase.transferring => 'Передача изменений…',
-      LocalSyncPhase.applying => 'Сохранение Canvas и заметок…',
-      LocalSyncPhase.complete => 'Обмен завершён',
-      LocalSyncPhase.failed => 'Обмен прерван',
-      null => busy ? 'Синхронизация…' : 'Готово к обмену',
-    };
-    final secondary = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: 10,
-      children: [
-        Row(
-          spacing: 8,
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-            ),
-            if (overall != null && phase != null)
-              Text(
-                '${(overall * 100).floor()}%',
-                style: TextStyle(color: secondary),
-              ),
-          ],
-        ),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: const Color(0x26FFFFFF),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: ShaderMask(
-            blendMode: BlendMode.srcIn,
-            shaderCallback: const LinearGradient(
-              colors: [_syncWarm, Color(0xFFFF887C)],
-            ).createShader,
-            child: LinearProgressIndicator(
-              value: overall,
-              minHeight: 9,
-              color: Colors.white,
-              backgroundColor: Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-            ),
-          ),
-        ),
-        if (transfer != null && transfer.total > 0)
-          Text(
-            '${transfer.done} из ${transfer.total} записей журнала',
-            style: TextStyle(color: secondary),
-          ),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            const gap = 8.0;
-            final width = constraints.maxWidth;
-            final columns =
-                width >= 255 && MediaQuery.textScalerOf(context).scale(14) < 20
-                ? 2
-                : 1;
-            return Wrap(
-              spacing: gap,
-              runSpacing: gap,
-              children: [
-                for (final section in SyncSection.values)
-                  SizedBox(
-                    width: (width - gap * (columns - 1)) / columns,
-                    child: _SyncStageTile(
-                      section: section,
-                      run: run,
-                      needsFolder:
-                          section == SyncSection.notes && notesNeedFolder,
-                    ),
-                  ),
-              ],
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
-
-class _SyncStageTile extends StatelessWidget {
-  const _SyncStageTile({
-    required this.section,
-    required this.run,
-    required this.needsFolder,
-  });
-  final SyncSection section;
-  final LocalSyncRun? run;
-  final bool needsFolder;
-
-  @override
-  Widget build(BuildContext context) {
-    final (label, icon) = switch (section) {
-      SyncSection.notes => ('Заметки', Icons.description_outlined),
-      SyncSection.tasks => ('Задачи', Icons.check_box_outlined),
-      SyncSection.projects => ('Проекты', Icons.layers_outlined),
-      SyncSection.graph => ('Граф', Icons.hub_outlined),
-      SyncSection.habits => ('Привычки', Icons.event_repeat_outlined),
-    };
-    final total = run?.transfer?.planned[section];
-    final done = run?.transfer?.transferred[section] ?? 0;
-    final isFileSection =
-        section == SyncSection.notes || section == SyncSection.graph;
-    final writingNotes = isFileSection && run?.phase == LocalSyncPhase.applying;
-    final active =
-        run?.phase == LocalSyncPhase.transferring &&
-        (run?.transfer?.active.contains(section) ?? false);
-    final complete =
-        run?.phase == LocalSyncPhase.complete ||
-        (!isFileSection && total != null && total > 0 && done == total);
-    final (status, statusIcon, tint) = needsFolder
-        ? ('Выберите папку Notes', Icons.folder_open_outlined, _syncWarm)
-        : switch ((writingNotes || active, complete, total)) {
-            (true, _, _) => ('В работе', Icons.sync_rounded, _syncWarm),
-            (_, _, 0) => (
-              'Без изменений',
-              Icons.remove_rounded,
-              Colors.white54,
-            ),
-            (_, true, _) => (
-              'Обмен завершён',
-              Icons.check_circle_rounded,
-              _syncSuccess,
-            ),
-            (_, _, final int count) when isFileSection && done == count => (
-              'Ожидает записи',
-              Icons.drive_file_move_outlined,
-              _syncWarm,
-            ),
-            _ => ('Ожидает обмена', Icons.circle_outlined, Colors.white38),
-          };
-    return Semantics(
-      value: total == null || total == 0 ? status : '$status, $done из $total',
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: const Color(0x18FFFFFF),
-          borderRadius: BorderRadius.circular(13),
-          border: Border.all(color: const Color(0x13FFFFFF)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 11),
-          child: Row(
-            spacing: 6,
-            children: [
-              Icon(icon, size: 18),
-              Expanded(child: Text(label)),
-              Tooltip(
-                message: status,
-                child: Icon(statusIcon, color: tint, size: 16),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

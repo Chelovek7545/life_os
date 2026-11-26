@@ -5,6 +5,7 @@ import 'package:sync_plugin/sync_logic.dart';
 import 'package:sync_plugin/sync_native.dart';
 import 'package:life_os/features/sync/data/secure_sync_secrets.dart';
 import 'package:life_os/features/sync/data/sync_device_name.dart';
+import 'package:life_os/features/sync/data/sync_network_settings.dart';
 import 'plugins/sync_plugin_adapter.dart';
 import 'package:life_os/features/sync/data/drift_sync_store.dart';
 import 'package:life_os/features/sync/data/sync_markdown_files.dart';
@@ -245,6 +246,7 @@ class DependencyContainer {
         ? LanSyncService(
             deviceName: localSyncDeviceName(),
             resolveDeviceName: readSyncDeviceName,
+            networkSettings: const AppSyncNetworkSettings(),
             data: taskSyncStore,
             secrets: syncSecrets ?? SecureSyncSecrets(),
             options: syncOptions,

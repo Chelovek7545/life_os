@@ -5,6 +5,13 @@ abstract interface class SyncSecretStore {
   Future<void> write(String value);
 }
 
+typedef SyncNetworkPreference = ({String? address, bool listening});
+
+abstract interface class SyncNetworkSettings {
+  Future<SyncNetworkPreference> read();
+  Future<void> write(SyncNetworkPreference preference);
+}
+
 abstract interface class LocalSyncData {
   SyncStore get store;
   Future<SyncIdentity?> existingIdentity();
@@ -38,11 +45,13 @@ class LanSyncOptions {
     this.timeout = const Duration(seconds: 15),
     this.pairingTimeout = const Duration(minutes: 2),
     this.identityFactory,
+    this.addressProvider,
   });
   final int port;
   final String bindAddress;
   final Duration timeout, pairingTimeout;
   final Future<SyncTlsMaterial> Function(String deviceId)? identityFactory;
+  final Future<List<String>> Function()? addressProvider;
 }
 
 class LocalSyncException implements Exception {
@@ -87,6 +96,7 @@ class LocalSyncState {
     this.busy = false,
     this.enrolled = false,
     this.endpoint,
+    this.localAddress,
     this.deviceId,
     this.deviceName = 'Это устройство',
     this.invitation,
@@ -105,6 +115,7 @@ class LocalSyncState {
        unverifiedPeers = List.unmodifiable(unverifiedPeers);
   final bool listening, busy, enrolled;
   final String? endpoint, invitation, error, deviceId;
+  final String? localAddress;
   final String deviceName;
   final LocalSyncPeer? awaitingApproval;
   final bool joining;
