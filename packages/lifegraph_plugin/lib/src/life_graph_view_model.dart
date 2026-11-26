@@ -360,6 +360,9 @@ class LifeGraphViewModel {
     );
   });
 
+  Future<bool> markdownNoteTitleExists(String title) =>
+      obsidianRepository!.noteTitleExists(title);
+
   Future<String> createMarkdownNote({
     required String title,
     String text = '',

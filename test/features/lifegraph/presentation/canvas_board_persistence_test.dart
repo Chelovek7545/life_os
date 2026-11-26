@@ -340,7 +340,7 @@ void main() {
       await vm.updateNoteText(vm.notes.single.id, 'sticker');
       await expectLater(
         vm.convertNoteToMarkdown(vm.notes.single.id, title: 'Existing'),
-        throwsA(isA<FileSystemException>()),
+        throwsA(isA<MarkdownNoteNameConflict>()),
       );
       expect(vm.notes.single.source, isNull);
       expect(await File(existing.absolutePath).readAsString(), 'keep');
@@ -660,7 +660,9 @@ void main() {
       find.byKey(const ValueKey('markdown-note-title')),
       'Converted UI',
     );
-    await tester.tap(find.text('Преобразовать'));
+    final convert = find.widgetWithText(FilledButton, 'Преобразовать');
+    await until(() => tester.widget<FilledButton>(convert).onPressed != null);
+    await tester.tap(convert);
     await until(
       () =>
           vm.notes.single.source != null &&
@@ -750,16 +752,18 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Создать .md'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('markdown-note-title')),
-      'Created UI',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('markdown-note-text')),
-      'body from dialog',
-    );
-    await tester.pump();
-    await tester.tap(find.text('Создать .md'));
+    final title = find.byKey(const ValueKey('markdown-note-title'));
+    final body = find.byKey(const ValueKey('markdown-note-text'));
+    final create = find.widgetWithText(FilledButton, 'Создать .md');
+    await tester.enterText(body, 'body from dialog');
+    await tester.enterText(title, 'Renamed UI.md');
+    final conflict = find.text(const MarkdownNoteNameConflict().toString());
+    await until(() => conflict.evaluate().isNotEmpty);
+    expect(tester.widget<FilledButton>(create).onPressed, isNull);
+    expect(tester.widget<TextField>(body).controller!.text, 'body from dialog');
+    await tester.enterText(title, 'Created UI');
+    await until(() => tester.widget<FilledButton>(create).onPressed != null);
+    await tester.tap(create);
     await until(
       () =>
           vm.notes.length == 2 && vm.saveStatus.value == GraphSaveStatus.saved,

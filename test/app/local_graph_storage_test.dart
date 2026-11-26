@@ -197,7 +197,7 @@ void main() {
       expect(resources.getAllNotes(), isEmpty);
       await expectLater(
         resources.createMarkdownNote('Library file', 'overwrite'),
-        throwsA(isA<FileSystemException>()),
+        throwsA(isA<MarkdownNoteNameConflict>()),
       );
       expect(await File(note.absolutePath).readAsString(), '# Markdown body');
       final pending = resources.createMarkdownNote(

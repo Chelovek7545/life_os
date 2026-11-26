@@ -47,7 +47,14 @@ abstract interface class VaultNotesApi {
   Future<void> refresh();
   Future<String> readContent(String absolutePath);
   Future<void> writeContent(String absolutePath, String content);
+  Future<bool> noteTitleExists(String title);
   Future<VaultNote> createNote(String title, String content);
+}
+
+class MarkdownNoteNameConflict implements Exception {
+  const MarkdownNoteNameConflict();
+  @override
+  String toString() => 'В этой папке уже есть заметка с таким названием.';
 }
 
 abstract interface class NotesLibrarySourcesApi {

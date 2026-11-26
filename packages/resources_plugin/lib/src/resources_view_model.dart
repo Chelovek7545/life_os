@@ -118,6 +118,9 @@ class ResourcesViewModel extends ChangeNotifier {
     }
     return (vault as MarkdownNoteDeleteApi).deleteMarkdownNote(path);
   });
+  Future<bool> markdownNoteTitleExists(String title) =>
+      _vault!.noteTitleExists(title);
+
   Future<VaultNote> createMarkdownNote(String title, String text) =>
       _enqueue(() {
         if (!canCreateMarkdown) {

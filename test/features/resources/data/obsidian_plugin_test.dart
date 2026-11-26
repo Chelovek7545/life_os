@@ -198,9 +198,11 @@ void main() {
       final vault = ObsidianVault();
       await vault.openVault(directory.path);
       final note = await vault.createNote('Existing', 'keep me');
+      expect(await vault.noteTitleExists(' Existing.MD '), isTrue);
+      expect(await vault.noteTitleExists('Available'), isFalse);
       await expectLater(
-        vault.createNote('Existing', 'overwrite'),
-        throwsA(isA<FileSystemException>()),
+        vault.createNote('Existing.MD', 'overwrite'),
+        throwsA(isA<MarkdownNoteNameConflict>()),
       );
       expect(await File(note.absolutePath).readAsString(), 'keep me');
       final safe = await vault.createNote(
@@ -208,6 +210,7 @@ void main() {
         'safe',
       );
       expect(p.isWithin(directory.path, safe.absolutePath), isTrue);
+      expect(await vault.noteTitleExists('parent/child/file.md'), isTrue);
       expect(
         File(safe.absolutePath).parent.path,
         p.join(directory.path, 'Pulse', 'Notes'),

@@ -293,11 +293,12 @@ class _MarkdownNotesPanel extends StatelessWidget {
       startEditing: editing,
     ),
     onCreate: viewModel.canCreateMarkdown
-        ? () async {
-            final value = await showMarkdownNoteDialog(context);
-            if (value == null || !context.mounted) return null;
-            return viewModel.createMarkdownNote(value.title, value.text);
-          }
+        ? () => showMarkdownNoteDialog(
+            context,
+            titleExists: viewModel.markdownNoteTitleExists,
+            onSave: (value) =>
+                viewModel.createMarkdownNote(value.title, value.text),
+          )
         : null,
   );
 }

@@ -205,6 +205,9 @@ class MemoryVault implements VaultNotesApi {
   }
 
   @override
+  Future<bool> noteTitleExists(String title) async => files.containsKey(title);
+
+  @override
   Future<VaultNote> createNote(String title, String content) async {
     final note = VaultNote(
       absolutePath: title,

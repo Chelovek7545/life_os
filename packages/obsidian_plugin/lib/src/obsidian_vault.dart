@@ -536,6 +536,45 @@ class ObsidianVault
   }
 
   @override
+  Future<bool> noteTitleExists(String title) async {
+    _checkActive();
+    final root = state.vaultPath;
+    if (root.isEmpty) throw StateError('Vault не выбран.');
+    final directory = _folderPath(root, _folders.notes);
+    return _markdownPathExists(
+      p.join(directory, _markdownNoteName(title).fileName),
+    );
+  }
+
+  ({String title, String fileName}) _markdownNoteName(String title) {
+    final sanitized = title.trim().replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+    if (sanitized.isEmpty || sanitized == '.' || sanitized == '..') {
+      throw ArgumentError('Укажите имя заметки.');
+    }
+    final stem = p.extension(sanitized).toLowerCase() == '.md'
+        ? p.basenameWithoutExtension(sanitized)
+        : sanitized;
+    return (title: sanitized, fileName: '$stem.md');
+  }
+
+  Future<bool> _markdownPathExists(String path) async =>
+      await _files.type(path, followLinks: false) !=
+      FileSystemEntityType.notFound;
+
+  Future<void> _writeNewMarkdown(String path, String content) async {
+    try {
+      await _files.writeNew(path, content);
+    } on PathExistsException {
+      throw const MarkdownNoteNameConflict();
+    } on FileSystemException {
+      if (await _markdownPathExists(path)) {
+        throw const MarkdownNoteNameConflict();
+      }
+      rethrow;
+    }
+  }
+
+  @override
   Future<VaultNote> createNote(String title, String content) async {
     _checkActive();
     final root = state.vaultPath;
@@ -544,24 +583,15 @@ class ObsidianVault
       if (root.isEmpty || selection != _vaultSelectionGeneration) {
         throw StateError('Vault изменён или не выбран.');
       }
-      final sanitized = title
-          .trim()
-          .replaceAll(RegExp(r'[<>:"|?*]'), '_')
-          .replaceAll('/', '_')
-          .replaceAll(String.fromCharCode(92), '_');
-      if (sanitized.isEmpty || sanitized == '.' || sanitized == '..')
-        throw ArgumentError.value(title, 'title');
+      final name = _markdownNoteName(title);
       final directory = _folderPath(root, _folders.notes);
       await _files.createDirectory(directory);
-      final stem = p.extension(sanitized).toLowerCase() == '.md'
-          ? p.basenameWithoutExtension(sanitized)
-          : sanitized;
-      final path = p.join(directory, '$stem.md');
-      await _files.writeNew(path, content);
+      final path = p.join(directory, name.fileName);
+      await _writeNewMarkdown(path, content);
       final note = VaultNote(
         absolutePath: path,
         relativePath: p.relative(path, from: state.vaultPath),
-        title: sanitized,
+        title: name.title,
         modifiedAt: DateTime.now(),
         content: content,
       );
@@ -759,7 +789,7 @@ class ObsidianVault
         throw FileSystemException('Папка не найдена', folder);
       }
       final path = p.join(folder, '$stem.md');
-      await _files.writeNew(path, text);
+      await _writeNewMarkdown(path, text);
       return path;
     });
   }

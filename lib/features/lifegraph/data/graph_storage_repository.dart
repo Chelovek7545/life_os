@@ -561,6 +561,8 @@ class GraphStorageRepository
   Future<void> writeContent(String path, String text) =>
       _reader(path).writeContent(path, text);
   @override
+  Future<bool> noteTitleExists(String title) => _files.noteTitleExists(title);
+  @override
   Future<VaultNote> createNote(String title, String text) =>
       _files.createNote(title, text);
   @override

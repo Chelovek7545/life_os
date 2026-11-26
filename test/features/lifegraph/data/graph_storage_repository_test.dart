@@ -339,7 +339,7 @@ void main() {
       expect(await File(path).readAsString(), '# Unicode Привет');
       await expectLater(
         storage.saveMarkdownCopy(outside.path, 'Copy', 'replace'),
-        throwsA(isA<FileSystemException>()),
+        throwsA(isA<MarkdownNoteNameConflict>()),
       );
       expect(await File(path).readAsString(), '# Unicode Привет');
     },

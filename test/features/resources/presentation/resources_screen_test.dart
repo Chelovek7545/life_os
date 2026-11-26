@@ -28,7 +28,12 @@ class _Library extends MemoryVault
   }
 
   @override
+  Future<bool> noteTitleExists(String title) async =>
+      files.containsKey('/Pulse/Notes/$title.md');
+
+  @override
   Future<VaultNote> createNote(String title, String content) async {
+    if (await noteTitleExists(title)) throw const MarkdownNoteNameConflict();
     final note = VaultNote(
       absolutePath: '/Pulse/Notes/$title.md',
       relativePath: '$title.md',
@@ -101,41 +106,66 @@ void main() {
     },
   );
 
-  testWidgets('the gallery plus creates a Markdown file in Notes', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(1100, 800));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    final files = _Library()
-      ..graphMarkdownState = VaultState(vaultPath: '/Pulse/Notes');
-    final notes = MemoryCanvasNotes();
-    final vm = ResourcesViewModel(notes: notes, vault: files);
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(body: ResourcesScreen(viewModel: vm)),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('markdown-create')));
-    await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('markdown-note-title')),
-      'Created from gallery',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('markdown-note-text')),
-      '# Body',
-    );
-    await tester.pump();
-    await tester.tap(find.text('Создать .md'));
-    await tester.pumpAndSettle();
-    expect(files.files['/Pulse/Notes/Created from gallery.md'], '# Body');
-    expect(find.text('Created from gallery'), findsOneWidget);
-    expect(vm.getAllNotes(), isEmpty);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox());
-    await vm.close();
-  });
+  testWidgets(
+    'the gallery keeps the draft on name conflicts and saves a retry',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1100, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final files = _Library()
+        ..graphMarkdownState = VaultState(vaultPath: '/Pulse/Notes')
+        ..files['/Pulse/Notes/Existing.md'] = 'original content';
+      final notes = MemoryCanvasNotes();
+      final vm = ResourcesViewModel(notes: notes, vault: files);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: ResourcesScreen(viewModel: vm)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('markdown-create')));
+      await tester.pumpAndSettle();
+      final title = find.byKey(const ValueKey('markdown-note-title'));
+      final body = find.byKey(const ValueKey('markdown-note-text'));
+      final create = find.widgetWithText(FilledButton, 'Создать .md');
+      final conflict = find.text(const MarkdownNoteNameConflict().toString());
+
+      await tester.enterText(body, '# Body');
+      await tester.enterText(title, 'Existing');
+      await tester.pumpAndSettle();
+      expect(conflict, findsOneWidget);
+      expect(tester.widget<FilledButton>(create).onPressed, isNull);
+
+      await tester.enterText(title, 'Created from gallery');
+      await tester.pumpAndSettle();
+      expect(conflict, findsNothing);
+      files.files['/Pulse/Notes/Created from gallery.md'] = 'created elsewhere';
+      await tester.tap(create);
+      await tester.pumpAndSettle();
+      expect(conflict, findsOneWidget);
+      expect(
+        tester.widget<TextField>(title).controller!.text,
+        'Created from gallery',
+      );
+      expect(tester.widget<TextField>(body).controller!.text, '# Body');
+
+      await tester.enterText(title, 'Another name');
+      await tester.pumpAndSettle();
+      await tester.tap(create);
+      await tester.pumpAndSettle();
+      expect(title, findsNothing);
+      expect(files.files['/Pulse/Notes/Existing.md'], 'original content');
+      expect(
+        files.files['/Pulse/Notes/Created from gallery.md'],
+        'created elsewhere',
+      );
+      expect(files.files['/Pulse/Notes/Another name.md'], '# Body');
+      expect(find.text('Another name'), findsOneWidget);
+      expect(vm.getAllNotes(), isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+      await vm.close();
+    },
+  );
 
   testWidgets(
     'cached Notes folder Markdown stays readable when its file becomes unavailable',

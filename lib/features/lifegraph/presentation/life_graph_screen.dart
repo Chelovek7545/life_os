@@ -578,28 +578,21 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     } else if (choice == GraphNoteCreation.markdownLibrary) {
       _showVaultNotePicker(context, markdown: true);
     } else if (choice == GraphNoteCreation.markdownFile) {
-      final value = await showMarkdownNoteDialog(context);
-      if (value == null || !mounted) return;
-      try {
-        final path = await widget.viewModel.createMarkdownNote(
-          title: value.title,
-          text: value.text,
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(this.context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Заметка создана: ${AndroidGraphFiles.displayPath(path)}',
-              ),
+      final model = widget.viewModel;
+      final path = await showMarkdownNoteDialog(
+        context,
+        titleExists: model.markdownNoteTitleExists,
+        onSave: (value) =>
+            model.createMarkdownNote(title: value.title, text: value.text),
+      );
+      if (path != null && mounted) {
+        ScaffoldMessenger.of(this.context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Заметка создана: ${AndroidGraphFiles.displayPath(path)}',
             ),
-          );
-        }
-      } catch (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            this.context,
-          ).showSnackBar(SnackBar(content: Text('$error')));
-        }
+          ),
+        );
       }
     }
   }
@@ -611,32 +604,23 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         .first
         .trim()
         .replaceFirst(RegExp(r'^#+\s*'), '');
-    final value = await showMarkdownNoteDialog(
+    final model = widget.viewModel;
+    final path = await showMarkdownNoteDialog(
       context,
       initialTitle: title,
       converting: true,
+      titleExists: model.markdownNoteTitleExists,
+      onSave: (value) =>
+          model.convertNoteToMarkdown(state.note.id, title: value.title),
     );
-    if (value == null || !mounted) return;
-    try {
-      final path = await widget.viewModel.convertNoteToMarkdown(
-        state.note.id,
-        title: value.title,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Заметка сохранена: ${AndroidGraphFiles.displayPath(path)}',
-            ),
+    if (path != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Заметка сохранена: ${AndroidGraphFiles.displayPath(path)}',
           ),
-        );
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$error')));
-      }
+        ),
+      );
     }
   }
 
@@ -784,7 +768,8 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     try {
       final directory = await widget.pickDirectory();
       if (directory == null || !mounted) return;
-      final value = await showMarkdownNoteDialog(
+      final model = widget.viewModel;
+      final path = await showMarkdownNoteDialog(
         context,
         initialTitle: state.text
             .split('\n')
@@ -793,14 +778,13 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
             .replaceFirst(RegExp(r'^#+\s*'), ''),
         converting: true,
         savingCopy: true,
+        onSave: (value) => model.saveNoteMarkdownCopy(
+          state.note.id,
+          directory: directory,
+          title: value.title,
+        ),
       );
-      if (value == null || !mounted) return;
-      final path = await widget.viewModel.saveNoteMarkdownCopy(
-        state.note.id,
-        directory: directory,
-        title: value.title,
-      );
-      if (mounted) {
+      if (path != null && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
