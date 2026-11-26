@@ -124,14 +124,18 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
   }
 
   @override
-  Future<void> resolve(SyncRevision chosen, Set<String> expected) =>
-      SyncPayload.externalEntities.contains(chosen.entityType)
-      ? _resolveNote(chosen, expected)
+  Future<void> resolve(
+    SyncRevision chosen,
+    Set<String> expected, {
+    String? mergedPayload,
+  }) => SyncPayload.externalEntities.contains(chosen.entityType)
+      ? _resolveNote(chosen, expected, mergedPayload: mergedPayload)
       : _write(
           chosen.key,
-          chosen.payload,
+          mergedPayload ?? chosen.payload,
           expectedHeads: expected,
           resolveConflict: true,
+          mergeBase: mergedPayload == null ? null : chosen,
         );
 
   static int _version(String type, String? payload, {bool grouped = false}) {
@@ -850,6 +854,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
     String? payload, {
     required Set<String> expectedHeads,
     required bool resolveConflict,
+    SyncRevision? mergeBase,
   }) => db.transaction(() async {
     await identity();
     final revisions = await _revisions();
@@ -861,6 +866,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
       throw StateError('Entity changed; reload.');
     }
     _checkEdit(id, graph, revisions, resolveConflict: resolveConflict);
+    if (mergeBase != null) _checkMergeBasis(mergeBase, versions);
     await _capture(() async {
       if (payload == null && SyncPayload.typeOf(id) == 'task') {
         await (db.update(
@@ -879,6 +885,16 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
       );
     }, resolving: resolveConflict ? id : null);
   });
+
+  void _checkMergeBasis(SyncRevision base, List<SyncRevision> versions) {
+    if (versions.length < 2 ||
+        versions.any((revision) => revision.deleted) ||
+        !versions.any((revision) => revision.encode() == base.encode())) {
+      throw const LocalSyncException(
+        'Эти версии нельзя объединить. Обновите список конфликтов.',
+      );
+    }
+  }
 
   Future<void> _applyPayload(String type, String id, String? payload) async {
     if (payload != null && SyncPayload.payloadId(type, payload) != id) {

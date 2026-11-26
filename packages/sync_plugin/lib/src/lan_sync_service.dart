@@ -11,6 +11,8 @@ import 'local_sync_contracts.dart';
 import 'sync_models.dart';
 import 'sync_payload.dart';
 
+part 'lan_discovery.dart';
+
 String localSyncDeviceName() {
   final host = Platform.localHostname.trim();
   final name = host.isEmpty || host == 'localhost'
@@ -226,6 +228,12 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   bool _joining = false;
   String? _approvalId;
   Completer<String>? _approval;
+  String? _datasetId, _pendingPairCode;
+  LocalSyncPairReview? _pairReview;
+  Completer<bool>? _pairDecision;
+  _LanDiscovery? _discovery;
+  int _discoveryRevision = 0;
+  final _nearby = <String, _NearbyDevice>{};
   int _conflictCount = 0, _pendingCount = 0;
   @override
   LocalSyncState get state => _state;
@@ -254,6 +262,10 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
       run: _run,
       notesNeedFolder: _notesNeedFolder,
       joining: _joining,
+      discovering: _discovery != null,
+      nearby: _nearby.values.map((device) => device.peer),
+      pairingCode: _pendingPairCode,
+      pairReview: _pairReview,
       confirmingDevice: _peers[_approvedPeer?.id]?.confirmed == true
           ? null
           : _approvedPeer?.name,
@@ -290,12 +302,96 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   }
 
   Future<void> _refresh() async {
-    _enrolled = await data.existingIdentity() != null;
+    _datasetId = (await data.existingIdentity())?.datasetId;
+    _enrolled = _datasetId != null;
     if (_enrolled) {
       _conflictCount = (await data.conflicts()).length;
       _pendingCount = (await data.pendingRevisions()).length;
     }
     _emit();
+  }
+
+  @override
+  Future<void> setDiscoveryVisible(bool visible) async {
+    final generation = _generation;
+    _live(generation);
+    _closeDiscovery();
+    final revision = _discoveryRevision;
+    if (!visible || _material == null) {
+      _emit();
+      return;
+    }
+
+    try {
+      await _pairingName(generation);
+      if (revision != _discoveryRevision) return;
+      final socket = await RawDatagramSocket.bind(
+        options.bindAddress,
+        options.discoveryPort,
+        reuseAddress: false,
+      );
+      if (!_active || revision != _discoveryRevision) {
+        socket.close();
+        return;
+      }
+      _discovery = _LanDiscovery(
+        socket,
+        options,
+        advertisement: _advertisement,
+        onDevice: _rememberNearby,
+        expire: _expireNearby,
+      )..probe();
+    } on SocketException {
+      // QR pairing remains available when this network blocks UDP discovery.
+    }
+    if (_active && revision == _discoveryRevision) _emit();
+  }
+
+  bool get _discoverable =>
+      _discovery != null &&
+      _server != null &&
+      _datasetId != null &&
+      _material != null &&
+      !_busy &&
+      _incoming == null &&
+      _pending == null &&
+      _approvedPeer == null;
+
+  Map<String, Object?>? _advertisement() => !_discoverable
+      ? null
+      : {
+          'id': _material!.deviceId,
+          'name': _advertisedName ?? deviceName,
+          'dataset': _datasetId,
+          'port': _server!.port,
+          'pin': _fingerprint(_material!.certificatePem),
+        };
+
+  void _rememberNearby(_NearbyDevice device) {
+    final localId = _material?.deviceId;
+    final id = device.peer.id;
+    if (localId == null ||
+        id == localId ||
+        _nearby.length >= 64 && !_nearby.containsKey(id)) {
+      return;
+    }
+    final old = _nearby[id];
+    _nearby[id] = device;
+    if (old == null || !old.sameDevice(device)) _emit();
+  }
+
+  void _expireNearby() {
+    final count = _nearby.length;
+    final now = DateTime.now();
+    _nearby.removeWhere((_, device) => !device.expires.isAfter(now));
+    if (count != _nearby.length) _emit();
+  }
+
+  void _closeDiscovery() {
+    _discoveryRevision++;
+    _discovery?.close();
+    _discovery = null;
+    _nearby.clear();
   }
 
   Future<T> _accept<T>(Future<T> Function(int) action, {bool busy = true}) {
@@ -603,6 +699,7 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     _confirmationTimer?.cancel();
     _confirmationTimer = null;
     _approvedPeer = null;
+    _pendingPairCode = null;
   }
 
   Future<void> _completePair(_Peer peer) => _accept((generation) async {
@@ -663,15 +760,45 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     _emit();
   });
   @override
-  Future<void> join(String invitation, String host) => _accept((g) async {
-    _joining = true;
-    _emit();
-    try {
-      await _join(invitation, host, g);
-    } finally {
-      _joining = false;
+  Future<void> join(String invitation, String host) =>
+      _withJoining((g) => _join(invitation, host, g));
+
+  @override
+  Future<void> joinNearby(String peerId, String host) => _withJoining((
+    g,
+  ) async {
+    if (_peers[peerId]?.confirmed == true) {
+      throw const LocalSyncException('Это устройство уже подключено.');
     }
+    final device = _nearby[peerId];
+    if (device == null || !device.expires.isAfter(DateTime.now())) {
+      throw const LocalSyncException(
+        'Устройство исчезло с радара. Откройте на нём окно синхронизации или используйте QR.',
+      );
+    }
+    await _pairWith(
+      uri: _endpoint(device.peer.endpoint),
+      pin: device.peer.fingerprint,
+      remoteId: device.peer.id,
+      dataset: device.dataset,
+      localIp: _requireLocalIp(host),
+      generation: g,
+      nearby: device.peer,
+    );
   });
+
+  Future<void> _withJoining(Future<void> Function(int) action) =>
+      _accept((g) async {
+        _joining = true;
+        _emit();
+        try {
+          await action(g);
+        } finally {
+          _joining = false;
+          _pairReview = null;
+          _pairDecision = null;
+        }
+      });
 
   Future<void> _join(String invitation, String host, int g) async {
     final localIp = _requireLocalIp(host);
@@ -704,6 +831,28 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
         'Обновите Pulse на обоих устройствах для сопряжения.',
       );
     }
+    await _pairWith(
+      uri: uri,
+      pin: pin,
+      remoteId: remoteId,
+      dataset: dataset,
+      localIp: localIp,
+      generation: g,
+      secret: secret,
+    );
+  }
+
+  Future<void> _pairWith({
+    required Uri uri,
+    required String pin,
+    required String remoteId,
+    required String dataset,
+    required String localIp,
+    required int generation,
+    String? secret,
+    LocalSyncPeer? nearby,
+  }) async {
+    final g = generation;
     final existing = await data.existingIdentity();
     if (existing != null && existing.datasetId != dataset) {
       throw const LocalSyncException(
@@ -722,9 +871,20 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
         'Нельзя подключить устройство к самому себе.',
       );
     }
+    final nonce = nearby == null ? null : _randomNonce();
+    final localPin = _fingerprint(_material!.certificatePem);
+    final invitationHash = _hash(secret ?? nonce!);
+    if (nearby != null) {
+      _pairReview = (
+        peer: nearby,
+        code: _comparisonCode(pin, localPin, nonce!),
+        canConfirm: false,
+      );
+      _emit();
+    }
     var peer = _peers[remoteId];
     if (peer == null ||
-        peer.invitationHash != _hash(secret) ||
+        peer.invitationHash != invitationHash ||
         peer.endpoint != uri.toString() ||
         peer.pin != pin) {
       final response = await _post(
@@ -734,12 +894,13 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
         {
           'protocol': 1,
           'confirmPairing': true,
-          'secret': secret,
+          'secret': ?secret,
+          'nearbyNonce': ?nonce,
           'datasetId': dataset,
           'deviceId': _material!.deviceId,
           'name': await _pairingName(g),
           'endpoint': _advertised,
-          'pin': _fingerprint(_material!.certificatePem),
+          'pin': localPin,
         },
         g,
         timeout: options.pairingTimeout + const Duration(seconds: 5),
@@ -760,8 +921,9 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
         'endpoint': uri.toString(),
         'pin': pin,
         'token': response['token'],
-        'invitationHash': _hash(secret),
+        'invitationHash': invitationHash,
       });
+      if (nearby != null) await _waitForPairDecision(peer, dataset, g);
       await data.enroll(
         dataset,
         _material!.deviceId,
@@ -793,6 +955,47 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     await _save({..._peers, peer.id: peer.confirm()}, g);
     await _saveNetwork(listening: true);
     await _refresh();
+  }
+
+  Future<void> _waitForPairDecision(_Peer peer, String dataset, int g) async {
+    final decision = _pairDecision = Completer<bool>();
+    final review = _pairReview!;
+    _pairReview = (peer: review.peer, code: review.code, canConfirm: true);
+    _emit();
+    final accepted = await decision.future.timeout(
+      options.pairingTimeout,
+      onTimeout: () => false,
+    );
+    _live(g);
+    if (accepted) return;
+    try {
+      await _post(
+        _endpoint(peer.endpoint),
+        peer.pin,
+        '/v1/pair/cancel',
+        {'protocol': 1, 'datasetId': dataset},
+        g,
+        token: peer.token,
+        deviceId: _material!.deviceId,
+        timeout: const Duration(seconds: 2),
+      );
+    } catch (_) {
+      // The receiver also expires an approved pairing that never completes.
+    }
+    throw const LocalSyncException('Сопряжение отменено.');
+  }
+
+  @override
+  Future<void> confirmNearby(bool accepted) async {
+    _live(_generation);
+    final decision = _pairDecision;
+    final review = _pairReview;
+    if (review == null || decision == null || decision.isCompleted) {
+      throw const LocalSyncException('Запрос уже закрыт.');
+    }
+    _pairReview = (peer: review.peer, code: review.code, canConfirm: false);
+    decision.complete(accepted);
+    _emit();
   }
 
   @override
@@ -952,20 +1155,23 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     await _refresh();
   });
   @override
-  Future<void> resolve(SyncRevision chosen, Set<String> expected) =>
-      _accept((g) async {
-        _live(g);
-        if (SyncPayload.externalEntities.contains(chosen.entityType)) {
-          await reconcileNotes?.call();
-          _live(g);
-        }
-        await data.resolve(chosen, expected);
-        if (SyncPayload.externalEntities.contains(chosen.entityType)) {
-          _live(g);
-          await (applyNotes ?? reconcileNotes)?.call();
-        }
-        await _refresh();
-      });
+  Future<void> resolve(
+    SyncRevision chosen,
+    Set<String> expected, {
+    String? mergedPayload,
+  }) => _accept((g) async {
+    _live(g);
+    if (SyncPayload.externalEntities.contains(chosen.entityType)) {
+      await reconcileNotes?.call();
+      _live(g);
+    }
+    await data.resolve(chosen, expected, mergedPayload: mergedPayload);
+    if (SyncPayload.externalEntities.contains(chosen.entityType)) {
+      _live(g);
+      await (applyNotes ?? reconcileNotes)?.call();
+    }
+    await _refresh();
+  });
 
   Future<Map<String, dynamic>> _read(Stream<List<int>> stream) async {
     final bytes = <int>[];
@@ -1109,12 +1315,22 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
       }
       Map<String, Object?> result;
       if (request.uri.path == '/v1/pair') {
+        final nonce = body['nearbyNonce'];
+        final source = request.connectionInfo?.remoteAddress.address;
+        final invited =
+            nonce == null &&
+            _inviteHash != null &&
+            _inviteDeadline?.isAfter(DateTime.now()) == true &&
+            body['secret'] is String &&
+            _hash(body['secret'] as String) == _inviteHash;
+        final nearby =
+            nonce is String &&
+            _validNonce(nonce) &&
+            source != null &&
+            _isLan(source) &&
+            _discoverable;
         if (body['confirmPairing'] != true ||
-            _inviteHash == null ||
-            _inviteDeadline == null ||
-            !DateTime.now().isBefore(_inviteDeadline!) ||
-            body['secret'] is! String ||
-            _hash(body['secret'] as String) != _inviteHash ||
+            !(invited || nearby) ||
             body['datasetId'] != identity.datasetId ||
             _pending != null ||
             _approvedPeer != null) {
@@ -1126,10 +1342,12 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
         if (peerId == identity.deviceId || _peers.containsKey(peerId)) {
           throw const LocalSyncException('Это устройство уже подключено.');
         }
+        final endpoint = _endpoint(body['endpoint'] as String);
         final pending = _Peer.fromJson({
           'id': peerId,
           'name': body['name'],
-          'endpoint': body['endpoint'],
+          'endpoint': (nearby ? endpoint.replace(host: source) : endpoint)
+              .toString(),
           'pin': body['pin'],
           'token': _randomSecret(),
         });
@@ -1137,8 +1355,17 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
         _approvalId = const Uuid().v4();
         _pending = pending;
         _approval = approval;
-        _inviteHash = null;
-        _invitation = null;
+        _pendingPairCode = nearby
+            ? _comparisonCode(
+                _fingerprint(_material!.certificatePem),
+                pending.pin,
+                nonce,
+              )
+            : null;
+        if (invited) {
+          _inviteHash = null;
+          _invitation = null;
+        }
         _emit();
         try {
           final token = await approval.future.timeout(options.pairingTimeout);
@@ -1154,12 +1381,15 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
           if (identical(_approval, approval)) {
             _pending = null;
             _approval = null;
+            if (_approvedPeer == null) _pendingPairCode = null;
             _emit();
           }
         }
       } else {
         final id = request.headers.value('X-Life-Device');
-        final completing = request.uri.path == '/v1/pair/confirm';
+        final path = request.uri.path;
+        final cancelling = path == '/v1/pair/cancel';
+        final completing = path == '/v1/pair/confirm' || cancelling;
         final approved = _approvedPeer;
         final peer = completing && approved != null && approved.id == id
             ? approved
@@ -1177,11 +1407,10 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
             'Устройства принадлежат разным пространствам.',
           );
         }
-        final path = request.uri.path;
         final runId = body['runId'] == null ? null : _id(body['runId']);
         final inSession =
             runId != null && _incoming == (id: runId, peerId: peer.id);
-        if (path != '/v1/hello' && path != '/v1/pair/confirm') {
+        if (path != '/v1/hello' && !completing) {
           if (runId != null || _incoming != null) {
             if (!inSession) throw const _SyncInUse();
             _touchIncoming();
@@ -1191,6 +1420,13 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
           case '/v1/pair/confirm':
             await _completePair(peer);
             result = {'confirmed': true};
+          case '/v1/pair/cancel':
+            if (!identical(_approvedPeer, peer)) {
+              throw const _PeerNotAuthorized();
+            }
+            _clearApprovedPeer();
+            _emit();
+            result = {};
           case '/v1/hello':
             final name = _advertisedName ?? await _pairingName(generation);
             if (runId != null &&
@@ -1271,7 +1507,7 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
           default:
             throw const FormatException('Unknown request.');
         }
-        _trusted(peer, generation);
+        if (!cancelling) _trusted(peer, generation);
       }
       request.response.headers.contentType = ContentType.json;
       request.response.write(jsonEncode(result));
@@ -1317,6 +1553,10 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     _active = false;
     _generation++;
     _busy = false;
+    _closeDiscovery();
+    if (_pairDecision case final decision? when !decision.isCompleted) {
+      decision.complete(false);
+    }
     for (final client in _clients.toList()) {
       client.close(force: true);
     }

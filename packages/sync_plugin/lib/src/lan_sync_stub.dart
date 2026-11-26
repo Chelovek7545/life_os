@@ -58,6 +58,12 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   @override
   Future<void> join(String invitation, String host) async => _unsupported();
   @override
+  Future<void> setDiscoveryVisible(bool visible) async {}
+  @override
+  Future<void> joinNearby(String peerId, String host) async => _unsupported();
+  @override
+  Future<void> confirmNearby(bool accepted) async => _unsupported();
+  @override
   Future<void> approve(String id) async => _unsupported();
   @override
   Future<void> reject(String id) async => _unsupported();
@@ -70,6 +76,9 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
   @override
   Future<Map<String, List<SyncRevision>>> conflicts() async => _unsupported();
   @override
-  Future<void> resolve(SyncRevision chosen, Set<String> expected) async =>
-      _unsupported();
+  Future<void> resolve(
+    SyncRevision chosen,
+    Set<String> expected, {
+    String? mergedPayload,
+  }) async => _unsupported();
 }

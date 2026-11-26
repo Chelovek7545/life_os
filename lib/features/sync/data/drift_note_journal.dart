@@ -163,34 +163,36 @@ extension DriftNoteJournal on DriftSyncStore {
     return graph;
   }
 
-  Future<void> _resolveNote(SyncRevision chosen, Set<String> expected) =>
-      db.transaction(() async {
-        final local = await identity();
-        final revisions = await _revisions();
-        final graph = SyncGraph(revisions);
-        final versions = graph.heads[chosen.key] ?? const [];
-        final parents = versions.map((revision) => revision.id).toSet();
-        if (parents.length != expected.length ||
-            !parents.containsAll(expected) ||
-            !versions.any((revision) => revision.encode() == chosen.encode())) {
-          throw const LocalSyncException(
-            'Запись изменилась. Откройте конфликт заново.',
-          );
-        }
-        _checkEdit(chosen.key, graph, revisions, resolveConflict: true);
-        await _appendNotes(revisions, [
-          SyncRevision(
-            id: const Uuid().v4(),
-            deviceId: local.deviceId,
-            entityId: chosen.entityId,
-            entityType: chosen.entityType,
-            parents: parents,
-            payload: chosen.payload,
-            schemaVersion: DriftSyncStore._version(
-              chosen.entityType,
-              chosen.payload,
-            ),
-          ),
-        ]);
-      });
+  Future<void> _resolveNote(
+    SyncRevision chosen,
+    Set<String> expected, {
+    String? mergedPayload,
+  }) => db.transaction(() async {
+    final local = await identity();
+    final revisions = await _revisions();
+    final graph = SyncGraph(revisions);
+    final versions = graph.heads[chosen.key] ?? const [];
+    final parents = versions.map((revision) => revision.id).toSet();
+    if (parents.length != expected.length ||
+        !parents.containsAll(expected) ||
+        !versions.any((revision) => revision.encode() == chosen.encode())) {
+      throw const LocalSyncException(
+        'Запись изменилась. Откройте конфликт заново.',
+      );
+    }
+    _checkEdit(chosen.key, graph, revisions, resolveConflict: true);
+    if (mergedPayload != null) _checkMergeBasis(chosen, versions);
+    final payload = mergedPayload ?? chosen.payload;
+    await _appendNotes(revisions, [
+      SyncRevision(
+        id: const Uuid().v4(),
+        deviceId: local.deviceId,
+        entityId: chosen.entityId,
+        entityType: chosen.entityType,
+        parents: parents,
+        payload: payload,
+        schemaVersion: DriftSyncStore._version(chosen.entityType, payload),
+      ),
+    ]);
+  });
 }

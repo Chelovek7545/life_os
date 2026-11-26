@@ -30,7 +30,11 @@ abstract interface class LocalSyncData {
     String payload,
     Set<String> expected,
   );
-  Future<void> resolve(SyncRevision chosen, Set<String> expected);
+  Future<void> resolve(
+    SyncRevision chosen,
+    Set<String> expected, {
+    String? mergedPayload,
+  });
 }
 
 class SyncTlsMaterial {
@@ -46,12 +50,16 @@ class LanSyncOptions {
     this.pairingTimeout = const Duration(minutes: 2),
     this.identityFactory,
     this.addressProvider,
+    this.discoveryPort = 48767,
+    this.discoveryTargets = const ['255.255.255.255'],
   });
   final int port;
   final String bindAddress;
   final Duration timeout, pairingTimeout;
   final Future<SyncTlsMaterial> Function(String deviceId)? identityFactory;
   final Future<List<String>> Function()? addressProvider;
+  final int discoveryPort;
+  final List<String> discoveryTargets;
 }
 
 class LocalSyncException implements Exception {
@@ -81,6 +89,12 @@ class LocalSyncPending {
   final Set<String> basis;
 }
 
+typedef LocalSyncPairReview = ({
+  LocalSyncPeer peer,
+  String code,
+  bool canConfirm,
+});
+
 enum LocalSyncPhase { connecting, transferring, applying, complete, failed }
 
 class LocalSyncRun {
@@ -102,6 +116,9 @@ class LocalSyncState {
     this.invitation,
     this.awaitingApproval,
     this.joining = false,
+    this.discovering = false,
+    this.pairingCode,
+    this.pairReview,
     this.confirmingDevice,
     this.error,
     this.lastSync,
@@ -109,19 +126,25 @@ class LocalSyncState {
     this.notesNeedFolder = false,
     Iterable<LocalSyncPeer> peers = const [],
     Iterable<LocalSyncPeer> unverifiedPeers = const [],
+    Iterable<LocalSyncPeer> nearby = const [],
     this.conflictCount = 0,
     this.pendingCount = 0,
   }) : peers = List.unmodifiable(peers),
-       unverifiedPeers = List.unmodifiable(unverifiedPeers);
+       unverifiedPeers = List.unmodifiable(unverifiedPeers),
+       nearby = List.unmodifiable(nearby);
   final bool listening, busy, enrolled;
   final String? endpoint, invitation, error, deviceId;
   final String? localAddress;
   final String deviceName;
   final LocalSyncPeer? awaitingApproval;
   final bool joining;
+  final bool discovering;
+  final String? pairingCode;
+  final LocalSyncPairReview? pairReview;
   final String? confirmingDevice;
   final List<LocalSyncPeer> peers;
   final List<LocalSyncPeer> unverifiedPeers;
+  final List<LocalSyncPeer> nearby;
   final DateTime? lastSync;
   final LocalSyncRun? run;
   final bool notesNeedFolder;
@@ -145,11 +168,18 @@ abstract interface class LocalSyncControl {
   Future<void> closeListener();
   Future<void> invite(String host);
   Future<void> join(String invitation, String host);
+  Future<void> setDiscoveryVisible(bool visible);
+  Future<void> joinNearby(String peerId, String host);
+  Future<void> confirmNearby(bool accepted);
   Future<void> approve(String id);
   Future<void> reject(String id);
   Future<void> verifyPair(String id);
   Future<void> synchronize(String id);
   Future<void> revoke(String id);
   Future<Map<String, List<SyncRevision>>> conflicts();
-  Future<void> resolve(SyncRevision chosen, Set<String> expected);
+  Future<void> resolve(
+    SyncRevision chosen,
+    Set<String> expected, {
+    String? mergedPayload,
+  });
 }

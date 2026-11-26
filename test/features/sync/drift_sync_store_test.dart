@@ -41,6 +41,39 @@ void main() {
   });
 
   test(
+    'a merged payload resolves the recorded heads and converges after exchange',
+    () async {
+      final original = Task.blank();
+      await a.saveTask(original, expectedHeads: {});
+      await engine.exchange(a, b);
+      final local = original.copyWith(title: 'Изменение на ПК');
+      final remote = original.copyWith(description: 'Изменение на планшете');
+      await a.saveTask(local, expectedHeads: await versions(a, original.id));
+      await b.saveTask(remote, expectedHeads: await versions(b, original.id));
+      await engine.exchange(a, b);
+      final heads = await a.heads(original.id);
+      final basis = heads.map((revision) => revision.id).toSet();
+      final merged = TaskSyncCodec.encode(
+        local.copyWith(description: remote.description),
+      );
+      await expectLater(
+        a.resolve(heads.first, {heads.first.id}, mergedPayload: merged),
+        throwsStateError,
+      );
+      expect(await versions(a, original.id), basis);
+      await a.resolve(heads.first, basis, mergedPayload: merged);
+      final resolved = (await a.heads(original.id)).single;
+      expect(resolved.parents.toSet(), basis);
+      expect(resolved.payload, merged);
+      await engine.exchange(a, b);
+      final onTablet = (await task(bDb, original.id))!;
+      expect(onTablet.title, local.title);
+      expect(onTablet.description, remote.description);
+      expect((await b.heads(original.id)).single.id, resolved.id);
+    },
+  );
+
+  test(
     'unsupported bootstrap rolls back identity and all initial revisions',
     () async {
       final db = AppDatabase(NativeDatabase.memory());

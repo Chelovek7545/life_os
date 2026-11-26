@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:sync_plugin/sync_logic.dart';
 import 'package:tasks_api/tasks_api.dart' show Wrapped;
 import 'sync_address_field.dart';
+import 'sync_conflict_comparison.dart';
+import 'sync_pairing_qr.dart';
 import 'sync_progress.dart';
 
 class SyncSettingsPanel extends StatefulWidget {
@@ -72,40 +74,6 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
         await action(host);
       });
 
-  String _stickerDetails(SyncRevision revision) {
-    final sticker = SyncSticker.decode(revision.payload!);
-    return sticker.markdownPath ?? sticker.text;
-  }
-
-  String _label(SyncRevision r, [Map<String, String> names = const {}]) {
-    if (r.deleted) return 'Удаление';
-    if (r.entityType == 'canvasBoard') {
-      final board = SyncCanvasBoard.decode(r.payload!);
-      final name = names[SyncPayload.key('sphere', board.sphereId)];
-      return name == null ? 'Доска Canvas' : 'Доска «$name»';
-    }
-    if (r.entityType == 'canvasNode') {
-      final placement = SyncCanvasPlacement.decode(r.payload!);
-      for (final type in ['task', 'project', 'goal', 'sphere']) {
-        final name = names[SyncPayload.key(type, placement.nodeId)];
-        if (name != null) return 'Положение узла «$name»';
-      }
-      return 'Положение узла';
-    }
-    if (r.entityType == 'sticker') {
-      final title = _stickerDetails(r).trim().split('\n').first;
-      return title.isEmpty ? 'Стикер' : title;
-    }
-    final m = jsonDecode(r.payload!) as Map<String, dynamic>;
-    return (m['title'] ??
-            m['path'] ??
-            m['dateKey'] ??
-            m['name'] ??
-            m['description'] ??
-            'Запись')
-        .toString();
-  }
-
   Future<void> _pending() async {
     final items = await widget.control.pending();
     if (!mounted) return;
@@ -125,7 +93,7 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                 for (final item in items)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(_label(item.revision)),
+                    title: Text(syncRevisionTitle(item.revision)),
                     subtitle: Text(
                       item.revision.deleted
                           ? 'Ожидает завершения группы удаления'
@@ -335,196 +303,6 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
     }
   }
 
-  Future<void> _conflicts() async {
-    final conflicts = await widget.control.conflicts();
-    final names = await widget.control.entityNames();
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Конфликтующие изменения'),
-        content: SizedBox(
-          width: 560,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (conflicts.isEmpty) const Text('Конфликтов нет.'),
-                for (final entry in conflicts.entries) ...[
-                  Text(
-                    _label(
-                      entry.value.firstWhere(
-                        (r) => !r.deleted,
-                        orElse: () => entry.value.first,
-                      ),
-                      names,
-                    ),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  if (entry.value.any((r) => r.deleted))
-                    Text(
-                      SyncPayload.externalNotes.contains(
-                            entry.value.first.entityType,
-                          )
-                          ? 'Одна версия удалена. Выберите текст или подтвердите удаление.'
-                          : 'Сохранено удаление и варианты текста. Восстановление выполняется отдельной копией.',
-                    ),
-                  for (final revision in entry.value)
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(_label(revision, names)),
-                            ..._details(revision, names),
-                            if (revision.payload != null) ...[
-                              if (SyncPayload.externalNotes.contains(
-                                revision.entityType,
-                              ))
-                                ExpansionTile(
-                                  title: const Text('Содержимое'),
-                                  children: [
-                                    SelectableText(
-                                      revision.entityType == 'sticker'
-                                          ? _stickerDetails(revision)
-                                          : MarkdownSyncNote.decode(
-                                              revision.payload!,
-                                            ).text,
-                                    ),
-                                  ],
-                                )
-                              else if ((jsonDecode(revision.payload!)
-                                      as Map<String, dynamic>)['description']
-                                  case final String description
-                                  when description.isNotEmpty)
-                                Text(description),
-                              Text(
-                                revision.deviceId ==
-                                        widget.control.state.deviceId
-                                    ? 'Это устройство'
-                                    : 'Источник: ${widget.control.state.peers.where((p) => p.id == revision.deviceId).map((p) => p.name).firstOrNull ?? 'Другое устройство'}',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ],
-                            FilledButton(
-                              onPressed:
-                                  !SyncPayload.externalNotes.contains(
-                                        revision.entityType,
-                                      ) &&
-                                      !revision.deleted &&
-                                      entry.value.any((r) => r.deleted)
-                                  ? null
-                                  : () {
-                                      Navigator.pop(dialogContext);
-                                      _run(
-                                        () => widget.control.resolve(
-                                          revision,
-                                          entry.value.map((r) => r.id).toSet(),
-                                        ),
-                                      );
-                                    },
-                              child: Text(
-                                revision.deleted
-                                    ? 'Принять удаление'
-                                    : 'Выбрать эту версию',
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                ],
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Закрыть'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _details(SyncRevision r, Map<String, String> names) {
-    if (r.payload == null) return [];
-    if (r.entityType == 'canvasBoard') {
-      final board = SyncCanvasBoard.decode(r.payload!);
-      final nodes = board.document['nodes'] as List;
-      final edges = board.document['edges'] as List;
-      return [Text('Карточек ${nodes.length} · Связей ${edges.length}')];
-    }
-    if (r.entityType == 'canvasNode') {
-      final placement = SyncCanvasPlacement.decode(r.payload!);
-      final sphere = names[SyncPayload.key('sphere', placement.sphereId)];
-      return [
-        if (sphere != null) Text('Граф «$sphere»'),
-        Text('X ${placement.x}, Y ${placement.y}'),
-        Text('Размер ${placement.width} × ${placement.height}'),
-      ];
-    }
-    final m = jsonDecode(r.payload!) as Map<String, dynamic>;
-    const labels = {
-      'status': 'Статус',
-      'startsAt': 'Начало',
-      'endsAt': 'Окончание',
-      'dueDate': 'Срок',
-      'date': 'Дата',
-      'dateKey': 'День',
-      'startedAt': 'Начало работы',
-      'endedAt': 'Конец работы',
-      'isArchived': 'В архиве',
-    };
-    const statuses = {
-      'open': 'Открыта',
-      'notStarted': 'Не начата',
-      'inProgress': 'В работе',
-      'done': 'Выполнена',
-      'completed': 'Выполнено',
-      'pending': 'Ожидает',
-      'skipped': 'Пропущено',
-    };
-    const relations = {
-      'parentTaskId': 'Родительская задача',
-      'predecessorTaskId': 'Предшествующая задача',
-      'projectId': 'Проект',
-      'parentProjectId': 'Родительский проект',
-      'goalId': 'Цель',
-      'sphereId': 'Сфера',
-      'habitId': 'Привычка',
-    };
-    const types = {
-      'parentTaskId': 'task',
-      'predecessorTaskId': 'task',
-      'projectId': 'project',
-      'parentProjectId': 'project',
-      'goalId': 'goal',
-      'sphereId': 'sphere',
-      'habitId': 'habit',
-    };
-    return [
-      for (final entry in labels.entries)
-        if (m[entry.key] != null)
-          Text(
-            '${entry.value}: ${m[entry.key] is bool ? (m[entry.key] as bool ? 'Да' : 'Нет') : statuses[m[entry.key]] ?? m[entry.key]}',
-          ),
-      for (final entry in relations.entries)
-        if (m[entry.key] is String && (m[entry.key] as String).isNotEmpty)
-          Text(
-            '${entry.value}: ${names[SyncPayload.key(types[entry.key]!, m[entry.key] as String)] ?? 'Недоступный объект'}',
-          ),
-      if (m['tagIds'] is List)
-        Text(
-          'Теги: ${(m['tagIds'] as List).map((id) => names['tag/$id'] ?? 'Недоступный тег').join(', ')}',
-        ),
-    ];
-  }
-
   @override
   Widget build(BuildContext context) => StreamBuilder<LocalSyncState>(
     stream: widget.control.states,
@@ -544,7 +322,6 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: SyncProgress(
                   run: run,
-                  busy: s.busy,
                   notesNeedFolder: s.notesNeedFolder,
                 ),
               ),
@@ -646,9 +423,7 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Одноразовое приглашение · 5 минут. Передайте его только своему устройству.',
-                      ),
+                      SyncInvitationQr(invitation: s.invitation!),
                       TextButton.icon(
                         onPressed: () => Clipboard.setData(
                           ClipboardData(text: s.invitation!),
@@ -671,11 +446,16 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                         'Подключается: ${peer.name}',
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
-                      const Text('Подтвердите, если это ваше устройство.'),
-                      SelectableText(
-                        peer.fingerprint,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
+                      if (s.pairingCode case final code?) ...[
+                        const Text('Сверьте код на обоих экранах'),
+                        SyncPairCode(code),
+                      ] else ...[
+                        const Text('Подтвердите, если это ваше устройство.'),
+                        SelectableText(
+                          peer.fingerprint,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                       Wrap(
                         spacing: 8,
                         children: [
@@ -685,7 +465,11 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
                                 : () => _run(
                                     () => widget.control.approve(peer.id),
                                   ),
-                            child: const Text('Подтвердить'),
+                            child: Text(
+                              s.pairingCode == null
+                                  ? 'Подтвердить'
+                                  : 'Коды совпадают',
+                            ),
                           ),
                           TextButton(
                             onPressed: s.busy
@@ -758,11 +542,6 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
               Text(
                 'Последний обмен: ${s.lastSync!.toLocal()}',
                 style: Theme.of(context).textTheme.bodySmall,
-              ),
-            if (s.conflictCount > 0)
-              TextButton(
-                onPressed: s.busy ? null : () => _run(_conflicts),
-                child: Text('Разрешить конфликты: ${s.conflictCount}'),
               ),
             if (s.pendingCount > 0) ...[
               Text(

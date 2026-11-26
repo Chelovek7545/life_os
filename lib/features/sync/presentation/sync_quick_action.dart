@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
@@ -6,7 +8,10 @@ import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:sync_plugin/sync_logic.dart';
 
 import 'sync_address_field.dart';
+import 'sync_conflicts_panel.dart';
+import 'sync_pairing_qr.dart';
 import 'sync_progress.dart';
+import 'sync_radar.dart';
 import 'sync_settings_panel.dart';
 
 class SyncQuickAction extends StatefulWidget {
@@ -147,6 +152,29 @@ class _QuickSyncDialogState extends State<_QuickSyncDialog> {
   String? _addressDraft;
   String? _selectedPeerId;
   bool _runningAction = false;
+  bool _addingDevice = false;
+  bool _showQr = false;
+  bool _showConflicts = false;
+  late final int _generation;
+
+  @override
+  void initState() {
+    super.initState();
+    _generation = widget.control.generation;
+    unawaited(
+      widget.control.setDiscoveryVisible(true).catchError((Object _) {}),
+    );
+  }
+
+  @override
+  void dispose() {
+    if (widget.control.generation == _generation) {
+      unawaited(
+        widget.control.setDiscoveryVisible(false).catchError((Object _) {}),
+      );
+    }
+    super.dispose();
+  }
 
   Future<void> _synchronize(String id) async {
     if (!widget.control.state.peers.any((peer) => peer.id == id)) return;
@@ -187,15 +215,59 @@ class _QuickSyncDialogState extends State<_QuickSyncDialog> {
       await control.closeListener();
       return;
     }
-    var address = _addressDraft ?? syncAddressOf(control.state);
-    if (address.isEmpty) {
-      address = (await control.addresses()).firstOrNull ?? '';
-    }
+    final address = await _resolveLocalAddress();
     if (!mounted || !widget.isCurrent()) return;
-    if (address.isEmpty) throw LocalSyncException.missingLocalIp;
     await control.listen(address);
     _addressDraft = null;
   }, 'Не удалось изменить приём по локальной сети.');
+
+  Future<String> _resolveLocalAddress() async {
+    final control = widget.control;
+    final current = _addressDraft ?? syncAddressOf(control.state);
+    if (current.isNotEmpty) return current;
+    final address = (await control.addresses()).firstOrNull;
+    if (address == null || address.isEmpty) {
+      throw LocalSyncException.missingLocalIp;
+    }
+    return address;
+  }
+
+  Future<void> _pairNearby(String id) => _runAction(() async {
+    final address = await _resolveLocalAddress();
+    if (mounted && widget.isCurrent()) {
+      await widget.control.joinNearby(id, address);
+      if (mounted && widget.isCurrent()) setState(() => _addingDevice = false);
+    }
+  }, 'Не удалось запросить сопряжение.');
+
+  Future<void> _showInvitation() => _runAction(() async {
+    final address = await _resolveLocalAddress();
+    if (!mounted || !widget.isCurrent()) return;
+    await widget.control.invite(address);
+    if (mounted && widget.isCurrent()) setState(() => _showQr = true);
+  }, 'Не удалось создать QR сопряжения.');
+
+  Future<void> _readInvitation() => _runAction(() async {
+    final invitation = await readSyncInvitationQr(context);
+    if (invitation == null || !mounted || !widget.isCurrent()) return;
+    final address = await _resolveLocalAddress();
+    if (mounted && widget.isCurrent()) {
+      await widget.control.join(invitation, address);
+      if (mounted && widget.isCurrent()) setState(() => _addingDevice = false);
+    }
+  }, 'Не удалось подключиться по QR.');
+
+  Future<void> _decideNearby(bool accepted) async {
+    if (!widget.isCurrent() ||
+        widget.control.state.pairReview?.canConfirm != true) {
+      return;
+    }
+    try {
+      await widget.control.confirmNearby(accepted);
+    } on LocalSyncException catch (error) {
+      if (mounted && widget.isCurrent()) setState(() => _error = error.message);
+    }
+  }
 
   Future<void> _editAddress() async {
     final control = widget.control;
@@ -230,27 +302,191 @@ class _QuickSyncDialogState extends State<_QuickSyncDialog> {
       final available = widget.isCurrent();
       final busy = state.busy || _runningAction;
       final run = state.run;
-      final selectedId = state.busy
-          ? run?.peerId ?? _selectedPeerId
-          : _selectedPeerId ?? run?.peerId;
+      if (state.busy &&
+          run != null &&
+          run.phase != LocalSyncPhase.complete &&
+          run.phase != LocalSyncPhase.failed) {
+        _selectedPeerId = run.peerId;
+      }
+      final selectedId = _selectedPeerId ?? run?.peerId;
       final peer =
-          state.peers.where((peer) => peer.id == selectedId).firstOrNull ??
+          state.peers.where((item) => item.id == selectedId).firstOrNull ??
           state.peers.firstOrNull;
       final currentRun = run?.peerId == peer?.id ? run : null;
       final connected =
           currentRun?.phase == LocalSyncPhase.transferring ||
           currentRun?.phase == LocalSyncPhase.applying;
       final error = _error ?? state.error;
-      final colors = Theme.of(context).colorScheme;
+      final theme = Theme.of(context);
       final localizations = MaterialLocalizations.of(context);
       final lastSync = state.lastSync?.toLocal();
       final entrance = widget.animation.drive(
         CurveTween(curve: Curves.easeOutCubic),
       );
+
+      void openSettings() => Navigator.pop(context, true);
+
+      final conflictAction = state.conflictCount == 0
+          ? null
+          : ActionChip(
+              avatar: const Icon(Icons.merge_type_rounded, size: 16),
+              label: Text('Конфликты: ${state.conflictCount}'),
+              onPressed: busy
+                  ? null
+                  : () => setState(() => _showConflicts = true),
+            );
+      final network = _SyncReceiveCard(
+        listening: state.listening,
+        enrolled: state.enrolled,
+        address: _addressDraft ?? syncAddressOf(state),
+        onChanged: !busy && (state.enrolled || state.listening)
+            ? _toggleReceive
+            : null,
+        onEditAddress: !busy && state.enrolled ? _editAddress : null,
+      );
+      final issue = error == null
+          ? null
+          : _SyncNotice(
+              message: error,
+              icon: Icons.error_outline_rounded,
+              tint: theme.colorScheme.error,
+            );
+      final request = state.awaitingApproval;
+      final pairedIds = {
+        ...state.peers.map((peer) => peer.id),
+        ...state.unverifiedPeers.map((peer) => peer.id),
+      };
+      final nearbyCandidates = state.nearby
+          .where((peer) => !pairedIds.contains(peer.id))
+          .toList();
+      final needsPairingPanel =
+          peer == null ||
+          _addingDevice ||
+          request != null ||
+          state.pairReview != null ||
+          state.confirmingDevice != null ||
+          nearbyCandidates.isNotEmpty;
+      final setup = needsPairingPanel
+          ? _SyncSetupPrompt(
+              state: state,
+              nearbyCandidates: nearbyCandidates,
+              openSettings: openSettings,
+              selectNearby: busy ? null : _pairNearby,
+              showInvitation: !busy && state.enrolled ? _showInvitation : null,
+              readInvitation: busy ? null : _readInvitation,
+              showQr: _showQr,
+              hideQr: () => setState(() => _showQr = false),
+              decide: state.pairReview?.canConfirm == true
+                  ? _decideNearby
+                  : request == null || busy
+                  ? null
+                  : (accepted) => _runAction(
+                      () => accepted
+                          ? widget.control.approve(request.id)
+                          : widget.control.reject(request.id),
+                      'Не удалось подтвердить сопряжение.',
+                    ),
+            )
+          : TextButton.icon(
+              onPressed: busy
+                  ? null
+                  : () => setState(() => _addingDevice = true),
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+              label: const Text('Добавить устройство'),
+            );
+      final Widget? devices = peer == null
+          ? null
+          : _SyncDevices(
+              state: state,
+              selected: peer.id,
+              connected: connected,
+              onSelect: busy || state.peers.length < 2
+                  ? null
+                  : (id) => setState(() {
+                      _selectedPeerId = id;
+                      _error = null;
+                    }),
+            );
+      final Widget? overview = peer == null
+          ? null
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 10,
+              children: [
+                ?issue,
+                SyncProgress(
+                  run: currentRun,
+                  notesNeedFolder: state.notesNeedFolder,
+                ),
+                if (state.notesNeedFolder)
+                  const _SyncNotice(
+                    message:
+                        'Выберите папку Notes в настройках графа на обоих устройствах для отображения заметок.',
+                    icon: Icons.folder_open_outlined,
+                    tint: AppColors.primary,
+                  ),
+                if (state.conflictCount > 0 || state.pendingCount > 0)
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      ?conflictAction,
+                      if (state.pendingCount > 0)
+                        ActionChip(
+                          avatar: const Icon(Icons.pending_outlined, size: 16),
+                          label: Text(
+                            'Ожидающие изменения: ${state.pendingCount}',
+                          ),
+                          onPressed: busy ? null : openSettings,
+                        ),
+                    ],
+                  ),
+                if (lastSync != null || currentRun == null)
+                  Text(
+                    lastSync == null
+                        ? 'В этом сеансе обмена ещё не было.'
+                        : 'Последний обмен: ${localizations.formatCompactDate(lastSync)}, '
+                              '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(lastSync), alwaysUse24HourFormat: true)}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            );
+      final actionColor = busy
+          ? theme.colorScheme.onSurfaceVariant
+          : const Color(0xFF2C1A14);
+      final Widget? action = !available || peer == null
+          ? null
+          : FilledButton.tonalIcon(
+              onPressed: busy ? null : () => _synchronize(peer.id),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: const Color(0xFF2C1A14),
+                disabledBackgroundColor: AppColors.surfaceGlass,
+                disabledForegroundColor: theme.colorScheme.onSurfaceVariant,
+                minimumSize: const Size(0, 48),
+              ),
+              icon: Icon(
+                currentRun?.phase == LocalSyncPhase.failed
+                    ? Icons.refresh_rounded
+                    : Icons.sync_rounded,
+                color: actionColor,
+              ),
+              label: Text(
+                currentRun?.phase == LocalSyncPhase.failed
+                    ? 'Повторить обмен'
+                    : 'Синхронизировать',
+                style: theme.textTheme.labelLarge?.copyWith(color: actionColor),
+              ),
+            );
+
       return Dialog(
         alignment: Alignment.topCenter,
         insetPadding: const EdgeInsets.all(AppSpacing.md),
-        constraints: const BoxConstraints(maxWidth: 680),
+        constraints: _showConflicts
+            ? const BoxConstraints(maxWidth: 1320, maxHeight: 820)
+            : const BoxConstraints(maxWidth: 752),
         backgroundColor: Colors.transparent,
         elevation: 0,
         child: SlideTransition(
@@ -260,245 +496,144 @@ class _QuickSyncDialogState extends State<_QuickSyncDialog> {
           child: FadeTransition(
             opacity: entrance,
             child: GlassPanel(
-              borderRadius: 30,
+              borderRadius: 28,
               blurLevel: 20,
-              borderColor: const Color(0xFF64545D),
-              color: const Color(0xCF211E25),
+              borderColor: AppColors.borderGlass,
+              color: _showConflicts
+                  ? const Color(0xF41A1A20)
+                  : const Color(0xE7201A1D),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(29),
+                borderRadius: BorderRadius.circular(27),
                 child: DecoratedBox(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: RadialGradient(
-                      center: Alignment.bottomLeft,
+                      center: Alignment.topLeft,
                       radius: 1.25,
-                      colors: [
-                        Color(0x80552C22),
-                        Color(0x30141419),
-                        Color(0x22141419),
-                      ],
+                      colors: _showConflicts
+                          ? const [Color(0x4A494653), Color(0x17141419)]
+                          : const [Color(0x46593329), Color(0x17141419)],
                     ),
                   ),
                   child: LayoutBuilder(
                     builder: (context, constraints) {
+                      if (available && _showConflicts) {
+                        return SyncConflictsPanel(
+                          control: widget.control,
+                          isCurrent: widget.isCurrent,
+                          onBack: () => setState(() => _showConflicts = false),
+                          onClose: () => Navigator.pop(context),
+                        );
+                      }
                       final compact = constraints.maxWidth < 480;
-                      return SingleChildScrollView(
-                        padding: EdgeInsets.all(compact ? 14 : 26),
-                        child: DefaultTextStyle.merge(
-                          style: AppTypography.bodySm.copyWith(
-                            color: colors.onSurface,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            mainAxisSize: MainAxisSize.min,
-                            spacing: compact ? 14 : 22,
-                            children: [
-                              Row(
-                                spacing: compact ? 8 : 14,
+                      final wide = constraints.maxWidth >= 600;
+                      final inset = compact ? 14.0 : 20.0;
+                      final header = Padding(
+                        padding: EdgeInsets.fromLTRB(inset, 12, inset, 8),
+                        child: Row(
+                          spacing: compact ? 6 : 12,
+                          children: [
+                            if (!compact) const _SyncEmblem(size: 42),
+                            Expanded(
+                              child: Semantics(
+                                header: true,
+                                child: Text(
+                                  'Синхронизация',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    fontSize: compact ? 19 : 24,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            _headerButton(
+                              tooltip: 'Настройки',
+                              icon: Icons.settings_outlined,
+                              onPressed: available ? openSettings : null,
+                            ),
+                            _headerButton(
+                              tooltip: 'Закрыть',
+                              icon: Icons.close_rounded,
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ],
+                        ),
+                      );
+                      final body = Padding(
+                        padding: EdgeInsets.fromLTRB(inset, 8, inset, 12),
+                        child: !available
+                            ? const Text('Откройте панель заново.')
+                            : wide && devices != null && overview != null
+                            ? Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                spacing: 16,
                                 children: [
-                                  if (!compact) const _SyncEmblem(size: 50),
                                   Expanded(
-                                    child: Semantics(
-                                      header: true,
-                                      child: Text(
-                                        'Синхронизация',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleLarge
-                                            ?.copyWith(
-                                              fontSize: compact ? 19 : 28,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                      ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      spacing: 12,
+                                      children: [network, devices, setup],
                                     ),
                                   ),
-                                  _headerButton(
-                                    tooltip: 'Настройки',
-                                    icon: Icons.settings_outlined,
-                                    onPressed: available
-                                        ? () => Navigator.pop(context, true)
-                                        : null,
-                                  ),
-                                  _headerButton(
-                                    tooltip: 'Закрыть',
-                                    icon: Icons.close_rounded,
-                                    onPressed: () => Navigator.pop(context),
-                                  ),
+                                  Expanded(child: overview),
+                                ],
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                spacing: 12,
+                                children: [
+                                  if (peer == null && conflictAction != null)
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: conflictAction,
+                                    ),
+                                  network,
+                                  if (request != null ||
+                                      state.pairReview != null)
+                                    setup,
+                                  if (currentRun != null) ?overview,
+                                  ?devices,
+                                  if (request == null &&
+                                      state.pairReview == null)
+                                    setup,
+                                  if (currentRun == null) ?overview,
+                                  if (peer == null && issue != null) issue,
                                 ],
                               ),
-                              if (available)
-                                _SyncReceiveCard(
-                                  listening: state.listening,
-                                  enrolled: state.enrolled,
-                                  address:
-                                      _addressDraft ?? syncAddressOf(state),
-                                  onChanged:
-                                      !busy &&
-                                          (state.enrolled || state.listening)
-                                      ? _toggleReceive
-                                      : null,
-                                  onEditAddress: !busy && state.enrolled
-                                      ? _editAddress
-                                      : null,
-                                ),
-                              if (!available)
-                                const Text('Откройте панель заново.')
-                              else if (peer == null) ...[
-                                Text(switch (state) {
-                                  LocalSyncState(
-                                    awaitingApproval: final request?,
-                                  ) =>
-                                    '${request.name} запрашивает подключение.',
-                                  LocalSyncState(
-                                    confirmingDevice: final name?,
-                                  ) =>
-                                    'Ожидаем завершения подключения от «$name».',
-                                  LocalSyncState(joining: true) =>
-                                    'Завершаем сопряжение…',
-                                  _ when state.unverifiedPeers.isNotEmpty =>
-                                    'Проверьте сохранённое сопряжение в настройках.',
-                                  _ => 'Подключённых устройств пока нет.',
-                                }),
-                                Align(
-                                  alignment: AlignmentDirectional.centerEnd,
-                                  child: TextButton.icon(
-                                    onPressed: () =>
-                                        Navigator.pop(context, true),
-                                    icon: const Icon(Icons.settings_outlined),
-                                    label: Text(switch (state) {
-                                      LocalSyncState(
-                                        awaitingApproval: final LocalSyncPeer _,
-                                      ) =>
-                                        'Подтвердить подключение',
-                                      LocalSyncState(joining: true) ||
-                                      LocalSyncState(
-                                        confirmingDevice: final String _,
-                                      ) => 'Открыть настройки',
-                                      _ when state.unverifiedPeers.isNotEmpty =>
-                                        'Открыть настройки',
-                                      _ => 'Подключить устройство',
-                                    }),
-                                  ),
-                                ),
-                              ] else ...[
-                                if (connected)
-                                  const Align(
-                                    alignment: AlignmentDirectional.centerStart,
-                                    child: _SyncConnection(),
-                                  ),
-                                Row(
-                                  spacing: compact ? 6 : 12,
-                                  children: [
-                                    Expanded(
-                                      child: _SyncDeviceCard(
-                                        name: state.deviceName,
-                                        subtitle: 'Это устройство',
-                                        icon: switch (Theme.of(
-                                          context,
-                                        ).platform) {
-                                          TargetPlatform.android ||
-                                          TargetPlatform.iOS =>
-                                            Icons.phone_android_outlined,
-                                          _ => Icons.laptop_outlined,
-                                        },
-                                        compact: compact,
-                                      ),
-                                    ),
-                                    _SyncBridge(
-                                      compact: compact,
-                                      active: connected,
-                                    ),
-                                    Expanded(
-                                      child: _SyncDeviceCard(
-                                        name: peer.name,
-                                        subtitle: connected
-                                            ? 'На связи'
-                                            : 'Связь не проверена',
-                                        icon: Icons.devices_other_outlined,
-                                        compact: compact,
-                                        active: connected,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (state.peers.length > 1)
-                                  Align(
-                                    alignment: AlignmentDirectional.centerEnd,
-                                    child: PopupMenuButton<String>(
-                                      enabled: !busy,
-                                      initialValue: peer.id,
-                                      tooltip: 'Выбрать устройство',
-                                      onSelected: (id) => setState(() {
-                                        _selectedPeerId = id;
-                                        _error = null;
-                                      }),
-                                      itemBuilder: (_) => [
-                                        for (final item in state.peers)
-                                          PopupMenuItem(
-                                            value: item.id,
-                                            child: Text(item.name),
-                                          ),
-                                      ],
-                                      child: const Padding(
-                                        padding: EdgeInsets.symmetric(
-                                          vertical: 8,
-                                        ),
-                                        child: Text('Выбрать устройство'),
-                                      ),
-                                    ),
-                                  ),
-                                SyncProgress(
-                                  run: currentRun,
-                                  busy: state.busy,
-                                  notesNeedFolder: state.notesNeedFolder,
-                                ),
-                                if (state.notesNeedFolder)
-                                  const Text(
-                                    'Выберите папку Notes в настройках графа на обоих устройствах для отображения заметок.',
-                                  ),
-                                if (state.awaitingApproval case final request?)
-                                  Text(
-                                    '${request.name} запрашивает подключение.',
-                                  ),
-                                Wrap(
-                                  spacing: 16,
-                                  runSpacing: 4,
-                                  children: [
-                                    Text(
-                                      lastSync == null
-                                          ? 'В этом сеансе обмена ещё не было.'
-                                          : 'Последний обмен: ${localizations.formatCompactDate(lastSync)}, '
-                                                '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(lastSync), alwaysUse24HourFormat: true)}',
-                                    ),
-                                    if (state.conflictCount > 0)
-                                      Text('Конфликты: ${state.conflictCount}'),
-                                    if (state.pendingCount > 0)
-                                      Text(
-                                        'Ожидающие изменения: ${state.pendingCount}',
-                                      ),
-                                  ],
-                                ),
-                                FilledButton.tonalIcon(
-                                  onPressed: busy
-                                      ? null
-                                      : () => _synchronize(peer.id),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: _syncWarm,
-                                    foregroundColor: const Color(0xFF2C1A14),
-                                  ),
-                                  icon: const Icon(Icons.sync_rounded),
-                                  label: const Text('Синхронизировать'),
-                                ),
-                              ],
-                              if (available && error != null)
-                                Text(
-                                  error,
-                                  style: TextStyle(color: colors.error),
-                                ),
-                            ],
-                          ),
+                      );
+                      final footer = action == null
+                          ? null
+                          : Padding(
+                              padding: EdgeInsets.fromLTRB(inset, 8, inset, 12),
+                              child: action,
+                            );
+
+                      return DefaultTextStyle.merge(
+                        style: AppTypography.bodySm.copyWith(
+                          color: theme.colorScheme.onSurface,
                         ),
+                        child: constraints.maxHeight < 250
+                            ? SingleChildScrollView(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [header, body, ?footer],
+                                ),
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  header,
+                                  Flexible(
+                                    child: SingleChildScrollView(child: body),
+                                  ),
+                                  ?footer,
+                                ],
+                              ),
                       );
                     },
                   ),
@@ -711,128 +846,321 @@ class _SyncEmblem extends StatelessWidget {
   );
 }
 
-class _SyncConnection extends StatelessWidget {
-  const _SyncConnection();
+class _SyncSetupPrompt extends StatelessWidget {
+  const _SyncSetupPrompt({
+    required this.state,
+    required this.nearbyCandidates,
+    required this.openSettings,
+    required this.selectNearby,
+    required this.showInvitation,
+    required this.readInvitation,
+    required this.showQr,
+    required this.hideQr,
+    required this.decide,
+  });
+
+  final LocalSyncState state;
+  final List<LocalSyncPeer> nearbyCandidates;
+  final VoidCallback openSettings;
+  final ValueChanged<String>? selectNearby;
+  final VoidCallback? showInvitation, readInvitation;
+  final bool showQr;
+  final VoidCallback hideQr;
+  final ValueChanged<bool>? decide;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final review = state.pairReview;
+    final code = review?.code ?? state.pairingCode;
+    final prompt = review == null
+        ? switch (state) {
+            LocalSyncState(awaitingApproval: final request?) =>
+              '${request.name} запрашивает подключение.',
+            LocalSyncState(confirmingDevice: final name?) =>
+              'Ожидаем завершения подключения от «$name».',
+            LocalSyncState(joining: true) => 'Завершаем сопряжение…',
+            _ when state.nearby.isNotEmpty => 'Устройства рядом',
+            _ when state.unverifiedPeers.isNotEmpty =>
+              'Проверьте сохранённое сопряжение в настройках.',
+            _ => 'Подключённых устройств пока нет.',
+          }
+        : review.canConfirm
+        ? 'Подтвердите подключение к «${review.peer.name}»'
+        : 'Ожидаем подтверждения от «${review.peer.name}»';
+    final pairing =
+        review != null ||
+        state.joining ||
+        state.awaitingApproval != null ||
+        state.confirmingDevice != null;
+    final invitation = showQr && !pairing ? state.invitation : null;
+
+    return DecoratedBox(
+      decoration: _syncCardDecoration,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          spacing: 9,
+          children: [
+            if (invitation != null) ...[
+              SyncInvitationQr(invitation: invitation),
+              TextButton(onPressed: hideQr, child: const Text('Скрыть QR')),
+            ] else ...[
+              if (!pairing)
+                SyncRadar(
+                  receiving: state.listening && state.discovering,
+                  deviceIds: state.nearby.map((peer) => peer.id).toList(),
+                ),
+              Text(
+                prompt,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleSmall,
+              ),
+              if (!pairing && state.discovering)
+                Text(
+                  state.listening && state.enrolled
+                      ? 'Устройство видно в локальной сети'
+                      : 'Откройте Pulse и включите приём на другом устройстве.',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              if (code != null) ...[
+                const Text(
+                  'Сверьте код на обоих экранах',
+                  textAlign: TextAlign.center,
+                ),
+                SyncPairCode(code),
+              ],
+              if (decide case final confirm?)
+                Wrap(
+                  spacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    FilledButton.tonal(
+                      onPressed: () => confirm(true),
+                      child: Text(
+                        code == null
+                            ? 'Подтвердить подключение'
+                            : 'Коды совпадают',
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => confirm(false),
+                      child: const Text('Отклонить'),
+                    ),
+                  ],
+                ),
+              if (!pairing) ...[
+                for (final peer in nearbyCandidates)
+                  _SyncDeviceRow(
+                    name: peer.name,
+                    detail: Uri.parse(peer.endpoint).host,
+                    icon: Icons.wifi_tethering_rounded,
+                    onTap: selectNearby == null
+                        ? null
+                        : () => selectNearby!(peer.id),
+                  ),
+                Wrap(
+                  spacing: 6,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    if (state.enrolled)
+                      TextButton.icon(
+                        onPressed: showInvitation,
+                        icon: const Icon(Icons.qr_code_rounded),
+                        label: const Text('Показать QR'),
+                      ),
+                    TextButton.icon(
+                      onPressed: readInvitation,
+                      icon: const Icon(Icons.qr_code_scanner_rounded),
+                      label: Text(
+                        canScanSyncQrWithCamera
+                            ? 'Сканировать QR'
+                            : 'Открыть QR с изображения',
+                      ),
+                    ),
+                  ],
+                ),
+                if (!state.enrolled || state.unverifiedPeers.isNotEmpty)
+                  FilledButton.tonal(
+                    onPressed: openSettings,
+                    child: Text(
+                      state.unverifiedPeers.isNotEmpty
+                          ? 'Открыть настройки'
+                          : 'Подключить устройство',
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SyncDevices extends StatelessWidget {
+  const _SyncDevices({
+    required this.state,
+    required this.selected,
+    required this.connected,
+    required this.onSelect,
+  });
+
+  final LocalSyncState state;
+  final String selected;
+  final bool connected;
+  final ValueChanged<String>? onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: 8,
+      children: [
+        Text('Устройства', style: theme.textTheme.titleSmall),
+        _SyncDeviceRow(
+          name: state.deviceName,
+          detail: state.deviceName == 'Это устройство'
+              ? null
+              : 'Это устройство',
+          icon: switch (theme.platform) {
+            TargetPlatform.android ||
+            TargetPlatform.iOS => Icons.phone_android_outlined,
+            _ => Icons.laptop_outlined,
+          },
+        ),
+        for (final peer in state.peers)
+          _SyncDeviceRow(
+            name: peer.name,
+            detail: switch ((peer.id == selected, connected)) {
+              (true, true) => 'Прямое соединение · P2P',
+              _ when state.nearby.any((other) => other.id == peer.id) =>
+                'Видно в локальной сети',
+              (true, false) => 'Выбрано для обмена',
+              _ => null,
+            },
+            icon: Icons.devices_other_outlined,
+            selected: peer.id == selected,
+            connected: peer.id == selected && connected,
+            onTap: onSelect == null ? null : () => onSelect!(peer.id),
+          ),
+      ],
+    );
+  }
+}
+
+class _SyncDeviceRow extends StatelessWidget {
+  const _SyncDeviceRow({
+    required this.name,
+    required this.detail,
+    required this.icon,
+    this.selected = false,
+    this.connected = false,
+    this.onTap,
+  });
+
+  final String name;
+  final String? detail;
+  final IconData icon;
+  final bool selected, connected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final tint = selected ? AppColors.primary : muted;
+    return Semantics(
+      selected: selected ? true : null,
+      child: Material(
+        color: selected ? tint.withValues(alpha: .10) : AppColors.surfaceGlass,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: selected
+                ? tint.withValues(alpha: .34)
+                : AppColors.borderGlass,
+          ),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
+              spacing: 10,
+              children: [
+                Icon(icon, color: tint, size: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 3,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      if (detail case final text?)
+                        Text(
+                          text,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: connected ? _syncSuccess : muted,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (selected || onTap != null)
+                  Icon(
+                    selected
+                        ? Icons.check_rounded
+                        : Icons.chevron_right_rounded,
+                    size: 18,
+                    color: tint,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SyncNotice extends StatelessWidget {
+  const _SyncNotice({
+    required this.message,
+    required this.icon,
+    required this.tint,
+  });
+
+  final String message;
+  final IconData icon;
+  final Color tint;
 
   @override
   Widget build(BuildContext context) => DecoratedBox(
     decoration: BoxDecoration(
-      color: const Color(0x18FFFFFF),
-      borderRadius: BorderRadius.circular(24),
+      color: tint.withValues(alpha: .10),
+      borderRadius: BorderRadius.circular(14),
     ),
     child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.all(10),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         spacing: 8,
-        children: const [
-          Icon(Icons.circle, size: 8, color: _syncSuccess),
-          Flexible(child: Text('Прямое соединение · P2P')),
-        ],
-      ),
-    ),
-  );
-}
-
-class _SyncBridge extends StatelessWidget {
-  const _SyncBridge({required this.compact, required this.active});
-  final bool compact, active;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: compact ? 40 : 88,
-    height: compact ? 44 : 68,
-    child: CustomPaint(
-      painter: compact ? null : _SyncLinkPainter(active),
-      child: Center(child: _SyncEmblem(size: compact ? 34 : 48)),
-    ),
-  );
-}
-
-class _SyncLinkPainter extends CustomPainter {
-  const _SyncLinkPainter(this.active);
-  final bool active;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final middle = size.height / 2;
-    final path = Path()
-      ..moveTo(0, middle)
-      ..cubicTo(15, middle - 14, 15, middle + 14, size.width / 2, middle)
-      ..cubicTo(
-        size.width - 15,
-        middle - 14,
-        size.width - 15,
-        middle + 14,
-        size.width,
-        middle,
-      );
-    final paint = Paint()
-      ..color = _syncWarm.withValues(alpha: active ? .85 : .45)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5;
-    canvas.drawPath(path, paint);
-    canvas.drawPath(
-      path,
-      paint
-        ..strokeWidth = 5
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
-    );
-  }
-
-  @override
-  bool shouldRepaint(_SyncLinkPainter oldDelegate) =>
-      oldDelegate.active != active;
-}
-
-class _SyncDeviceCard extends StatelessWidget {
-  const _SyncDeviceCard({
-    required this.name,
-    required this.subtitle,
-    required this.icon,
-    required this.compact,
-    this.active = false,
-  });
-  final String name, subtitle;
-  final IconData icon;
-  final bool compact, active;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Container(
-      padding: EdgeInsets.all(compact ? 9 : 14),
-      decoration: _syncCardDecoration,
-      child: Row(
-        spacing: 10,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (!compact) Icon(icon, size: 30, color: colors.onSurfaceVariant),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              spacing: 3,
-              children: [
-                if (compact)
-                  Icon(icon, size: 18, color: colors.onSurfaceVariant),
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                Text(
-                  subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: active ? _syncSuccess : colors.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          Icon(icon, size: 18, color: tint),
+          Expanded(child: Text(message)),
         ],
       ),
-    );
-  }
+    ),
+  );
 }

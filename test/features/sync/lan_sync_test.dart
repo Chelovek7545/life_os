@@ -86,8 +86,11 @@ class _GateSyncData implements LocalSyncData {
   @override
   Future<Map<String, List<SyncRevision>>> conflicts() => inner.conflicts();
   @override
-  Future<void> resolve(SyncRevision chosen, Set<String> expected) =>
-      inner.resolve(chosen, expected);
+  Future<void> resolve(
+    SyncRevision chosen,
+    Set<String> expected, {
+    String? mergedPayload,
+  }) => inner.resolve(chosen, expected, mergedPayload: mergedPayload);
 }
 
 class _GateStore implements SyncStore {
@@ -166,6 +169,114 @@ void main() {
       client.close(force: true);
     }
   }
+
+  test(
+    'radar discovers a visible peer and pairing needs both confirmations',
+    () async {
+      await a.stop();
+      await b.stop();
+      final reservation = await RawDatagramSocket.bind('127.0.0.1', 0);
+      final port = reservation.port;
+      reservation.close();
+      LanSyncOptions nearbyOptions(
+        SyncTlsMaterial cert,
+        String host,
+        String target,
+      ) => LanSyncOptions(
+        port: 0,
+        bindAddress: host,
+        discoveryPort: port,
+        discoveryTargets: [target],
+        timeout: const Duration(seconds: 4),
+        pairingTimeout: const Duration(seconds: 8),
+        identityFactory: (id) async =>
+            SyncTlsMaterial(id, cert.certificatePem, cert.privateKeyPem),
+      );
+      a = LanSyncService(
+        data: aData,
+        secrets: aSecrets,
+        deviceName: 'PC',
+        options: nearbyOptions(certA, '127.0.0.1', '127.0.0.2'),
+      );
+      b = LanSyncService(
+        data: bData,
+        secrets: bSecrets,
+        deviceName: 'Tablet',
+        options: nearbyOptions(certB, '127.0.0.2', '127.0.0.1'),
+      );
+      await a.start();
+      await b.start();
+      await a.createSpace();
+      await a.listen('127.0.0.1');
+      await a.setDiscoveryVisible(true);
+      final discovery = b.states.firstWhere((s) => s.nearby.isNotEmpty);
+      await b.setDiscoveryVisible(true);
+      final discovered = (await discovery.timeout(
+        const Duration(seconds: 6),
+      )).nearby.single;
+      expect(discovered.name, 'PC');
+      expect(discovered.endpoint, a.state.endpoint);
+
+      await a.setDiscoveryVisible(false);
+      await expectLater(
+        b.joinNearby(discovered.id, '127.0.0.2'),
+        throwsA(isA<LocalSyncException>()),
+      );
+      expect(a.state.awaitingApproval, isNull);
+      await a.setDiscoveryVisible(true);
+      expect(a.state.invitation, isNull);
+
+      final declinedRequest = a.states.firstWhere(
+        (s) => s.awaitingApproval != null,
+      );
+      final declined = expectLater(
+        b.joinNearby(discovered.id, '127.0.0.2'),
+        throwsA(isA<LocalSyncException>()),
+      );
+      final first = await declinedRequest.timeout(const Duration(seconds: 6));
+      final readyToDecline = b.states.firstWhere(
+        (s) => s.pairReview?.canConfirm == true,
+      );
+      await a.approve(first.awaitingApproval!.id);
+      await readyToDecline.timeout(const Duration(seconds: 6));
+      await b.confirmNearby(false);
+      await declined.timeout(const Duration(seconds: 6));
+      expect(a.state.confirmingDevice, isNull);
+      expect(a.state.peers, isEmpty);
+      expect(await bData.existingIdentity(), isNull);
+
+      final pending = a.states.firstWhere((s) => s.awaitingApproval != null);
+      final joining = b.joinNearby(discovered.id, '127.0.0.2');
+      final firstReview = await pending.timeout(const Duration(seconds: 6));
+      expect(firstReview.awaitingApproval!.name, 'Tablet');
+      expect(
+        firstReview.pairingCode,
+        matches(r'^[A-F0-9]{4}( [A-F0-9]{4}){3}$'),
+      );
+      expect(firstReview.pairingCode, b.state.pairReview?.code);
+      expect(a.state.peers, isEmpty);
+      expect(b.state.peers, isEmpty);
+
+      final ready = b.states.firstWhere(
+        (s) => s.pairReview?.canConfirm == true,
+      );
+      await a.approve(firstReview.awaitingApproval!.id);
+      await ready.timeout(const Duration(seconds: 6));
+      expect(a.state.pairingCode, b.state.pairReview?.code);
+      expect(await bData.existingIdentity(), isNull);
+      expect(a.state.peers, isEmpty);
+      await b.confirmNearby(true);
+      await joining.timeout(const Duration(seconds: 6));
+      expect(a.state.peers.single.name, 'Tablet');
+      expect(b.state.peers.single.name, 'PC');
+      expect(b.state.nearby.single.id, discovered.id);
+      expect(a.state.pairingCode, isNull);
+      expect(b.state.pairReview, isNull);
+      await b.setDiscoveryVisible(false);
+      expect(b.state.nearby, isEmpty);
+      await b.synchronize(a.state.deviceId!);
+    },
+  );
 
   test(
     'both devices publish the names exchanged during completed pairing',
