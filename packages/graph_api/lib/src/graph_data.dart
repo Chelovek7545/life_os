@@ -5,6 +5,8 @@ class GraphScope {
 }
 
 class GraphNodeData {
+  static const removeFromBoardAttribute = 'removeFromBoard';
+
   GraphNodeData({
     required this.id,
     required this.kind,
@@ -44,3 +46,9 @@ class GraphNodeData {
     attributes: attributes,
   );
 }
+
+Iterable<String> graphPredecessorIds(Map<String, Object?> attributes) =>
+    switch (attributes['predecessorTaskIds']) {
+      final List<Object?> ids => ids.whereType<String>(),
+      _ => [if (attributes['predecessorTaskId'] case final String id) id],
+    };

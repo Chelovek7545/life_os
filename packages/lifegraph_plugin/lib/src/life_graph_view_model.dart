@@ -112,6 +112,7 @@ class LifeGraphViewModel {
         ],
         notes: _canvasNotes(),
         filePath: filePath,
+        removedTaskIds: _removedTaskIds,
       );
 
   List<CanvasNote> _canvasNotes() => [
@@ -187,7 +188,15 @@ class LifeGraphViewModel {
 
   void _readBoardLayout(CanvasBoardDocument document) {
     double minX = 0, minY = 0, maxX = worldSize, maxY = worldSize;
-    final geometry = document.entityGeometry;
+    final removed = document.removedTaskIds;
+    final removalChanged =
+        removed.length != _removedTaskIds.length ||
+        !_removedTaskIds.containsAll(removed);
+    _removedTaskIds
+      ..clear()
+      ..addAll(removed);
+    final geometry = document.entityGeometry
+      ..removeWhere((id, _) => removed.contains(id));
     for (final (x: x, y: y, width: width, height: height) in [
       ...geometry.values,
       for (final node in document.nodes)
@@ -216,17 +225,20 @@ class LifeGraphViewModel {
       _positions[entry.key] = Offset(value.x, value.y) - _boardOrigin;
       _boardSizes[entry.key] = Size(value.width, value.height);
     }
-    final standaloneIds = document.standaloneEntityIds;
-    if (standaloneIds.any(
-      (id) => !_standalonePositions.value.containsKey(id),
-    )) {
+    final standalone = _standalonePositions.value;
+    final standaloneIds = document.standaloneEntityIds.difference(removed);
+    if (removalChanged ||
+        standalone.keys.any(removed.contains) ||
+        standaloneIds.any((id) => !standalone.containsKey(id))) {
       _standalonePositions.add({
-        ..._standalonePositions.value,
+        for (final entry in standalone.entries)
+          if (!removed.contains(entry.key)) entry.key: entry.value,
         for (final id in standaloneIds)
           if (_positions[id] case final position?)
             id: GraphPoint(position.dx, position.dy),
       });
     }
+    _positions.removeWhere((id, _) => removed.contains(id));
   }
 
   Future<void> reloadCanvasBoard() => _enqueue(() async {
@@ -288,7 +300,10 @@ class LifeGraphViewModel {
     final nodes = await graphBuilder
         .watchGraph(
           sphereId,
-          standaloneIds: Stream.value(_standalonePositions.value.keys.toSet()),
+          standaloneIds: Stream.value({
+            ..._standalonePositions.value.keys,
+            ..._removedTaskIds,
+          }),
         )
         .first;
     if (nodes.isEmpty) return;
@@ -471,6 +486,7 @@ class LifeGraphViewModel {
   List<GraphNode> _domainNodes = const [];
 
   final Map<String, Offset> _positions = {};
+  final Set<String> _removedTaskIds = {};
   final _standalonePositions = BehaviorSubject<Map<String, GraphPoint>>.seeded(
     const {},
   );
@@ -544,9 +560,16 @@ class LifeGraphViewModel {
 
   Future<void> _loadPositions(String sphereId) async {
     final loaded = await positionsRepository.loadPositions(sphereId);
-    _standalonePositions.add(
-      await positionsRepository.loadStandalonePositions(sphereId),
+    _removedTaskIds
+      ..clear()
+      ..addAll(await positionsRepository.loadRemovedTaskIds(sphereId));
+    final standalone = await positionsRepository.loadStandalonePositions(
+      sphereId,
     );
+    _standalonePositions.add({
+      for (final entry in standalone.entries)
+        if (!_removedTaskIds.contains(entry.key)) entry.key: entry.value,
+    });
     _positions.clear();
     _restoreStandalonePositions();
     if (loaded != null) {
@@ -554,6 +577,7 @@ class LifeGraphViewModel {
         loaded.map((id, point) => MapEntry(id, Offset(point.x, point.y))),
       );
     }
+    _positions.removeWhere((id, _) => _removedTaskIds.contains(id));
   }
 
   void _restoreStandalonePositions() {
@@ -637,16 +661,21 @@ class LifeGraphViewModel {
     final byId = {for (final node in _domainNodes) node.id: node};
     final options = <GraphDisconnection>[];
     for (final target in _domainNodes) {
-      if (!commands.canDetach(target.kind)) continue;
+      if (_removedTaskIds.contains(target.id) ||
+          !commands.canDetach(target.kind)) {
+        continue;
+      }
       for (final (sourceId, type) in [
         (target.parentId, GraphLinkType.hierarchy),
-        (
-          target.attributes['predecessorTaskId'] as String?,
-          GraphLinkType.sequence,
-        ),
+        for (final predecessor in graphPredecessorIds(target.attributes))
+          (predecessor, GraphLinkType.sequence),
       ]) {
         final source = byId[sourceId];
-        if (source == null || (source.id != id && target.id != id)) continue;
+        if (source == null ||
+            _removedTaskIds.contains(source.id) ||
+            (source.id != id && target.id != id)) {
+          continue;
+        }
         final link = GraphDetachRequest(
           scope: scope,
           source: source.toData(),
@@ -669,10 +698,12 @@ class LifeGraphViewModel {
     bool Function() isAvailable,
   ) async {
     final target = nodeById(link.target.id);
-    final parentId = link.linkType == GraphLinkType.hierarchy
-        ? target?.parentId
-        : target?.attributes['predecessorTaskId'];
-    if (target?.kind != link.target.kind || parentId != link.source.id) {
+    final stillLinked =
+        target != null &&
+        (link.linkType == GraphLinkType.hierarchy
+            ? target.parentId == link.source.id
+            : graphPredecessorIds(target.attributes).contains(link.source.id));
+    if (target?.kind != link.target.kind || !stillLinked) {
       throw StateError('Связь уже изменилась.');
     }
     if (link.linkType == GraphLinkType.sequence) {
@@ -802,7 +833,8 @@ class LifeGraphViewModel {
       isAvailable: () =>
           !_disposed &&
           _scopeGeneration == generation &&
-          _currentSphereId == scope.rootId,
+          _currentSphereId == scope.rootId &&
+          !_removedTaskIds.contains(id),
       createChild: (draft, active) =>
           createChild(id, draft, isAvailable: active),
       updateNode: (updated, active) =>
@@ -871,7 +903,8 @@ class LifeGraphViewModel {
       () async {
         final nodes = [
           for (final n in _domainNodes)
-            if (selectedNodes.contains(n.id)) n,
+            if (selectedNodes.contains(n.id) && !_removedTaskIds.contains(n.id))
+              n,
         ];
         if (nodes.length != selectedNodes.length ||
             nodes.any((n) => !commands.canDelete(n.kind)) ||
@@ -968,10 +1001,83 @@ class LifeGraphViewModel {
 
   /// Доменная нода по id — для кастомного nodeBuilder экрана.
   GraphNode? nodeById(String id) {
+    if (_removedTaskIds.contains(id)) return null;
     for (final n in _domainNodes) {
       if (n.id == id) return n;
     }
     return null;
+  }
+
+  List<GraphNode> get tasksRemovedFromBoard => [
+    for (final node in _domainNodes)
+      if (_removedTaskIds.contains(node.id)) node,
+  ];
+
+  bool canRemoveTaskFromBoard(String id) =>
+      nodeById(id)?.attributes[GraphNodeData.removeFromBoardAttribute] == true;
+
+  Iterable<String> sequencePredecessorsFor(String id) {
+    final node = _domainNodes.where((node) => node.id == id).firstOrNull;
+    return node == null ? const [] : graphPredecessorIds(node.attributes);
+  }
+
+  Future<void> Function() removeTaskFromBoard(String id) {
+    final generation = _scopeGeneration;
+    return () => _enqueue(() async {
+      if (!canRemoveTaskFromBoard(id)) return;
+      final scopeId = _scope().rootId;
+      final ids = {..._removedTaskIds, id};
+      if (_board == null) {
+        await positionsRepository.saveRemovedTaskIds(scopeId, ids);
+      }
+      for (final node in graph) {
+        if (node.id != id) _positions.putIfAbsent(node.id, () => node.position);
+      }
+      _removedTaskIds.add(id);
+      _positions.remove(id);
+      _boardSizes.remove(id);
+      _saveStandalonePositions(
+        scopeId,
+        Map.of(_standalonePositions.value)..remove(id),
+      );
+      _graphSubject.add(_toViewNodes(_domainNodes));
+      await _scheduleSavePositions();
+    }, isAvailable: () => generation == _scopeGeneration);
+  }
+
+  Future<void> Function(String) placeRemovedTaskAt(Offset point) {
+    final generation = _scopeGeneration;
+    return (id) => _enqueue(() async {
+      if (!_removedTaskIds.contains(id)) return;
+      final task = tasksRemovedFromBoard
+          .where((node) => node.id == id)
+          .firstOrNull;
+      if (task == null) throw StateError('Задача больше недоступна.');
+      final scopeId = _scope().rootId;
+      final position = _clampPosition(
+        point,
+        nodePresentations.sizeFor(task.kind),
+      );
+      final standalone = {
+        ..._standalonePositions.value,
+        id: GraphPoint(position.dx, position.dy),
+      };
+      final ids = Set<String>.of(_removedTaskIds)..remove(id);
+      if (_board == null) {
+        await _standaloneWriter.flush();
+        await positionsRepository.saveStandalonePositions(scopeId, standalone);
+        await positionsRepository.saveRemovedTaskIds(scopeId, ids);
+      }
+      _removedTaskIds.remove(id);
+      _positions[id] = position;
+      if (_board == null) {
+        _standalonePositions.add(standalone);
+      } else {
+        _saveStandalonePositions(scopeId, standalone);
+      }
+      _graphSubject.add(_toViewNodes(_domainNodes));
+      await _scheduleSavePositions();
+    }, isAvailable: () => generation == _scopeGeneration);
   }
 
   void _onPresentationsChanged() {
@@ -1011,14 +1117,17 @@ class LifeGraphViewModel {
     final out = <gv.GraphNode>[];
     for (var i = 0; i < nodes.length; i++) {
       final n = nodes[i];
+      if (_removedTaskIds.contains(n.id)) continue;
       out.add(
         gv.GraphNode(
           id: n.id,
           label: n.title,
           index: i,
           depth: depth[n.id] ?? 0,
-          parentId: n.parentId,
-          predecessorId: n.attributes['predecessorTaskId'] as String?,
+          parentId: _removedTaskIds.contains(n.parentId) ? null : n.parentId,
+          predecessorIds: graphPredecessorIds(
+            n.attributes,
+          ).where((id) => !_removedTaskIds.contains(id)),
           size: _boardSizes[n.id] ?? nodePresentations.sizeFor(n.kind),
           position: _clampPosition(
             positions[n.id] ?? Offset.zero,
@@ -1515,7 +1624,7 @@ class LifeGraphViewModel {
         .watchGraph(
           sphereId,
           standaloneIds: _standalonePositions.map(
-            (positions) => positions.keys.toSet(),
+            (positions) => {...positions.keys, ..._removedTaskIds},
           ),
         )
         .listen((nodes) {

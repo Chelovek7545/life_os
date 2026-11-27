@@ -22,6 +22,7 @@ Map<String, Object?> createSphereCanvas({
   required List<CanvasEntity> entities,
   required List<CanvasNote> notes,
   required String Function(String) filePath,
+  Set<String> removedTaskIds = const {},
 }) {
   final ids = <String>{};
   final nodes = <Map<String, Object?>>[];
@@ -100,8 +101,7 @@ Map<String, Object?> createSphereCanvas({
     'nodes': nodes,
     'edges': [
       for (final entity in entities)
-        if (entity.node.attributes['predecessorTaskId']
-            case final String previous)
+        for (final previous in graphPredecessorIds(entity.node.attributes))
           if (ids.contains('pulse:$previous'))
             {
               'id': 'pulse-sequence:$previous:${entity.node.id}',
@@ -126,6 +126,11 @@ Map<String, Object?> createSphereCanvas({
               'pulse': {'kind': 'hierarchy'},
             },
     ],
-    'pulse': {'version': 1, 'sphereId': sphereId},
+    'pulse': {
+      'version': 1,
+      'sphereId': sphereId,
+      if (removedTaskIds.isNotEmpty)
+        'removedTaskIds': removedTaskIds.toList()..sort(),
+    },
   };
 }

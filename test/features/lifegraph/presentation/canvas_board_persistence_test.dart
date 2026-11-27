@@ -361,7 +361,7 @@ void main() {
   );
 
   testWidgets(
-    'drag connects tasks and the node menu removes individual links',
+    'graph removes task placement and adds the stored task at a new position',
     (tester) async {
       Future<void> until(bool Function() done) async {
         for (var i = 0; i < 100 && !done(); i++) {
@@ -529,8 +529,12 @@ void main() {
         await until(() => vm.nodeById(sub) != null);
         await tester.tap(find.byTooltip('Fit graph'));
         await tester.pumpAndSettle();
-        Future<void> choose(String targetTitle, String option) async {
-          final gesture = await drag(task.id, targetTitle);
+        Future<void> choose(
+          String targetTitle,
+          String option, {
+          String? sourceId,
+        }) async {
+          final gesture = await drag(sourceId ?? task.id, targetTitle);
           await gesture.up();
           await tester.pumpAndSettle();
           expect(find.text('Сделать подзадачей'), findsOneWidget);
@@ -547,12 +551,16 @@ void main() {
         );
         await choose('Child task', 'Сделать подзадачей');
         await until(() => vm.nodeById(sub)?.parentId == task.id);
+        await choose('Next task', 'Сделать следующей задачей', sourceId: sub);
+        await until(() => vm.sequencePredecessorsFor(next).length == 2);
         await finish(vm.flush());
         await tester.runAsync(() async {
           final edges = (await read(vm))['edges'] as List;
-          expect(edges, hasLength(3));
+          expect(edges, hasLength(4));
           final sequence = edges.singleWhere(
-            (e) => e['toNode'] == 'pulse:$next',
+            (e) =>
+                e['toNode'] == 'pulse:$next' &&
+                e['fromNode'] == 'pulse:${task.id}',
           );
           expect(sequence['fromNode'], 'pulse:${task.id}');
           expect(sequence['pulse'], {'kind': 'sequence'});
@@ -566,13 +574,17 @@ void main() {
         final subPosition = vm.graph
             .singleWhere((node) => node.id == sub)
             .position;
-        final menu = await tester.startGesture(
-          tester.getCenter(find.text('Child task')),
-          kind: PointerDeviceKind.mouse,
-          buttons: kSecondaryMouseButton,
-        );
-        await menu.up();
-        await tester.pumpAndSettle();
+        Future<void> openChildMenu() async {
+          final menu = await tester.startGesture(
+            tester.getCenter(find.text('Child task')),
+            kind: PointerDeviceKind.mouse,
+            buttons: kSecondaryMouseButton,
+          );
+          await menu.up();
+          await tester.pumpAndSettle();
+        }
+
+        await openChildMenu();
         await tester.tap(find.text('Отсоединить…'));
         await tester.pumpAndSettle();
         expect(find.text('Какую связь убрать?'), findsOneWidget);
@@ -584,7 +596,7 @@ void main() {
           vm.graph.singleWhere((node) => node.id == sub).position,
           subPosition,
         );
-        expect(vm.nodeById(next)!.attributes['predecessorTaskId'], task.id);
+        expect(vm.sequencePredecessorsFor(next), [task.id, sub]);
 
         await tester.pumpAndSettle();
         await tester.tap(find.text(task.label));
@@ -593,12 +605,28 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Последовательность'), findsOneWidget);
         await tester.tap(find.text('${task.label} → Next task'));
-        await until(
-          () => vm.nodeById(next)!.attributes['predecessorTaskId'] == null,
-        );
+        await until(() => vm.sequencePredecessorsFor(next).length == 1);
+        expect(vm.sequencePredecessorsFor(next), [sub]);
+        await tester.pumpAndSettle();
+        await openChildMenu();
+        expect(find.text('Убрать с графа'), findsNothing);
+        await tester.tap(find.text('Удалить'));
+        await tester.pumpAndSettle();
+        expect(find.text('Удалить задачу'), findsOneWidget);
+        await tester.tap(find.text('Убрать с графа'));
+        await until(() => vm.graph.every((node) => node.id != sub));
         await finish(vm.flush());
         await tester.runAsync(() async {
-          final edge = ((await read(vm))['edges'] as List).single as Map;
+          final document = await read(vm);
+          final edge = (document['edges'] as List).single as Map;
+          expect(document['pulse']['removedTaskIds'], [sub]);
+          expect(document['pulse']['hiddenTasks'], isNull);
+          expect(
+            (document['nodes'] as List).any(
+              (node) => node['id'] == 'pulse:$sub',
+            ),
+            isFalse,
+          );
           expect(edge['fromNode'], 'pulse:${project.id}');
           expect(edge['toNode'], 'pulse:${task.id}');
           expect(
@@ -606,8 +634,8 @@ void main() {
             isNull,
           );
           expect(
-            (await app.tasksRepository.getById(next))!.predecessorTaskId,
-            isNull,
+            (await app.tasksRepository.getById(next))!.predecessorTaskIds,
+            [sub],
           );
         });
 
@@ -616,24 +644,74 @@ void main() {
         final reopened = await finish(
           open(positions: GraphPositionsRepository(prefix: 'reopened_graph')),
         );
+        expect(reopened.tasksRemovedFromBoard.map((task) => task.id), [sub]);
+        expect(reopened.nodeById(sub), isNull);
+        expect(
+          reopened.graph.singleWhere((node) => node.id == next).predecessorIds,
+          isEmpty,
+        );
+        await tester.pumpWidget(
+          MaterialApp(home: LifeGraphScreen(viewModel: reopened)),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Скрытые задачи'), findsNothing);
+        expect(find.byTooltip('Добавить задачу на доску'), findsNothing);
+        final viewer = find.byType(InteractiveViewer);
+        final placedAt = tester
+            .widget<InteractiveViewer>(viewer)
+            .transformationController!
+            .toScene(const Offset(690, 525) - tester.getTopLeft(viewer));
+        final contextMenu = await tester.startGesture(
+          const Offset(690, 525),
+          kind: PointerDeviceKind.mouse,
+          buttons: kSecondaryMouseButton,
+        );
+        await contextMenu.up();
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Добавить существующую задачу'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Child task'));
+        await until(() => reopened.nodeById(sub) != null);
+        await finish(reopened.flush());
+        await tester.runAsync(() async {
+          final document = await read(reopened);
+          expect(document['pulse']['removedTaskIds'], isNull);
+          expect((document['edges'] as List), hasLength(2));
+        });
         expect(
           reopened.graph.map((node) => node.id),
           unorderedEquals([sphere.id, task.id, project.id, next, sub]),
         );
         expect(reopened.nodeById(next)!.parentId, isNull);
-        expect(
-          reopened.nodeById(next)!.attributes['predecessorTaskId'],
-          isNull,
-        );
+        expect(reopened.sequencePredecessorsFor(next), [sub]);
         expect(reopened.nodeById(sub)!.parentId, isNull);
         expect(reopened.nodeById(sub)!.attributes['predecessorTaskId'], isNull);
         expect(reopened.nodeById(task.id)!.parentId, project.id);
+        expect(
+          (reopened.graph.singleWhere((node) => node.id == sub).position -
+                  placedAt)
+              .distance,
+          lessThan(1),
+        );
         expect(
           (reopened.graph.singleWhere((node) => node.id == task.id).position -
                   task.position)
               .distance,
           lessThan(1),
         );
+        await tester.tap(find.byTooltip('Fit graph'));
+        await tester.pumpAndSettle();
+        await openChildMenu();
+        await tester.tap(find.text('Удалить'));
+        await tester.pumpAndSettle();
+        expect(find.text('Убрать с графа'), findsOneWidget);
+        await tester.tap(find.text('Удалить задачу'));
+        await until(() => reopened.nodeById(sub) == null);
+        await until(
+          () => find.text('Что сделать с задачей?').evaluate().isEmpty,
+        );
+        expect(await finish(app.tasksRepository.getById(sub)), isNull);
+        expect(await finish(app.tasksRepository.getById(next)), isNotNull);
       } finally {
         await tester.pumpWidget(const SizedBox());
         for (final model in models) {
@@ -799,6 +877,37 @@ void main() {
     await tester.pumpAndSettle();
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
+
+    final noteId = vm.notes.single.id;
+    final boardBeforeRemoval = (await tester.runAsync(() => read(vm)))!;
+    final fileCard = (boardBeforeRemoval['nodes'] as List).singleWhere(
+      (node) => node['pulse']?['noteId'] == noteId,
+    );
+    expect(fileCard['type'], 'file');
+    final removeMouse = await tester.startGesture(
+      tester.getTopLeft(find.byType(graph.DefaultNoteCard)) +
+          const Offset(40, 36),
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await removeMouse.up();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Удалить с доски'));
+    await until(
+      () => vm.notes.isEmpty && vm.saveStatus.value == GraphSaveStatus.saved,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(graph.DefaultNoteCard), findsNothing);
+    final savedBoard = (await tester.runAsync(() => read(vm)))!;
+    expect(
+      (savedBoard['nodes'] as List).map((node) => node['id']),
+      isNot(contains(fileCard['id'])),
+    );
+    expect(
+      await tester.runAsync(() => File(originalSource).readAsString()),
+      'UI note edited before rename',
+    );
+
     await tester.tap(find.byTooltip('Add note'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Создать .md'));
@@ -817,7 +926,7 @@ void main() {
     await tester.tap(create);
     await until(
       () =>
-          vm.notes.length == 2 && vm.saveStatus.value == GraphSaveStatus.saved,
+          vm.notes.length == 1 && vm.saveStatus.value == GraphSaveStatus.saved,
     );
     await tester.pumpAndSettle();
     expect(
@@ -851,7 +960,7 @@ void main() {
     );
     await until(
       () =>
-          vm.notes.length == 3 && vm.saveStatus.value == GraphSaveStatus.saved,
+          vm.notes.length == 2 && vm.saveStatus.value == GraphSaveStatus.saved,
     );
     expect(vm.notes.last.source!.path, originalSource);
     expect(vm.notes.last.text, 'UI note edited before rename');

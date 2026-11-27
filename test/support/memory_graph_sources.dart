@@ -87,6 +87,7 @@ class MemoryGoals implements GoalsQueries {
 class MemoryPositions implements GraphPositionsStore {
   final values = <String, Map<String, GraphPoint>>{};
   final standalone = <String, Map<String, GraphPoint>>{};
+  final removedTasks = <String, Set<String>>{};
   String? last;
   Completer<void>? loadGate;
   Completer<void>? loadEntered;
@@ -115,9 +116,16 @@ class MemoryPositions implements GraphPositionsStore {
     Map<String, GraphPoint> positions,
   ) async => standalone[id] = Map.unmodifiable(positions);
   @override
+  Future<Set<String>> loadRemovedTaskIds(String id) async =>
+      removedTasks[id] ?? const {};
+  @override
+  Future<void> saveRemovedTaskIds(String id, Set<String> ids) async =>
+      removedTasks[id] = Set.unmodifiable(ids);
+  @override
   Future<void> deletePositions(String id) async {
     values.remove(id);
     standalone.remove(id);
+    removedTasks.remove(id);
   }
 
   @override

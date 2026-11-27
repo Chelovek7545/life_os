@@ -1,6 +1,11 @@
 import 'package:life_os/features/tasks/presentation/task_status_visuals.dart';
 import 'package:tasks_api/tasks_api.dart'
-    show WorkLogsApi, Task, TaskStatus, TaskSequenceDirection;
+    show
+        WorkLogsApi,
+        Task,
+        TaskStatus,
+        TaskSequenceDirection,
+        wouldCreateSequenceCycle;
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
@@ -251,8 +256,11 @@ class TaskFormContentState extends State<TaskFormContent> {
         final task = tasks[widget.task.id];
         if (task == null) return const SizedBox.shrink();
         final successors = tasks.values
-            .where((candidate) => candidate.predecessorTaskId == task.id)
+            .where(
+              (candidate) => candidate.predecessorTaskIds.contains(task.id),
+            )
             .toList();
+        final predecessors = task.predecessorTaskIds;
 
         Widget step(TaskSequenceDirection direction, String? linkedId) {
           final previous = direction == TaskSequenceDirection.previous;
@@ -307,10 +315,36 @@ class TaskFormContentState extends State<TaskFormContent> {
                   ),
                   Column(
                     children: [
-                      step(
-                        TaskSequenceDirection.previous,
-                        task.predecessorTaskId,
-                      ),
+                      if (predecessors.isEmpty)
+                        step(TaskSequenceDirection.previous, null)
+                      else ...[
+                        for (final (index, predecessor) in predecessors.indexed)
+                          Padding(
+                            padding: EdgeInsets.only(top: index == 0 ? 0 : 6),
+                            child: step(
+                              TaskSequenceDirection.previous,
+                              predecessor,
+                            ),
+                          ),
+                        Padding(
+                          padding: const EdgeInsetsDirectional.only(start: 32),
+                          child: Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: TextButton.icon(
+                              onPressed: _removingSequenceLink
+                                  ? null
+                                  : () => _pickSequenceTask(
+                                      tasks,
+                                      task,
+                                      TaskSequenceDirection.previous,
+                                      null,
+                                    ),
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Добавить предыдущую задачу'),
+                            ),
+                          ),
+                        ),
+                      ],
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 6),
                         child: _sequenceStep(
@@ -491,16 +525,14 @@ class TaskFormContentState extends State<TaskFormContent> {
           if (candidate.id == task.id || candidate.id == oldTaskId) {
             return false;
           }
-          if (!previous && candidate.predecessorTaskId != null) return false;
-          final targetId = previous ? task.id : candidate.id;
-          var predecessorId = previous ? candidate.id : task.id;
-          final visited = {targetId};
-          while (visited.add(predecessorId)) {
-            final next = tasks[predecessorId]?.predecessorTaskId;
-            if (next == null) return true;
-            predecessorId = next;
-          }
-          return false;
+          final source = previous ? candidate : task;
+          final target = previous ? task : candidate;
+          return !target.predecessorTaskIds.contains(source.id) &&
+              !wouldCreateSequenceCycle(
+                source.id,
+                target.id,
+                (id) => tasks[id]?.predecessorTaskIds ?? const [],
+              );
         }).toList()..sort(
           (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
         );

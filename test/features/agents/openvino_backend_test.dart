@@ -120,7 +120,7 @@ for line in sys.stdin:
           ]);
           expect(processes.stdout.toString(), isNot(contains('"$pid"')));
         },
-        skip: !Platform.isWindows,
+        skip: Platform.isWindows ? null : 'Requires the Windows venv launcher',
       );
       test(
         'startup timeout and malformed protocol clean up correctly',

@@ -45,6 +45,61 @@ void main() {
     }
 
     test(
+      'removing a task drops its placement and preserves its data and subtasks',
+      () async {
+        await vm.dispose();
+        vm = LifeGraphViewModel(
+          spheresRepository: app.spheresRepository,
+          positionsRepository: app.graphPositionsRepository,
+          notesRepository: app.graphNotesRepository,
+          graphBuilder: app.graphBuilder,
+          nodePresentations: app.graphPresentations,
+          nodeEditors: app.graphEditors,
+          commands: app.graphCommands,
+          obsidianRepository: null,
+        );
+        addTearDown(vm.dispose);
+        await vm.switchSphere(sphere.id);
+        await vm.graphStream.firstWhere((nodes) => nodes.isNotEmpty);
+        final goal = await create(sphere.id, 'goal');
+        final project = await create(goal, 'project');
+        final task = await create(project, 'task');
+        final child = await create(task, 'subTask');
+        await vm.removeTaskFromBoard(task)();
+        await vm.flush();
+        expect(
+          (await app.graphPositionsRepository.loadPositions(
+            sphere.id,
+          ))?.containsKey(task),
+          isFalse,
+        );
+        expect(vm.nodeById(task), isNull);
+        expect(
+          vm.graph.singleWhere((node) => node.id == child).parentId,
+          isNull,
+        );
+        expect((await app.tasksRepository.getById(child))!.parentTaskId, task);
+        expect((await app.tasksRepository.getById(task))!.projectId, project);
+
+        final other = Sphere.create(name: 'Another board');
+        await app.spheresRepository.addSphere(other);
+        await vm.switchSphere(other.id);
+        await vm.graphStream.firstWhere((nodes) => nodes.isNotEmpty);
+        expect(vm.tasksRemovedFromBoard, isEmpty);
+        await vm.switchSphere(sphere.id);
+        await vm.graphStream.firstWhere((nodes) => nodes.length == 4);
+        expect(vm.tasksRemovedFromBoard.map((task) => task.id), [task]);
+        const newPosition = Offset(450, 620);
+        await vm.placeRemovedTaskAt(newPosition)(task);
+        expect(
+          vm.graph.singleWhere((node) => node.id == task).position,
+          newPosition,
+        );
+        expect(vm.graph.singleWhere((node) => node.id == child).parentId, task);
+      },
+    );
+
+    test(
       'detaching hierarchy links preserves the branch and its board placement',
       () async {
         final goal = await create(sphere.id, 'goal');

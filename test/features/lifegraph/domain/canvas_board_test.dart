@@ -16,6 +16,37 @@ Map<String, Object?> card(String id, {String type = 'text', String? entity}) =>
     };
 
 void main() {
+  test('legacy hidden cards become removals without stored geometry', () {
+    final geometry = {'x': 20, 'y': 30, 'width': 160, 'height': 60};
+    final legacy = CanvasBoardDocument(
+      jsonEncode({
+        'nodes': [],
+        'edges': [],
+        'pulse': {
+          'version': 1,
+          'hiddenTasks': {
+            'task': {...geometry, 'standalone': true},
+          },
+          'nodeGeometry': {'task': geometry},
+        },
+      }),
+    );
+    expect(legacy.removedTaskIds, {'task'});
+
+    final rewritten = legacy.merge({
+      'nodes': [],
+      'edges': [],
+      'pulse': {
+        'version': 1,
+        'removedTaskIds': ['task'],
+      },
+    });
+    final board = CanvasBoardDocument(jsonEncode(rewritten));
+    expect(board.removedTaskIds, {'task'});
+    expect(board.entityGeometry, isEmpty);
+    expect((board.data['pulse'] as Map).containsKey('hiddenTasks'), isFalse);
+  });
+
   CanvasBoardDocument board(List nodes, [List edges = const []]) =>
       CanvasBoardDocument(
         jsonEncode({

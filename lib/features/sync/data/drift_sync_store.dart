@@ -151,6 +151,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
     if (type == 'workLog') return 2;
     if (payload != null) {
       final task = TaskSyncCodec.decode(payload);
+      if (task.additionalPredecessorTaskIds.isNotEmpty) return 10;
       if (task.predecessorTaskId != null) return 4;
       if (task.projectId != null ||
           task.spaceId != null ||
@@ -286,6 +287,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
           projectId: task.projectId,
           parentTaskId: task.parentTaskId,
           predecessorTaskId: task.predecessorTaskId,
+          additionalPredecessorTaskIds: task.additionalPredecessorTaskIds,
           space: task.space,
           spaceId: task.spaceId,
           priority: task.priority,
@@ -869,14 +871,7 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
     if (mergeBase != null) _checkMergeBasis(mergeBase, versions);
     await _capture(() async {
       if (payload == null && SyncPayload.typeOf(id) == 'task') {
-        await (db.update(
-          db.tasks,
-        )..where((t) => t.predecessorTaskId.equals(id))).write(
-          TasksCompanion(
-            predecessorTaskId: const Value(null),
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
+        await db.clearTaskPredecessors({id});
       }
       await _applyPayload(
         SyncPayload.typeOf(id),

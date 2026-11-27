@@ -42,6 +42,7 @@ class Tasks extends Table {
   TextColumn get projectId => text().nullable()();
   TextColumn get parentTaskId => text().nullable()();
   TextColumn get predecessorTaskId => text().nullable()();
+  TextColumn get additionalPredecessorTaskIds => text().nullable()();
   TextColumn get spaceId => text().nullable()();
 
   IntColumn get timerSeconds => integer().withDefault(const Constant(0))();
@@ -178,7 +179,7 @@ class AppDatabase extends _$AppDatabase {
 
   // Версия схемы базы данных
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   Future<void> _createSyncProjectionTriggers() async {
     for (final event in ['INSERT', 'UPDATE', 'DELETE']) {
@@ -206,6 +207,15 @@ class AppDatabase extends _$AppDatabase {
         );
       },
       onUpgrade: (Migrator m, int from, int to) async {
+        if (from < 16) {
+          final columns = await customSelect('PRAGMA table_info(tasks)').get();
+          if (!columns.any(
+            (row) =>
+                row.read<String>('name') == 'additional_predecessor_task_ids',
+          )) {
+            await m.addColumn(tasks, tasks.additionalPredecessorTaskIds);
+          }
+        }
         if (from < 15) await m.createTable(syncNoteCheckpoints);
         if (from < 14) {
           // Миграция могла добавить колонку до обновления user_version.

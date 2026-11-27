@@ -13,6 +13,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 
@@ -124,7 +125,8 @@ class GraphLayout {
 /// One node of the graph. The host owns instances; emit fresh objects
 /// (see [clone]) so the internal diff can see changes.
 class GraphNode {
-  final String? predecessorId;
+  final List<String> predecessorIds;
+  String? get predecessorId => predecessorIds.firstOrNull;
   final String id;
   final String label;
   final int index; // creation order — drives the boot stagger
@@ -139,10 +141,11 @@ class GraphNode {
     required this.index,
     required this.depth,
     required this.parentId,
-    this.predecessorId,
+    String? predecessorId,
+    Iterable<String>? predecessorIds,
     this.size = const Size(176, 68),
     required this.position,
-  });
+  }) : predecessorIds = List.unmodifiable(predecessorIds ?? [?predecessorId]);
 
   GraphNode clone() => GraphNode(
     id: id,
@@ -150,7 +153,7 @@ class GraphNode {
     index: index,
     depth: depth,
     parentId: parentId,
-    predecessorId: predecessorId,
+    predecessorIds: predecessorIds,
     size: size,
     position: position,
   );
@@ -823,7 +826,7 @@ class _GraphViewState extends State<GraphView>
       } else if (existing.label != fresh.label ||
           existing.size != fresh.size ||
           existing.parentId != fresh.parentId ||
-          existing.predecessorId != fresh.predecessorId ||
+          !listEquals(existing.predecessorIds, fresh.predecessorIds) ||
           existing.depth != fresh.depth ||
           existing.index != fresh.index) {
         _nodes[fresh.id] = fresh;
@@ -1540,7 +1543,7 @@ class _GraphViewState extends State<GraphView>
     for (final n in _nodes.values) {
       for (final (id, sequence) in [
         (n.parentId, false),
-        (n.predecessorId, true),
+        for (final predecessor in n.predecessorIds) (predecessor, true),
       ]) {
         final from = _nodes[id];
         if (from == null) continue;

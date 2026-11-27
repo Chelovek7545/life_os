@@ -4,6 +4,11 @@ import 'package:tasks_api/tasks_api.dart';
 // Keeps the v1 shape for standalone tasks; hierarchy links require revision v2.
 class TaskSyncCodec {
   static String encode(Task task) {
+    final predecessors = task.predecessorTaskIds;
+    if (predecessors.toSet().length != predecessors.length ||
+        predecessors.any((id) => id.isEmpty || id.length > 128)) {
+      throw const FormatException('Invalid task predecessors.');
+    }
     if (task.tags.any((tag) => tag.syncId == null || tag.syncId!.isEmpty)) {
       throw const FormatException('Task tag has no portable identity.');
     }
@@ -25,8 +30,8 @@ class TaskSyncCodec {
       'timerSeconds': task.timerSeconds,
       'effortWeight': task.effortWeight,
       if (task.parentTaskId != null) 'parentTaskId': task.parentTaskId,
-      if (task.predecessorTaskId != null)
-        'predecessorTaskId': task.predecessorTaskId,
+      if (predecessors.length == 1) 'predecessorTaskId': predecessors.single,
+      if (predecessors.length > 1) 'predecessorTaskIds': predecessors,
       if (task.projectId != null) 'projectId': task.projectId,
       if (task.spaceId != null) 'spaceId': task.spaceId,
       if (task.tags.isNotEmpty)
@@ -36,6 +41,9 @@ class TaskSyncCodec {
 
   static Task decode(String payload) {
     final map = jsonDecode(payload) as Map<String, dynamic>;
+    final predecessors =
+        (map['predecessorTaskIds'] as List?)?.cast<String>() ??
+        [?(map['predecessorTaskId'] as String?)];
     DateTime? date(String key) =>
         map[key] == null ? null : DateTime.parse(map[key] as String);
     final task = Task(
@@ -58,7 +66,8 @@ class TaskSyncCodec {
       projectId: map['projectId'] as String?,
       spaceId: map['spaceId'] as String?,
       parentTaskId: map['parentTaskId'] as String?,
-      predecessorTaskId: map['predecessorTaskId'] as String?,
+      predecessorTaskId: predecessors.firstOrNull,
+      additionalPredecessorTaskIds: List.unmodifiable(predecessors.skip(1)),
     );
     // Strict canonical format prevents silently ignoring fields from a newer peer.
     if (encode(task) != payload) {

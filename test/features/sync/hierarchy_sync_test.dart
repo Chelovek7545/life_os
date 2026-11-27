@@ -153,10 +153,8 @@ void main() {
         tasks.linkTaskAfter(first.id, last.id),
         throwsStateError,
       );
-      await expectLater(
-        tasks.linkTaskAfter(last.id, first.id),
-        throwsStateError,
-      );
+      await tasks.linkTaskAfter(last.id, first.id);
+      expect((await a.heads(last.id)).single.schemaVersion, 10);
       await expectLater(
         tasks.linkTaskAfter(first.id, first.id),
         throwsStateError,
@@ -169,13 +167,19 @@ void main() {
       expect(child.projectId, data.nested.id);
       expect(child.status, TaskStatus.inProgress);
       expect((await otherTasks.getById(last.id))!.parentTaskId, isNull);
-      expect((await otherTasks.getById(last.id))!.predecessorTaskId, child.id);
+      expect((await otherTasks.getById(last.id))!.predecessorTaskIds, [
+        child.id,
+        first.id,
+      ]);
 
       await tasks.deleteTask(first.id);
       await engine.exchange(a, b);
       final survivor = (await otherTasks.getById(child.id))!;
       expect(survivor.predecessorTaskId, isNull);
       expect(survivor.parentTaskId, data.root.id);
+      expect((await otherTasks.getById(last.id))!.predecessorTaskIds, [
+        child.id,
+      ]);
       final removed = await DriftGraphDeletion(
         aDb,
         journal: a,
@@ -187,14 +191,19 @@ void main() {
     },
   );
   test(
-    'opposite sequence links created offline wait for repair on both devices',
+    'offline sequence cycles through a second predecessor wait for repair',
     () async {
       final first = Task.blank();
       final second = Task.blank();
+      final independent = Task.blank();
       await tasks.addTask(first);
       await tasks.addTask(second);
+      await tasks.addTask(independent);
       await engine.exchange(a, b);
-      await tasks.linkTaskAfter(first.id, second.id);
+      final current = (await tasks.getById(first.id))!;
+      await tasks.updateTask(
+        current.copyWith(predecessorTaskIds: [independent.id, second.id]),
+      );
       await otherTasks.linkTaskAfter(second.id, first.id);
       await engine.exchange(a, b);
       final pending = await a.readPending();

@@ -23,6 +23,7 @@ class Task {
     this.projectId,
     this.parentTaskId,
     this.predecessorTaskId,
+    this.additionalPredecessorTaskIds = const [],
     this.space,
     this.spaceId,
     this.priority = 0,
@@ -44,6 +45,11 @@ class Task {
   final String? projectId;
   final String? parentTaskId;
   final String? predecessorTaskId;
+  final List<String> additionalPredecessorTaskIds;
+  List<String> get predecessorTaskIds => [
+    ?predecessorTaskId,
+    ...additionalPredecessorTaskIds,
+  ];
   final String? space;
   final String? spaceId;
   final int priority;
@@ -92,6 +98,7 @@ class Task {
     Wrapped<String?>? projectId,
     Wrapped<String?>? parentTaskId,
     Wrapped<String?>? predecessorTaskId,
+    List<String>? predecessorTaskIds,
     Wrapped<String?>? space,
     Wrapped<String?>? spaceId,
     int? priority,
@@ -99,6 +106,11 @@ class Task {
     double? effortWeight,
     List<Tag>? tags,
   }) {
+    final predecessors =
+        predecessorTaskIds ??
+        (predecessorTaskId == null
+            ? this.predecessorTaskIds
+            : [?predecessorTaskId.value]);
     return Task(
       id: id ?? this.id,
       title: title ?? this.title,
@@ -111,9 +123,8 @@ class Task {
       endsAt: endsAt != null ? endsAt.value : this.endsAt,
 
       projectId: projectId != null ? projectId.value : this.projectId,
-      predecessorTaskId: predecessorTaskId == null
-          ? this.predecessorTaskId
-          : predecessorTaskId.value,
+      predecessorTaskId: predecessors.firstOrNull,
+      additionalPredecessorTaskIds: List.unmodifiable(predecessors.skip(1)),
       parentTaskId: parentTaskId != null
           ? parentTaskId.value
           : this.parentTaskId,
@@ -133,4 +144,19 @@ TaskStatus taskStatusFromStorage(String value) {
     (TaskStatus status) => status.name == value,
     orElse: () => TaskStatus.open,
   );
+}
+
+bool wouldCreateSequenceCycle(
+  String sourceId,
+  String targetId,
+  Iterable<String> Function(String id) predecessorsOf,
+) {
+  final visited = <String>{};
+  final pending = [sourceId];
+  while (pending.isNotEmpty) {
+    final id = pending.removeLast();
+    if (id == targetId) return true;
+    if (visited.add(id)) pending.addAll(predecessorsOf(id));
+  }
+  return false;
 }

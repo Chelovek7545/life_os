@@ -183,14 +183,20 @@ String buildMergedSyncPayload(
       // Optional keys have a fixed position in the canonical task codec.
       for (final key in [
         'parentTaskId',
-        'predecessorTaskId',
+        'predecessorTaskIds',
         'projectId',
         'spaceId',
         'tagIds',
       ]) {
         if (draft.containsKey(key)) {
           final value = draft.remove(key);
-          draft[key] = value;
+          if (key == 'predecessorTaskIds' &&
+              value is List &&
+              value.length == 1) {
+            draft['predecessorTaskId'] = value.single;
+          } else {
+            draft[key] = value;
+          }
         }
       }
     }
@@ -212,10 +218,16 @@ Map<String, dynamic> _parentOf(Map<String, dynamic> root, List<String> path) {
   return node;
 }
 
-Map<String, dynamic>? _payload(SyncRevision revision) =>
-    revision.payload == null
-    ? null
-    : jsonDecode(revision.payload!) as Map<String, dynamic>;
+Map<String, dynamic>? _payload(SyncRevision revision) {
+  if (revision.payload == null) return null;
+  final payload = jsonDecode(revision.payload!) as Map<String, dynamic>;
+  if (revision.entityType == 'task') {
+    if (payload.remove('predecessorTaskId') case final String id) {
+      payload['predecessorTaskIds'] = [id];
+    }
+  }
+  return payload;
+}
 
 String? _caption(Object? value) {
   if (value is! String || value.trim().isEmpty) return null;
@@ -259,7 +271,7 @@ const _labels = {
   'isArchived': 'В архиве',
   'taskId': 'Задача',
   'parentTaskId': 'Родительская задача',
-  'predecessorTaskId': 'Предшествующая задача',
+  'predecessorTaskIds': 'Предыдущие задачи',
   'projectId': 'Проект',
   'parentProjectId': 'Родительский проект',
   'goalId': 'Цель',
@@ -296,7 +308,6 @@ const _labels = {
 const _relations = {
   'taskId': 'task',
   'parentTaskId': 'task',
-  'predecessorTaskId': 'task',
   'projectId': 'project',
   'parentProjectId': 'project',
   'goalId': 'goal',
@@ -423,6 +434,9 @@ String? _display(
   }
   if (key == 'tagIds' && value is List) {
     return value.map((id) => names['tag/$id'] ?? id).join(', ');
+  }
+  if (key == 'predecessorTaskIds' && value is List) {
+    return value.map((id) => names[id] ?? id).join(', ');
   }
   if (key == 'days' && value is List) {
     return value

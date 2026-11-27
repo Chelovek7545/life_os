@@ -119,6 +119,18 @@ class CanvasBoardDocument {
         if (entityId(node) case final id?) id,
   };
 
+  Set<String> get removedTaskIds {
+    final metadata = data['pulse'];
+    if (metadata is! Map) return const {};
+    if (metadata['removedTaskIds'] case final List ids) {
+      return ids.whereType<String>().toSet();
+    }
+    if (metadata['hiddenTasks'] case final Map legacy) {
+      return legacy.keys.whereType<String>().toSet();
+    }
+    return const {};
+  }
+
   Map<String, CanvasNodeGeometry> get _waitingGeometry {
     final metadata = data['pulse'];
     final waiting = metadata is Map ? metadata['nodeGeometry'] : null;
@@ -313,6 +325,7 @@ class CanvasBoardDocument {
   }
 
   Map<String, Object?> merge(Map<String, Object?> generated) {
+    final generatedMetadata = generated['pulse'] as Map?;
     final generatedNodes = (generated['nodes'] as List)
         .cast<Map<String, Object?>>();
     final oldEntities = <String, Map<String, dynamic>>{};
@@ -378,6 +391,11 @@ class CanvasBoardDocument {
     }
     mergedNodes.addAll(replacements.values);
     final waiting = _waitingGeometry;
+    if (generatedMetadata?['removedTaskIds'] case final List ids) {
+      for (final id in ids) {
+        waiting.remove(id);
+      }
+    }
     for (final id in oldEntities.keys) {
       waiting.remove(id);
     }
@@ -392,14 +410,22 @@ class CanvasBoardDocument {
       ...data,
       ...generated,
       'nodes': mergedNodes,
-      'pulse': {
-        ...?(data['pulse'] as Map?),
-        ...?(generated['pulse'] as Map?),
-        if (waiting.isNotEmpty)
-          'nodeGeometry': waiting.map(
-            (id, value) => MapEntry(id, _encodeGeometry(value)),
+      'pulse':
+          {
+            ...?(data['pulse'] as Map?),
+            ...?(generated['pulse'] as Map?),
+            if (waiting.isNotEmpty)
+              'nodeGeometry': waiting.map(
+                (id, value) => MapEntry(id, _encodeGeometry(value)),
+              ),
+          }..removeWhere(
+            (key, _) =>
+                (key == 'nodeGeometry' && waiting.isEmpty) ||
+                (generatedMetadata != null &&
+                    (key == 'hiddenTasks' ||
+                        (key == 'removedTaskIds' &&
+                            !generatedMetadata.containsKey(key)))),
           ),
-      }..removeWhere((key, _) => key == 'nodeGeometry' && waiting.isEmpty),
       'edges': [
         for (final edge in edges)
           if (!(edge['id'] as String).startsWith('pulse-hierarchy:') &&

@@ -2,8 +2,40 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:life_os/features/sync/presentation/sync_conflict_comparison.dart';
 import 'package:life_os/features/sync/presentation/sync_text_difference.dart';
 import 'package:sync_plugin/sync_logic.dart';
+import 'package:tasks_api/tasks_api.dart';
 
 void main() {
+  test('compares legacy and multiple predecessors as one merge field', () {
+    final task = Task.blank();
+    SyncRevision version(String id, int schema, List<String> predecessors) =>
+        SyncRevision(
+          id: id,
+          deviceId: id,
+          entityId: task.id,
+          schemaVersion: schema,
+          parents: [],
+          payload: TaskSyncCodec.encode(
+            task.copyWith(predecessorTaskIds: predecessors),
+          ),
+        );
+    final versions = [
+      version('local', 4, ['first']),
+      version('remote', 10, ['first', 'second']),
+    ];
+    final field = compareSyncVersions(versions, {
+      'first': 'Подготовка',
+      'second': 'Проверка',
+    }).single.fields.single;
+    expect(field.label, 'Предыдущие задачи');
+    expect(field.values, ['Подготовка', 'Подготовка, Проверка']);
+    for (final (index, revision) in versions.indexed) {
+      expect(
+        buildMergedSyncPayload(versions, {field: index}),
+        revision.payload,
+      );
+    }
+  });
+
   test('compares Canvas geometry and links by identifier', () {
     SyncRevision version(String id, int x, String target) {
       final board = SyncCanvasBoard('sphere', {

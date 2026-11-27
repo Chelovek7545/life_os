@@ -17,6 +17,8 @@ class GraphPositionsRepository implements GraphPositionsStore {
 
   String _key(String sphereId) => '$prefix.$sphereId';
   String _standaloneKey(String sphereId) => '${_key(sphereId)}.standalone';
+  String _hiddenTasksKey(String sphereId) => '${_key(sphereId)}.hiddenTasks';
+  String _removedTasksKey(String sphereId) => '${_key(sphereId)}.removedTasks';
 
   /// Загружает позиции для графа (сферы).
   /// Возвращает null, если позиций ещё нет.
@@ -66,6 +68,25 @@ class GraphPositionsRepository implements GraphPositionsStore {
     Map<String, GraphPoint> positions,
   ) => _save(_standaloneKey(sphereId), positions);
 
+  @override
+  Future<Set<String>> loadRemovedTaskIds(String sphereId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_removedTasksKey(sphereId)) ??
+            prefs.getStringList(_hiddenTasksKey(sphereId)) ??
+            const <String>[])
+        .toSet();
+  }
+
+  @override
+  Future<void> saveRemovedTaskIds(String sphereId, Set<String> ids) async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = await prefs.setStringList(
+      _removedTasksKey(sphereId),
+      ids.toList()..sort(),
+    );
+    if (!saved) throw StateError('Could not save removed graph tasks.');
+  }
+
   Future<void> _save(String key, Map<String, GraphPoint> positions) async {
     final prefs = await SharedPreferences.getInstance();
     final saved = await prefs.setString(
@@ -86,6 +107,8 @@ class GraphPositionsRepository implements GraphPositionsStore {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_key(sphereId));
     await prefs.remove(_standaloneKey(sphereId));
+    await prefs.remove(_hiddenTasksKey(sphereId));
+    await prefs.remove(_removedTasksKey(sphereId));
   }
 
   // ── App-state (не слот графа): какая сфера открыта последней ─────────────

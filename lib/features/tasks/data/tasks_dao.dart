@@ -89,12 +89,10 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
       _mutate(id, () async {
         final task = await getById(id);
         if (task == null) throw StateError('Задача удалена.');
-        if (task.predecessorTaskId == predecessorId) return;
-        if (task.predecessorTaskId != null) {
-          throw StateError('У задачи уже есть предшественник.');
-        }
-        await _checkPredecessor(id, predecessorId);
-        await _writePredecessor(id, predecessorId);
+        final predecessors = task.predecessorIds;
+        if (predecessors.contains(predecessorId)) return;
+        await _checkPredecessors(id, [predecessorId]);
+        await _writePredecessors(id, [...predecessors, predecessorId]);
       });
 
   Future<void> replaceTaskSequenceLink(
@@ -108,61 +106,91 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
     if (oldTaskId == newTaskId) return;
 
     if (direction == TaskSequenceDirection.previous) {
-      if (task.predecessorTaskId != oldTaskId) {
+      final predecessors = task.predecessorIds;
+      if (oldTaskId != null && !predecessors.contains(oldTaskId)) {
         throw StateError('Предыдущая задача уже изменилась.');
       }
-      await _checkPredecessor(id, newTaskId);
-      await _writePredecessor(id, newTaskId);
+      await _checkPredecessors(id, [?newTaskId]);
+      await _writePredecessors(
+        id,
+        {
+          for (final predecessor in predecessors)
+            if (predecessor != oldTaskId) predecessor,
+          ?newTaskId,
+        }.toList(),
+      );
       return;
     }
 
-    if (oldTaskId != null &&
-        (await getById(oldTaskId))?.predecessorTaskId != id) {
+    final old = oldTaskId == null ? null : await getById(oldTaskId);
+    if (oldTaskId != null && !(old?.predecessorIds.contains(id) ?? false)) {
       throw StateError('Следующая задача уже изменилась.');
     }
+    final next = newTaskId == null ? null : await getById(newTaskId);
     if (newTaskId != null) {
-      final next = await getById(newTaskId);
       if (next == null) throw StateError('Задача удалена.');
-      if (next.predecessorTaskId != null) {
-        throw StateError('У выбранной задачи уже есть предшественник.');
-      }
-      await _checkPredecessor(newTaskId, id);
+      await _checkPredecessors(newTaskId, [id]);
     }
-    if (oldTaskId != null) await _writePredecessor(oldTaskId, null);
-    if (newTaskId != null) await _writePredecessor(newTaskId, id);
+    if (old != null) {
+      await _writePredecessors(
+        old.id,
+        old.predecessorIds.where((predecessor) => predecessor != id).toList(),
+      );
+    }
+    if (next != null && !next.predecessorIds.contains(id)) {
+      await _writePredecessors(next.id, [...next.predecessorIds, id]);
+    }
   });
 
-  Future<void> _writePredecessor(String id, String? predecessorId) async {
+  Future<void> _writePredecessors(String id, List<String> predecessors) async {
     await (update(tasks)..where((row) => row.id.equals(id))).write(
-      TasksCompanion(
-        predecessorTaskId: Value(predecessorId),
-        updatedAt: Value(DateTime.now()),
-      ),
+      taskPredecessorUpdate(predecessors, DateTime.now()),
     );
   }
 
-  Future<void> _checkPredecessor(String id, String? predecessorId) async {
-    final visited = {id};
-    var next = predecessorId;
-    while (next != null) {
-      if (!visited.add(next)) {
+  Future<void> _checkPredecessors(String id, List<String> predecessors) async {
+    if (predecessors.toSet().length != predecessors.length) {
+      throw StateError('Связь уже существует.');
+    }
+    final visited = <String>{};
+    final pending = predecessors.toList();
+    while (pending.isNotEmpty) {
+      final next = pending.removeLast();
+      if (next == id) {
         throw StateError('Получится замкнутая последовательность.');
       }
+      if (!visited.add(next)) continue;
       final previous = await getById(next);
       if (previous == null) {
         throw StateError('Предшествующая задача удалена.');
       }
-      next = previous.predecessorTaskId;
+      pending.addAll(previous.predecessorIds);
     }
+  }
+
+  Future<void> _checkCompanionPredecessors(TasksCompanion task) async {
+    final first = task.predecessorTaskId;
+    final additional = task.additionalPredecessorTaskIds;
+    if (!first.present && !additional.present) return;
+    final existing = first.present && additional.present
+        ? null
+        : await getById(task.id.value);
+    await _checkPredecessors(
+      task.id.value,
+      decodeTaskPredecessors(
+        first.present ? first.value : existing?.predecessorTaskId,
+        additional.present
+            ? additional.value
+            : existing?.additionalPredecessorTaskIds,
+      ),
+    );
   }
 
   // =============== CREATE ===============
 
   Future<int> insert(TasksCompanion task) {
     return _mutate(task.id.value, () async {
-      if (task.predecessorTaskId.present) {
-        await _checkPredecessor(task.id.value, task.predecessorTaskId.value);
-      }
+      await _checkCompanionPredecessors(task);
       return into(tasks).insert(task);
     }, createOnly: true);
   }
@@ -173,12 +201,7 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
     List<Tag>? tagSnapshots,
   }) async {
     await _mutate(taskCompanion.id.value, () async {
-      if (taskCompanion.predecessorTaskId.present) {
-        await _checkPredecessor(
-          taskCompanion.id.value,
-          taskCompanion.predecessorTaskId.value,
-        );
-      }
+      await _checkCompanionPredecessors(taskCompanion);
       await into(tasks).insertOnConflictUpdate(taskCompanion);
 
       // Вызываем общий метод, передавая имена тегов
@@ -374,12 +397,7 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
     return _mutate(
       taskId,
       () async {
-        if (taskCompanion.predecessorTaskId.present) {
-          await _checkPredecessor(
-            taskId,
-            taskCompanion.predecessorTaskId.value,
-          );
-        }
+        await _checkCompanionPredecessors(taskCompanion);
         final bool isTaskUpdated = await update(tasks).replace(taskCompanion);
         if (!isTaskUpdated) return false;
 
@@ -398,12 +416,7 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
   /// Удалить задачу
   Future<void> deleteTask(String id) async {
     await _mutate(id, () async {
-      await (update(tasks)..where((t) => t.predecessorTaskId.equals(id))).write(
-        TasksCompanion(
-          predecessorTaskId: const Value(null),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
+      await attachedDatabase.clearTaskPredecessors({id});
       await (delete(tasks)..where((t) => t.id.equals(id))).go();
     });
   }

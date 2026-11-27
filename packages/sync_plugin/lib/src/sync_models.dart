@@ -7,7 +7,7 @@ import 'sync_payload.dart';
 import 'sticker_sync_codec.dart';
 
 class SyncRevision {
-  static const supportedSchema = 9;
+  static const supportedSchema = 10;
   static const maxPayloadBytes = 1024 * 1024;
 
   SyncRevision({
@@ -84,6 +84,9 @@ class SyncRevision {
     }
     if (entityType == 'task' && payload != null) {
       final task = TaskSyncCodec.decode(payload!);
+      if (schemaVersion < 10 && task.additionalPredecessorTaskIds.isNotEmpty) {
+        throw const FormatException('Multiple predecessors require schema 10.');
+      }
       if (schemaVersion < 4 && task.predecessorTaskId != null) {
         throw const FormatException('Task sequences require schema 4.');
       }
@@ -239,7 +242,7 @@ class SyncGraph {
       }
       final invalid = <String>{};
       final hierarchy = <String, String?>{};
-      final sequence = <String, String?>{};
+      final sequence = <String, List<String>>{};
       final alive = {
         for (final key in heads.keys)
           if (!winner(key)!.deleted) key,
@@ -256,8 +259,8 @@ class SyncGraph {
         if (r.entityType == 'task') {
           final task = TaskSyncCodec.decode(r.payload!);
           hierarchy[key] = task.parentTaskId;
-          if (task.predecessorTaskId != null) {
-            sequence[key] = task.predecessorTaskId;
+          if (task.predecessorTaskIds.isNotEmpty) {
+            sequence[key] = task.predecessorTaskIds;
           }
         } else if (r.entityType == 'project') {
           hierarchy[key] = SyncPayload.hierarchyParent(
@@ -281,22 +284,23 @@ class SyncGraph {
           }
         }
       }
-      for (final links in [hierarchy, sequence]) {
-        final checked = <String>{};
-        for (final start in links.keys) {
-          if (checked.contains(start)) continue;
-          final path = <String>{};
-          String? next = start;
-          while (next != null && !checked.contains(next) && path.add(next)) {
-            next = links[next];
-          }
-          if (next != null && path.contains(next)) {
-            for (final key in path.skipWhile((key) => key != next)) {
-              invalid.add(unit(winner(key)!));
-            }
-          }
-          checked.addAll(path);
+      final checked = <String>{};
+      for (final start in hierarchy.keys) {
+        if (checked.contains(start)) continue;
+        final path = <String>{};
+        String? next = start;
+        while (next != null && !checked.contains(next) && path.add(next)) {
+          next = hierarchy[next];
         }
+        if (next != null && path.contains(next)) {
+          for (final key in path.skipWhile((key) => key != next)) {
+            invalid.add(unit(winner(key)!));
+          }
+        }
+        checked.addAll(path);
+      }
+      for (final key in _sequenceCycleNodes(sequence)) {
+        invalid.add(unit(winner(key)!));
       }
       final added = invalid.difference(blocked);
       if (added.isEmpty) break;
@@ -316,6 +320,48 @@ class SyncGraph {
       );
     }
     return versions.firstWhere((r) => r.deleted, orElse: () => versions.first);
+  }
+}
+
+// Find strongly connected components through both directions of the graph.
+// Iterative traversal keeps long chains off the call stack.
+Iterable<String> _sequenceCycleNodes(Map<String, List<String>> links) sync* {
+  final reverse = <String, List<String>>{};
+  for (final entry in links.entries) {
+    for (final parent in entry.value) {
+      reverse.putIfAbsent(parent, () => []).add(entry.key);
+    }
+  }
+  final visited = <String>{};
+  final finished = <String>[];
+  for (final start in links.keys) {
+    if (!visited.add(start)) continue;
+    final stack = [(start, links[start]!.iterator)];
+    while (stack.isNotEmpty) {
+      final (id, edges) = stack.last;
+      if (!edges.moveNext()) {
+        finished.add(id);
+        stack.removeLast();
+      } else if (visited.add(edges.current)) {
+        stack.add((
+          edges.current,
+          (links[edges.current] ?? const <String>[]).iterator,
+        ));
+      }
+    }
+  }
+  visited.clear();
+  for (final start in finished.reversed) {
+    if (!visited.add(start)) continue;
+    final component = <String>[start];
+    for (var index = 0; index < component.length; index++) {
+      for (final id in reverse[component[index]] ?? const <String>[]) {
+        if (visited.add(id)) component.add(id);
+      }
+    }
+    if (component.length > 1 || (links[start]?.contains(start) ?? false)) {
+      yield* component;
+    }
   }
 }
 

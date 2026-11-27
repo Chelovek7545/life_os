@@ -67,6 +67,9 @@ void main() {
       await store.initialize('dataset');
       await store.saveTask(predecessor, expectedHeads: {});
       await store.saveTask(successor, expectedHeads: {});
+      await old.customStatement(
+        'ALTER TABLE tasks DROP COLUMN additional_predecessor_task_ids',
+      );
       await old.customStatement('PRAGMA user_version = 13');
     } finally {
       await old.close();
@@ -83,7 +86,7 @@ void main() {
       final version = await upgraded
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.read<int>('user_version'), 15);
+      expect(version.read<int>('user_version'), 16);
     } finally {
       await upgraded.close();
     }

@@ -1,5 +1,6 @@
 import 'package:graph_ui/graph_ui.dart';
-import 'package:graph_api/graph_api.dart' show GraphLinkType;
+import 'package:graph_api/graph_api.dart'
+    show GraphLinkType, graphPredecessorIds;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -20,6 +21,7 @@ import 'package:notes_api/notes_api.dart';
 import 'package:projects_plugin/projects_logic.dart'
     show ProjectsGraphContributor;
 import 'package:tasks_plugin/tasks_logic.dart' show TasksGraphContributor;
+import 'package:tasks_api/tasks_api.dart' show wouldCreateSequenceCycle;
 import 'widgets/markdown_note_dialog.dart';
 import 'widgets/graph_note_creation_dialog.dart';
 import 'widgets/graph_note_context_menu.dart';
@@ -46,6 +48,8 @@ class LifeGraphScreen extends StatefulWidget {
 }
 
 enum _SelectionMenuAction { disconnect, delete }
+
+enum _BackgroundMenuAction { placeTask }
 
 class _LifeGraphScreenState extends State<LifeGraphScreen> {
   final graph.GraphViewCamera _camera = graph.GraphViewCamera();
@@ -399,9 +403,20 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           final disconnections = state.selected
               ? widget.viewModel.disconnectionsFor(node.id)
               : const <GraphDisconnection>[];
+          final removeFromBoard =
+              widget.viewModel.canRemoveTaskFromBoard(node.id)
+              ? widget.viewModel.removeTaskFromBoard(node.id)
+              : null;
           final dialogs = GraphNodeDialogs(
             registry: widget.viewModel.nodeEditors,
             commands: widget.viewModel.commands,
+          );
+          final canDelete = widget.viewModel.commands.canDelete(node.kind);
+          void showRemoveTaskDialog() => _showDeleteDialog(
+            count: 1,
+            hasNodes: true,
+            delete: canDelete ? actions.deleteNode : null,
+            removeFromGraph: removeFromBoard,
           );
           return GraphNodeView(
             registry: widget.viewModel.nodePresentations,
@@ -429,7 +444,9 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
               addChild: dialogs.canAddChild(node.kind)
                   ? () => dialogs.addChild(context, actions)
                   : null,
-              remove: widget.viewModel.commands.canDelete(node.kind)
+              remove: removeFromBoard != null
+                  ? showRemoveTaskDialog
+                  : canDelete
                   ? () => dialogs.remove(context, actions)
                   : null,
               createChild: actions.createChild,
@@ -480,27 +497,28 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     final task = model.nodeById(target);
     if (task == null ||
         task.parentId == source ||
-        task.attributes['predecessorTaskId'] == source) {
+        graphPredecessorIds(task.attributes).contains(source)) {
       return {};
     }
 
-    bool wouldCycle(GraphLinkType type) {
+    bool wouldCycleInHierarchy() {
       final visited = {target};
       String? id = source;
       while (id != null) {
         if (!visited.add(id)) return true;
         final node = model.nodeById(id);
-        id = type == GraphLinkType.hierarchy
-            ? node?.parentId
-            : node?.attributes['predecessorTaskId'] as String?;
+        id = node?.parentId;
       }
       return false;
     }
 
     return {
-      if (!wouldCycle(GraphLinkType.hierarchy)) GraphLinkType.hierarchy,
-      if (task.attributes['predecessorTaskId'] == null &&
-          !wouldCycle(GraphLinkType.sequence))
+      if (!wouldCycleInHierarchy()) GraphLinkType.hierarchy,
+      if (!wouldCreateSequenceCycle(
+        source,
+        target,
+        model.sequencePredecessorsFor,
+      ))
         GraphLinkType.sequence,
     };
   }
@@ -640,13 +658,15 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       commands: model.commands,
     );
     final editors = dialogs.standaloneEditors;
-    if (editors.isEmpty) return;
+    final canPlace = model.tasksRemovedFromBoard.isNotEmpty;
+    if (editors.isEmpty && !canPlace) return;
     final create = model.standaloneCreationAt(canvasPoint);
+    final place = model.placeRemovedTaskAt(canvasPoint);
     final overlay =
         Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
     final point = overlay.globalToLocal(position);
     final palette = AppGraphThemes.dark;
-    final editor = await showMenu<GraphNodeEditor>(
+    final action = await showMenu<Object>(
       context: context,
       position: RelativeRect.fromSize(
         Rect.fromLTWH(point.dx, point.dy, 0, 0),
@@ -659,6 +679,11 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         side: BorderSide(color: palette.border),
       ),
       items: [
+        if (canPlace)
+          const PopupMenuItem(
+            value: _BackgroundMenuAction.placeTask,
+            child: Text('Добавить существующую задачу'),
+          ),
         for (final editor in editors)
           PopupMenuItem(
             value: editor,
@@ -669,8 +694,12 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           ),
       ],
     );
-    if (editor == null || !mounted || widget.viewModel != model) return;
-    await dialogs.createStandalone(context, editor, create);
+    if (!mounted || widget.viewModel != model) return;
+    if (action == _BackgroundMenuAction.placeTask) {
+      await _showTaskPlacement(place);
+    } else if (action is GraphNodeEditor) {
+      await dialogs.createStandalone(context, action, create);
+    }
   }
 
   Future<void> _showSelectionMenu(
@@ -682,6 +711,12 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       nodeIds: selection.nodeIds,
       noteIds: selection.noteIds,
     );
+    final removeFromBoard =
+        selection.length == 1 &&
+            selection.nodeIds.isNotEmpty &&
+            model.canRemoveTaskFromBoard(selection.nodeIds.single)
+        ? model.removeTaskFromBoard(selection.nodeIds.single)
+        : null;
     final canDelete = selection.nodeIds.every((id) {
       final node = model.nodeById(id);
       return node != null && model.commands.canDelete(node.kind);
@@ -689,7 +724,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     final disconnections = selection.length == 1 && selection.nodeIds.isNotEmpty
         ? model.disconnectionsFor(selection.nodeIds.single)
         : const <GraphDisconnection>[];
-    if (!canDelete && disconnections.isEmpty) return;
+    if (!canDelete && disconnections.isEmpty && removeFromBoard == null) return;
     final palette = AppGraphThemes.dark;
     final overlay =
         Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
@@ -719,7 +754,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
               ],
             ),
           ),
-        if (canDelete)
+        if (canDelete || removeFromBoard != null)
           PopupMenuItem(
             value: _SelectionMenuAction.delete,
             child: Row(
@@ -729,7 +764,9 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                 const SizedBox(width: 10),
                 Flexible(
                   child: Text(
-                    selection.length == 1
+                    removeFromBoard != null
+                        ? 'Удалить'
+                        : selection.length == 1
                         ? 'Удалить объект'
                         : 'Удалить выбранные (${selection.length})',
                     maxLines: 2,
@@ -748,15 +785,65 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       return;
     }
     if (action != _SelectionMenuAction.delete) return;
-    final hasNodes = selection.nodeIds.isNotEmpty;
-    await showDialog<void>(
+    await _showDeleteDialog(
+      count: selection.length,
+      hasNodes: selection.nodeIds.isNotEmpty,
+      delete: canDelete ? delete : null,
+      removeFromGraph: removeFromBoard,
+    );
+  }
+
+  Future<void> _showDeleteDialog({
+    required int count,
+    required bool hasNodes,
+    required Future<void> Function(bool)? delete,
+    required Future<void> Function()? removeFromGraph,
+  }) => showDialog<void>(
+    context: context,
+    builder: (_) => _SelectionDeleteDialog(
+      count: count,
+      hasNodes: hasNodes,
+      onDelete: delete,
+      onRemoveFromGraph: removeFromGraph,
+    ),
+  );
+
+  Future<void> _showTaskPlacement(Future<void> Function(String) place) async {
+    final model = widget.viewModel;
+    final tasks = model.tasksRemovedFromBoard;
+    if (tasks.isEmpty) return;
+    final id = await showDialog<String>(
       context: context,
-      builder: (_) => _SelectionDeleteDialog(
-        count: selection.length,
-        hasNodes: hasNodes,
-        onDelete: delete,
+      builder: (context) => SimpleDialog(
+        title: const Text('Добавить задачу на доску'),
+        children: [
+          for (final node in tasks)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, node.id),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(node.title),
+                trailing: const Icon(Icons.add),
+              ),
+            ),
+        ],
       ),
     );
+    if (id == null || !mounted || widget.viewModel != model) return;
+    await _changeBoardPlacement(() => place(id));
+  }
+
+  Future<void> _changeBoardPlacement(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Не удалось изменить размещение задачи: $error'),
+        ),
+      );
+    }
   }
 
   Future<void> _chooseDisconnection(List<GraphDisconnection> options) async {
@@ -1232,10 +1319,12 @@ class _SelectionDeleteDialog extends StatefulWidget {
     required this.count,
     required this.hasNodes,
     required this.onDelete,
+    required this.onRemoveFromGraph,
   });
   final int count;
   final bool hasNodes;
-  final Future<void> Function(bool keepChildren) onDelete;
+  final Future<void> Function(bool keepChildren)? onDelete;
+  final Future<void> Function()? onRemoveFromGraph;
   @override
   State<_SelectionDeleteDialog> createState() => _SelectionDeleteDialogState();
 }
@@ -1243,18 +1332,19 @@ class _SelectionDeleteDialog extends StatefulWidget {
 class _SelectionDeleteDialogState extends State<_SelectionDeleteDialog> {
   bool _deleting = false;
   String? _error;
-  Future<void> _delete(bool keepChildren) async {
+  Future<void> _run(Future<void> Function() action) async {
     if (_deleting) return;
     setState(() {
       _deleting = true;
       _error = null;
     });
     try {
-      await widget.onDelete(keepChildren);
+      await action();
       if (mounted) Navigator.pop(context);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() => _error = 'Не удалось завершить удаление: $error');
+      }
     } finally {
       if (mounted) setState(() => _deleting = false);
     }
@@ -1264,10 +1354,16 @@ class _SelectionDeleteDialogState extends State<_SelectionDeleteDialog> {
   Widget build(BuildContext context) => PopScope(
     canPop: !_deleting,
     child: AlertDialog(
-      title: Text('Удалить объекты (${widget.count})?'),
+      title: Text(
+        widget.onRemoveFromGraph != null
+            ? 'Что сделать с задачей?'
+            : 'Удалить объекты (${widget.count})?',
+      ),
       content: Text(
         _error ??
-            (widget.hasNodes
+            (widget.onRemoveFromGraph != null
+                ? '«Убрать с графа» удалит карточку с доски и сохранит задачу в приложении.'
+                : widget.hasNodes
                 ? 'Выбранные сущности будут удалены из приложения. Что сделать с дочерними объектами? Стикеры удаляются только с доски, файлы .md сохраняются.'
                 : 'Стикеры будут удалены с доски. Связанные файлы .md сохраняются.'),
       ),
@@ -1276,17 +1372,35 @@ class _SelectionDeleteDialogState extends State<_SelectionDeleteDialog> {
           onPressed: _deleting ? null : () => Navigator.pop(context),
           child: const Text('Отмена'),
         ),
-        if (widget.hasNodes)
+        if (widget.onRemoveFromGraph case final remove?)
           TextButton(
-            onPressed: _deleting ? null : () => _delete(false),
+            onPressed: _deleting ? null : () => _run(remove),
+            child: const Text('Убрать с графа'),
+          ),
+        if (widget.onRemoveFromGraph == null && widget.hasNodes)
+          TextButton(
+            onPressed: _deleting
+                ? null
+                : () => _run(() => widget.onDelete!(false)),
             child: const Text('Удалить всё поддерево'),
           ),
-        FilledButton(
-          onPressed: _deleting ? null : () => _delete(true),
-          child: Text(
-            widget.hasNodes ? 'Сохранить детей (скрыть)' : 'Удалить с доски',
+        if (widget.onDelete case final delete?)
+          FilledButton(
+            onPressed: _deleting ? null : () => _run(() => delete(true)),
+            style: widget.onRemoveFromGraph != null
+                ? FilledButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                    foregroundColor: Theme.of(context).colorScheme.onError,
+                  )
+                : null,
+            child: Text(
+              widget.onRemoveFromGraph != null
+                  ? 'Удалить задачу'
+                  : widget.hasNodes
+                  ? 'Сохранить детей (скрыть)'
+                  : 'Удалить с доски',
+            ),
           ),
-        ),
       ],
     ),
   );

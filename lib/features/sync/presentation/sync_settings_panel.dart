@@ -133,8 +133,10 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
     String? taskId;
     final fields = <String, String>{
       if (revision.entityType == 'task') ...{
-        if (m['predecessorTaskId'] != null)
-          'predecessorTaskId': 'Убрать предшествующую задачу',
+        if (m['predecessorTaskId'] != null || m['predecessorTaskIds'] != null)
+          'predecessorTaskIds': m['predecessorTaskIds'] == null
+              ? 'Убрать предшествующую задачу'
+              : 'Убрать связи с предыдущими задачами',
         if (m['parentTaskId'] != null)
           'parentTaskId': 'Убрать связь с родительской задачей',
         if (m['projectId'] != null) 'projectId': 'Отвязать от проекта',
@@ -160,8 +162,8 @@ class _SyncSettingsPanelState extends State<SyncSettingsPanel> {
         case 'task':
           return TaskSyncCodec.encode(
             TaskSyncCodec.decode(revision.payload!).copyWith(
-              predecessorTaskId: cleared.contains('predecessorTaskId')
-                  ? const Wrapped(null)
+              predecessorTaskIds: cleared.contains('predecessorTaskIds')
+                  ? []
                   : null,
               parentTaskId: cleared.contains('parentTaskId')
                   ? const Wrapped(null)

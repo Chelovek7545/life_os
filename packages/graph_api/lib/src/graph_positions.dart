@@ -17,6 +17,8 @@ abstract interface class GraphPositionsStore {
     String scopeId,
     Map<String, GraphPoint> positions,
   );
+  Future<Set<String>> loadRemovedTaskIds(String scopeId);
+  Future<void> saveRemovedTaskIds(String scopeId, Set<String> ids);
   Future<void> deletePositions(String scopeId);
   Future<String?> loadLastSphereId();
   Future<void> saveLastSphereId(String scopeId);

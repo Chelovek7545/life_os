@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import 'package:life_os/core/database/database.dart';
 import 'package:lifegraph_plugin/lifegraph_logic.dart' show GraphNodeType;
 import 'package:life_os/features/tasks/data/task_mutation_journal.dart';
+import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 
 class DriftGraphDeletion implements GraphDeletion {
   DriftGraphDeletion(this.database, {this.journal});
@@ -97,14 +98,7 @@ class DriftGraphDeletion implements GraphDeletion {
       }
     }
     if (tasks.isNotEmpty) {
-      await (db.update(
-        db.tasks,
-      )..where((row) => row.predecessorTaskId.isIn(tasks))).write(
-        TasksCompanion(
-          predecessorTaskId: const Value(null),
-          updatedAt: Value(DateTime.now()),
-        ),
-      );
+      await db.clearTaskPredecessors(tasks);
       await (db.delete(db.tasks)..where((t) => t.id.isIn(tasks))).go();
     }
     if (projects.isNotEmpty) {

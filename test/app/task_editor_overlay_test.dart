@@ -5,6 +5,7 @@ import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
 import 'package:life_os/features/tasks/presentation/components/task_form_content.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
 import 'package:life_os/core/ui/collapsible_sheet.dart';
+import 'package:life_os/core/ui/telegram_bot_toggle_button.dart';
 import 'package:life_os/features/tasks/presentation/widgets/existing_task_picker_dialog.dart';
 import 'package:tasks_api/tasks_api.dart';
 import '../support/test_app.dart';
@@ -164,13 +165,21 @@ void main() {
         await tester.tap(find.widgetWithText(ListTile, previous.title));
         await pumpStorage(tester);
         expect(textInSequence(previous.title), findsOneWidget);
+        final addPredecessor = textInSequence('Добавить предыдущую задачу');
+        await tester.ensureVisible(addPredecessor);
+        await tester.tap(addPredecessor);
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(ListTile, child.title));
+        await pumpStorage(tester);
+        expect(textInSequence(previous.title), findsOneWidget);
+        expect(textInSequence(child.title), findsOneWidget);
         await tester.tap(find.byKey(const ValueKey('task-editor.save')));
         await pumpStorage(tester);
         expect(surface, findsNothing);
         final saved = (await tester.runAsync(
           () => repository.getById(task.id),
         ))!;
-        expect(saved.predecessorTaskId, previous.id);
+        expect(saved.predecessorTaskIds, [previous.id, child.id]);
 
         app.tasksViewModel.openTaskInEditor(saved);
         await pumpStorage(tester);
@@ -309,11 +318,19 @@ void main() {
         if (!app.ui.screens.any((screen) => screen.id == id)) continue;
         app.navigation.open(id);
         await pumpStorage(tester);
-        expect(
-          find.byType(AppBar),
-          findsNothing,
-          reason: 'No portrait Telegram app bar on $id',
-        );
+        final appBar = find.byType(AppBar);
+        final quickTask = find.byTooltip('Быстрый ввод');
+        expect(find.byType(TelegramBotToggleButton), findsNothing);
+        if (id == 'pulse') {
+          expect(appBar, findsOneWidget);
+          expect(
+            find.descendant(of: appBar, matching: quickTask),
+            findsOneWidget,
+          );
+        } else {
+          expect(appBar, findsNothing, reason: 'Unexpected app bar on $id');
+          expect(quickTask, findsNothing);
+        }
         expect(create, findsNothing);
         expect(find.byType(FloatingActionButton), findsNothing);
       }

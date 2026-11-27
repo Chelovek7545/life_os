@@ -68,7 +68,10 @@ class MemoryTasks implements TasksApi {
   });
   @override
   Future<void> linkTaskAfter(String id, String predecessorId) => _write(id, () {
-    items[id] = items[id]!.copyWith(predecessorTaskId: Wrapped(predecessorId));
+    final task = items[id]!;
+    items[id] = task.copyWith(
+      predecessorTaskIds: {...task.predecessorTaskIds, predecessorId}.toList(),
+    );
   });
   @override
   Future<void> replaceTaskSequenceLink(
@@ -78,16 +81,28 @@ class MemoryTasks implements TasksApi {
     required String? newTaskId,
   }) => _write(id, () {
     if (direction == TaskSequenceDirection.previous) {
-      items[id] = items[id]!.copyWith(predecessorTaskId: Wrapped(newTaskId));
+      final task = items[id]!;
+      items[id] = task.copyWith(
+        predecessorTaskIds: {
+          for (final predecessor in task.predecessorTaskIds)
+            if (predecessor != oldTaskId) predecessor,
+          ?newTaskId,
+        }.toList(),
+      );
     } else {
       if (oldTaskId != null) {
         items[oldTaskId] = items[oldTaskId]!.copyWith(
-          predecessorTaskId: const Wrapped(null),
+          predecessorTaskIds: items[oldTaskId]!.predecessorTaskIds
+              .where((predecessor) => predecessor != id)
+              .toList(),
         );
       }
       if (newTaskId != null) {
         items[newTaskId] = items[newTaskId]!.copyWith(
-          predecessorTaskId: Wrapped(id),
+          predecessorTaskIds: {
+            ...items[newTaskId]!.predecessorTaskIds,
+            id,
+          }.toList(),
         );
       }
     }
