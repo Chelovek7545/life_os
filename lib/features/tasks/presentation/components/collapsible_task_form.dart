@@ -30,6 +30,8 @@ class CollapsibleTaskForm extends StatefulWidget {
     required this.onChanged,
     this.forceExpanded = false,
     this.workLogs,
+    this.watchTasks,
+    this.onSequenceChange,
     this.resetAfterSubmit = true,
   });
 
@@ -39,6 +41,8 @@ class CollapsibleTaskForm extends StatefulWidget {
   final Stream<List<Project>> projects;
   final Task task;
   final WorkLogsApi? workLogs;
+  final Stream<List<Task>> Function()? watchTasks;
+  final OnTaskSequenceChange? onSequenceChange;
   final bool resetAfterSubmit;
   final bool isEditMode;
   final double height;
@@ -79,6 +83,8 @@ class _CollapsibleTaskFormState extends State<CollapsibleTaskForm> {
             ),
       bodyBuilder: (progress, snapIndex) => TaskFormContent(
         workLogs: widget.workLogs,
+        watchTasks: widget.watchTasks,
+        onSequenceChange: widget.onSequenceChange,
         resetAfterSubmit: widget.resetAfterSubmit,
         key: _formKey,
         task: widget.task,

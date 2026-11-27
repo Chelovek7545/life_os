@@ -8,15 +8,20 @@ import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus;
 class ExistingTaskPickerDialog extends StatefulWidget {
   final List<Task> tasks;
   final Future<void> Function(String) onSelect;
+  final Future<void> Function()? onRemove;
   final String title;
   final String emptyText;
+  final String errorText;
 
   const ExistingTaskPickerDialog({
     super.key,
     required this.tasks,
     required this.onSelect,
+    this.onRemove,
     this.title = 'Добавить существующую задачу',
     this.emptyText = 'Нет задач без проекта',
+    this.errorText =
+        'Не удалось привязать задачу. Проверьте связь и повторите попытку.',
   });
 
   @override
@@ -29,21 +34,20 @@ class _ExistingTaskPickerDialogState extends State<ExistingTaskPickerDialog> {
   bool _saving = false;
   String? _error;
 
-  Future<void> _select(String id) async {
+  Future<void> _apply(Future<void> Function() change) async {
     if (_saving) return;
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
-      await widget.onSelect(id);
-      if (mounted) Navigator.pop(context);
+      await change();
+      if (mounted && ModalRoute.of(context)?.isCurrent == true) {
+        Navigator.pop(context);
+      }
     } catch (_) {
       if (mounted) {
-        setState(
-          () => _error =
-              'Не удалось привязать задачу. Проверьте связь и повторите попытку.',
-        );
+        setState(() => _error = widget.errorText);
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -124,7 +128,9 @@ class _ExistingTaskPickerDialogState extends State<ExistingTaskPickerDialog> {
                                   style: const TextStyle(fontSize: 11.5),
                                 ),
                           trailing: _StatusChip(status: task.status),
-                          onTap: _saving ? null : () => _select(task.id),
+                          onTap: _saving
+                              ? null
+                              : () => _apply(() => widget.onSelect(task.id)),
                         );
                       },
                     ),
@@ -133,6 +139,11 @@ class _ExistingTaskPickerDialogState extends State<ExistingTaskPickerDialog> {
         ),
       ),
       actions: [
+        if (widget.onRemove case final remove?)
+          TextButton(
+            onPressed: _saving ? null : () => _apply(remove),
+            child: const Text('Убрать связь'),
+          ),
         TextButton(
           onPressed: _saving ? null : () => Navigator.pop(context),
           child: const Text('Отмена'),

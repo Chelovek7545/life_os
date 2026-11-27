@@ -89,6 +89,53 @@ void main() {
 
   final engine = SyncEngine();
   test(
+    'replacing a successor syncs the detach and attach in one group',
+    () async {
+      final first = Task.blank();
+      final old = Task.blank();
+      final replacement = Task.blank();
+      for (final item in [first, old, replacement]) {
+        await tasks.addTask(item);
+      }
+      await tasks.linkTaskAfter(old.id, first.id);
+      await engine.exchange(a, b);
+      await expectLater(
+        tasks.replaceTaskSequenceLink(
+          first.id,
+          TaskSequenceDirection.previous,
+          oldTaskId: null,
+          newTaskId: old.id,
+        ),
+        throwsStateError,
+      );
+      await tasks.replaceTaskSequenceLink(
+        first.id,
+        TaskSequenceDirection.next,
+        oldTaskId: old.id,
+        newTaskId: replacement.id,
+      );
+      await expectLater(
+        tasks.replaceTaskSequenceLink(
+          first.id,
+          TaskSequenceDirection.next,
+          oldTaskId: old.id,
+          newTaskId: null,
+        ),
+        throwsStateError,
+      );
+      final detached = (await a.heads(old.id)).single;
+      final attached = (await a.heads(replacement.id)).single;
+      expect(detached.groupId, isNotNull);
+      expect(detached.groupId, attached.groupId);
+      await engine.exchange(a, b);
+      expect((await otherTasks.getById(old.id))!.predecessorTaskId, isNull);
+      expect(
+        (await otherTasks.getById(replacement.id))!.predecessorTaskId,
+        first.id,
+      );
+    },
+  );
+  test(
     'task sequences sync independently of hierarchy and survive deletion of a predecessor',
     () async {
       final data = await seed();

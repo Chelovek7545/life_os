@@ -298,6 +298,24 @@ class MockTasksDao extends _i1.Mock implements _i5.TasksDao {
           as _i6.Future<void>);
 
   @override
+  _i6.Future<void> replaceTaskSequenceLink(
+    String? id,
+    _i8.TaskSequenceDirection? direction, {
+    required String? oldTaskId,
+    required String? newTaskId,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #replaceTaskSequenceLink,
+              [id, direction],
+              {#oldTaskId: oldTaskId, #newTaskId: newTaskId},
+            ),
+            returnValue: _i6.Future<void>.value(),
+            returnValueForMissingStub: _i6.Future<void>.value(),
+          )
+          as _i6.Future<void>);
+
+  @override
   _i6.Future<int> insert(_i2.TasksCompanion? task) =>
       (super.noSuchMethod(
             Invocation.method(#insert, [task]),

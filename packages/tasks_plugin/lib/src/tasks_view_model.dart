@@ -381,6 +381,23 @@ class TasksViewModel {
   Future<void> moveTaskUnder(String id, String parentId) =>
       _enqueue(() => _repository.moveTaskUnder(id, parentId));
 
+  Future<void> replaceTaskSequenceLink(
+    String id,
+    TaskSequenceDirection direction, {
+    required String? oldTaskId,
+    required String? newTaskId,
+  }) => _enqueue(() {
+    if (activeTaskWithProject?.task.id != id || !currentUiFlags.isFormVisible) {
+      throw StateError('Редактор задачи закрыт.');
+    }
+    return _repository.replaceTaskSequenceLink(
+      id,
+      direction,
+      oldTaskId: oldTaskId,
+      newTaskId: newTaskId,
+    );
+  });
+
   Future<void> rescheduleTask(
     String id, {
     int? startMinutes,

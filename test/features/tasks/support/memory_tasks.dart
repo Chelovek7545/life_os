@@ -71,6 +71,28 @@ class MemoryTasks implements TasksApi {
     items[id] = items[id]!.copyWith(predecessorTaskId: Wrapped(predecessorId));
   });
   @override
+  Future<void> replaceTaskSequenceLink(
+    String id,
+    TaskSequenceDirection direction, {
+    required String? oldTaskId,
+    required String? newTaskId,
+  }) => _write(id, () {
+    if (direction == TaskSequenceDirection.previous) {
+      items[id] = items[id]!.copyWith(predecessorTaskId: Wrapped(newTaskId));
+    } else {
+      if (oldTaskId != null) {
+        items[oldTaskId] = items[oldTaskId]!.copyWith(
+          predecessorTaskId: const Wrapped(null),
+        );
+      }
+      if (newTaskId != null) {
+        items[newTaskId] = items[newTaskId]!.copyWith(
+          predecessorTaskId: Wrapped(id),
+        );
+      }
+    }
+  });
+  @override
   Future<void> moveTaskUnder(String id, String parentId) => _write(id, () {
     final task = items[id];
     if (task == null || task.parentTaskId == parentId) return;

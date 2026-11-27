@@ -3,7 +3,8 @@ import 'package:life_os/core/database/database.dart';
 import 'package:life_os/features/tasks/data/extensions/tag_model_extension.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 
-import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus, Tag;
+import 'package:tasks_api/tasks_api.dart'
+    show Task, TaskStatus, Tag, TaskSequenceDirection;
 import 'task_mutation_journal.dart';
 
 part 'tasks_dao.g.dart';
@@ -93,13 +94,52 @@ class TasksDao extends DatabaseAccessor<AppDatabase> with _$TasksDaoMixin {
           throw StateError('У задачи уже есть предшественник.');
         }
         await _checkPredecessor(id, predecessorId);
-        await (update(tasks)..where((row) => row.id.equals(id))).write(
-          TasksCompanion(
-            predecessorTaskId: Value(predecessorId),
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
+        await _writePredecessor(id, predecessorId);
       });
+
+  Future<void> replaceTaskSequenceLink(
+    String id,
+    TaskSequenceDirection direction, {
+    required String? oldTaskId,
+    required String? newTaskId,
+  }) => _mutate(id, () async {
+    final task = await getById(id);
+    if (task == null) throw StateError('Задача удалена.');
+    if (oldTaskId == newTaskId) return;
+
+    if (direction == TaskSequenceDirection.previous) {
+      if (task.predecessorTaskId != oldTaskId) {
+        throw StateError('Предыдущая задача уже изменилась.');
+      }
+      await _checkPredecessor(id, newTaskId);
+      await _writePredecessor(id, newTaskId);
+      return;
+    }
+
+    if (oldTaskId != null &&
+        (await getById(oldTaskId))?.predecessorTaskId != id) {
+      throw StateError('Следующая задача уже изменилась.');
+    }
+    if (newTaskId != null) {
+      final next = await getById(newTaskId);
+      if (next == null) throw StateError('Задача удалена.');
+      if (next.predecessorTaskId != null) {
+        throw StateError('У выбранной задачи уже есть предшественник.');
+      }
+      await _checkPredecessor(newTaskId, id);
+    }
+    if (oldTaskId != null) await _writePredecessor(oldTaskId, null);
+    if (newTaskId != null) await _writePredecessor(newTaskId, id);
+  });
+
+  Future<void> _writePredecessor(String id, String? predecessorId) async {
+    await (update(tasks)..where((row) => row.id.equals(id))).write(
+      TasksCompanion(
+        predecessorTaskId: Value(predecessorId),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
 
   Future<void> _checkPredecessor(String id, String? predecessorId) async {
     final visited = {id};

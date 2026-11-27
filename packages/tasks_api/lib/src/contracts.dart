@@ -1,6 +1,8 @@
 import 'task.dart';
 import 'work_log.dart';
 
+enum TaskSequenceDirection { previous, next }
+
 abstract interface class TaskQueries {
   Future<Task?> getById(String id);
   Future<List<Task>> getAllTasks();
@@ -14,6 +16,12 @@ abstract interface class TaskCommands {
   Future<void> setTaskStatus(String id, TaskStatus status);
   Future<void> moveTaskUnder(String id, String parentId);
   Future<void> linkTaskAfter(String id, String predecessorId);
+  Future<void> replaceTaskSequenceLink(
+    String id,
+    TaskSequenceDirection direction, {
+    required String? oldTaskId,
+    required String? newTaskId,
+  });
   Future<void> deleteTask(String id);
 }
 

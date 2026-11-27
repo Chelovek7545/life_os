@@ -64,6 +64,24 @@ class MockTasksRepository extends _i1.Mock implements _i2.TasksRepository {
           as _i3.Future<void>);
 
   @override
+  _i3.Future<void> replaceTaskSequenceLink(
+    String? id,
+    _i4.TaskSequenceDirection? direction, {
+    required String? oldTaskId,
+    required String? newTaskId,
+  }) =>
+      (super.noSuchMethod(
+            Invocation.method(
+              #replaceTaskSequenceLink,
+              [id, direction],
+              {#oldTaskId: oldTaskId, #newTaskId: newTaskId},
+            ),
+            returnValue: _i3.Future<void>.value(),
+            returnValueForMissingStub: _i3.Future<void>.value(),
+          )
+          as _i3.Future<void>);
+
+  @override
   _i3.Future<_i4.Task?> completeTask(String? id) =>
       (super.noSuchMethod(
             Invocation.method(#completeTask, [id]),

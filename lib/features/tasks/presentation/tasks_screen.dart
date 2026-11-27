@@ -627,7 +627,7 @@ class TasksScreenState extends State<TasksScreen> {
 
   Future<void> _submitTask(Task task) async {
     if (widget.viewModel.activeTaskWithProject != null) {
-      await widget.viewModel.updateTask(task);
+      await widget.viewModel.updateTaskFromEditor(task);
     } else {
       await widget.viewModel.addTask(task);
     }
@@ -817,6 +817,8 @@ class TasksScreenState extends State<TasksScreen> {
       builder: (context, constraints) {
         return CollapsibleTaskForm(
           workLogs: widget.workLogs,
+          watchTasks: widget.viewModel.watchAllTasks,
+          onSequenceChange: widget.viewModel.replaceTaskSequenceLink,
           onChanged: (draft) {
             widget.viewModel.draftTask = draft;
           },

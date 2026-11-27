@@ -1,6 +1,11 @@
 import 'package:core_contracts/core_contracts.dart' show StorageException;
 import 'package:tasks_api/tasks_api.dart'
-    show TasksApi, Task, TaskStatus, TaskCompletionCommands;
+    show
+        TasksApi,
+        Task,
+        TaskStatus,
+        TaskCompletionCommands,
+        TaskSequenceDirection;
 import 'package:life_os/features/tasks/data/tasks_dao.dart';
 import 'package:life_os/features/tasks/data/extensions/task_model_extension.dart';
 
@@ -30,6 +35,19 @@ class TasksRepository implements TasksApi, TaskCompletionCommands {
   @override
   Future<void> linkTaskAfter(String id, String predecessorId) =>
       _dao.linkTaskAfter(id, predecessorId);
+
+  @override
+  Future<void> replaceTaskSequenceLink(
+    String id,
+    TaskSequenceDirection direction, {
+    required String? oldTaskId,
+    required String? newTaskId,
+  }) => _dao.replaceTaskSequenceLink(
+    id,
+    direction,
+    oldTaskId: oldTaskId,
+    newTaskId: newTaskId,
+  );
 
   @override
   Future<Task?> completeTask(String id) async {

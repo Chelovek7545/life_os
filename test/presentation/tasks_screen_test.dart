@@ -134,6 +134,9 @@ class FakeTasksViewModel extends Fake implements TasksViewModel {
   Future<void> updateTask(Task task) async {}
 
   @override
+  Future<void> updateTaskFromEditor(Task task) => updateTask(task);
+
+  @override
   Future<void> addTask(Task task) async {}
 
   @override

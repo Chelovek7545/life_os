@@ -1,5 +1,6 @@
 import 'package:life_os/features/tasks/presentation/task_status_visuals.dart';
-import 'package:tasks_api/tasks_api.dart' show WorkLogsApi, Task, TaskStatus;
+import 'package:tasks_api/tasks_api.dart'
+    show WorkLogsApi, Task, TaskStatus, TaskSequenceDirection;
 import 'package:flutter/material.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
@@ -13,8 +14,16 @@ import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:projects_api/projects_api.dart';
 import 'package:life_os/features/tasks/presentation/components/work_logs_section.dart';
+import '../widgets/existing_task_picker_dialog.dart';
 
 typedef OnTaskSubmit = void Function(Task task);
+typedef OnTaskSequenceChange =
+    Future<void> Function(
+      String id,
+      TaskSequenceDirection direction, {
+      required String? oldTaskId,
+      required String? newTaskId,
+    });
 
 /// Содержимое формы задачи: поля, выбор дат/проекта/статуса и сохранение.
 /// Не зависит от того, где показано — в шторке, панели или диалоге.
@@ -31,11 +40,15 @@ class TaskFormContent extends StatefulWidget {
     required this.midProgress,
     required this.maxProgress,
     this.workLogs,
+    this.watchTasks,
+    this.onSequenceChange,
     this.resetAfterSubmit = true,
   });
 
   final Task task;
   final WorkLogsApi? workLogs;
+  final Stream<List<Task>> Function()? watchTasks;
+  final OnTaskSequenceChange? onSequenceChange;
   final bool resetAfterSubmit;
   final Stream<List<Project>> projects;
   final bool isEditMode;
@@ -55,6 +68,7 @@ class TaskFormContent extends StatefulWidget {
 class TaskFormContentState extends State<TaskFormContent> {
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _descController = TextEditingController();
+  late Stream<List<Task>>? _tasks = widget.watchTasks?.call();
   VoidCallback? _onTitleChanged;
   VoidCallback? _onDescChanged;
   String? _selectedProjectId;
@@ -98,6 +112,9 @@ class TaskFormContentState extends State<TaskFormContent> {
   @override
   void didUpdateWidget(covariant TaskFormContent oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.watchTasks != oldWidget.watchTasks) {
+      _tasks = widget.watchTasks?.call();
+    }
     if (widget.task.id != oldWidget.task.id) {
       _initFields();
     }
@@ -221,6 +238,154 @@ class TaskFormContentState extends State<TaskFormContent> {
 
   bool _validateStartsAt(DateTime date) {
     return true;
+  }
+
+  Widget _buildSequenceFields() {
+    return StreamBuilder<List<Task>>(
+      stream: _tasks,
+      builder: (context, snapshot) {
+        final tasks = {
+          for (final task in snapshot.data ?? const <Task>[]) task.id: task,
+        };
+        final task = tasks[widget.task.id];
+        if (task == null) return const SizedBox.shrink();
+        final next = <Task?>[
+          ...tasks.values.where(
+            (candidate) => candidate.predecessorTaskId == task.id,
+          ),
+        ];
+        if (next.isEmpty) next.add(null);
+        return Column(
+          children: [
+            const SizedBox(height: AppMargins.sm),
+            _sequenceField(
+              'Prev task',
+              tasks[task.predecessorTaskId]?.title,
+              () => _pickSequenceTask(
+                tasks,
+                task,
+                TaskSequenceDirection.previous,
+                task.predecessorTaskId,
+              ),
+            ),
+            const SizedBox(height: AppMargins.sm),
+            for (final (index, successor) in next.indexed)
+              _sequenceField(
+                index == 0
+                    ? (next.length == 1
+                          ? 'Next task'
+                          : 'Next tasks')
+                    : '',
+                successor?.title,
+                () => _pickSequenceTask(
+                  tasks,
+                  task,
+                  TaskSequenceDirection.next,
+                  successor?.id,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _sequenceField(String label, String? title, VoidCallback onPressed) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: AppTypography.codeLabel.copyWith(color: Colors.white),
+          ),
+        ),
+        Flexible(
+          flex: 2,
+          child: SizedBox(
+            width: 180,
+            child: TextButton(
+              style: title != null ? TextButton.styleFrom(
+                backgroundColor: AppColors.primary.withValues(alpha: 0.05),
+                overlayColor: AppColors.primary,
+                foregroundColor: AppColors.primary,
+                iconColor: Colors.white
+              ) : TextButton.styleFrom(),
+              onPressed: onPressed,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title ?? 'Без связи',
+                      maxLines: 1,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if(title != null) const Icon(Icons.task),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _pickSequenceTask(
+    Map<String, Task> tasks,
+    Task task,
+    TaskSequenceDirection direction,
+    String? oldTaskId,
+  ) {
+    final change = widget.onSequenceChange!;
+    final previous = direction == TaskSequenceDirection.previous;
+    final candidates =
+        tasks.values.where((candidate) {
+          if (candidate.id == task.id || candidate.id == oldTaskId) {
+            return false;
+          }
+          if (!previous && candidate.predecessorTaskId != null) return false;
+          final targetId = previous ? task.id : candidate.id;
+          var predecessorId = previous ? candidate.id : task.id;
+          final visited = {targetId};
+          while (visited.add(predecessorId)) {
+            final next = tasks[predecessorId]?.predecessorTaskId;
+            if (next == null) return true;
+            predecessorId = next;
+          }
+          return false;
+        }).toList()..sort(
+          (a, b) => a.title.toLowerCase().compareTo(b.title.toLowerCase()),
+        );
+
+    Future<void> apply(String? newTaskId) async {
+      if (!mounted ||
+          widget.task.id != task.id ||
+          widget.onSequenceChange != change ||
+          !isEditMode) {
+        throw StateError('Редактор задачи закрыт.');
+      }
+      await change(
+        task.id,
+        direction,
+        oldTaskId: oldTaskId,
+        newTaskId: newTaskId,
+      );
+    }
+
+    showDialog<void>(
+      context: context,
+      builder: (context) => ExistingTaskPickerDialog(
+        title: previous ? 'Предыдущая задача' : 'Следующая задача',
+        tasks: candidates,
+        emptyText: 'Нет доступных задач',
+        errorText: 'Не удалось изменить связь. Откройте список задач заново.',
+        onSelect: apply,
+        onRemove: oldTaskId == null ? null : () => apply(null),
+      ),
+    );
   }
 
   @override
@@ -572,6 +737,10 @@ class TaskFormContentState extends State<TaskFormContent> {
                           ),
                         ],
                       ),
+                      if (isEditMode &&
+                          _tasks != null &&
+                          widget.onSequenceChange != null)
+                        _buildSequenceFields(),
                     ],
                   ),
                 ),

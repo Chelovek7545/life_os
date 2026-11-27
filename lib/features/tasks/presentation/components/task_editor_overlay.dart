@@ -135,6 +135,8 @@ class _EditorSurfaceState extends State<_EditorSurface> {
           child: CollapsibleTaskForm(
             task: widget.task,
             workLogs: widget.workLogs,
+            watchTasks: widget.viewModel.watchAllTasks,
+            onSequenceChange: widget.viewModel.replaceTaskSequenceLink,
             resetAfterSubmit: false,
             projects: widget.viewModel.watchProjects(),
             isEditMode: widget.editing,

@@ -5,10 +5,164 @@ import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
 import 'package:life_os/features/tasks/presentation/components/task_form_content.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
 import 'package:life_os/core/ui/collapsible_sheet.dart';
+import 'package:life_os/core/ui/base_container.dart';
+import 'package:life_os/features/tasks/presentation/widgets/existing_task_picker_dialog.dart';
+import 'package:tasks_api/tasks_api.dart';
 import '../support/test_app.dart';
 import 'today_composition_test.dart' show pumpStorage;
 
 void main() {
+  testWidgets(
+    'task settings replace and remove sequence links across filters',
+    (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final app = (await tester.runAsync(
+        () => createTestApp(enableObsidian: false),
+      ))!;
+      try {
+        final previous = Task.blank().copyWith(
+          title: 'Подготовить материалы',
+          status: TaskStatus.done,
+        );
+        final task = Task.blank().copyWith(
+          title: 'Собрать прототип',
+          startsAt: Wrapped(app.tasksViewModel.currentFilterValue.anchorDate),
+        );
+        final next = Task.blank().copyWith(
+          title: 'Проверить прототип',
+          status: TaskStatus.done,
+        );
+        final child = Task.blank().copyWith(
+          title: 'Сверстать форму',
+          status: TaskStatus.done,
+          parentTaskId: Wrapped(task.id),
+        );
+        final repository = app.tasksRepository;
+        await tester.runAsync(() async {
+          for (final item in [previous, task, next, child]) {
+            await repository.addTask(item);
+          }
+          await repository.linkTaskAfter(task.id, previous.id);
+          await repository.linkTaskAfter(next.id, task.id);
+        });
+
+        await tester.pumpWidget(MyApp(diContainer: app));
+        app.navigation.open('tasks');
+        app.tasksViewModel.updateFilter(
+          (filter) => filter.copyWith(showCompleted: () => false),
+        );
+        await pumpStorage(tester);
+        expect(find.text(previous.title), findsNothing);
+        expect(find.text(next.title), findsNothing);
+        await tester.tap(find.text(task.title).hitTestable().first);
+        await pumpStorage(tester);
+
+        final surface = find.byKey(const ValueKey('task-editor.surface'));
+        Finder textInEditor(String text) =>
+            find.descendant(of: surface, matching: find.text(text));
+        final settings = find.ancestor(
+          of: textInEditor('DueDate'),
+          matching: find.byType(BaseContainer),
+        );
+        final picker = find.byType(ExistingTaskPickerDialog);
+        Finder textInSettings(String text) =>
+            find.descendant(of: settings, matching: find.text(text));
+        Future<void> openPicker(String title) async {
+          await tester.ensureVisible(textInSettings(title).first);
+          await tester.tap(textInSettings(title).first);
+          await tester.pumpAndSettle();
+          expect(picker, findsOneWidget);
+        }
+
+        expect(textInSettings('Предыдущая задача'), findsOneWidget);
+        expect(textInSettings(previous.title), findsOneWidget);
+        expect(textInSettings('Следующая задача'), findsOneWidget);
+        expect(textInSettings(next.title), findsOneWidget);
+        expect(textInEditor(child.title), findsNothing);
+
+        await openPicker(previous.title);
+        expect(find.widgetWithText(ListTile, next.title), findsNothing);
+        await tester.enterText(
+          find.descendant(of: picker, matching: find.byType(TextField)),
+          child.title,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(ListTile, child.title));
+        await pumpStorage(tester);
+        expect(textInSettings(child.title), findsOneWidget);
+        expect(textInSettings(previous.title), findsNothing);
+
+        final second = Task.blank().copyWith(
+          title: 'Показать прототип',
+          status: TaskStatus.done,
+        );
+        await tester.runAsync(() async {
+          await repository.addTask(second);
+          await repository.linkTaskAfter(second.id, task.id);
+        });
+        await pumpStorage(tester);
+        expect(textInSettings('Следующие задачи'), findsOneWidget);
+        await openPicker(next.title);
+        expect(find.widgetWithText(ListTile, second.title), findsNothing);
+        await tester.tap(find.widgetWithText(ListTile, previous.title));
+        await pumpStorage(tester);
+        expect(textInSettings(next.title), findsNothing);
+        expect(textInSettings(previous.title), findsOneWidget);
+        expect(textInSettings(second.title), findsOneWidget);
+        expect(
+          (await tester.runAsync(
+            () => repository.getById(next.id),
+          ))!.predecessorTaskId,
+          isNull,
+        );
+        expect(
+          (await tester.runAsync(
+            () => repository.getById(previous.id),
+          ))!.predecessorTaskId,
+          task.id,
+        );
+
+        for (final linked in [child, previous, second]) {
+          await openPicker(linked.title);
+          await tester.tap(find.text('Убрать связь'));
+          await pumpStorage(tester);
+          expect(textInSettings(linked.title), findsNothing);
+        }
+        expect(textInSettings('Без связи'), findsNWidgets(2));
+        expect(
+          (await tester.runAsync(
+            () => repository.getById(task.id),
+          ))!.predecessorTaskId,
+          isNull,
+        );
+        expect(
+          (await tester.runAsync(
+            () => repository.getById(child.id),
+          ))!.parentTaskId,
+          task.id,
+        );
+        await openPicker('Без связи');
+        await tester.tap(find.widgetWithText(ListTile, previous.title));
+        await pumpStorage(tester);
+        expect(textInSettings(previous.title), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('task-editor.save')));
+        await pumpStorage(tester);
+        expect(surface, findsNothing);
+        expect(
+          (await tester.runAsync(
+            () => repository.getById(task.id),
+          ))!.predecessorTaskId,
+          previous.id,
+        );
+        expect(tester.takeException(), isNull);
+      } finally {
+        await disposeTestApp(tester, app);
+      }
+    },
+  );
+
   testWidgets(
     'global editor creates and edits without leaving a screen or resizing its content',
     (tester) async {
