@@ -23,6 +23,16 @@ class GraphNodeData {
   final String? parentId;
   final bool inheritParentColor;
   final Map<String, Object?> attributes;
+  GraphNodeData asRoot() => GraphNodeData(
+    id: id,
+    kind: kind,
+    title: title,
+    subtitle: subtitle,
+    color: color,
+    inheritParentColor: inheritParentColor,
+    attributes: attributes,
+  );
+
   GraphNodeData withColor(String value) => GraphNodeData(
     id: id,
     kind: kind,

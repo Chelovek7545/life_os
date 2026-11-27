@@ -22,6 +22,7 @@ class GraphNodeInteraction {
     this.edit,
     this.addChild,
     this.remove,
+    this.disconnect,
     this.createChild,
     this.updateNode,
     this.deleteNode,
@@ -42,6 +43,7 @@ class GraphNodeInteraction {
   final VoidCallback? edit;
   final VoidCallback? addChild;
   final VoidCallback? remove;
+  final VoidCallback? disconnect;
   final Future<String> Function(GraphNodeDraft draft)? createChild;
   final Future<void> Function(GraphNodeData updated)? updateNode;
   final Future<void> Function(bool keepChildren)? deleteNode;

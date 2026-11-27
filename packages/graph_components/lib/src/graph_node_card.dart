@@ -118,6 +118,24 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
             ),
           ),
 
+          if (s.selected && s.disconnect != null)
+            Positioned(
+              top: 0,
+              left: 0,
+              child: IconButton(
+                tooltip: 'Отсоединить узел',
+                onPressed: s.disconnect,
+                icon: const Icon(Icons.link_off, size: 15),
+                style: IconButton.styleFrom(
+                  backgroundColor: _palette.surfaceBright,
+                  foregroundColor: _accent,
+                  minimumSize: const Size.square(24),
+                  padding: EdgeInsets.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
+
           if (_hovered && widget.onDelete != null)
             Positioned(
               top: -9,

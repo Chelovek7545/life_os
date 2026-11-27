@@ -46,6 +46,32 @@ GraphNodeData node(
 
 void main() {
   test(
+    'placed nodes keep their branch when their parent is on another board',
+    () async {
+      final registry = GraphContributorRegistry();
+      final source = MutableContributor('source', [
+        node('root', kind: 'root'),
+        node('foreign-project', parent: 'other-sphere'),
+        node('placed', parent: 'foreign-project'),
+        node('child', parent: 'placed'),
+      ]);
+      registry.register('module', [source]);
+      final builder = GraphBuilder(registry: registry, rootKind: 'root');
+      final graph = await builder
+          .watchGraph('root', standaloneIds: Stream.value({'child', 'placed'}))
+          .first;
+      expect(graph.map((node) => (node.id, node.parentId)), [
+        ('root', null),
+        ('placed', null),
+        ('child', 'placed'),
+      ]);
+      await builder.dispose();
+      await registry.dispose();
+      await source.changes.close();
+    },
+  );
+
+  test(
     'projects arbitrarily deep, unordered nodes and excludes orphaned cycles',
     () async {
       final registry = GraphContributorRegistry();

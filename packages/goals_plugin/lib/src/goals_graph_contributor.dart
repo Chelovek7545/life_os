@@ -8,23 +8,23 @@ class GoalsGraphContributor implements GraphContributor {
   @override
   String get id => 'goals.nodes';
   @override
-  Stream<List<GraphNodeData>> watch(GraphScope scope) => goals
-      .watchGoalsBySphere(scope.rootId)
-      .map(
+  Stream<List<GraphNodeData>> watch(GraphScope scope) =>
+      goals.watchAllGoals().map(
         (values) => [
           for (final goal in values)
-            GraphNodeData(
-              id: goal.id,
-              kind: kind,
-              title: goal.name,
-              subtitle: goal.description,
-              color: goal.color,
-              attributes: {
-                if (goal.storageRevision != null)
-                  'storageRevision': goal.storageRevision,
-              },
-              parentId: goal.sphereId,
-            ),
+            if (goal.sphereId.isEmpty || goal.sphereId == scope.rootId)
+              GraphNodeData(
+                id: goal.id,
+                kind: kind,
+                title: goal.name,
+                subtitle: goal.description,
+                color: goal.color,
+                attributes: {
+                  if (goal.storageRevision != null)
+                    'storageRevision': goal.storageRevision,
+                },
+                parentId: goal.sphereId.isEmpty ? null : goal.sphereId,
+              ),
         ],
       );
 }

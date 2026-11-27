@@ -11,7 +11,7 @@ import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/features/lifegraph/data/android_graph_files.dart';
 import 'package:graph_canvas/graph_canvas.dart' as graph;
 import 'package:lifegraph_plugin/lifegraph_plugin.dart'
-    show LifeGraphViewModel, GraphSaveStatus;
+    show LifeGraphViewModel, GraphSaveStatus, GraphDisconnection;
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
 import 'package:spheres_api/spheres_api.dart';
@@ -44,6 +44,8 @@ class LifeGraphScreen extends StatefulWidget {
   @override
   State<LifeGraphScreen> createState() => _LifeGraphScreenState();
 }
+
+enum _SelectionMenuAction { disconnect, delete }
 
 class _LifeGraphScreenState extends State<LifeGraphScreen> {
   final graph.GraphViewCamera _camera = graph.GraphViewCamera();
@@ -394,6 +396,9 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           final node = widget.viewModel.nodeById(state.node.id);
           if (node == null) return const SizedBox.shrink();
           final actions = widget.viewModel.actionsFor(node.id);
+          final disconnections = state.selected
+              ? widget.viewModel.disconnectionsFor(node.id)
+              : const <GraphDisconnection>[];
           final dialogs = GraphNodeDialogs(
             registry: widget.viewModel.nodeEditors,
             commands: widget.viewModel.commands,
@@ -415,6 +420,9 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
               dragUpdate: state.dragUpdate,
               dragEnd: state.dragEnd,
               startConnection: state.startConnection,
+              disconnect: disconnections.isEmpty
+                  ? null
+                  : () => _chooseDisconnection(disconnections),
               edit: dialogs.canEdit(node.kind)
                   ? () => dialogs.edit(context, actions)
                   : null,
@@ -678,12 +686,15 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       final node = model.nodeById(id);
       return node != null && model.commands.canDelete(node.kind);
     });
-    if (!canDelete) return;
+    final disconnections = selection.length == 1 && selection.nodeIds.isNotEmpty
+        ? model.disconnectionsFor(selection.nodeIds.single)
+        : const <GraphDisconnection>[];
+    if (!canDelete && disconnections.isEmpty) return;
     final palette = AppGraphThemes.dark;
     final overlay =
         Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
     final point = overlay.globalToLocal(position);
-    final confirmed = await showMenu<bool>(
+    final action = await showMenu<_SelectionMenuAction>(
       context: context,
       position: RelativeRect.fromSize(
         Rect.fromLTWH(point.dx, point.dy, 0, 0),
@@ -697,29 +708,46 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         side: BorderSide(color: palette.border),
       ),
       items: [
-        PopupMenuItem(
-          value: true,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.delete_outline, color: palette.textDim, size: 18),
-              const SizedBox(width: 10),
-              Flexible(
-                child: Text(
-                  selection.length == 1
-                      ? 'Удалить объект'
-                      : 'Удалить выбранные (${selection.length})',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: palette.text, fontSize: 13),
-                ),
-              ),
-            ],
+        if (disconnections.isNotEmpty)
+          const PopupMenuItem(
+            value: _SelectionMenuAction.disconnect,
+            child: Row(
+              children: [
+                Icon(Icons.link_off, size: 18),
+                SizedBox(width: 10),
+                Text('Отсоединить…'),
+              ],
+            ),
           ),
-        ),
+        if (canDelete)
+          PopupMenuItem(
+            value: _SelectionMenuAction.delete,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.delete_outline, color: palette.textDim, size: 18),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    selection.length == 1
+                        ? 'Удалить объект'
+                        : 'Удалить выбранные (${selection.length})',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: palette.text, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
-    if (confirmed != true || !mounted) return;
+    if (!mounted || widget.viewModel != model) return;
+    if (action == _SelectionMenuAction.disconnect) {
+      await _chooseDisconnection(disconnections);
+      return;
+    }
+    if (action != _SelectionMenuAction.delete) return;
     final hasNodes = selection.nodeIds.isNotEmpty;
     await showDialog<void>(
       context: context,
@@ -729,6 +757,46 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         onDelete: delete,
       ),
     );
+  }
+
+  Future<void> _chooseDisconnection(List<GraphDisconnection> options) async {
+    final model = widget.viewModel;
+    final selected = await showDialog<GraphDisconnection>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Какую связь убрать?'),
+        children: [
+          for (final option in options)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, option),
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  '${option.link.source.title} → ${option.link.target.title}',
+                ),
+                subtitle: Text(
+                  option.link.linkType == GraphLinkType.hierarchy
+                      ? 'Иерархия'
+                      : 'Последовательность',
+                ),
+              ),
+            ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+        ],
+      ),
+    );
+    if (selected == null || !mounted || widget.viewModel != model) return;
+    try {
+      await selected.apply();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось убрать связь: $error')),
+      );
+    }
   }
 
   Future<void> _showNoteMenu(graph.NoteState state, Offset position) async {

@@ -7,6 +7,7 @@ import 'package:graph_canvas/graph_canvas.dart' as graph;
 import 'package:graph_api/graph_api.dart';
 import 'package:graph_components/graph_components.dart';
 import 'package:life_os/app/dependency_container.dart';
+import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
 import 'package:lifegraph_plugin/lifegraph_plugin.dart';
@@ -47,10 +48,10 @@ void main() {
     }
     await directory.delete(recursive: true);
   });
-  Future<LifeGraphViewModel> open() async {
+  Future<LifeGraphViewModel> open({GraphPositionsStore? positions}) async {
     final vm = LifeGraphViewModel(
       spheresRepository: app.spheresRepository,
-      positionsRepository: app.graphPositionsRepository,
+      positionsRepository: positions ?? app.graphPositionsRepository,
       notesRepository: app.graphNotesRepository,
       graphBuilder: app.graphBuilder,
       nodePresentations: app.graphPresentations,
@@ -360,7 +361,7 @@ void main() {
   );
 
   testWidgets(
-    'drag links a project to a task and distinguishes subtasks from next tasks',
+    'drag connects tasks and the node menu removes individual links',
     (tester) async {
       Future<void> until(bool Function() done) async {
         for (var i = 0; i < 100 && !done(); i++) {
@@ -562,9 +563,59 @@ void main() {
           expect(hierarchy['pulse'], {'kind': 'hierarchy'});
         });
 
+        final subPosition = vm.graph
+            .singleWhere((node) => node.id == sub)
+            .position;
+        final menu = await tester.startGesture(
+          tester.getCenter(find.text('Child task')),
+          kind: PointerDeviceKind.mouse,
+          buttons: kSecondaryMouseButton,
+        );
+        await menu.up();
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Отсоединить…'));
+        await tester.pumpAndSettle();
+        expect(find.text('Какую связь убрать?'), findsOneWidget);
+        await tester.tap(find.text('${task.label} → Child task'));
+        await until(
+          () => vm.nodeById(sub) != null && vm.nodeById(sub)!.parentId == null,
+        );
+        expect(
+          vm.graph.singleWhere((node) => node.id == sub).position,
+          subPosition,
+        );
+        expect(vm.nodeById(next)!.attributes['predecessorTaskId'], task.id);
+
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(task.label));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Отсоединить узел'));
+        await tester.pumpAndSettle();
+        expect(find.text('Последовательность'), findsOneWidget);
+        await tester.tap(find.text('${task.label} → Next task'));
+        await until(
+          () => vm.nodeById(next)!.attributes['predecessorTaskId'] == null,
+        );
+        await finish(vm.flush());
+        await tester.runAsync(() async {
+          final edge = ((await read(vm))['edges'] as List).single as Map;
+          expect(edge['fromNode'], 'pulse:${project.id}');
+          expect(edge['toNode'], 'pulse:${task.id}');
+          expect(
+            (await app.tasksRepository.getById(sub))!.parentTaskId,
+            isNull,
+          );
+          expect(
+            (await app.tasksRepository.getById(next))!.predecessorTaskId,
+            isNull,
+          );
+        });
+
         await tester.pumpWidget(const SizedBox());
         await finish(vm.dispose());
-        final reopened = await finish(open());
+        final reopened = await finish(
+          open(positions: GraphPositionsRepository(prefix: 'reopened_graph')),
+        );
         expect(
           reopened.graph.map((node) => node.id),
           unorderedEquals([sphere.id, task.id, project.id, next, sub]),
@@ -572,9 +623,9 @@ void main() {
         expect(reopened.nodeById(next)!.parentId, isNull);
         expect(
           reopened.nodeById(next)!.attributes['predecessorTaskId'],
-          task.id,
+          isNull,
         );
-        expect(reopened.nodeById(sub)!.parentId, task.id);
+        expect(reopened.nodeById(sub)!.parentId, isNull);
         expect(reopened.nodeById(sub)!.attributes['predecessorTaskId'], isNull);
         expect(reopened.nodeById(task.id)!.parentId, project.id);
         expect(

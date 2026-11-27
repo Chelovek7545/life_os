@@ -22,6 +22,11 @@ import 'package:rxdart/rxdart.dart';
 /// Состояние автосохранения позиций графа.
 enum GraphSaveStatus { draft, saving, saved, failed }
 
+typedef GraphDisconnection = ({
+  GraphDetachRequest link,
+  Future<void> Function() apply,
+});
+
 class LifeGraphViewModel {
   LifeGraphViewModel({
     required this.spheresRepository,
@@ -102,6 +107,7 @@ class LifeGraphViewModel {
               ),
               width: view.size.width,
               height: view.size.height,
+              standalone: _standalonePositions.value.containsKey(view.id),
             ),
         ],
         notes: _canvasNotes(),
@@ -209,6 +215,17 @@ class LifeGraphViewModel {
       final value = entry.value;
       _positions[entry.key] = Offset(value.x, value.y) - _boardOrigin;
       _boardSizes[entry.key] = Size(value.width, value.height);
+    }
+    final standaloneIds = document.standaloneEntityIds;
+    if (standaloneIds.any(
+      (id) => !_standalonePositions.value.containsKey(id),
+    )) {
+      _standalonePositions.add({
+        ..._standalonePositions.value,
+        for (final id in standaloneIds)
+          if (_positions[id] case final position?)
+            id: GraphPoint(position.dx, position.dy),
+      });
     }
   }
 
@@ -612,6 +629,78 @@ class LifeGraphViewModel {
     final generation = _scopeGeneration;
     final active = commands.guardFor(kind);
     return () => _accepting && generation == _scopeGeneration && active();
+  }
+
+  List<GraphDisconnection> disconnectionsFor(String id) {
+    if (_currentSphereId == null || nodeById(id) == null) return const [];
+    final scope = _scope();
+    final byId = {for (final node in _domainNodes) node.id: node};
+    final options = <GraphDisconnection>[];
+    for (final target in _domainNodes) {
+      if (!commands.canDetach(target.kind)) continue;
+      for (final (sourceId, type) in [
+        (target.parentId, GraphLinkType.hierarchy),
+        (
+          target.attributes['predecessorTaskId'] as String?,
+          GraphLinkType.sequence,
+        ),
+      ]) {
+        final source = byId[sourceId];
+        if (source == null || (source.id != id && target.id != id)) continue;
+        final link = GraphDetachRequest(
+          scope: scope,
+          source: source.toData(),
+          target: target.toData(),
+          linkType: type,
+        );
+        final active = connectionGuard(target.kind);
+        options.add((
+          link: link,
+          apply: () =>
+              _enqueue(() => _disconnect(link, active), isAvailable: active),
+        ));
+      }
+    }
+    return options;
+  }
+
+  Future<void> _disconnect(
+    GraphDetachRequest link,
+    bool Function() isAvailable,
+  ) async {
+    final target = nodeById(link.target.id);
+    final parentId = link.linkType == GraphLinkType.hierarchy
+        ? target?.parentId
+        : target?.attributes['predecessorTaskId'];
+    if (target?.kind != link.target.kind || parentId != link.source.id) {
+      throw StateError('Связь уже изменилась.');
+    }
+    if (link.linkType == GraphLinkType.sequence) {
+      await commands.detach(link);
+      return;
+    }
+
+    // Keep auto-positioned cards in place when the branch becomes a root.
+    for (final view in graph) {
+      _positions.putIfAbsent(view.id, () => view.position);
+    }
+    final scopeId = link.scope.rootId;
+    final id = link.target.id;
+    final standalone = _standalonePositions.value;
+    final position = _positions[id]!;
+    _saveStandalonePositions(scopeId, {
+      ...standalone,
+      id: GraphPoint(position.dx, position.dy),
+    });
+    try {
+      await _standaloneWriter.flush();
+      if (!isAvailable()) throw StateError('Действие больше недоступно.');
+      await commands.detach(link);
+    } catch (_) {
+      _saveStandalonePositions(scopeId, standalone);
+      rethrow;
+    }
+    if (_board == null) await _scheduleSavePositions();
   }
 
   Future<void> connectNodes(

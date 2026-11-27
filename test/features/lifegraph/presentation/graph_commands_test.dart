@@ -45,6 +45,59 @@ void main() {
     }
 
     test(
+      'detaching hierarchy links preserves the branch and its board placement',
+      () async {
+        final goal = await create(sphere.id, 'goal');
+        final project = await create(goal, 'project');
+        final task = await create(project, 'task');
+        final positions = {for (final node in vm.graph) node.id: node.position};
+
+        final detach = vm.disconnectionsFor(sphere.id).single;
+        await detach.apply();
+        await vm.graphStream.firstWhere(
+          (nodes) =>
+              nodes.any((node) => node.id == goal && node.parentId == null),
+        );
+        expect((await app.goalsRepository.getGoal(goal))!.sphereId, isEmpty);
+        expect(vm.nodeById(project)!.parentId, goal);
+        expect(vm.nodeById(task)!.parentId, project);
+        expect({
+          for (final node in vm.graph) node.id: node.position,
+        }, positions);
+
+        final other = Sphere.create(name: 'Other board');
+        await app.spheresRepository.addSphere(other);
+        final stale = vm.disconnectionsFor(project).first;
+        await vm.switchSphere(other.id);
+        await vm.graphStream.firstWhere((nodes) => nodes.isNotEmpty);
+        await expectLater(stale.apply(), throwsStateError);
+        expect(vm.graph.single.id, other.id);
+        await vm.switchSphere(sphere.id);
+        await vm.graphStream.firstWhere((nodes) => nodes.length == 4);
+        expect(vm.nodeById(goal)!.parentId, isNull);
+        expect(vm.nodeById(project)!.parentId, goal);
+        expect(vm.nodeById(task)!.parentId, project);
+
+        await vm.disconnectionsFor(goal).single.apply();
+        await vm.graphStream.firstWhere(
+          (nodes) =>
+              nodes.any((node) => node.id == project && node.parentId == null),
+        );
+        expect(
+          (await app.projectsRepository.getProjectById(project))!.goalId,
+          isNull,
+        );
+        expect(vm.nodeById(task)!.parentId, project);
+        await vm.disconnectionsFor(project).single.apply();
+        await vm.graphStream.firstWhere(
+          (nodes) =>
+              nodes.any((node) => node.id == task && node.parentId == null),
+        );
+        expect((await app.tasksRepository.getById(task))!.projectId, isNull);
+      },
+    );
+
+    test(
       'standalone branches stay on their board and retain moved positions',
       () async {
         await vm.dispose();

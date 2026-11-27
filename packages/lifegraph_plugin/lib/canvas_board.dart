@@ -113,6 +113,12 @@ class CanvasBoardDocument {
     return id.startsWith('pulse:') ? id.substring(6) : null;
   }
 
+  Set<String> get standaloneEntityIds => {
+    for (final node in nodes)
+      if (node['pulse'] case {'standalone': true})
+        if (entityId(node) case final id?) id,
+  };
+
   Map<String, CanvasNodeGeometry> get _waitingGeometry {
     final metadata = data['pulse'];
     final waiting = metadata is Map ? metadata['nodeGeometry'] : null;

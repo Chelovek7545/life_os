@@ -59,12 +59,23 @@ class GraphBuilder {
     for (final node in byId.values) {
       if (node.parentId != null) (children[node.parentId!] ??= []).add(node);
     }
+
+    bool hasBoardAncestor(GraphNodeData node) {
+      final visited = {node.id};
+      var parent = node.parentId;
+      while (parent != null && visited.add(parent)) {
+        if (parent == root.id || standaloneIds.contains(parent)) return true;
+        parent = byId[parent]?.parentId;
+      }
+      return false;
+    }
+
     final result = [
       root,
       for (final id in standaloneIds)
         if (byId[id] case final node?
-            when node.parentId == null && node.kind != scope.rootKind)
-          node,
+            when node.kind != scope.rootKind && !hasBoardAncestor(node))
+          node.parentId == null ? node : node.asRoot(),
     ];
     final visited = result.map((node) => node.id).toSet();
     for (var index = 0; index < result.length; index++) {

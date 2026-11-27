@@ -41,6 +41,19 @@ GraphNodeCommands projectsGraphCommands(
         ),
       );
     },
+    detach: (request) async {
+      final project = await projects.getProjectById(request.target.id);
+      if (request.linkType != GraphLinkType.hierarchy ||
+          project == null ||
+          (project.parentProejectId ?? project.goalId) != request.source.id) {
+        throw StateError('Связь проекта уже изменилась.');
+      }
+      await projects.updateProject(
+        project.parentProejectId != null
+            ? project.copyWith(parentProejectId: const Wrapped(null))
+            : project.copyWith(goalId: const Wrapped(null)),
+      );
+    },
     delete: delete,
   );
 }

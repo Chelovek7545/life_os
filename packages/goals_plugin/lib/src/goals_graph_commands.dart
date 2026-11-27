@@ -35,5 +35,14 @@ GraphNodeCommands goalsGraphCommands(
       ),
     );
   },
+  detach: (request) async {
+    final goal = await goals.getGoal(request.target.id);
+    if (request.linkType != GraphLinkType.hierarchy ||
+        goal == null ||
+        goal.sphereId != request.source.id) {
+      throw StateError('Связь цели уже изменилась.');
+    }
+    await goals.updateGoal(goal.copyWith(sphereId: ''));
+  },
   delete: delete,
 );

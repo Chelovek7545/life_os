@@ -7,12 +7,14 @@ class CanvasEntity {
     required this.position,
     required this.width,
     required this.height,
+    this.standalone = false,
   });
 
   final GraphNodeData node;
   final GraphPoint position;
   final double width;
   final double height;
+  final bool standalone;
 }
 
 Map<String, Object?> createSphereCanvas({
@@ -63,7 +65,11 @@ Map<String, Object?> createSphereCanvas({
           'Статус: $status',
       ].join('\n\n'),
       'color': node.color,
-      'pulse': {'kind': node.kind, 'entityId': node.id},
+      'pulse': {
+        'kind': node.kind,
+        'entityId': node.id,
+        if (entity.standalone) 'standalone': true,
+      },
     });
   }
   for (final note in notes) {

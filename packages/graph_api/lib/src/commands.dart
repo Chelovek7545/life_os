@@ -72,6 +72,20 @@ class GraphAttachRequest {
   final GraphLinkType linkType;
 }
 
+class GraphDetachRequest {
+  const GraphDetachRequest({
+    required this.scope,
+    required this.source,
+    required this.target,
+    required this.linkType,
+  });
+
+  final GraphScope scope;
+  final GraphNodeData source;
+  final GraphNodeData target;
+  final GraphLinkType linkType;
+}
+
 typedef GraphCreateHandler =
     Future<String> Function(GraphCreateRequest request);
 typedef GraphUpdateHandler = Future<void> Function(GraphUpdateRequest request);
@@ -94,6 +108,7 @@ class GraphNodeCommands {
     this.update,
     this.delete,
     this.attach,
+    this.detach,
   }) : parentKinds = Set.unmodifiable(parentKinds);
 
   final String kind;
@@ -103,6 +118,7 @@ class GraphNodeCommands {
   final GraphUpdateHandler? update;
   final GraphDeleteHandler? delete;
   final GraphAttachHandler? attach;
+  final Future<void> Function(GraphDetachRequest request)? detach;
 }
 
 /// Routes mutations to their owners and drains accepted work on removal.
@@ -118,6 +134,7 @@ class GraphCommandRegistry {
 
   bool canUpdate(String kind) => _find(kind)?.commands.update != null;
   bool canDelete(String kind) => _find(kind)?.commands.delete != null;
+  bool canDetach(String kind) => _find(kind)?.commands.detach != null;
   bool canCreateStandalone(String kind) =>
       _find(kind)?.commands.createStandalone != null;
 
@@ -229,6 +246,15 @@ class GraphCommandRegistry {
       );
     }
     return _run(entry.owner, () => handler(request));
+  }
+
+  Future<void> detach(GraphDetachRequest request) async {
+    final entry = _require(request.target.kind);
+    final handler = entry.commands.detach;
+    if (handler == null) {
+      throw UnsupportedError('Cannot detach ${request.target.kind}.');
+    }
+    await _run(entry.owner, () => handler(request));
   }
 
   Future<T> _run<T>(_CommandOwner owner, Future<T> Function() action) {

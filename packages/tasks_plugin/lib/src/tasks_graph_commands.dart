@@ -80,6 +80,29 @@ GraphNodeCommands _commands(
       }
       return existing.id;
     },
+    detach: (request) async {
+      final id = request.target.id;
+      final sourceId = request.source.id;
+      if (request.linkType == GraphLinkType.sequence) {
+        await tasks.replaceTaskSequenceLink(
+          id,
+          TaskSequenceDirection.previous,
+          oldTaskId: sourceId,
+          newTaskId: null,
+        );
+        return;
+      }
+      final task = await tasks.getById(id);
+      if (task == null || (task.parentTaskId ?? task.projectId) != sourceId) {
+        throw StateError('Связь задачи уже изменилась.');
+      }
+      final now = DateTime.now();
+      await tasks.updateTask(
+        task.parentTaskId != null
+            ? task.copyWith(parentTaskId: const Wrapped(null), updatedAt: now)
+            : task.copyWith(projectId: const Wrapped(null), updatedAt: now),
+      );
+    },
     delete: delete,
   );
 }
