@@ -5,7 +5,6 @@ import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
 import 'package:life_os/features/tasks/presentation/components/task_form_content.dart';
 import 'package:life_os/features/tasks/presentation/components/collapsible_task_form.dart';
 import 'package:life_os/core/ui/collapsible_sheet.dart';
-import 'package:life_os/core/ui/base_container.dart';
 import 'package:life_os/features/tasks/presentation/widgets/existing_task_picker_dialog.dart';
 import 'package:tasks_api/tasks_api.dart';
 import '../support/test_app.dart';
@@ -62,24 +61,35 @@ void main() {
         final surface = find.byKey(const ValueKey('task-editor.surface'));
         Finder textInEditor(String text) =>
             find.descendant(of: surface, matching: find.text(text));
-        final settings = find.ancestor(
-          of: textInEditor('DueDate'),
-          matching: find.byType(BaseContainer),
-        );
+        final sequence = find.byKey(const ValueKey('task-editor.sequence'));
         final picker = find.byType(ExistingTaskPickerDialog);
-        Finder textInSettings(String text) =>
-            find.descendant(of: settings, matching: find.text(text));
+        Finder textInSequence(String text) =>
+            find.descendant(of: sequence, matching: find.text(text));
         Future<void> openPicker(String title) async {
-          await tester.ensureVisible(textInSettings(title).first);
-          await tester.tap(textInSettings(title).first);
+          await tester.ensureVisible(textInSequence(title).first);
+          await tester.tap(textInSequence(title).first);
           await tester.pumpAndSettle();
           expect(picker, findsOneWidget);
         }
 
-        expect(textInSettings('Предыдущая задача'), findsOneWidget);
-        expect(textInSettings(previous.title), findsOneWidget);
-        expect(textInSettings('Следующая задача'), findsOneWidget);
-        expect(textInSettings(next.title), findsOneWidget);
+        final current = textInSequence('Текущая задача');
+        expect(
+          tester.getTopLeft(sequence).dy,
+          greaterThan(tester.getBottomLeft(textInEditor('DueDate')).dy),
+        );
+        expect(current, findsOneWidget);
+        expect(textInSequence('Предыдущая задача'), findsOneWidget);
+        expect(textInSequence(previous.title), findsOneWidget);
+        expect(textInSequence('Следующая задача'), findsOneWidget);
+        expect(textInSequence(next.title), findsOneWidget);
+        expect(
+          tester.getCenter(current).dy,
+          greaterThan(tester.getCenter(textInSequence(previous.title)).dy),
+        );
+        expect(
+          tester.getCenter(current).dy,
+          lessThan(tester.getCenter(textInSequence(next.title)).dy),
+        );
         expect(textInEditor(child.title), findsNothing);
 
         await openPicker(previous.title);
@@ -91,8 +101,8 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.widgetWithText(ListTile, child.title));
         await pumpStorage(tester);
-        expect(textInSettings(child.title), findsOneWidget);
-        expect(textInSettings(previous.title), findsNothing);
+        expect(textInSequence(child.title), findsOneWidget);
+        expect(textInSequence(previous.title), findsNothing);
 
         final second = Task.blank().copyWith(
           title: 'Показать прототип',
@@ -103,14 +113,14 @@ void main() {
           await repository.linkTaskAfter(second.id, task.id);
         });
         await pumpStorage(tester);
-        expect(textInSettings('Следующие задачи'), findsOneWidget);
+        expect(textInSequence('Следующая задача'), findsNWidgets(2));
         await openPicker(next.title);
         expect(find.widgetWithText(ListTile, second.title), findsNothing);
         await tester.tap(find.widgetWithText(ListTile, previous.title));
         await pumpStorage(tester);
-        expect(textInSettings(next.title), findsNothing);
-        expect(textInSettings(previous.title), findsOneWidget);
-        expect(textInSettings(second.title), findsOneWidget);
+        expect(textInSequence(next.title), findsNothing);
+        expect(textInSequence(previous.title), findsOneWidget);
+        expect(textInSequence(second.title), findsOneWidget);
         expect(
           (await tester.runAsync(
             () => repository.getById(next.id),
@@ -124,13 +134,20 @@ void main() {
           task.id,
         );
 
-        for (final linked in [child, previous, second]) {
+        final firstRemove = find
+            .descendant(of: sequence, matching: find.byTooltip('Убрать связь'))
+            .first;
+        await tester.ensureVisible(firstRemove);
+        await tester.tap(firstRemove);
+        await pumpStorage(tester);
+        expect(textInSequence(child.title), findsNothing);
+        for (final linked in [previous, second]) {
           await openPicker(linked.title);
           await tester.tap(find.text('Убрать связь'));
           await pumpStorage(tester);
-          expect(textInSettings(linked.title), findsNothing);
+          expect(textInSequence(linked.title), findsNothing);
         }
-        expect(textInSettings('Без связи'), findsNWidgets(2));
+        expect(textInSequence('Без связи'), findsNWidgets(2));
         expect(
           (await tester.runAsync(
             () => repository.getById(task.id),
@@ -146,15 +163,29 @@ void main() {
         await openPicker('Без связи');
         await tester.tap(find.widgetWithText(ListTile, previous.title));
         await pumpStorage(tester);
-        expect(textInSettings(previous.title), findsOneWidget);
+        expect(textInSequence(previous.title), findsOneWidget);
         await tester.tap(find.byKey(const ValueKey('task-editor.save')));
         await pumpStorage(tester);
         expect(surface, findsNothing);
+        final saved = (await tester.runAsync(
+          () => repository.getById(task.id),
+        ))!;
+        expect(saved.predecessorTaskId, previous.id);
+
+        app.tasksViewModel.openTaskInEditor(saved);
+        await pumpStorage(tester);
+        final delete = textInEditor('Удалить задачу');
+        await tester.ensureVisible(delete);
+        await tester.tap(delete);
+        await pumpStorage(tester);
+        expect(surface, findsNothing);
         expect(
-          (await tester.runAsync(
-            () => repository.getById(task.id),
-          ))!.predecessorTaskId,
-          previous.id,
+          await tester.runAsync(() => repository.getById(task.id)),
+          isNull,
+        );
+        expect(
+          await tester.runAsync(() => repository.getById(previous.id)),
+          isNotNull,
         );
         expect(tester.takeException(), isNull);
       } finally {
