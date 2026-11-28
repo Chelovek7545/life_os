@@ -3,7 +3,11 @@ import 'package:graph_api/graph_api.dart';
 import 'package:graph_components/graph_components.dart';
 import 'package:graph_ui/graph_ui.dart';
 import 'package:tasks_api/tasks_api.dart';
+import 'package:projects_api/projects_api.dart';
 import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/theme/app_spacing.dart';
+import 'package:life_os/core/theme/app_text_styles.dart';
+import 'package:life_os/core/ui/graph_edit_fields.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'task_status_visuals.dart';
 import 'graph_task_schedule_fields.dart';
@@ -11,6 +15,8 @@ import 'graph_task_schedule_fields.dart';
 GraphNodeComponentSpec taskGraphComponent({
   bool subtask = false,
   Future<void> Function(String, TaskStatus)? setStatus,
+  ProjectsQueries? projects,
+  Widget? sequence,
 }) => GraphNodeComponentSpec(
   kind: subtask ? 'subTask' : 'task',
   label: subtask ? 'ПОДЗАДАЧА' : 'ЗАДАЧА',
@@ -19,6 +25,8 @@ GraphNodeComponentSpec taskGraphComponent({
   editTitle: subtask ? 'Редактировать подзадачу' : 'Редактировать задачу',
   createTitle: subtask ? 'Добавить Подзадачу' : 'Добавить задачу',
   editColor: false,
+  descriptionForEdit: (node) =>
+      node.attributes['taskDescription'] as String? ?? node.subtitle,
   createColor: subtask,
   createDescription: subtask,
   badge: _statusBadge,
@@ -30,7 +38,16 @@ GraphNodeComponentSpec taskGraphComponent({
           accent: graphColor(node.color, fallback: state.accent),
           setStatus: (status) => setStatus(node.id, status),
         ),
-  editFields: _statusFields,
+  editFields: (context, attributes, onChanged) =>
+      GraphNodeEditLayout.maybeOf(context) == null
+      ? _statusFields(context, attributes, onChanged)
+      : _TaskCanvasFields(
+          attributes: attributes,
+          onChanged: onChanged,
+          projects: subtask ? null : projects,
+          sequence: sequence,
+        ),
+  validateEdit: _validateSchedule,
   createFields: subtask
       ? null
       : (_, _, onChanged) => GraphTaskScheduleFields(onChanged: onChanged),
@@ -42,6 +59,161 @@ String _statusLabel(TaskStatus status) => switch (status) {
   TaskStatus.notStarted => 'Не начато',
   TaskStatus.open => 'Открыто',
 };
+
+String? _validateSchedule(GraphNodeData original, GraphNodeData updated) {
+  final start = updated.attributes['startsAt'] as DateTime?;
+  final end = updated.attributes['endsAt'] as DateTime?;
+  if ((start != original.attributes['startsAt'] ||
+          end != original.attributes['endsAt']) &&
+      start != null &&
+      end != null &&
+      end.isBefore(start)) {
+    return 'Окончание должно быть не раньше начала.';
+  }
+  return null;
+}
+
+class _TaskCanvasFields extends StatelessWidget {
+  const _TaskCanvasFields({
+    required this.attributes,
+    required this.onChanged,
+    this.projects,
+    this.sequence,
+  });
+
+  final Map<String, Object?> attributes;
+  final ValueChanged<Map<String, Object?>> onChanged;
+  final ProjectsQueries? projects;
+  final Widget? sequence;
+
+  @override
+  Widget build(BuildContext context) {
+    final priority = attributes['priority'] as int? ?? 0;
+    final statusField = graphEditSelect(
+      label: 'Статус',
+      value: taskStatusFromStorage(
+        attributes['taskStatus'] as String? ?? 'open',
+      ),
+      options: {
+        for (final status in TaskStatus.values) status: _statusLabel(status),
+      },
+      onChanged: (status) => onChanged({'taskStatus': status.name}),
+    );
+    final priorityField = graphEditSelect(
+      label: 'Приоритет',
+      value: priority,
+      options: {
+        0: 'Низкий',
+        1: 'Обычный',
+        2: 'Высокий',
+        if (priority < 0 || priority > 2) priority: '$priority',
+      },
+      onChanged: (value) => onChanged({'priority': value}),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: AppSpacing.md,
+      children: [
+        LayoutBuilder(
+          builder: (context, constraints) =>
+              constraints.maxWidth >= 360 &&
+                  MediaQuery.textScalerOf(context).scale(16) <= 20
+              ? Row(
+                  spacing: AppSpacing.md,
+                  children: [
+                    Expanded(child: statusField),
+                    Expanded(child: priorityField),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: AppSpacing.md,
+                  children: [statusField, priorityField],
+                ),
+        ),
+        if (projects case final queries?)
+          _TaskProjectField(
+            queries: queries,
+            value: attributes['projectId'] as String?,
+            onChanged: (id) => onChanged({'projectId': id}),
+          ),
+        ?sequence,
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpacing.sm),
+          child: Text(
+            'Планирование',
+            style: AppTypography.bodyMd.copyWith(
+              color: AppColors.onSurface,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        for (final (key, label, withTime) in const [
+          ('startsAt', 'Начало', true),
+          ('endsAt', 'Окончание', true),
+          ('dueDate', 'Дедлайн', false),
+        ])
+          GraphEditDateField(
+            label: label,
+            value: attributes[key] as DateTime?,
+            onChanged: (value) => onChanged({key: value}),
+            withTime: withTime,
+          ),
+      ],
+    );
+  }
+}
+
+class _TaskProjectField extends StatefulWidget {
+  const _TaskProjectField({
+    required this.queries,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final ProjectsQueries queries;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  State<_TaskProjectField> createState() => _TaskProjectFieldState();
+}
+
+class _TaskProjectFieldState extends State<_TaskProjectField> {
+  late final _projects = widget.queries.watchAllProjects();
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<List<Project>>(
+    stream: _projects,
+    builder: (context, snapshot) {
+      if (snapshot.hasError) {
+        return Text(
+          'Не удалось загрузить проекты.',
+          style: AppTypography.bodySm,
+        );
+      }
+      if (!snapshot.hasData) {
+        return const LinearProgressIndicator(
+          semanticsLabel: 'Загрузка проектов',
+        );
+      }
+      final options = {
+        '': 'Без проекта',
+        for (final project in snapshot.data!)
+          if (!project.isArchived || project.id == widget.value)
+            project.id: project.name,
+      };
+      final selected = widget.value ?? '';
+      options.putIfAbsent(selected, () => 'Недоступный проект');
+      return graphEditSelect(
+        label: 'Проект',
+        value: selected,
+        options: options,
+        onChanged: (id) => widget.onChanged(id.isEmpty ? null : id),
+      );
+    },
+  );
+}
 
 Widget? _statusBadge(BuildContext context, GraphNodeData node) {
   final value = node.attributes['taskStatus'];

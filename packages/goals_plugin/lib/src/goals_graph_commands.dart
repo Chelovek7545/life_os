@@ -26,11 +26,15 @@ GraphNodeCommands goalsGraphCommands(
             existing.storageRevision) {
       throw StateError('Node changed; reload before saving.');
     }
+    final attributes = request.updated.attributes;
+    final dueDate = attributes['dueDate'] as DateTime?;
     await goals.updateGoal(
       existing.copyWith(
         name: request.updated.title,
         description: request.updated.subtitle,
         color: request.updated.color,
+        dueDate: dueDate,
+        clearDueDate: attributes.containsKey('dueDate') && dueDate == null,
         updatedAt: DateTime.now(),
       ),
     );

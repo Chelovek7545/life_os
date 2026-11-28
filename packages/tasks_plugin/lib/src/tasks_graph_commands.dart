@@ -48,14 +48,24 @@ GraphNodeCommands _commands(
               existing.storageRevision) {
         throw StateError('Node changed; reload before saving.');
       }
-      final status = request.updated.attributes['taskStatus'];
+      final attributes = request.updated.attributes;
+      final status = attributes['taskStatus'];
       await tasks.updateTask(
         existing.copyWith(
           title: request.updated.title,
-          description: request.updated.subtitle,
+          description: request.updated.subtitle == request.current.subtitle
+              ? existing.description
+              : request.updated.subtitle,
           status: status is String
               ? taskStatusFromStorage(status)
               : existing.status,
+          priority: attributes['priority'] as int?,
+          startsAt: _datePatch(attributes, 'startsAt'),
+          endsAt: _datePatch(attributes, 'endsAt'),
+          dueDate: _datePatch(attributes, 'dueDate'),
+          projectId: !subtask && attributes.containsKey('projectId')
+              ? Wrapped(attributes['projectId'] as String?)
+              : null,
           updatedAt: DateTime.now(),
         ),
       );
@@ -106,3 +116,8 @@ GraphNodeCommands _commands(
     delete: delete,
   );
 }
+
+Wrapped<DateTime?>? _datePatch(Map<String, Object?> attributes, String field) =>
+    attributes.containsKey(field)
+    ? Wrapped(attributes[field] as DateTime?)
+    : null;

@@ -25,9 +25,14 @@ class TasksGraphContributor implements GraphContributor {
           attributes: {
             GraphNodeData.removeFromBoardAttribute: true,
             'taskStatus': task.status.name,
+            if (task.description.isEmpty) 'taskDescription': '',
             if (scope.isCanvas) ...{
               'projectId': ?task.projectId,
               'tagNames': [for (final tag in task.tags) tag.name],
+              'priority': task.priority,
+              'startsAt': ?task.startsAt,
+              'endsAt': ?task.endsAt,
+              'dueDate': ?task.dueDate,
             },
             if (task.predecessorTaskId != null)
               'predecessorTaskId': task.predecessorTaskId,

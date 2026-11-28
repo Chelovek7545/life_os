@@ -19,9 +19,11 @@ class GraphNodeComponentSpec {
     required this.createTitle,
     this.round = false,
     this.editColor = true,
+    this.descriptionForEdit,
     this.createColor = true,
     this.createDescription = true,
     this.editFields,
+    this.validateEdit,
     this.createFields,
     this.badge,
     this.details,
@@ -35,9 +37,12 @@ class GraphNodeComponentSpec {
   final String createTitle;
   final bool round;
   final bool editColor;
+  final String? Function(GraphNodeData)? descriptionForEdit;
   final bool createColor;
   final bool createDescription;
   final GraphAttributesBuilder? editFields;
+  final String? Function(GraphNodeData original, GraphNodeData updated)?
+  validateEdit;
   final GraphAttributesBuilder? createFields;
   final Widget? Function(BuildContext, GraphNodeData)? badge;
   final Widget? Function(BuildContext, GraphNodeData, GraphNodeInteraction)?

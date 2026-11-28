@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:goals_api/goals_api.dart';
 import 'package:graph_canvas/graph_canvas.dart' as graph;
 import 'package:life_os/features/lifegraph/data/preferences_canvas_session.dart';
 import 'package:life_os/features/lifegraph/presentation/canvas_export.dart';
@@ -10,19 +11,25 @@ import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/canvases_panel.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
 import 'package:lifegraph_plugin/canvas_board.dart';
+import 'package:projects_api/projects_api.dart';
+import 'package:spheres_api/spheres_api.dart';
 import 'package:tasks_api/tasks_api.dart';
 
 import '../../../support/test_app.dart';
 
-Future<void> _until(WidgetTester tester, Finder finder) async {
+Future<void> _until(
+  WidgetTester tester,
+  Finder finder, {
+  bool exists = true,
+}) async {
   for (var i = 0; i < 35; i++) {
     await tester.pump(const Duration(milliseconds: 50));
-    if (finder.evaluate().isNotEmpty) return;
+    if (finder.evaluate().isNotEmpty == exists) return;
     await tester.runAsync(
       () => Future<void>.delayed(const Duration(milliseconds: 10)),
     );
   }
-  expect(finder, findsOneWidget);
+  expect(finder, exists ? findsOneWidget : findsNothing);
 }
 
 void main() {
@@ -74,10 +81,9 @@ void main() {
         'Настройки отображения',
         'Экспорт канваса',
         'Заметки канваса',
-        'Видимость слоёв',
+        'Рука',
         'Добавить карточку',
         'Выделение рамкой',
-        'Разложить по веткам',
       ]),
     );
     expect(
@@ -98,12 +104,15 @@ void main() {
     expect(tester.widget<Text>(zoomLabel).data, isNot(initialZoom));
     expect(find.byTooltip('Режим фокуса'), findsNothing);
     expect(find.byTooltip('Показать весь граф'), findsNothing);
+    expect(find.byTooltip('Видимость слоёв'), findsNothing);
+    expect(find.byTooltip('Разложить по веткам'), findsNothing);
+    final tools = find.byKey(const ValueKey('canvas-tools'));
+    final graphView = find.byType(graph.GraphView);
+    expect(tester.getCenter(tools).dy, tester.getCenter(graphView).dy);
     final selection = find.byTooltip('Выделение рамкой');
+    final hand = find.byTooltip('Рука');
     expect(selection, findsOneWidget);
-    expect(
-      tester.getCenter(selection).dx,
-      tester.getCenter(find.byTooltip('Видимость слоёв')).dx,
-    );
+    expect(tester.getCenter(selection).dx, tester.getCenter(hand).dx);
     expect(
       tester.getCenter(selection).dx,
       tester.getCenter(find.byTooltip('Добавить карточку')).dx,
@@ -112,8 +121,39 @@ void main() {
       of: selection,
       matching: find.byType(graph.ControlButton),
     );
+    final handControl = find.ancestor(
+      of: hand,
+      matching: find.byType(graph.ControlButton),
+    );
     await tester.tap(selection);
     await tester.pumpAndSettle();
+    expect(tester.widget<graph.ControlButton>(selectionControl).active, isTrue);
+    await tester.tap(hand);
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<graph.ControlButton>(selectionControl).active,
+      isFalse,
+    );
+    expect(tester.widget<graph.ControlButton>(handControl).active, isTrue);
+
+    final camera = tester.widget<graph.GraphView>(graphView).camera!;
+    final origin = editor.graph.single.position;
+    final nodeCenter = camera.screenBoundsOfNode(task.id)!.center;
+    await tester.dragFrom(
+      nodeCenter,
+      const Offset(90, 60),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      camera.screenBoundsOfNode(task.id)!.center.dx,
+      greaterThan(nodeCenter.dx),
+    );
+    expect(editor.graph.single.position, origin);
+
+    await tester.tap(selection);
+    await tester.pumpAndSettle();
+    expect(tester.widget<graph.ControlButton>(handControl).active, isFalse);
     expect(tester.widget<graph.ControlButton>(selectionControl).active, isTrue);
     await tester.tap(selection);
     await tester.pumpAndSettle();
@@ -320,6 +360,247 @@ void main() {
       return session.read();
     }))!;
     expect(CanvasBoardDocument(raw).nodes, hasLength(2));
+  });
+
+  testWidgets(
+    'task editor shows live sequence and keeps the canvas interactive',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1200, 780);
+      addTearDown(tester.view.reset);
+      final project = Project.create(name: 'Новый проект');
+      final previous = Task.blank().copyWith(title: 'Подготовить материалы');
+      final task = Task.blank().copyWith(
+        title: 'Запланировать встречу',
+        startsAt: Wrapped(DateTime(2027, 1, 12, 9, 30)),
+        dueDate: Wrapped(DateTime(2027, 1, 20)),
+        predecessorTaskIds: [previous.id],
+        tags: const [Tag(id: 0, name: 'встречи', colorHex: 0xFF4A90D9)],
+      );
+      final next = Task.blank().copyWith(
+        title: 'Отправить итоги',
+        predecessorTaskIds: [task.id],
+      );
+      final (app, editor) = (await tester.runAsync(() async {
+        final app = await createTestApp(enableObsidian: false);
+        await app.projectsRepository.addProject(project);
+        for (final item in [previous, task, next]) {
+          await app.tasksRepository.addTask(item);
+        }
+        final pulse = app.pulseScreenViewModel;
+        final canvas = await pulse.createCanvas(title: 'Планирование');
+        final editor = await pulse.openCanvas(canvas);
+        await editor.addCanvasEntity(task.id, const Offset(1200, 1000));
+        return (app, editor);
+      }))!;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData.dark(),
+          home: LifeGraphScreen(viewModel: editor),
+        ),
+      );
+      await _until(tester, find.text(task.title));
+      final camera = tester
+          .widget<graph.GraphView>(find.byType(graph.GraphView))
+          .camera!;
+      camera.revealNode(task.id);
+      await tester.pumpAndSettle();
+      await tester.tapAt(
+        camera.screenBoundsOfNode(task.id)!.center,
+        kind: PointerDeviceKind.mouse,
+        buttons: kSecondaryMouseButton,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Редактировать карточку'));
+      final title = find.text('Редактировать задачу');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 60));
+      final entering = tester.getTopLeft(title).dx;
+      final projectField = find.byType(DropdownButtonFormField<String>);
+      await _until(tester, projectField);
+      await _until(tester, find.text(next.title));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(title).dx, lessThan(entering));
+      expect(tester.getTopLeft(title).dx, greaterThan(690));
+      expect(find.text('Предыдущая задача'), findsOneWidget);
+      expect(find.text(previous.title), findsOneWidget);
+      expect(find.text('Следующая задача'), findsOneWidget);
+      await tester.runAsync(
+        () => app.tasksRepository.updateTask(
+          next.copyWith(title: 'Отправить протокол'),
+        ),
+      );
+      await _until(tester, find.text('Отправить протокол'));
+      expect(find.text(next.title), findsNothing);
+
+      final before = camera.screenBoundsOfNode(task.id)!.center;
+      await tester.dragFrom(const Offset(260, 300), const Offset(85, 55));
+      await tester.pumpAndSettle();
+      expect(
+        camera.screenBoundsOfNode(task.id)!.center.dx,
+        greaterThan(before.dx),
+      );
+      final scale = camera.scale.value;
+      final zoom = find.byTooltip('Увеличить масштаб');
+      expect(zoom.hitTestable(), findsOneWidget);
+      await tester.tap(zoom);
+      await tester.pumpAndSettle();
+      expect(camera.scale.value, greaterThan(scale));
+      expect(title, findsOneWidget);
+
+      final priority = find.byType(DropdownButtonFormField<int>);
+      await tester.ensureVisible(priority);
+      await tester.tap(priority);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Высокий').last);
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(projectField);
+      await tester.tap(projectField);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(project.name).last);
+      await tester.pumpAndSettle();
+
+      final clearDeadline = find.byTooltip('Очистить дату · Дедлайн');
+      await tester.ensureVisible(clearDeadline);
+      await tester.tap(clearDeadline);
+      await tester.pumpAndSettle();
+      final selectEnd = find.byTooltip('Выбрать дату · Окончание');
+      await tester.ensureVisible(selectEnd);
+      await tester.tap(selectEnd);
+      await tester.pumpAndSettle();
+      final calendar = tester.widget<CalendarDatePicker>(
+        find.byType(CalendarDatePicker),
+      );
+      calendar.onDateChanged(DateTime(2027, 1, 13));
+      await tester.pump();
+      await tester.tap(find.text('Выбрать'));
+      await tester.pumpAndSettle();
+
+      await tester.runAsync(() => tester.tap(find.text('Сохранить')));
+      await _until(tester, title, exists: false);
+      await tester.pumpAndSettle();
+      expect(title, findsNothing);
+      final saved = (await tester.runAsync(
+        () => app.tasksRepository.getById(task.id),
+      ))!;
+      expect(saved.priority, 2);
+      expect(saved.projectId, project.id);
+      expect(saved.startsAt, task.startsAt);
+      expect(saved.endsAt?.day, 13);
+      expect(saved.dueDate, isNull);
+      expect(saved.description, isEmpty);
+      expect(saved.tags.single.name, 'встречи');
+      expect(tester.takeException(), isNull);
+      await disposeTestApp(tester, app);
+    },
+  );
+
+  testWidgets('compact editor saves project, goal and sphere fields', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(360, 580);
+    addTearDown(tester.view.reset);
+    final sphere = Sphere.create(name: 'Работа');
+    final deadline = DateTime(2027, 3, 15);
+    final goal = Goal.create(
+      name: 'Запуск',
+      sphereId: sphere.id,
+      dueDate: deadline,
+    );
+    final project = Project.create(
+      name: 'Пилот',
+    ).copyWith(dueDate: Wrapped(deadline));
+    final (app, editor) = (await tester.runAsync(() async {
+      final app = await createTestApp(enableObsidian: false);
+      await app.spheresRepository.addSphere(sphere);
+      await app.goalsRepository.addGoal(goal);
+      await app.projectsRepository.addProject(project);
+      final pulse = app.pulseScreenViewModel;
+      final canvas = await pulse.createCanvas(title: 'Рабочая доска');
+      final editor = await pulse.openCanvas(canvas);
+      await editor.addCanvasEntity(sphere.id, const Offset(900, 1000));
+      await editor.addCanvasEntity(goal.id, const Offset(1200, 1000));
+      await editor.addCanvasEntity(project.id, const Offset(1500, 1000));
+      return (app, editor);
+    }))!;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(1.25)),
+          child: child!,
+        ),
+        home: LifeGraphScreen(viewModel: editor),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final camera = tester
+        .widget<graph.GraphView>(find.byType(graph.GraphView))
+        .camera!;
+    Future<void> open(String id, String title) async {
+      camera.revealNode(id);
+      await tester.pumpAndSettle();
+      await tester.longPressAt(camera.screenBoundsOfNode(id)!.center);
+      await tester.pumpAndSettle();
+      expect(find.text(title), findsOneWidget);
+      expect(find.text('Сохранить').hitTestable(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+
+    Future<void> save() async {
+      await tester.runAsync(() => tester.tap(find.text('Сохранить')));
+      await _until(tester, find.byTooltip('Закрыть редактор'), exists: false);
+      await tester.pumpAndSettle();
+    }
+
+    await open(project.id, 'Редактировать проект');
+    expect(find.byTooltip('Рука').hitTestable(), findsOneWidget);
+    final zoom = find.byTooltip('Увеличить масштаб');
+    expect(zoom.hitTestable(), findsOneWidget);
+    final scale = camera.scale.value;
+    await tester.tap(zoom);
+    await tester.pumpAndSettle();
+    expect(camera.scale.value, greaterThan(scale));
+    expect(find.text('Редактировать проект'), findsOneWidget);
+    final archived = find.byType(DropdownButtonFormField<bool>);
+    await tester.ensureVisible(archived);
+    await tester.tap(archived);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('В архиве').last);
+    await tester.pumpAndSettle();
+    await save();
+
+    await open(goal.id, 'Редактировать цель');
+    final clear = find.byTooltip('Очистить дату · Дедлайн');
+    await tester.ensureVisible(clear);
+    await tester.tap(clear);
+    await save();
+
+    await open(sphere.id, 'Редактировать сферу');
+    final hex = find.byWidgetPredicate(
+      (widget) =>
+          widget is TextField && widget.decoration?.labelText == 'Цвет HEX',
+    );
+    await tester.ensureVisible(hex);
+    await tester.enterText(hex, '#96C2AB');
+    await save();
+
+    await tester.runAsync(() async {
+      final stored = (await app.projectsRepository.getProjectById(project.id))!;
+      expect(stored.isArchived, isTrue);
+      expect(stored.dueDate, deadline);
+      expect((await app.goalsRepository.getGoal(goal.id))!.dueDate, isNull);
+      expect(
+        (await app.spheresRepository.getSphere(sphere.id))!.color,
+        '#96C2AB',
+      );
+    });
+    expect(tester.takeException(), isNull);
+    await disposeTestApp(tester, app);
   });
 
   test(

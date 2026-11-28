@@ -51,6 +51,7 @@ class Goal {
     String? color,
     String? sphereId,
     DateTime? dueDate,
+    bool clearDueDate = false,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -61,7 +62,7 @@ class Goal {
       description: description ?? this.description,
       color: color ?? this.color,
       sphereId: sphereId ?? this.sphereId,
-      dueDate: dueDate ?? this.dueDate,
+      dueDate: clearDueDate ? null : dueDate ?? this.dueDate,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

@@ -19,7 +19,8 @@ class ProjectsGraphContributor implements GraphContributor {
               subtitle: project.description,
               color: project.color,
               attributes: {
-                if (project.dueDate case final date?) 'dueDate': date,
+                'dueDate': ?project.dueDate,
+                if (scope.isCanvas) 'isArchived': project.isArchived,
                 if (project.storageRevision != null)
                   'storageRevision': project.storageRevision,
               },

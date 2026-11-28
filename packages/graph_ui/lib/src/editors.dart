@@ -74,6 +74,9 @@ class GraphNodeActionContext {
 typedef GraphFormBuilder =
     Widget Function(BuildContext context, GraphNodeActionContext actions);
 
+typedef GraphPresentedForm =
+    Widget Function(BuildContext context, VoidCallback close);
+
 typedef GraphStandaloneFormBuilder =
     Widget Function(
       BuildContext context,
@@ -279,8 +282,9 @@ class GraphNodeDialogs {
 
   Future<void> edit(
     BuildContext context,
-    GraphNodeActionContext actions,
-  ) async {
+    GraphNodeActionContext actions, {
+    Future<void> Function(BuildContext, GraphPresentedForm)? present,
+  }) async {
     final entry = registry._editor(actions.node.kind);
     if (entry == null || !canEdit(actions.node.kind)) return;
     await _show(
@@ -289,6 +293,7 @@ class GraphNodeDialogs {
       (context, active) =>
           entry.editor.builder(context, actions._guarded(active)),
       commands.guardFor(actions.node.kind),
+      present: present,
     );
   }
 
@@ -348,29 +353,29 @@ class GraphNodeDialogs {
     BuildContext context,
     _EditorOwner owner,
     Widget Function(BuildContext, bool Function()) builder,
-    bool Function() commandActive,
-  ) {
+    bool Function() commandActive, {
+    Future<void> Function(BuildContext, GraphPresentedForm)? present,
+  }) {
     bool active() => registry._active(owner) && commandActive();
-    return showDialog<void>(
-      context: context,
-      builder: (context) => ListenableBuilder(
-        listenable: registry,
-        builder: (context, _) => active()
-            ? builder(context, active)
-            : AlertDialog(
-                title: const Text('Действие больше недоступно'),
-                content: const Text(
-                  'Модуль был отключён. Закройте форму и выберите доступное действие.',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Закрыть'),
-                  ),
-                ],
+    Widget form(BuildContext context, VoidCallback close) => ListenableBuilder(
+      listenable: registry,
+      builder: (context, _) => active()
+          ? builder(context, active)
+          : AlertDialog(
+              title: const Text('Действие больше недоступно'),
+              content: const Text(
+                'Модуль был отключён. Закройте форму и выберите доступное действие.',
               ),
-      ),
+              actions: [
+                TextButton(onPressed: close, child: const Text('Закрыть')),
+              ],
+            ),
     );
+    return present?.call(context, form) ??
+        showDialog<void>(
+          context: context,
+          builder: (context) => form(context, () => Navigator.pop(context)),
+        );
   }
 
   Future<void> remove(

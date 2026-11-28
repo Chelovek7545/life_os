@@ -22,6 +22,8 @@ class GoalsGraphContributor implements GraphContributor {
                 subtitle: goal.description,
                 color: goal.color,
                 attributes: {
+                  if (scope.isCanvas && goal.dueDate != null)
+                    'dueDate': goal.dueDate,
                   if (goal.storageRevision != null)
                     'storageRevision': goal.storageRevision,
                 },

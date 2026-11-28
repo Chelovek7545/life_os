@@ -37,6 +37,10 @@ GraphNodeCommands projectsGraphCommands(
           name: request.updated.title,
           description: request.updated.subtitle,
           color: request.updated.color,
+          dueDate: request.updated.attributes.containsKey('dueDate')
+              ? Wrapped(request.updated.attributes['dueDate'] as DateTime?)
+              : null,
+          isArchived: request.updated.attributes['isArchived'] as bool?,
           updatedAt: DateTime.now(),
         ),
       );

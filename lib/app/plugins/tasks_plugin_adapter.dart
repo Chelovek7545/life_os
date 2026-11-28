@@ -6,6 +6,7 @@ import 'package:graph_api/graph_api.dart';
 import 'package:graph_ui/graph_ui.dart';
 import 'package:life_os/features/tasks/presentation/tasks_screen.dart';
 import 'package:life_os/features/tasks/presentation/components/task_editor_overlay.dart';
+import 'package:life_os/features/tasks/presentation/components/task_sequence_section.dart';
 import 'package:life_os/features/tasks/presentation/tasks_graph_ui.dart';
 import 'package:graph_components/graph_components.dart';
 import 'package:life_os/features/tasks/presentation/tasks_graph_components.dart';
@@ -45,13 +46,24 @@ TasksPlugin createTasksPlugin({
   required GraphDeleteHandler delete,
 }) {
   TasksNodeUi node({bool subtask = false}) {
-    final spec = taskGraphComponent(subtask: subtask);
+    final spec = taskGraphComponent(subtask: subtask, projects: projects);
     return TasksNodeUi(
       size: spec.size,
       card: (context, node, state, setStatus) => graphNodePresentation(
         taskGraphComponent(subtask: subtask, setStatus: setStatus),
       ).builder(context, node, state),
-      editor: graphNodeEditor(spec).builder,
+      editor: (context, actions) => graphNodeEditor(
+        actions.scope.isCanvas
+            ? taskGraphComponent(
+                subtask: subtask,
+                projects: projects,
+                sequence: TaskSequenceSection(
+                  taskId: actions.node.id,
+                  watchTasks: tasks.watchTasks,
+                ),
+              )
+            : spec,
+      ).builder(context, actions),
       create: (_, actions) => graphChildForm(spec, actions),
       standaloneForm: subtask
           ? null

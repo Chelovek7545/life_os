@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:life_os/core/ui/hierarchy/build_note_hierarchy.dart';
 import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
+import 'package:life_os/core/ui/glass_panel.dart';
 import 'package:life_os/features/lifegraph/data/android_graph_files.dart';
 import 'package:graph_canvas/graph_canvas.dart' as graph;
 import 'package:lifegraph_plugin/lifegraph_plugin.dart'
@@ -32,6 +33,7 @@ import 'widgets/canvas_add_dialog.dart';
 import 'widgets/canvas_visuals.dart';
 import 'widgets/canvas_editor_chrome.dart';
 import 'widgets/canvas_editor_panels.dart';
+import 'widgets/canvas_entity_editor.dart';
 import 'canvas_export.dart';
 
 /// Экран графа жизни: сфера -> цель -> проект -> задача.
@@ -62,6 +64,8 @@ enum _BackgroundMenuAction { placeTask, placeEntity }
 
 enum _CanvasMoreAction { focus, branch, disconnect, copyTitle }
 
+enum _CanvasTool { pointer, hand, frame }
+
 class _LifeGraphScreenState extends State<LifeGraphScreen> {
   final graph.GraphViewCamera _camera = graph.GraphViewCamera();
   String? _syncedSphereId;
@@ -69,7 +73,8 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   bool _closing = false;
   bool _exporting = false;
   bool _arranging = false;
-  bool _frameSelection = false;
+  _CanvasTool _canvasTool = _CanvasTool.pointer;
+  ({String id, GraphPresentedForm form})? _entityEditor;
   CanvasDisplayOptions _display = const CanvasDisplayOptions();
   final _filters = BehaviorSubject.seeded(const CanvasFilters());
   final _nodeScale = BehaviorSubject.seeded(1.0);
@@ -247,6 +252,10 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       canPop: _allowPop,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop || _closing) return;
+        if (result == null && _entityEditor != null) {
+          setState(() => _entityEditor = null);
+          return;
+        }
         _closing = true;
         try {
           if (!widget.viewModel.isClosing) await widget.viewModel.flush();
@@ -320,6 +329,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
             nodes.any((n) => n.parentId == null && n.id == sphereId);
         if (ready) _maybeFit(sphereId);
         final stale = _syncedSphereId != sphereId;
+        final editor = _entityEditor;
 
         return Stack(
           children: [
@@ -343,6 +353,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                 showControls: !independent,
                 showGrid: !independent || _display.grid,
                 straightEdges: independent && _display.straight,
+                panTool: independent && _canvasTool == _CanvasTool.hand,
                 animateTransitions:
                     !independent ||
                     (_display.animations &&
@@ -380,9 +391,20 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                   child: CircularProgressIndicator(color: AppColors.primary),
                 ),
               ),
-            if (independent)
-              Positioned.fill(child: _editorChrome())
-            else ...[
+            if (independent) ...[
+              Positioned.fill(child: _editorChrome()),
+              Positioned.fill(
+                child: CanvasEntityEditorPanel(
+                  form: editor?.form,
+                  onClose: () {
+                    if (mounted &&
+                        identical(_entityEditor?.form, editor?.form)) {
+                      setState(() => _entityEditor = null);
+                    }
+                  },
+                ),
+              ),
+            ] else ...[
               Positioned(
                 left: 18,
                 bottom: 18,
@@ -435,8 +457,13 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     builder: (context, constraints) {
       final wide = constraints.maxWidth >= 660;
       final short = constraints.maxHeight < 450;
+      final horizontalZoom = short || (!wide && _entityEditor != null);
       const toolSize = 38.0;
       const gap = 7.0;
+      final toolInset = math.min(
+        14 + toolSize + gap,
+        constraints.maxHeight / 4,
+      );
       Widget tool(
         IconData icon,
         String title,
@@ -553,32 +580,45 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
             child: Row(children: spaced(actions, Axis.horizontal)),
           ),
           Positioned(
-            top: 14 + toolSize + gap + (wide ? 9 : 0),
-            bottom: 14 + toolSize + gap,
+            top: toolInset,
+            bottom: toolInset,
             left: 14,
-            child: SingleChildScrollView(
-              primary: false,
-              child: Column(
-                children: spaced([
-                  tool(
-                    Icons.sticky_note_2_outlined,
-                    'Заметки канваса',
-                    () => _searchCanvas(notesOnly: true),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: GlassPanel(
+                key: const ValueKey('canvas-tools'),
+                padding: const EdgeInsets.all(4),
+                child: SingleChildScrollView(
+                  primary: false,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: 4,
+                    children: [
+                      tool(
+                        Icons.sticky_note_2_outlined,
+                        'Заметки канваса',
+                        () => _searchCanvas(notesOnly: true),
+                      ),
+                      tool(
+                        Icons.pan_tool_outlined,
+                        'Рука',
+                        () => _toggleCanvasTool(_CanvasTool.hand),
+                        active: _canvasTool == _CanvasTool.hand,
+                      ),
+                      tool(
+                        Icons.select_all,
+                        'Выделение рамкой',
+                        () => _toggleCanvasTool(_CanvasTool.frame),
+                        active: _canvasTool == _CanvasTool.frame,
+                      ),
+                      tool(
+                        Icons.add,
+                        'Добавить карточку',
+                        _showAddCanvasObjects,
+                      ),
+                    ],
                   ),
-                  tool(
-                    Icons.layers_outlined,
-                    'Видимость слоёв',
-                    () => _configureFilters(layersOnly: true),
-                    active: _filters.value.kinds.isNotEmpty,
-                  ),
-                  tool(
-                    Icons.select_all,
-                    'Выделение рамкой',
-                    _toggleFrameSelection,
-                    active: _frameSelection,
-                  ),
-                  tool(Icons.add, 'Добавить карточку', _showAddCanvasObjects),
-                ], Axis.vertical),
+                ),
               ),
             ),
           ),
@@ -586,7 +626,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
             Positioned(
               bottom: 14,
               left: 14,
-              right: wide ? null : 80,
+              right: wide ? null : (horizontalZoom ? 200 : 80),
               child: Align(
                 alignment: Alignment.bottomLeft,
                 child: CanvasToolSurface(
@@ -600,40 +640,26 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                         ),
                       ),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: StreamBuilder<int>(
-                            stream: _visibleCount,
-                            initialData:
-                                widget.viewModel.graph.length +
-                                widget.viewModel.notes.length,
-                            builder: (_, snapshot) => Text(
-                              '${canvasCardCount(snapshot.data ?? 0)}${wide ? ' · ПКМ — действия' : ''}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: canvasToolInk,
-                                fontSize: 12,
-                              ),
-                            ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      child: StreamBuilder<int>(
+                        stream: _visibleCount,
+                        initialData:
+                            widget.viewModel.graph.length +
+                            widget.viewModel.notes.length,
+                        builder: (_, snapshot) => Text(
+                          '${canvasCardCount(snapshot.data ?? 0)}${wide ? ' · ПКМ — действия' : ''}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: canvasToolInk,
+                            fontSize: 12,
                           ),
                         ),
-                        const SizedBox(width: 5),
-                        const SizedBox(
-                          height: 24,
-                          child: VerticalDivider(width: 1),
-                        ),
-                        tool(
-                          Icons.account_tree_outlined,
-                          'Разложить по веткам',
-                          _arranging || widget.viewModel.graph.length < 2
-                              ? null
-                              : _arrangeNodes,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -642,7 +668,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           Positioned(
             bottom: 14,
             right: 14,
-            child: short
+            child: horizontalZoom
                 ? Row(children: spaced(zoom, Axis.horizontal))
                 : Column(children: spaced(zoom, Axis.vertical)),
           ),
@@ -651,9 +677,11 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     },
   );
 
-  void _toggleFrameSelection() {
-    setState(() => _frameSelection = !_frameSelection);
-    _camera.setSelectionMode(_frameSelection);
+  void _toggleCanvasTool(_CanvasTool tool) {
+    setState(
+      () => _canvasTool = _canvasTool == tool ? _CanvasTool.pointer : tool,
+    );
+    _camera.setSelectionMode(_canvasTool == _CanvasTool.frame);
   }
 
   Future<void> _switchCanvas() async {
@@ -726,7 +754,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   void _applyFilters(CanvasFilters filters) =>
       setState(() => _filters.add(filters));
 
-  Future<void> _configureFilters({bool layersOnly = false}) async {
+  Future<void> _configureFilters() async {
     final model = widget.viewModel;
     final kinds = <String>{if (model.notes.isNotEmpty) 'note'};
     final projects = <String, String>{};
@@ -746,7 +774,6 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       availableKinds: kinds,
       availableProjects: projects,
       availableTags: tags,
-      layersOnly: layersOnly,
     );
     if (selected != null && mounted) _applyFilters(selected);
   }
@@ -965,7 +992,9 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
               ? null
               : () => _chooseDisconnection(disconnections),
           edit: live && dialogs.canEdit(node.kind)
-              ? () => dialogs.edit(context, actions)
+              ? independent
+                    ? () => _openEntityEditor(node.id)
+                    : () => dialogs.edit(context, actions)
               : null,
           addChild: !independent && dialogs.canAddChild(node.kind)
               ? () => dialogs.addChild(context, actions)
@@ -1367,6 +1396,26 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     );
   }
 
+  Future<void> _openEntityEditor(String id) async {
+    final model = widget.viewModel;
+    if (_closing ||
+        model.isClosing ||
+        _entityEditor?.id == id ||
+        !model.canEditCanvasEntity(id)) {
+      return;
+    }
+    final dialogs = GraphNodeDialogs(
+      registry: model.nodeEditors,
+      commands: model.commands,
+    );
+    await dialogs.edit(
+      context,
+      model.actionsFor(id),
+      present: (_, form) async =>
+          setState(() => _entityEditor = (id: id, form: form)),
+    );
+  }
+
   Future<void> _showCanvasNodeMenu(String id, Offset pointer) async {
     final model = widget.viewModel;
     final node = model.nodeById(id);
@@ -1384,13 +1433,15 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         (candidate) => model.canConnectCanvasCards(id, candidate.id),
       ),
     );
-    if (!mounted || model.isClosing || model.nodeById(id) == null) return;
+    if (!mounted ||
+        widget.viewModel != model ||
+        model.isClosing ||
+        model.nodeById(id) == null) {
+      return;
+    }
     switch (action) {
       case CanvasNodeAction.edit:
-        if (model.canEditCanvasEntity(id) &&
-            dialogs.canEdit(model.nodeById(id)!.kind)) {
-          await dialogs.edit(context, model.actionsFor(id));
-        }
+        await _openEntityEditor(id);
       case CanvasNodeAction.link:
         final target = await showDialog<GraphNodeData>(
           context: context,

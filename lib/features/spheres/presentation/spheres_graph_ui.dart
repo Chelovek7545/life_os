@@ -9,10 +9,13 @@ const sphereGraphComponent = GraphNodeComponentSpec(
   icon: Icons.public_rounded,
   size: Size(140, 140),
   round: true,
+  descriptionForEdit: _sphereDescription,
   editTitle: 'Редактировать сферу',
   createTitle: 'Добавить ',
   details: _sphereTaskCount,
 );
+
+String? _sphereDescription(GraphNodeData _) => null;
 
 Widget? _sphereTaskCount(
   BuildContext context,

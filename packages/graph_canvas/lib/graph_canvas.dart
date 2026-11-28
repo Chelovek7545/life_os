@@ -545,6 +545,9 @@ class GraphView extends StatefulWidget {
   final bool showGrid;
   final bool straightEdges;
   final bool animateTransitions;
+
+  /// Lets the camera receive drags that start over cards and notes.
+  final bool panTool;
   final bool doubleTapCreatesRoot;
   final bool longPressDeletes;
 
@@ -578,6 +581,7 @@ class GraphView extends StatefulWidget {
     this.showGrid = true,
     this.straightEdges = false,
     this.animateTransitions = true,
+    this.panTool = false,
     this.doubleTapCreatesRoot = true,
     this.longPressDeletes = true,
     this.notesDeletable = true,
@@ -692,6 +696,16 @@ class _GraphViewState extends State<GraphView>
   @override
   void didUpdateWidget(covariant GraphView old) {
     super.didUpdateWidget(old);
+    if (widget.panTool && !old.panTool) {
+      _selectionAnchor = null;
+      _selectionPoint = null;
+      _connection = null;
+      if (_editingNoteId != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && widget.panTool) _commitNoteEdit();
+        });
+      }
+    }
     if (old.camera != widget.camera) {
       old.camera?._delegate = null;
       widget.camera?._delegate = this;
@@ -1657,6 +1671,17 @@ class _GraphViewState extends State<GraphView>
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
+  Widget _worldGestures({required Widget child}) => MouseRegion(
+    cursor: widget.panTool ? SystemMouseCursors.grab : MouseCursor.defer,
+    child: ExcludeFocus(
+      excluding: widget.panTool,
+      child: AbsorbPointer(
+        absorbing: widget.panTool,
+        child: SizedBox.fromSize(size: widget.layout.worldSize, child: child),
+      ),
+    ),
+  );
+
   List<_EdgeSpec> _buildEdges(GraphViewTheme theme) {
     final out = <_EdgeSpec>[];
     for (final n in _nodes.values) {
@@ -1695,7 +1720,8 @@ class _GraphViewState extends State<GraphView>
     final ns = l.nodeSize;
     // Keep the recognizer until pointer-up/cancel even if a modifier is released.
     final frameEnabled =
-        _selectionMode || _selectionModifier || _selectionAnchor != null;
+        !widget.panTool &&
+        (_selectionMode || _selectionModifier || _selectionAnchor != null);
     final connection = _connection;
     final source = _nodes[connection?.sourceId];
     GraphNode? target;
@@ -1859,9 +1885,7 @@ class _GraphViewState extends State<GraphView>
               scaleEnabled: _selectionAnchor == null && connection == null,
               minScale: widget.minScale,
               maxScale: widget.maxScale,
-              child: SizedBox(
-                width: l.worldSize.width,
-                height: l.worldSize.height,
+              child: _worldGestures(
                 child: Stack(
                   children: [
                     Positioned.fill(

@@ -160,7 +160,6 @@ Future<CanvasFilters?> showCanvasFilters(
   required Set<String> availableKinds,
   required Map<String, String> availableProjects,
   required Set<String> availableTags,
-  bool layersOnly = false,
 }) {
   final kinds = {...initial.kinds};
   final statuses = {...initial.statuses};
@@ -203,7 +202,7 @@ Future<CanvasFilters?> showCanvasFilters(
           ),
         );
         return AlertDialog(
-          title: Text(layersOnly ? 'Видимость слоёв' : 'Фильтры канваса'),
+          title: const Text('Фильтры канваса'),
           scrollable: true,
           content: SizedBox(
             width: 460,
@@ -214,12 +213,11 @@ Future<CanvasFilters?> showCanvasFilters(
                   for (final kind in {...availableKinds, ...kinds})
                     kind: canvasKindLabel(kind),
                 }, kinds),
-                if (!layersOnly &&
-                    (availableKinds.contains('task') || statuses.isNotEmpty))
+                if (availableKinds.contains('task') || statuses.isNotEmpty)
                   group('Статусы задач', _taskStatuses, statuses),
-                if (!layersOnly && availableProjects.isNotEmpty)
+                if (availableProjects.isNotEmpty)
                   group('Проекты', availableProjects, projects),
-                if (!layersOnly && availableTags.isNotEmpty)
+                if (availableTags.isNotEmpty)
                   group('Теги задач', {
                     for (final tag in availableTags) tag: tag,
                   }, tags),
@@ -228,16 +226,7 @@ Future<CanvasFilters?> showCanvasFilters(
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(
-                context,
-                layersOnly
-                    ? CanvasFilters(
-                        statuses: statuses,
-                        projects: projects,
-                        tags: tags,
-                      )
-                    : const CanvasFilters(),
-              ),
+              onPressed: () => Navigator.pop(context, const CanvasFilters()),
               child: const Text('Сбросить'),
             ),
             FilledButton(

@@ -3,6 +3,7 @@ import 'package:graph_components/graph_components.dart';
 import 'package:graph_ui/graph_ui.dart';
 import 'package:goals_plugin/goals_plugin.dart' show goalsChildAction;
 import 'package:graph_api/graph_api.dart';
+import 'package:life_os/core/ui/graph_edit_fields.dart';
 
 const goalGraphComponent = GraphNodeComponentSpec(
   kind: 'goal',
@@ -12,7 +13,20 @@ const goalGraphComponent = GraphNodeComponentSpec(
   editTitle: 'Редактировать цель',
   createTitle: 'Добавить цель',
   details: _goalProgress,
+  editFields: _goalFields,
 );
+
+Widget _goalFields(
+  BuildContext context,
+  Map<String, Object?> attributes,
+  ValueChanged<Map<String, Object?>> onChanged,
+) => GraphNodeEditLayout.maybeOf(context) == null
+    ? const SizedBox.shrink()
+    : GraphEditDateField(
+        label: 'Дедлайн',
+        value: attributes['dueDate'] as DateTime?,
+        onChanged: (date) => onChanged({'dueDate': date}),
+      );
 
 Widget? _goalProgress(
   BuildContext context,
