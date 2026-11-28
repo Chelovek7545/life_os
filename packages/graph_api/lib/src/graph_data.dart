@@ -1,7 +1,9 @@
 class GraphScope {
   const GraphScope({required this.rootId, required this.rootKind});
+  const GraphScope.canvas(String id) : this(rootId: id, rootKind: 'canvas');
   final String rootId;
   final String rootKind;
+  bool get isCanvas => rootKind == 'canvas';
 }
 
 class GraphNodeData {

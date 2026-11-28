@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:graph_api/graph_api.dart';
 import 'package:graph_ui/graph_ui.dart';
@@ -8,8 +9,11 @@ import 'package:spheres_api/spheres_api.dart';
 import 'package:tasks_api/tasks_api.dart';
 import 'package:notes_api/notes_api.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:uuid/uuid.dart';
 import 'graph_builder.dart';
 import 'life_graph_view_model.dart';
+import 'canvas_catalog.dart';
+import '../canvas_document.dart';
 
 class PulseScreenViewModel {
   PulseScreenViewModel({
@@ -24,7 +28,7 @@ class PulseScreenViewModel {
     required this.nodeEditors,
     required this.commands,
     required this.obsidianRepository,
-    this.ensureAllBoards = false,
+    this.canvasStore,
   });
   final SpheresApi spheresRepository;
   final GoalsQueries goalsRepository;
@@ -37,9 +41,10 @@ class PulseScreenViewModel {
   final GraphEditorRegistry nodeEditors;
   final GraphCommandRegistry commands;
   final VaultNotesApi? obsidianRepository;
-  final bool ensureAllBoards;
-  final _ensuredBoards = <String>{};
-  String? _ensuredRoot;
+  final CanvasCatalogStore? canvasStore;
+  final _canvases = BehaviorSubject<List<CanvasSummary>>.seeded(const []);
+  Stream<List<CanvasSummary>> get canvasesStream => _canvases.stream;
+  List<CanvasSummary> get canvases => _canvases.valueOrNull ?? const [];
   final _graphs = <LifeGraphViewModel>{};
   final _subscriptions = <StreamSubscription<dynamic>>[];
   final _spheres = BehaviorSubject<List<Sphere>>.seeded(const []);
@@ -62,17 +67,12 @@ class PulseScreenViewModel {
   Future<void> _operations = Future.value();
   Future<void>? _closing;
 
-  void _listen<T>(
-    Stream<List<T>> source,
-    BehaviorSubject<List<T>> target, {
-    void Function(List<T>)? onItems,
-  }) {
+  void _listen<T>(Stream<List<T>> source, BehaviorSubject<List<T>> target) {
     _subscriptions.add(
       source.listen((items) {
         if (_disposed) return;
         target.add(List.unmodifiable(items));
         if (identical(target, _spheres)) _initialized = true;
-        onItems?.call(items);
       }, onError: (Object error) => debugPrint('Pulse source error: $error')),
     );
   }
@@ -81,26 +81,27 @@ class PulseScreenViewModel {
     if (!_accepting) throw StateError('Pulse module is closed.');
     if (_started) return;
     _started = true;
-    if (ensureAllBoards) {
-      await _ensureBoards(await spheresRepository.getAllSpheres());
-    }
-    _listen(
-      spheresRepository.watchAllSpheres(),
-      _spheres,
-      onItems: (items) {
-        if (ensureAllBoards && _accepting) {
-          unawaited(
-            _enqueue(() => _ensureBoards(items)).catchError(
-              (Object error) =>
-                  debugPrint('Canvas initialization failed: $error'),
-            ),
-          );
-        }
-      },
-    );
+    _listen(spheresRepository.watchAllSpheres(), _spheres);
     _listen(goalsRepository.watchAllGoals(), _goals);
     _listen(tasksRepository.watchTasks(), _tasks);
     _listen(projectsRepository.watchAllProjects(), _projects);
+    if (canvasStore != null) {
+      await _initializeCanvases().catchError(_reportCanvasCatalogError);
+      if (obsidianRepository case final storage?) {
+        _subscriptions.add(
+          storage
+              .watch()
+              .map((state) => state.vaultPath)
+              .distinct()
+              .skip(1)
+              .listen((_) {
+                if (_accepting) {
+                  unawaited(retryCanvasCatalog());
+                }
+              }),
+        );
+      }
+    }
   }
 
   Future<T> _enqueue<T>(Future<T> Function() action) {
@@ -117,7 +118,6 @@ class PulseScreenViewModel {
       _enqueue(() async {
         final sphere = Sphere.create(name: name, color: color);
         await spheresRepository.addSphere(sphere);
-        if (ensureAllBoards) await _ensureBoards([sphere]);
       });
 
   LifeGraphViewModel _newGraph() {
@@ -136,37 +136,157 @@ class PulseScreenViewModel {
     return model;
   }
 
-  Future<void> ensureCanvasBoards() => _enqueue(() async {
-    if (ensureAllBoards) {
-      await _ensureBoards(await spheresRepository.getAllSpheres());
-    }
-  });
-
-  Future<void> _ensureBoards(Iterable<Sphere> spheres) async {
-    final vault = obsidianRepository;
-    if (vault is! VaultCanvasBoardsApi ||
-        vault == null ||
-        vault.state.vaultPath.isEmpty ||
-        vault.state.error != null) {
-      return;
-    }
-    final root = vault.state.vaultPath;
-    if (_ensuredRoot != root) {
-      _ensuredRoot = root;
-      _ensuredBoards.clear();
-    }
-    for (final sphere in spheres) {
-      if (!_accepting || vault.state.vaultPath != root) return;
-      if (_ensuredBoards.contains(sphere.id)) continue;
+  Future<void> _initializeCanvases() async {
+    final store = canvasStore!;
+    final known = (await store.listCanvasIds()).toSet();
+    for (final sphere in await spheresRepository.getAllSpheres()) {
+      if (known.contains(sphere.id)) continue;
+      if ((await positionsRepository.loadPositions(sphere.id))?.isNotEmpty !=
+              true &&
+          (await positionsRepository.loadStandalonePositions(
+            sphere.id,
+          )).isEmpty &&
+          (await notesRepository.loadNotes(sphere.id))?.isNotEmpty != true &&
+          (await positionsRepository.loadRemovedTaskIds(sphere.id)).isEmpty) {
+        continue;
+      }
       final model = _newGraph();
       try {
-        await model.createMissingCanvasBoard(sphere.id);
-        _ensuredBoards.add(sphere.id);
+        await model.createMissingCanvasBoard(
+          sphere.id,
+          session: await store.openCatalogCanvas(sphere.id),
+        );
       } finally {
         await model.dispose();
       }
     }
+    await _loadCanvases();
   }
+
+  Future<void> reloadCanvases() => _enqueue(_loadCanvases);
+
+  Future<void> retryCanvasCatalog() =>
+      _enqueue(_initializeCanvases).catchError(_reportCanvasCatalogError);
+
+  void _reportCanvasCatalogError(Object error, StackTrace stack) {
+    if (!_disposed) _canvases.addError(error, stack);
+  }
+
+  Future<void> _loadCanvases() async {
+    final store = canvasStore;
+    if (store == null) return;
+    final sphereNames = {for (final sphere in spheres) sphere.id: sphere.name};
+    final entries = <CanvasSummary>[];
+    for (final id in await store.listCanvasIds()) {
+      try {
+        final session = await store.openCatalogCanvas(id);
+        if (await session.read() case final raw?) {
+          final canvas = CanvasSummary.read(
+            id,
+            raw,
+            legacyTitle: sphereNames[id],
+          );
+          if (canvas != null) entries.add(canvas);
+        }
+      } on FormatException catch (error) {
+        debugPrint('Invalid Canvas $id: $error');
+      }
+    }
+    _canvases.add(List.unmodifiable(entries));
+  }
+
+  Future<List<GraphNodeData>> canvasSources() =>
+      _enqueue(() => graphBuilder.watchCanvasEntities('catalog').first);
+
+  Future<CanvasSummary> createCanvas({
+    required String title,
+    String? sourceId,
+    Set<String> selectedIds = const {},
+  }) => _enqueue(() async {
+    final store = canvasStore ?? (throw StateError('Канвасы недоступны.'));
+    final name = title.trim();
+    if (name.isEmpty) throw ArgumentError('Укажите название канваса.');
+    final id = 'board-${const Uuid().v4()}';
+    GraphNodeData? source;
+    final entities = <CanvasEntity>[];
+    if (sourceId != null) {
+      final available = await graphBuilder.watchCanvasEntities(id).first;
+      final structure = CanvasStructure(available, sourceId);
+      source = structure.root;
+      if (source == null) throw StateError('Источник больше недоступен.');
+      final nodes = structure.selected(selectedIds);
+      if (nodes.isEmpty) throw StateError('Выберите карточки для добавления.');
+      final depths = <String, int>{};
+      final nextY = <int, double>{};
+      final widths = <int, double>{};
+      for (final node in nodes) {
+        final depth = depths[node.parentId];
+        final column = depth == null ? 0 : depth + 1;
+        depths[node.id] = column;
+        final width = nodePresentations.sizeFor(node.kind).width;
+        if (width > (widths[column] ?? 0)) widths[column] = width;
+      }
+      final columns = <double>[LifeGraphViewModel.worldCenter];
+      for (var depth = 0; depth < widths.length - 1; depth++) {
+        columns.add(columns.last + widths[depth]! + 68);
+      }
+      for (final node in nodes) {
+        final column = depths[node.id]!;
+        final size = nodePresentations.sizeFor(node.kind);
+        final y = nextY[column] ?? LifeGraphViewModel.worldCenter;
+        entities.add(
+          CanvasEntity(
+            node: node,
+            position: GraphPoint(columns[column], y),
+            width: size.width,
+            height: size.height,
+          ),
+        );
+        nextY[column] = y + size.height + 28;
+      }
+    }
+    final session = await store.openCatalogCanvas(id);
+    final document = createCanvasDocument(
+      entities: entities,
+      notes: const [],
+      filePath: session.notePath,
+      metadata: {
+        'version': 1,
+        'canvasId': id,
+        'title': name,
+        'updatedAt': DateTime.now().toUtc().toIso8601String(),
+        'sourceId': ?source?.id,
+        'sourceKind': ?source?.kind,
+      },
+    );
+    final raw = const JsonEncoder.withIndent('  ').convert(document);
+    await session.write(raw, expected: null);
+    final canvas = CanvasSummary.read(id, raw)!;
+    _canvases.add(List.unmodifiable([canvas, ...canvases]));
+    return canvas;
+  });
+
+  Future<LifeGraphViewModel> openCanvas(CanvasSummary canvas) =>
+      _enqueue(() async {
+        final store = canvasStore ?? (throw StateError('Канвасы недоступны.'));
+        if (_graphs.any((graph) => graph.currentCanvasId == canvas.id)) {
+          throw StateError('Этот канвас уже открыт.');
+        }
+        final model = _newGraph();
+        _graphs.add(model);
+        try {
+          await model.openCanvas(
+            canvas,
+            await store.openCatalogCanvas(canvas.id),
+          );
+          return model;
+        } catch (error, stack) {
+          try {
+            await model.dispose();
+          } catch (_) {}
+          Error.throwWithStackTrace(error, stack);
+        }
+      });
 
   Future<LifeGraphViewModel> openGraph(String sphereId) => _enqueue(() async {
     final model = _newGraph();
@@ -194,6 +314,7 @@ class PulseScreenViewModel {
       for (final graph in _graphs.toList())
         graph.refreshSyncedCanvas(sphereIds),
     ]);
+    await _loadCanvases();
   });
   Future<void> dispose() => _closing ??= _dispose();
   Future<void> _dispose() async {
@@ -222,6 +343,7 @@ class PulseScreenViewModel {
         _goals.close(),
         _projects.close(),
         _tasks.close(),
+        _canvases.close(),
       ]),
     );
     if (failure case final error?) {

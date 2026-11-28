@@ -195,7 +195,7 @@ class DependencyContainer {
       commands: graphCommands,
       ui: ui,
       vault: graphStorageRepository,
-      ensureAllBoards: resolveGraphRoot != null,
+      canvasStore: graphStorageRepository,
       currentStorageTarget: () => graphStorageRepository.effectiveTarget,
       selectStorageTarget: graphStorageRepository.selectTarget,
       completeTask: (task) => tasksPlugin.viewModel.toggleTask(task),
@@ -218,7 +218,6 @@ class DependencyContainer {
     );
     Future<bool> reconcileFiles({bool afterReceive = false}) async {
       final pulse = lifeGraphPlugin.viewModel;
-      await pulse.ensureCanvasBoards();
       final ready = await SyncMarkdownFiles(
         taskSyncStore,
         graphStorageRepository,
@@ -229,13 +228,18 @@ class DependencyContainer {
           ]);
         },
       ).reconcile();
-      final spheres = await spheresRepository.getAllSpheres();
+      await pulse.reloadCanvases();
+      final known = {
+        ...pulse.canvases.map((canvas) => canvas.id),
+        if (afterReceive && graphStorageRepository.state.vaultPath.isNotEmpty)
+          ...await taskSyncStore.knownCanvasBoardIds(),
+      };
       await SyncCanvasBoards(
         taskSyncStore,
         graphStorageRepository,
         graphNotesRepository,
       ).reconcile(
-        spheres.map((sphere) => sphere.id),
+        known,
         refresh: pulse.refreshSyncedCanvas,
         afterReceive: afterReceive,
       );

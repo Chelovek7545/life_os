@@ -12,7 +12,7 @@ class SpheresGraphContributor implements GraphContributor {
       spheres.watchAllSpheres().map(
         (values) => [
           for (final sphere in values)
-            if (sphere.id == scope.rootId)
+            if (scope.isCanvas || sphere.id == scope.rootId)
               GraphNodeData(
                 id: sphere.id,
                 kind: kind,

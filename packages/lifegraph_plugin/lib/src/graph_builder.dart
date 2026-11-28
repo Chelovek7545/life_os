@@ -21,26 +21,29 @@ class GraphBuilder {
     Stream<Set<String>> standaloneIds,
   ) {
     final scope = GraphScope(rootId: rootId, rootKind: rootKind);
-    final snapshots = registry.watch().switchMap((contributors) {
-      if (contributors.isEmpty) {
-        return Stream.value(const <List<GraphNodeData>>[]);
-      }
-      return Rx.combineLatestList(
-        contributors.map((contributor) => contributor.watch(scope)),
-      );
-    });
     return Rx.combineLatest2(
-      snapshots,
+      _watchContributors(scope),
       standaloneIds,
       (nodes, ids) => _project(scope, nodes, ids),
     );
   }
 
-  List<GraphNodeData> _project(
-    GraphScope scope,
-    List<List<GraphNodeData>> snapshots,
-    Set<String> standaloneIds,
-  ) {
+  Stream<List<GraphNodeData>> watchCanvasEntities(String id) => _streams.watch(
+    () => _watchContributors(GraphScope.canvas(id)).map(
+      (snapshots) => List<GraphNodeData>.unmodifiable(_index(snapshots).values),
+    ),
+  );
+
+  Stream<List<List<GraphNodeData>>> _watchContributors(GraphScope scope) =>
+      registry.watch().switchMap((contributors) {
+        if (contributors.isEmpty) {
+          return Stream.value(const <List<GraphNodeData>>[]);
+        }
+        return Rx.combineLatestList(
+          contributors.map((contributor) => contributor.watch(scope)),
+        );
+      });
+  Map<String, GraphNodeData> _index(List<List<GraphNodeData>> snapshots) {
     final byId = <String, GraphNodeData>{};
     for (final nodes in snapshots) {
       for (final node in nodes) {
@@ -50,6 +53,15 @@ class GraphBuilder {
         byId[node.id] = node;
       }
     }
+    return byId;
+  }
+
+  List<GraphNodeData> _project(
+    GraphScope scope,
+    List<List<GraphNodeData>> snapshots,
+    Set<String> standaloneIds,
+  ) {
+    final byId = _index(snapshots);
     final root = byId[scope.rootId];
     if (root == null || root.kind != scope.rootKind) return const [];
     if (root.parentId != null) {

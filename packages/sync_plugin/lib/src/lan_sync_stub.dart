@@ -27,10 +27,12 @@ class LanSyncService implements AppPlugin, LocalSyncControl {
     String deviceName = 'Устройство',
     Future<String?> Function()? resolveDeviceName,
     LanSyncOptions options = const LanSyncOptions(),
-    Future<bool> Function()? reconcileNotes,
-    Future<bool> Function()? applyNotes,
+    this.reconcileNotes,
+    this.applyNotes,
     Set<String> dependencies = const {},
   });
+  final Future<bool> Function()? reconcileNotes;
+  final Future<bool> Function()? applyNotes;
   Never _unsupported() =>
       throw UnsupportedError('LAN sync is available only on native platforms.');
   @override

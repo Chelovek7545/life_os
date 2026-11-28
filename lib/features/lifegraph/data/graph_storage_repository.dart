@@ -2,12 +2,14 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:lifegraph_plugin/lifegraph_plugin.dart' show CanvasCatalogStore;
 import 'package:lifegraph_plugin/graph_storage_settings.dart';
 import 'package:notes_api/notes_api.dart';
 import 'package:obsidian_plugin/obsidian_plugin.dart';
 import 'package:path/path.dart' as p;
 import 'package:plugin_runtime/plugin_runtime.dart';
 import 'package:uuid/uuid.dart';
+import 'preferences_canvas_session.dart';
 
 class GraphStorageRepository
     implements
@@ -16,6 +18,7 @@ class GraphStorageRepository
         NotesLibrarySourcesApi,
         VaultCanvasApi,
         VaultCanvasBoardsApi,
+        CanvasCatalogStore,
         CanvasStorageFoldersApi,
         MarkdownNoteSaveApi,
         MarkdownNoteDeleteApi,
@@ -586,6 +589,25 @@ class GraphStorageRepository
     final session = await files.openCanvasBoard(sphereId);
     ensureActive();
     return _GraphBoardSession(session, ensureActive);
+  }
+
+  @override
+  Future<List<String>> listCanvasIds() async {
+    _check();
+    return {
+      ...await PreferencesCanvasSession.listIds(),
+      ...?await _active?.listCanvasBoardIds(),
+    }.toList();
+  }
+
+  @override
+  Future<CanvasBoardSession> openCatalogCanvas(String id) async {
+    _check();
+    final local = await PreferencesCanvasSession.open(id);
+    if (_active == null || state.vaultPath.isEmpty) return local;
+    final file = await openCanvasBoard(id);
+    if (await local.read() != null && await file.read() == null) return local;
+    return file;
   }
 
   @override

@@ -45,11 +45,12 @@ class CanvasBoardDocument {
   List<Map<String, dynamic>> get edges =>
       (data['edges'] as List).cast<Map<String, dynamic>>();
 
-  void validateScope(String sphereId) {
+  void validateScope(String boardId) {
     final metadata = data['pulse'];
     if (metadata is! Map) return;
-    if (metadata['sphereId'] != null && metadata['sphereId'] != sphereId) {
-      throw const FormatException('Canvas принадлежит другой сфере.');
+    final declaredId = metadata['canvasId'] ?? metadata['sphereId'];
+    if (declaredId != null && declaredId != boardId) {
+      throw const FormatException('Неверный ID канваса.');
     }
     if (metadata['version'] != null && metadata['version'] != 1) {
       throw const FormatException(

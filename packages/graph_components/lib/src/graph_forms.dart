@@ -27,7 +27,7 @@ class GraphNodeEditDialog extends StatefulWidget {
   final GraphNodeData node;
   final GraphNodeComponentSpec spec;
   final Future<void> Function(GraphNodeData) onSave;
-  final Future<void> Function(bool keepChildren) onDelete;
+  final Future<void> Function(bool keepChildren)? onDelete;
   @override
   State<GraphNodeEditDialog> createState() => _GraphNodeEditDialogState();
 }
@@ -124,11 +124,15 @@ class _GraphNodeEditDialogState extends State<GraphNodeEditDialog> {
       ),
     ),
     actions: [
-      TextButton.icon(
-        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-        label: const Text('Удалить', style: TextStyle(color: Colors.redAccent)),
-        onPressed: _saving ? null : _confirmDelete,
-      ),
+      if (widget.onDelete case final remove?)
+        TextButton.icon(
+          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+          label: const Text(
+            'Удалить',
+            style: TextStyle(color: Colors.redAccent),
+          ),
+          onPressed: _saving ? null : () => _confirmDelete(remove),
+        ),
       TextButton(
         onPressed: _saving ? null : () => Navigator.pop(context),
         child: const Text('Отмена'),
@@ -155,7 +159,7 @@ class _GraphNodeEditDialogState extends State<GraphNodeEditDialog> {
     ],
   );
 
-  Future<void> _confirmDelete() async {
+  Future<void> _confirmDelete(Future<void> Function(bool) remove) async {
     final keep = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -180,7 +184,7 @@ class _GraphNodeEditDialogState extends State<GraphNodeEditDialog> {
         ],
       ),
     );
-    if (keep != null && mounted) await _submit(() => widget.onDelete(keep));
+    if (keep != null && mounted) await _submit(() => remove(keep));
   }
 }
 

@@ -9,6 +9,7 @@ import 'package:tasks_api/tasks_api.dart';
 import 'package:plugin_runtime/plugin_runtime.dart';
 import 'package:plugin_ui/plugin_ui.dart';
 import 'graph_builder.dart';
+import 'canvas_catalog.dart';
 import 'pulse_screen_view_model.dart';
 import '../graph_storage_settings.dart';
 import 'dart:async';
@@ -48,7 +49,7 @@ class LifeGraphPlugin {
     required Future<void> Function(Task) completeTask,
     this._vault,
     this.rootKind = 'sphere',
-    this.ensureAllBoards = false,
+    this.canvasStore,
     Set<String> dependencies = const {},
     this.storageSettings,
     GraphStorageSettingsBuilder? storageSettingsBuilder,
@@ -124,7 +125,7 @@ class LifeGraphPlugin {
   final GraphCommandRegistry _commands;
   final VaultNotesApi? _vault;
   final String rootKind;
-  final bool ensureAllBoards;
+  final CanvasCatalogStore? canvasStore;
   final GraphStorageSettings? storageSettings;
   final PluginUiRegistry _ui;
   late final List<AppPlugin> plugins;
@@ -184,7 +185,7 @@ class _LifeGraphLifecycle implements AppPlugin {
       tasksRepository: module._tasks,
       positionsRepository: module._positions,
       notesRepository: module._notes,
-      ensureAllBoards: module.ensureAllBoards,
+      canvasStore: module.canvasStore,
       graphBuilder: builder,
       nodePresentations: module._presentations,
       nodeEditors: module._editors,

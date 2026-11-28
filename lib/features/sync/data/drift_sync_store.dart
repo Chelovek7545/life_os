@@ -334,6 +334,17 @@ class DriftSyncStore implements SyncStore, TaskMutationJournal, LocalSyncData {
           .map((r) => SyncRevision.decode(r.body))
           .toList();
   Future<SyncGraph> state() async => SyncGraph(await _revisions());
+  Future<Set<String>> knownCanvasBoardIds() async {
+    final rows = await db
+        .customSelect(
+          r"SELECT DISTINCT json_extract(json_extract(body, '$.payload'), '$.sphereId') AS board_id "
+          r"FROM sync_revisions WHERE json_extract(body, '$.entityType') = 'canvasBoard'",
+          readsFrom: {db.syncRevisions},
+        )
+        .get();
+    return {for (final row in rows) ?row.readNullable<String>('board_id')};
+  }
+
   Future<List<SyncRevision>> heads(String key) async =>
       List.unmodifiable((await state()).heads[key] ?? []);
   Future<Map<String, List<SyncRevision>>> readConflicts() async {

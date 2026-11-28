@@ -12,7 +12,9 @@ class GoalsGraphContributor implements GraphContributor {
       goals.watchAllGoals().map(
         (values) => [
           for (final goal in values)
-            if (goal.sphereId.isEmpty || goal.sphereId == scope.rootId)
+            if (scope.isCanvas ||
+                goal.sphereId.isEmpty ||
+                goal.sphereId == scope.rootId)
               GraphNodeData(
                 id: goal.id,
                 kind: kind,

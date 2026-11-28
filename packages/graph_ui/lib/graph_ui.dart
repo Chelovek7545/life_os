@@ -27,6 +27,8 @@ class GraphNodeInteraction {
     this.updateNode,
     this.deleteNode,
     this.descendantProgress,
+    this.showLabels = true,
+    this.showDetails = true,
   });
   final Size size;
   final bool selected;
@@ -48,6 +50,8 @@ class GraphNodeInteraction {
   final Future<void> Function(GraphNodeData updated)? updateNode;
   final Future<void> Function(bool keepChildren)? deleteNode;
   final ({int total, int completed})? descendantProgress;
+  final bool showLabels;
+  final bool showDetails;
 }
 
 class GraphNodePresentation {

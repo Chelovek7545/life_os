@@ -15,6 +15,7 @@ import 'package:spheres_api/spheres_api.dart';
 import 'package:tasks_api/tasks_api.dart' show TaskStatus;
 import 'graph_node.dart';
 import 'graph_builder.dart';
+import 'canvas_catalog.dart';
 import 'package:notes_api/notes_api.dart';
 import 'package:graph_canvas/graph_canvas.dart' as gv;
 import 'package:rxdart/rxdart.dart';
@@ -78,6 +79,33 @@ class LifeGraphViewModel {
   StreamSubscription<NotePathChange>? _noteRenames;
 
   _CanvasBoardState? _board;
+  CanvasSummary? _canvas;
+  CanvasCards? _canvasCards;
+  Map<String, GraphNodeData> _liveCanvasEntities = const {};
+  String? get canvasTitle => _canvas?.title;
+  bool get isIndependentCanvas => _canvas != null;
+  List<GraphNodeData> get availableCanvasEntities => [
+    for (final entry in _liveCanvasEntities.entries)
+      if (!(_canvasCards?.snapshots.containsKey(entry.key) ?? false))
+        entry.value,
+  ];
+
+  GraphNodeData? canvasEntityData(String id) {
+    final snapshot = _canvasCards?.snapshots[id];
+    return snapshot == null ? null : _liveCanvasEntities[id] ?? snapshot;
+  }
+
+  GraphNodeData? canvasProjectFor(String id) {
+    final visited = <String>{};
+    for (String? current = id; current != null && visited.add(current);) {
+      final entity = _liveCanvasEntities[current];
+      if (entity == null) break;
+      if (entity.kind == 'project') return entity;
+      current = entity.attributes['projectId'] as String? ?? entity.parentId;
+    }
+    return null;
+  }
+
   Offset _boardOrigin = Offset.zero;
   double _boardWorldSize = 4200;
   final Map<String, Size> _boardSizes = {};
@@ -94,26 +122,42 @@ class LifeGraphViewModel {
     onIdle: _onSaveIdle,
   );
 
-  Map<String, Object?> _canvasSnapshot(String Function(String) filePath) =>
-      createSphereCanvas(
-        sphereId: _scope().rootId,
-        entities: [
-          for (final view in graph)
-            CanvasEntity(
-              node: _domainNode(view.id).toData(),
-              position: GraphPoint(
-                (_positions[view.id] ?? view.position).dx + _boardOrigin.dx,
-                (_positions[view.id] ?? view.position).dy + _boardOrigin.dy,
-              ),
-              width: view.size.width,
-              height: view.size.height,
-              standalone: _standalonePositions.value.containsKey(view.id),
+  Map<String, Object?> _canvasSnapshot(String Function(String) filePath) {
+    final metadata = switch (_canvas) {
+      final canvas? => <String, Object?>{
+        'version': 1,
+        'canvasId': canvas.id,
+        'title': canvas.title,
+        'updatedAt': DateTime.now().toUtc().toIso8601String(),
+        'sourceId': ?canvas.sourceId,
+        'sourceKind': ?canvas.sourceKind,
+      },
+      null => <String, Object?>{
+        'version': 1,
+        'sphereId': _scope().rootId,
+        if (_removedTaskIds.isNotEmpty)
+          'removedTaskIds': _removedTaskIds.toList()..sort(),
+      },
+    };
+    return createCanvasDocument(
+      entities: [
+        for (final view in graph)
+          CanvasEntity(
+            node: _domainNode(view.id).toData(),
+            position: GraphPoint(
+              (_positions[view.id] ?? view.position).dx + _boardOrigin.dx,
+              (_positions[view.id] ?? view.position).dy + _boardOrigin.dy,
             ),
-        ],
-        notes: _canvasNotes(),
-        filePath: filePath,
-        removedTaskIds: _removedTaskIds,
-      );
+            width: view.size.width,
+            height: view.size.height,
+            standalone: _standalonePositions.value.containsKey(view.id),
+          ),
+      ],
+      notes: _canvasNotes(),
+      filePath: filePath,
+      metadata: metadata,
+    );
+  }
 
   List<CanvasNote> _canvasNotes() => [
     for (final note in notes)
@@ -129,8 +173,13 @@ class LifeGraphViewModel {
 
   void _scheduleBoard() {
     final board = _board;
-    final sphereId = _currentSphereId;
-    if (board == null || sphereId == null || graph.isEmpty || _disposed) return;
+    final sphereId = _graphId;
+    if (board == null ||
+        sphereId == null ||
+        (graph.isEmpty && !isIndependentCanvas) ||
+        _disposed) {
+      return;
+    }
     saveStatus.value = GraphSaveStatus.saving;
     _boardWriter.schedule(
       _CanvasBoardWrite(
@@ -242,7 +291,7 @@ class LifeGraphViewModel {
   }
 
   Future<void> reloadCanvasBoard() => _enqueue(() async {
-    final sphereId = _currentSphereId;
+    final sphereId = _graphId;
     if (sphereId == null || _board == null) return;
     try {
       await _flush();
@@ -271,13 +320,24 @@ class LifeGraphViewModel {
     document.validateScope(sphereId);
     _board = _CanvasBoardState(session, raw, document);
     _readBoardLayout(document);
+    if (isIndependentCanvas) {
+      _canvas =
+          CanvasSummary.read(sphereId, raw, legacyTitle: canvasTitle) ??
+          _canvas;
+      _canvasCards = CanvasCards.fromDocument(document);
+      _removedTaskIds.clear();
+    }
     await _loadNotes(sphereId);
-    _graphSubject.add(_toViewNodes(_domainNodes));
+    if (isIndependentCanvas) {
+      _projectCanvas();
+    } else {
+      _graphSubject.add(_toViewNodes(_domainNodes));
+    }
     saveStatus.value = GraphSaveStatus.saved;
   }
 
   Future<void> refreshSyncedCanvas(Set<String> sphereIds) => _enqueue(() async {
-    final sphereId = _currentSphereId;
+    final sphereId = _graphId;
     final board = _board;
     if (sphereId == null || !sphereIds.contains(sphereId) || board == null) {
       return;
@@ -289,11 +349,19 @@ class LifeGraphViewModel {
     }
   });
 
-  Future<void> createMissingCanvasBoard(String sphereId) async {
-    if (_currentSphereId != null) {
+  Future<void> createMissingCanvasBoard(
+    String sphereId, {
+    CanvasBoardSession? session,
+  }) async {
+    if (_graphId != null) {
       throw StateError('Для создания Canvas нужна отдельная модель графа.');
     }
-    await _openBoard(sphereId, onlyIfMissing: true);
+    if (session == null) {
+      await _openBoard(sphereId, onlyIfMissing: true);
+    } else {
+      if (await session.read() != null) return;
+      _board = _CanvasBoardState(session, null, CanvasBoardDocument('{}'));
+    }
     if (_board == null) return;
     await _loadPositions(sphereId);
     await _loadNotes(sphereId);
@@ -307,12 +375,94 @@ class LifeGraphViewModel {
         )
         .first;
     if (nodes.isEmpty) return;
-    _currentSphereId = sphereId;
+    _graphId = sphereId;
     _domainNodes = nodes.map(GraphNode.fromData).toList(growable: false);
     _graphSubject.add(_toViewNodes(_domainNodes));
     _scheduleBoard();
     await _flush();
   }
+
+  Future<void> openCanvas(CanvasSummary canvas, CanvasBoardSession session) =>
+      _enqueue(() async {
+        if (_graphId != null) throw StateError('Граф уже открыт.');
+        final raw = await session.read();
+        if (raw == null) throw StateError('Файл канваса отсутствует.');
+        final live = await graphBuilder.watchCanvasEntities(canvas.id).first;
+        _liveCanvasEntities = {for (final node in live) node.id: node};
+        _canvas = canvas;
+        _graphId = canvas.id;
+        await _useCanvasBoard(canvas.id, session, raw);
+        _graphSubscription = graphBuilder.watchCanvasEntities(canvas.id).listen(
+          (nodes) {
+            _liveCanvasEntities = {for (final node in nodes) node.id: node};
+            _projectCanvas();
+          },
+          onError: (Object error) => debugPrint('Canvas source error: $error'),
+        );
+      });
+
+  void _projectCanvas() {
+    final nodes = _canvasCards!.project(_liveCanvasEntities);
+    _domainNodes = nodes.map(GraphNode.fromData).toList(growable: false);
+    _graphSubject.add(_toViewNodes(_domainNodes));
+  }
+
+  Future<void> addCanvasEntity(String id, Offset point) => _enqueue(() async {
+    if (_canvasCards!.snapshots.containsKey(id)) return;
+    final node = _liveCanvasEntities[id];
+    if (node == null) throw StateError('Объект больше недоступен.');
+    _placeCanvasEntity(node, point);
+  });
+
+  void _placeCanvasEntity(GraphNodeData node, Offset point) {
+    _canvasCards!.snapshots[node.id] = node;
+    _positions[node.id] = _clampPosition(
+      point,
+      nodePresentations.sizeFor(node.kind),
+    );
+    _projectCanvas();
+    _scheduleBoard();
+  }
+
+  bool canEditCanvasEntity(String id) =>
+      !isIndependentCanvas || _liveCanvasEntities.containsKey(id);
+
+  bool canConnectCanvasCards(String from, String to) =>
+      _canvasCards?.canConnect(from, to) ?? false;
+
+  Future<void> connectCanvasCards(String from, String to) => _enqueue(() async {
+    final cards = _canvasCards!;
+    if (!cards.canConnect(from, to)) return;
+    _rememberCanvasPositions();
+    cards.parents[to] = from;
+    _projectCanvas();
+    _scheduleBoard();
+  });
+
+  void _rememberCanvasPositions() {
+    for (final view in graph) {
+      _positions.putIfAbsent(view.id, () => view.position);
+    }
+  }
+
+  Future<void> removeCanvasSelection(
+    Iterable<String> ids,
+    Iterable<String> noteIds, {
+    bool Function()? isAvailable,
+  }) => _enqueue(() async {
+    final cards = _canvasCards!;
+    _rememberCanvasPositions();
+    for (final id in ids) {
+      cards.remove(id);
+      _positions.remove(id);
+      _boardSizes.remove(id);
+    }
+    _projectCanvas();
+    for (final id in noteIds) {
+      await _removeNote(id);
+    }
+    _scheduleBoard();
+  }, isAvailable: isAvailable);
 
   List<VaultNote> get vaultNotes => obsidianRepository?.state.notes ?? const [];
   List<VaultNote> get markdownLibraryNotes {
@@ -399,7 +549,7 @@ class LifeGraphViewModel {
     required String title,
     String text = '',
   }) => _enqueue(() async {
-    if (_currentSphereId == null || !canCreateMarkdown) {
+    if (_graphId == null || !canCreateMarkdown) {
       throw StateError('Откройте граф и подключите vault.');
     }
     await _flush();
@@ -440,6 +590,13 @@ class LifeGraphViewModel {
       obsidianRepository is VaultCanvasApi &&
       (obsidianRepository?.state.vaultPath.isNotEmpty ?? false);
 
+  Future<Map<String, Object?>> snapshotCanvas() => _enqueue(() async {
+    if (!isIndependentCanvas) throw StateError('Откройте канвас.');
+    await _flush();
+    final board = _board!;
+    return board.document.merge(_canvasSnapshot(board.session.notePath));
+  });
+
   Future<String> exportCanvas() => _enqueue(() async {
     final vault = obsidianRepository;
     if (vault is! VaultCanvasApi) {
@@ -447,15 +604,19 @@ class LifeGraphViewModel {
     }
     final canvas = vault as VaultCanvasApi;
     final scope = _scope();
-    if (graph.isEmpty) throw StateError('Граф ещё загружается.');
+    if (graph.isEmpty && !isIndependentCanvas) {
+      throw StateError('Граф ещё загружается.');
+    }
     await _flush();
     final generated = _canvasSnapshot(canvas.canvasNotePath);
     final document = _board?.document.merge(generated) ?? generated;
     return canvas.createCanvas(scope.rootId, document);
   });
 
-  String? _currentSphereId;
-  String? get currentSphereId => _currentSphereId;
+  String? _graphId;
+  String? get currentGraphId => _graphId;
+  String? get currentCanvasId => _canvas?.id;
+  String? get currentSphereId => isIndependentCanvas ? null : _graphId;
 
   final _sourceStreams = OwnedStreams();
   Stream<List<Sphere>> get spheresStream => _accepting
@@ -537,8 +698,10 @@ class LifeGraphViewModel {
   int _scopeGeneration = 0;
 
   /// Переключает текущую сферу (граф).
-  Future<void> switchSphere(String sphereId) =>
-      _enqueue(() => _switchToSphere(sphereId));
+  Future<void> switchSphere(String sphereId) => _enqueue(() {
+    if (isIndependentCanvas) throw StateError('Открыт самостоятельный канвас.');
+    return _switchToSphere(sphereId);
+  });
 
   Future<T> _enqueue<T>(
     Future<T> Function() operation, {
@@ -598,6 +761,21 @@ class LifeGraphViewModel {
           nodePresentations.sizeFor(draft.kind),
         );
         final id = await commands.createStandalone(draft);
+        if (scope.isCanvas) {
+          // The command may finish before the contributor emits the new row.
+          final node =
+              _liveCanvasEntities[id] ??
+              GraphNodeData(
+                id: id,
+                kind: draft.kind,
+                title: draft.title,
+                subtitle: draft.subtitle,
+                color: draft.color ?? '#E5E2E1',
+                attributes: draft.attributes,
+              );
+          _placeCanvasEntity(node, position);
+          return id;
+        }
         _positions[id] = position;
         _saveStandalonePositions(scope.rootId, {
           ..._standalonePositions.value,
@@ -607,7 +785,7 @@ class LifeGraphViewModel {
       },
       isAvailable: () =>
           generation == _scopeGeneration &&
-          scope.rootId == _currentSphereId &&
+          scope.rootId == _graphId &&
           isAvailable(),
     );
   }
@@ -643,7 +821,7 @@ class LifeGraphViewModel {
     required String id,
     bool Function()? isAvailable,
   }) => _enqueue(() async {
-    if (_currentSphereId == null) return;
+    if (_graphId == null) return;
     final parent = _domainNode(parentId).toData();
     final position = _childPosition(parentId, kind);
     await _attachNode(parent, kind, id, position);
@@ -656,13 +834,13 @@ class LifeGraphViewModel {
   }
 
   List<GraphDisconnection> disconnectionsFor(String id) {
-    if (_currentSphereId == null || nodeById(id) == null) return const [];
+    if (_graphId == null || nodeById(id) == null) return const [];
     final scope = _scope();
     final byId = {for (final node in _domainNodes) node.id: node};
     final options = <GraphDisconnection>[];
     for (final target in _domainNodes) {
       if (_removedTaskIds.contains(target.id) ||
-          !commands.canDetach(target.kind)) {
+          (!isIndependentCanvas && !commands.canDetach(target.kind))) {
         continue;
       }
       for (final (sourceId, type) in [
@@ -682,7 +860,9 @@ class LifeGraphViewModel {
           target: target.toData(),
           linkType: type,
         );
-        final active = connectionGuard(target.kind);
+        final active = isIndependentCanvas
+            ? () => _accepting
+            : connectionGuard(target.kind);
         options.add((
           link: link,
           apply: () =>
@@ -705,6 +885,17 @@ class LifeGraphViewModel {
             : graphPredecessorIds(target.attributes).contains(link.source.id));
     if (target?.kind != link.target.kind || !stillLinked) {
       throw StateError('Связь уже изменилась.');
+    }
+    if (_canvasCards case final cards?) {
+      _rememberCanvasPositions();
+      if (link.linkType == GraphLinkType.hierarchy) {
+        cards.parents.remove(link.target.id);
+      } else {
+        cards.predecessors[link.target.id]?.remove(link.source.id);
+      }
+      _projectCanvas();
+      _scheduleBoard();
+      return;
     }
     if (link.linkType == GraphLinkType.sequence) {
       await commands.detach(link);
@@ -746,7 +937,7 @@ class LifeGraphViewModel {
       () async {
         final parent = nodeById(parentId);
         final child = nodeById(id);
-        if (_currentSphereId == null ||
+        if (_graphId == null ||
             parentId == id ||
             parent == null ||
             child == null ||
@@ -798,7 +989,10 @@ class LifeGraphViewModel {
     GraphNodeData updated, {
     bool Function()? isAvailable,
   }) => _enqueue(() async {
-    final current = _domainNode(updated.id).toData();
+    final current = isIndependentCanvas
+        ? _liveCanvasEntities[updated.id] ??
+              (throw StateError('Объект больше недоступен.'))
+        : _domainNode(updated.id).toData();
     await commands.update(
       GraphUpdateRequest(scope: _scope(), current: current, updated: updated),
     );
@@ -819,28 +1013,43 @@ class LifeGraphViewModel {
   }
 
   GraphScope _scope() {
-    final rootId = _currentSphereId;
+    final rootId = _graphId;
     if (rootId == null) throw StateError('No graph is open.');
-    return GraphScope(rootId: rootId, rootKind: graphBuilder.rootKind);
+    return isIndependentCanvas
+        ? GraphScope.canvas(rootId)
+        : GraphScope(rootId: rootId, rootKind: graphBuilder.rootKind);
   }
 
   GraphNodeActionContext actionsFor(String id) {
     final scope = _scope();
     final generation = _scopeGeneration;
+    final snapshot = _liveCanvasEntities[id] ?? _domainNode(id).toData();
+    bool canUpdateSnapshot() {
+      if (!scope.isCanvas) return true;
+      final live = _liveCanvasEntities[id];
+      return live?.kind == snapshot.kind &&
+          live?.attributes['storageRevision'] ==
+              snapshot.attributes['storageRevision'];
+    }
+
     return GraphNodeActionContext(
       scope: scope,
-      node: _domainNode(id).toData(),
+      node: snapshot,
       isAvailable: () =>
           !_disposed &&
           _scopeGeneration == generation &&
-          _currentSphereId == scope.rootId &&
+          _graphId == scope.rootId &&
+          (_canvasCards?.snapshots.containsKey(id) ?? true) &&
           !_removedTaskIds.contains(id),
       createChild: (draft, active) =>
           createChild(id, draft, isAvailable: active),
-      updateNode: (updated, active) =>
-          updateGraphNode(updated, isAvailable: active),
-      deleteNode: (keepChildren, active) =>
-          deleteNode(id, keepChildren: keepChildren, isAvailable: active),
+      updateNode: (updated, active) => updateGraphNode(
+        updated,
+        isAvailable: () => active() && canUpdateSnapshot(),
+      ),
+      deleteNode: (keepChildren, active) => isIndependentCanvas
+          ? removeCanvasSelection([id], const [], isAvailable: active)
+          : deleteNode(id, keepChildren: keepChildren, isAvailable: active),
       attachNode: (kind, entityId, active) => attachNode(
         parentId: id,
         kind: kind,
@@ -854,7 +1063,7 @@ class LifeGraphViewModel {
   /// визуально ноду двигает сам [GraphView], запись — в [commitMove].
   void moveNode(String id, double x, double y) {
     if (!_accepting) return;
-    if (_currentSphereId == null) return;
+    if (_graphId == null) return;
     Size size = const Size(176, 68);
     for (final n in graph) {
       if (n.id == id) {
@@ -868,7 +1077,7 @@ class LifeGraphViewModel {
   /// Точка коммита драга: сохраняем позицию (с debounce).
   void commitMove(String id, double x, double y) {
     if (!_accepting) return;
-    if (_currentSphereId == null) return;
+    if (_graphId == null) return;
     moveNode(id, x, y);
     _scheduleSavePositions();
   }
@@ -947,12 +1156,12 @@ class LifeGraphViewModel {
       isAvailable: () =>
           !_disposed &&
           generation == _scopeGeneration &&
-          scope.rootId == _currentSphereId,
+          scope.rootId == _graphId,
     );
   }
 
   Future<void> _deleteNodeNow(String id, {required bool keepChildren}) async {
-    if (_currentSphereId == null) return;
+    if (_graphId == null) return;
     final scope = _scope();
     final node = _domainNode(id).toData();
     await _flush();
@@ -963,7 +1172,7 @@ class LifeGraphViewModel {
       await _graphSubscription?.cancel();
       await positionsRepository.deletePositions(id);
       await notesRepository.deleteNotes(id);
-      _currentSphereId = null;
+      _graphId = null;
       _positions.clear();
       _domainNodes = const [];
       _notesSubject.add(const []);
@@ -1276,7 +1485,7 @@ class LifeGraphViewModel {
   // ── Персистентность позиций (с debounce) ──────────────────────────────────
 
   Future<void> _scheduleSavePositions() async {
-    final sphereId = _currentSphereId;
+    final sphereId = _graphId;
     if (sphereId == null || _disposed) return;
     if (_board != null) {
       _scheduleBoard();
@@ -1349,11 +1558,12 @@ class LifeGraphViewModel {
   // ── Notes (стикеры) ────────────────────────────────────────────────────────────
 
   /// Создаёт новую заметку в центре видимой области.
-  Future<void> createNote() => _enqueue(() => _createNote());
+  Future<void> createNote({Offset? position}) =>
+      _enqueue(() => _createNote(position));
 
-  Future<void> _createNote() async {
-    if (_currentSphereId == null) return;
-    final center = Offset(worldCenter, worldCenter);
+  Future<void> _createNote(Offset? position) async {
+    if (_graphId == null) return;
+    final center = position ?? const Offset(worldCenter, worldCenter);
     final note = gv.GraphNote(
       id: 'note_${const Uuid().v4()}',
       index: notes.length,
@@ -1370,11 +1580,13 @@ class LifeGraphViewModel {
     required String title,
     required String text,
     String? obsidianPath,
+    Offset? position,
   }) => _enqueue(
     () => _createNoteWithText(
       title: title,
       text: text,
       obsidianPath: obsidianPath,
+      position: position,
     ),
   );
 
@@ -1382,17 +1594,18 @@ class LifeGraphViewModel {
     required String title,
     required String text,
     String? obsidianPath,
+    Offset? position,
   }) async {
-    final sphereId = _currentSphereId;
+    final sphereId = _graphId;
     if (sphereId == null || _disposed) return;
     if (obsidianPath != null && obsidianRepository == null) {
       throw StateError('Плагин заметок отключён.');
     }
-    final center = Offset(worldCenter, worldCenter);
+    final center = position ?? const Offset(worldCenter, worldCenter);
     final noteText = obsidianPath != null
         ? await obsidianRepository!.readContent(obsidianPath)
         : (title.isNotEmpty ? '$title\n\n$text' : text);
-    if (_disposed || _currentSphereId != sphereId) return;
+    if (_disposed || _graphId != sphereId) return;
     final note = gv.GraphNote(
       id: 'note_${const Uuid().v4()}',
       index: notes.length,
@@ -1437,7 +1650,7 @@ class LifeGraphViewModel {
   /// Live-курсор драга заметки: обновляет позицию в памяти без эмиссии.
   void moveNote(String id, double x, double y) {
     if (!_accepting) return;
-    if (_currentSphereId == null) return;
+    if (_graphId == null) return;
     Size size = const Size(212, 150);
     for (final n in notes) {
       if (n.id == id) {
@@ -1457,7 +1670,7 @@ class LifeGraphViewModel {
   /// Точка коммита драга заметки: сохраняет позицию (с debounce).
   void commitNoteMove(String id, double x, double y) {
     if (!_accepting) return;
-    if (_currentSphereId == null) return;
+    if (_graphId == null) return;
     moveNote(id, x, y);
     _scheduleSaveNotes();
   }
@@ -1466,7 +1679,7 @@ class LifeGraphViewModel {
   /// Границы синхронизированы с clamp в DefaultNoteCard (120..800 / 80..800).
   void resizeNote(String id, double width, double height) {
     if (!_accepting) return;
-    if (_currentSphereId == null) return;
+    if (_graphId == null) return;
     final clampedWidth = width.clamp(120.0, 800.0);
     final clampedHeight = height.clamp(80.0, 800.0);
     final updatedNotes = notes.map((n) {
@@ -1481,7 +1694,7 @@ class LifeGraphViewModel {
   /// Точка коммита ресайза заметки: сохраняет размер (с debounce).
   void commitNoteResize(String id, double width, double height) {
     if (!_accepting) return;
-    if (_currentSphereId == null) return;
+    if (_graphId == null) return;
     resizeNote(id, width, height);
     _scheduleSaveNotes();
   }
@@ -1501,10 +1714,10 @@ class LifeGraphViewModel {
   Future<void> refreshNotes() => _enqueue(() => _refreshNotes());
 
   Future<void> _refreshNotes() async {
-    final sphereId = _currentSphereId;
+    final sphereId = _graphId;
     if (sphereId == null) return;
     await _flush();
-    if (!_disposed && _currentSphereId == sphereId) await _loadNotes(sphereId);
+    if (!_disposed && _graphId == sphereId) await _loadNotes(sphereId);
   }
 
   /// Загружает заметки для текущей сферы. При каждом заходе в граф текст
@@ -1559,7 +1772,9 @@ class LifeGraphViewModel {
           {},
         ));
       }
-      if (cacheChanged && _board != null) _scheduleBoard();
+      if (cacheChanged && _board != null && !isIndependentCanvas) {
+        _scheduleBoard();
+      }
     }
   }
 
@@ -1584,7 +1799,7 @@ class LifeGraphViewModel {
   }
 
   Future<void> _scheduleSaveNotes() async {
-    final sphereId = _currentSphereId;
+    final sphereId = _graphId;
     if (sphereId == null || _disposed) return;
     if (_board != null) {
       _scheduleBoard();
@@ -1605,7 +1820,7 @@ class LifeGraphViewModel {
     await _flush();
     await _graphSubscription?.cancel();
     if (_disposed) return;
-    _currentSphereId = null;
+    _graphId = null;
     _graphSubject.add(const []);
     _notesSubject.add(const []);
     await positionsRepository.saveLastSphereId(sphereId);
@@ -1613,7 +1828,7 @@ class LifeGraphViewModel {
     await _openBoard(sphereId);
     await _loadNotes(sphereId);
     if (_disposed) return;
-    _currentSphereId = sphereId;
+    _graphId = sphereId;
     saveStatus.value =
         _standaloneWriter.isIdle && _positionWriter.isIdle && _noteWriter.isIdle
         ? GraphSaveStatus.saved

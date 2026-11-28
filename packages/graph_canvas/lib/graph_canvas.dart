@@ -13,7 +13,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show listEquals;
+import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 
@@ -472,11 +472,19 @@ abstract class _CameraDelegate {
   void fitView({required bool animate});
   void zoomBy(double factor);
   void revealNodeById(String id);
+  void focusCard(String id, {required bool note});
+  Rect? screenBoundsOfNode(String id);
+  Offset? get viewportCenter;
+  void setSelectionMode(bool enabled);
+  bool isCollapsed(String id);
+  void toggleBranch(String id);
 }
 
 /// Imperative camera. Safe to call before attach — calls are no-ops.
 class GraphViewCamera {
   _CameraDelegate? _delegate;
+  final _scale = ValueNotifier<double>(1);
+  ValueListenable<double> get scale => _scale;
 
   bool get isAttached => _delegate != null;
 
@@ -488,6 +496,16 @@ class GraphViewCamera {
 
   /// Pans (animated) so the node is inside the viewport.
   void revealNode(String id) => _delegate?.revealNodeById(id);
+
+  /// Unfolds ancestor branches and centers the card in the viewport.
+  void focusCard(String id, {bool note = false}) =>
+      _delegate?.focusCard(id, note: note);
+
+  Rect? screenBoundsOfNode(String id) => _delegate?.screenBoundsOfNode(id);
+  Offset? get viewportCenter => _delegate?.viewportCenter;
+  void setSelectionMode(bool enabled) => _delegate?.setSelectionMode(enabled);
+  bool isCollapsed(String id) => _delegate?.isCollapsed(id) ?? false;
+  void toggleBranch(String id) => _delegate?.toggleBranch(id);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -524,6 +542,9 @@ class GraphView extends StatefulWidget {
   final GraphViewCamera? camera;
   final NodeWidgetBuilder? nodeBuilder;
   final bool showControls;
+  final bool showGrid;
+  final bool straightEdges;
+  final bool animateTransitions;
   final bool doubleTapCreatesRoot;
   final bool longPressDeletes;
 
@@ -554,6 +575,9 @@ class GraphView extends StatefulWidget {
     this.camera,
     this.nodeBuilder,
     this.showControls = true,
+    this.showGrid = true,
+    this.straightEdges = false,
+    this.animateTransitions = true,
     this.doubleTapCreatesRoot = true,
     this.longPressDeletes = true,
     this.notesDeletable = true,
@@ -659,6 +683,7 @@ class _GraphViewState extends State<GraphView>
       vsync: this,
       duration: const Duration(milliseconds: 380),
     );
+    _ctrl.addListener(_publishScale);
 
     _subscribe(widget.nodes);
     _subscribeNotes(widget.notes);
@@ -670,6 +695,15 @@ class _GraphViewState extends State<GraphView>
     if (old.camera != widget.camera) {
       old.camera?._delegate = null;
       widget.camera?._delegate = this;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _publishScale();
+      });
+    }
+    if (old.animateTransitions && !widget.animateTransitions) {
+      if (_foldCtrl.isAnimating) _foldCtrl.value = 1;
+      if (_flyCtrl.isAnimating) _flyCtrl.value = 1;
+      _reveals.clear();
+      _booted = true;
     }
     if (old.nodes != widget.nodes) {
       _tapModifiers.clear();
@@ -709,6 +743,10 @@ class _GraphViewState extends State<GraphView>
     }
   }
 
+  void _publishScale() {
+    widget.camera?._scale.value = _ctrl.value.getMaxScaleOnAxis();
+  }
+
   @override
   void dispose() {
     widget.camera?._delegate = null;
@@ -734,8 +772,14 @@ class _GraphViewState extends State<GraphView>
     if (_bootStarted) return;
     _bootStarted = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && (_nodes.isNotEmpty || _notes.isNotEmpty))
+      if (!mounted) return;
+      if (_nodes.isNotEmpty || _notes.isNotEmpty) {
         fitView(animate: false);
+      }
+      if (!widget.animateTransitions) {
+        setState(() => _booted = true);
+        return;
+      }
       Future.delayed(const Duration(milliseconds: 450), () {
         if (!mounted) return;
         _revealCtrl.forward();
@@ -868,6 +912,7 @@ class _GraphViewState extends State<GraphView>
   }
 
   void _syncReveals() {
+    if (!widget.animateTransitions) return;
     final keys = <String>{};
     for (final n in _nodes.values) {
       if (n.parentId != null) keys.add('${n.parentId}>${n.id}');
@@ -990,7 +1035,12 @@ class _GraphViewState extends State<GraphView>
     _suckFrom.addAll(starts);
     _suckTo.addAll(targets);
     starts.forEach((id, v) => _suck.putIfAbsent(id, () => v));
-    _foldCtrl.forward(from: 0);
+    if (widget.animateTransitions) {
+      _foldCtrl.forward(from: 0);
+    } else {
+      _foldCtrl.value = 1;
+      _onFoldTick();
+    }
     setState(() {});
   }
 
@@ -1463,6 +1513,10 @@ class _GraphViewState extends State<GraphView>
 
   void _flyTo(Matrix4 target) {
     _flyAnim?.removeListener(_applyFly);
+    if (!widget.animateTransitions) {
+      _ctrl.value = target;
+      return;
+    }
     _flyAnim = Matrix4Tween(begin: _ctrl.value.clone(), end: target).animate(
       CurvedAnimation(parent: _flyCtrl, curve: Curves.easeInOutCubic),
     )..addListener(_applyFly);
@@ -1534,6 +1588,71 @@ class _GraphViewState extends State<GraphView>
     final n = _nodes[id];
     if (n == null) return;
     _ensureVisible(n.position + Offset(n.size.width / 2, n.size.height / 2));
+  }
+
+  @override
+  void focusCard(String id, {required bool note}) {
+    final box = _viewerBox;
+    if (box == null) return;
+    final Offset point;
+    if (note) {
+      final card = _notes[id];
+      if (card == null) return;
+      point = (card.position & card.size).center;
+      _setSelection({}, {id});
+    } else {
+      final card = _nodes[id];
+      if (card == null) return;
+      final visited = {id};
+      var parent = card.parentId;
+      while (parent != null && visited.add(parent)) {
+        final branch = _nodes[parent];
+        if (branch == null) break;
+        if (_collapsed.contains(parent)) {
+          _setCollapsed(branch, false, haptic: false);
+        }
+        parent = branch.parentId;
+      }
+      point = (card.position & card.size).center;
+      _setSelection({id}, {});
+    }
+    final current = MatrixUtils.transformPoint(_ctrl.value, point);
+    final offset = box.size.center(Offset.zero) - current;
+    _flyTo(
+      Matrix4.translationValues(offset.dx, offset.dy, 0)..multiply(_ctrl.value),
+    );
+  }
+
+  @override
+  Rect? screenBoundsOfNode(String id) {
+    final node = _nodes[id];
+    final box = _viewerBox;
+    if (node == null || box == null) return null;
+    final local = MatrixUtils.transformRect(_ctrl.value, _visualOf(node).rect);
+    return Rect.fromPoints(
+      box.localToGlobal(local.topLeft),
+      box.localToGlobal(local.bottomRight),
+    );
+  }
+
+  @override
+  Offset? get viewportCenter {
+    final box = _viewerBox;
+    return box == null ? null : _ctrl.toScene(box.size.center(Offset.zero));
+  }
+
+  @override
+  void setSelectionMode(bool enabled) {
+    if (_selectionMode != enabled) setState(() => _selectionMode = enabled);
+  }
+
+  @override
+  bool isCollapsed(String id) => _collapsed.contains(id);
+
+  @override
+  void toggleBranch(String id) {
+    final node = _nodes[id];
+    if (node != null) _setCollapsed(node, !_collapsed.contains(id));
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────
@@ -1612,6 +1731,7 @@ class _GraphViewState extends State<GraphView>
               child: Transform.scale(
                 scale: v.vis,
                 child: _PopIn(
+                  enabled: widget.animateTransitions,
                   delayMs: _booted ? 0 : math.min(n.index * 120, 600),
                   child: Listener(
                     onPointerDown: (event) {
@@ -1766,7 +1886,9 @@ class _GraphViewState extends State<GraphView>
                         onDoubleTapDown: widget.doubleTapCreatesRoot
                             ? (d) => _requestRoot(d.localPosition)
                             : null,
-                        child: CustomPaint(painter: _GridPainter(theme)),
+                        child: widget.showGrid
+                            ? CustomPaint(painter: _GridPainter(theme))
+                            : null,
                       ),
                     ),
                     Positioned.fill(
@@ -1776,6 +1898,7 @@ class _GraphViewState extends State<GraphView>
                             _buildEdges(theme),
                             theme,
                             preview,
+                            straight: widget.straightEdges,
                           ),
                         ),
                       ),
@@ -1814,6 +1937,7 @@ class _GraphViewState extends State<GraphView>
                             }
                           },
                           child: _PopIn(
+                            enabled: widget.animateTransitions,
                             delayMs: _booted ? 0 : math.min(nt.index * 90, 600),
                             child: (widget.noteBuilder ?? _defaultNoteBuilder)(
                               context,
@@ -1920,7 +2044,6 @@ class _GraphViewState extends State<GraphView>
             : (position) => _contextSelection(position, note: state.note.id),
       );
 }
-
 
 // ════════════════════════════════════════════════════════════════════════════
 // 5 · Default node card
@@ -2342,7 +2465,11 @@ class _DefaultNoteCardState extends State<DefaultNoteCard> {
                                     textAlignVertical: TextAlignVertical.top,
                                     onChanged: s.updateText,
                                     onSubmitted: (_) => s.endEdit(),
-                                    style: TextStyle(fontSize: 13.5, height: 1.35, color: t.text),
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      height: 1.35,
+                                      color: t.text,
+                                    ),
                                     decoration: InputDecoration(
                                       isCollapsed: true,
                                       border: InputBorder.none,
@@ -2455,7 +2582,12 @@ class _DefaultNoteCardState extends State<DefaultNoteCard> {
 class _PopIn extends StatefulWidget {
   final int delayMs;
   final Widget child;
-  const _PopIn({required this.delayMs, required this.child});
+  final bool enabled;
+  const _PopIn({
+    required this.delayMs,
+    required this.child,
+    required this.enabled,
+  });
 
   @override
   State<_PopIn> createState() => _PopInState();
@@ -2478,9 +2610,19 @@ class _PopInState extends State<_PopIn> with SingleTickerProviderStateMixin {
       begin: 0,
       end: 1,
     ).animate(CurvedAnimation(parent: _ctrl, curve: const Interval(0, 0.25)));
-    Future.delayed(Duration(milliseconds: widget.delayMs), () {
-      if (mounted) _ctrl.forward();
-    });
+    if (widget.enabled) {
+      Future.delayed(Duration(milliseconds: widget.delayMs), () {
+        if (mounted && widget.enabled) _ctrl.forward();
+      });
+    } else {
+      _ctrl.value = 1;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _PopIn oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.enabled) _ctrl.value = 1;
   }
 
   @override
@@ -2720,7 +2862,11 @@ class _ConnectionDrag extends Drag {
 Offset _edgeStart(Rect rect) => Offset(rect.right + 18, rect.center.dy);
 Offset _edgeEnd(Rect rect) => Offset(rect.left - 8, rect.center.dy);
 
-Path _edgePath(Offset start, Offset end) {
+Path _edgePath(Offset start, Offset end, {required bool straight}) {
+  if (straight)
+    return Path()
+      ..moveTo(start.dx, start.dy)
+      ..lineTo(end.dx, end.dy);
   final dx = math.max(56.0, (end.dx - start.dx) * 0.55);
   return Path()
     ..moveTo(start.dx, start.dy)
@@ -2754,7 +2900,13 @@ class _EdgesPainter extends CustomPainter {
   final List<_EdgeSpec> edges;
   final GraphViewTheme theme;
   final (Offset, Offset, Color)? preview;
-  const _EdgesPainter(this.edges, this.theme, this.preview);
+  final bool straight;
+  const _EdgesPainter(
+    this.edges,
+    this.theme,
+    this.preview, {
+    required this.straight,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -2762,13 +2914,15 @@ class _EdgesPainter extends CustomPainter {
       if (e.alpha <= 0.01) continue;
       final a = _edgeStart(e.rectFrom);
       final b = _edgeEnd(e.rectTo);
-      final path = _edgePath(a, b);
+      final path = _edgePath(a, b, straight: straight);
+      final metrics = path.computeMetrics().firstOrNull;
+      if (metrics == null) continue;
       if (e.sequence) {
         final paint = Paint()
           ..color = e.cTo.withValues(alpha: e.alpha)
           ..strokeWidth = 2.4
           ..style = PaintingStyle.stroke;
-        final metric = path.computeMetrics().first;
+        final metric = metrics;
         for (double offset = 0; offset < metric.length; offset += 14) {
           canvas.drawPath(metric.extractPath(offset, offset + 8), paint);
         }
@@ -2785,7 +2939,7 @@ class _EdgesPainter extends CustomPainter {
       Path drawn = path;
       ui.PathMetric? pm;
       if (e.reveal < 1) {
-        pm = path.computeMetrics().first;
+        pm = metrics;
         drawn = pm.extractPath(0, pm.length * e.reveal);
       }
 
@@ -2825,7 +2979,7 @@ class _EdgesPainter extends CustomPainter {
     }
     if (preview case (final start, final end, final color)) {
       canvas.drawPath(
-        _edgePath(start, end),
+        _edgePath(start, end, straight: straight),
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
@@ -2948,7 +3102,9 @@ class ControlButton extends StatefulWidget {
   final GraphViewTheme theme;
   final IconData icon;
   final String tooltip;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool active;
+  final double size;
 
   const ControlButton({
     super.key,
@@ -2956,6 +3112,8 @@ class ControlButton extends StatefulWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.active = false,
+    this.size = 38,
   });
 
   @override
@@ -2968,25 +3126,29 @@ class _ControlButtonState extends State<ControlButton> {
   @override
   Widget build(BuildContext context) {
     final t = widget.theme;
+    final enabled = widget.onTap != null;
+    final highlighted = enabled && (_hovered || widget.active);
     return Tooltip(
       message: widget.tooltip,
       child: MouseRegion(
-        cursor: SystemMouseCursors.click,
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
-        child: GestureDetector(
-          onTap: widget.onTap,
+        child: Semantics(
+          selected: widget.active ? true : null,
           child: AnimatedScale(
-            scale: _hovered ? 1.1 : 1,
+            scale: enabled && _hovered ? 1.1 : 1,
             duration: const Duration(milliseconds: 140),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 160),
-              width: 38,
-              height: 38,
+              width: widget.size,
+              height: widget.size,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: _hovered ? t.surfaceHover : t.controlsBg,
-                border: Border.all(color: t.border),
+                color: highlighted ? t.surfaceHover : t.controlsBg,
+                border: Border.all(
+                  color: widget.active ? t.textDim.withValues(alpha: .38) : t.border,
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: t.shadow,
@@ -2995,10 +3157,24 @@ class _ControlButtonState extends State<ControlButton> {
                   ),
                 ],
               ),
-              child: Icon(
-                widget.icon,
-                size: 17,
-                color: _hovered ? t.text : t.textDim,
+              child: Material(
+                type: MaterialType.transparency,
+                child: IconButton(
+                  onPressed: widget.onTap,
+                  icon: Icon(widget.icon, size: 17),
+                  style: IconButton.styleFrom(
+                    foregroundColor: highlighted ? t.text : t.textDim,
+                    disabledForegroundColor: t.textDim.withValues(alpha: .38),
+                    shape: const CircleBorder(),
+                    padding: EdgeInsets.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ).copyWith(
+                    overlayColor: WidgetStateProperty.resolveWith((states) =>
+                        states.contains(WidgetState.focused)
+                        ? t.textDim.withValues(alpha: .16)
+                        : Colors.transparent),
+                  ),
+                ),
               ),
             ),
           ),
@@ -3007,7 +3183,6 @@ class _ControlButtonState extends State<ControlButton> {
     );
   }
 }
-
 
 class _EditableNoteTitle extends StatefulWidget {
   const _EditableNoteTitle({

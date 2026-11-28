@@ -32,7 +32,7 @@ LifeGraphPlugin createLifeGraphPlugin({
   required PluginUiRegistry ui,
   required Future<void> Function(Task) completeTask,
   required Set<String> dependencies,
-  bool ensureAllBoards = false,
+  CanvasCatalogStore? canvasStore,
   VaultNotesApi? vault,
   Future<void> Function(GraphStorageTarget)? selectStorageTarget,
   GraphStorageTarget? Function()? currentStorageTarget,
@@ -51,7 +51,7 @@ LifeGraphPlugin createLifeGraphPlugin({
   completeTask: completeTask,
   vault: vault,
   dependencies: dependencies,
-  ensureAllBoards: ensureAllBoards,
+  canvasStore: canvasStore,
   storageSettings: AppGraphStorageSettings(),
   storageSettingsBuilder: (_, isActive) => GraphFoldersForm(
     initial: SettingsService.graphFolders.value,

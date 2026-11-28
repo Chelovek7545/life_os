@@ -333,7 +333,9 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
   }
 
   Widget _buildRoundContent(GraphNodeData node) {
-    final details = widget.spec.details?.call(context, node, widget.state);
+    final details = widget.state.showDetails
+        ? widget.spec.details?.call(context, node, widget.state)
+        : null;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: LayoutBuilder(
@@ -356,7 +358,8 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                 ),
                 const SizedBox(height: 5),
               ],
-              Flexible(child: _title(node.title, centered: true)),
+              if (widget.state.showLabels)
+                Flexible(child: _title(node.title, centered: true)),
               if (showDetails) ...[
                 const SizedBox(height: 3),
                 SizedBox(
@@ -390,10 +393,17 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
   );
 
   Widget _buildRectContent(GraphNodeData node) {
-    final badge = widget.spec.badge?.call(context, node);
-    final details = widget.spec.details?.call(context, node, widget.state);
+    final state = widget.state;
+    final badge = state.showDetails
+        ? widget.spec.badge?.call(context, node)
+        : null;
+    final details = state.showDetails
+        ? widget.spec.details?.call(context, node, state)
+        : null;
     final showDescription =
-        widget.spec.details == null && node.subtitle.isNotEmpty;
+        state.showDetails &&
+        widget.spec.details == null &&
+        node.subtitle.isNotEmpty;
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border(left: BorderSide(color: _accent, width: 4)),
@@ -412,6 +422,7 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                 space.maxHeight >= footerHeight + titleBudget + 4 &&
                 space.maxWidth >= 42;
             final showLabel =
+                state.showLabels &&
                 space.maxHeight >=
                 labelHeight +
                     titleBudget +
@@ -447,7 +458,7 @@ class _GraphNodeCardState extends State<GraphNodeCard> {
                             Icon(widget.spec.icon, color: _accent, size: 18),
                         const SizedBox(width: 6),
                       ],
-                      Expanded(child: _title(node.title)),
+                      if (state.showLabels) Expanded(child: _title(node.title)),
                     ],
                   ),
                 ),

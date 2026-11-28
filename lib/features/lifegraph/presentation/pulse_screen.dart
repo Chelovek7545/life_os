@@ -9,17 +9,14 @@ import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/core/theme/app_spacing.dart';
 import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/core/ui/glass_panel.dart';
-import 'package:life_os/core/ui/hierarchy/heirarchy_view.dart';
-import 'package:life_os/core/ui/hierarchy/build_hierarchy_tree.dart';
 import 'package:life_os/core/ui/layout/split_view.dart';
 import 'package:life_os/core/ui/task_card.dart';
 import 'package:life_os/core/utils/color_format.dart';
 import 'package:life_os/core/utils/date_format.dart';
 import 'package:life_os/core/utils/datetime_utils.dart';
 import 'package:goals_api/goals_api.dart' show Goal;
-import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
+import 'widgets/canvases_panel.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/create_sphere_dialog.dart';
-import 'package:projects_api/projects_api.dart';
 import 'package:spheres_api/spheres_api.dart' show Sphere;
 import 'package:tasks_api/tasks_api.dart' show Task, TaskStatus;
 
@@ -46,8 +43,7 @@ Task? _activeTaskOf(List<Task> tasks) {
   return candidates.isEmpty ? null : candidates.first;
 }
 
-/// PULSE — список сфер жизни. По тапу открывает [LifeGraphScreen] (граф сферы)
-/// через [Navigator.push]. Создание сферы — кнопкой в AppBar.
+/// Панели Pulse и список сфер.
 class PulseScreen extends StatefulWidget {
   final PulseScreenViewModel viewModel;
   final PluginUiRegistry registry;
@@ -98,13 +94,18 @@ class _PulseScreenState extends State<PulseScreen> {
           : null,
       body: LayoutBuilder(
         builder: (context, asyncSnapshot) {
-          bool isSplit = asyncSnapshot.maxWidth >= 900;
+          final isSplit = asyncSnapshot.maxWidth >= 906;
 
           final spheresPanel = SingleChildScrollView(
             child: SpheresPanel(
               viewModel: widget.viewModel,
               onCreate: () => _showCreateSphereDialog(context),
-              onOpenSphere: (sphere) => _openGraph(context, sphere),
+              onOpenSphere: (sphere) => showRelatedCanvases(
+                context,
+                widget.viewModel,
+                sourceId: sphere.id,
+                title: sphere.name,
+              ),
             ),
           );
 
@@ -130,7 +131,7 @@ class _PulseScreenState extends State<PulseScreen> {
             );
             body = SplitView(
               key: ValueKey(isLandscape),
-              minSizes: [if (isLandscape) 300, 300, 300],
+              minSizes: const [282, 300, 300],
               axis: Axis.horizontal,
               dividerThickness: 2,
               dividerBuilder: (context, dividerIndex, axis) {
@@ -141,12 +142,9 @@ class _PulseScreenState extends State<PulseScreen> {
                   ),
                 );
               },
-              initialWeights: [if (isLandscape) 0.15, 0.7, 0.15],
+              initialWeights: const [.25, .5, .25],
               children: [
-                if (isLandscape)
-                  SingleChildScrollView(
-                    child: HierarchyPanel(viewModel: widget.viewModel),
-                  ),
+                CanvasesPanel(model: widget.viewModel),
                 centerColumn,
                 spheresPanel,
               ],
@@ -168,16 +166,19 @@ class _PulseScreenState extends State<PulseScreen> {
                     const SizedBox(height: 12),
                     panel,
                   ],
-                  if (isLandscape) ...[
-                    const SizedBox(height: 12),
-                    HierarchyPanel(viewModel: widget.viewModel, expand: false),
-                  ],
+                  const SizedBox(height: 12),
+                  CanvasesPanel(model: widget.viewModel, embedded: true),
                   const SizedBox(height: 12),
                   SpheresPanel(
                     viewModel: widget.viewModel,
                     expand: false,
                     onCreate: () => _showCreateSphereDialog(context),
-                    onOpenSphere: (sphere) => _openGraph(context, sphere),
+                    onOpenSphere: (sphere) => showRelatedCanvases(
+                      context,
+                      widget.viewModel,
+                      sourceId: sphere.id,
+                      title: sphere.name,
+                    ),
                   ),
                 ],
               ),
@@ -200,91 +201,10 @@ class _PulseScreenState extends State<PulseScreen> {
     );
   }
 
-  Future<void> _openGraph(BuildContext context, Sphere sphere) async {
-    try {
-      final vmGraph = await widget.viewModel.openGraph(sphere.id);
-      if (!context.mounted) {
-        await vmGraph.dispose();
-        return;
-      }
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => LifeGraphScreen(viewModel: vmGraph),
-        ),
-      );
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось открыть граф. $error')),
-        );
-      }
-    }
-  }
-
   Future<void> _showCreateSphereDialog(BuildContext context) async {
     await showDialog<void>(
       context: context,
       builder: (ctx) => CreateSphereDialog(viewModel: widget.viewModel),
-    );
-  }
-}
-
-/// Панель иерархии: проект -> задача -> subtask. Строит дерево из
-/// live-стримов проектов и задач (subtask = задача с заполненным parentTaskId).
-class HierarchyPanel extends StatelessWidget {
-  final PulseScreenViewModel viewModel;
-  final bool expand;
-
-  const HierarchyPanel({
-    super.key,
-    required this.viewModel,
-    this.expand = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final list = StreamBuilder<List<Project>>(
-      stream: viewModel.projectsStream,
-      initialData: viewModel.projects,
-      builder: (context, projectSnapshot) {
-        final projects = projectSnapshot.data ?? const <Project>[];
-        return StreamBuilder<List<Task>>(
-          stream: viewModel.tasksStream,
-          initialData: viewModel.tasks,
-          builder: (context, taskSnapshot) {
-            final tasks = taskSnapshot.data ?? const <Task>[];
-
-            final nodes = buildHierarchyTree(projects, tasks);
-
-            return HierarchyColumn(
-              nodes: nodes,
-              height: MediaQuery.sizeOf(context).height - 100,
-            );
-          },
-        );
-      },
-    );
-
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            const Spacer(),
-            Text("Hierarchy", style: AppTypography.headlineLg),
-            const Spacer(),
-            const SizedBox(width: AppMargins.md),
-          ],
-        ),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final flexible = expand && constraints.maxHeight.isFinite;
-            return flexible
-                ? Expanded(child: SingleChildScrollView(child: list))
-                : SingleChildScrollView(child: list);
-          },
-        ),
-      ],
     );
   }
 }

@@ -73,7 +73,9 @@ void main() {
     await disposeTestApp(tester, app);
   });
 
-  testWidgets('Pulse shows Hierarchy only in landscape', (tester) async {
+  testWidgets('Pulse shows Canvases instead of Hierarchy at every width', (
+    tester,
+  ) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1400, 1000);
     addTearDown(tester.view.reset);
@@ -83,20 +85,31 @@ void main() {
     await tester.pumpWidget(MyApp(diContainer: app));
     await pumpShell(tester);
 
-    final hierarchy = find.text('Hierarchy');
-    expect(hierarchy, findsOneWidget);
+    final canvases = find.text('Канвасы');
+    expect(canvases, findsOneWidget);
+    expect(find.text('Hierarchy'), findsNothing);
 
     tester.view.physicalSize = const Size(1000, 1400);
     await pumpShell(tester);
-    expect(hierarchy, findsNothing);
+    expect(canvases, findsOneWidget);
 
     tester.view.physicalSize = const Size(390, 844);
     await pumpShell(tester);
-    expect(hierarchy, findsNothing);
+    expect(canvases, findsOneWidget);
+
+    final create = find.byKey(const ValueKey('canvas-create'));
+    await tester.ensureVisible(create);
+    await tester.pumpAndSettle();
+    await tester.tap(create);
+    await tester.pumpAndSettle();
+    expect(find.text('Пустой канвас'), findsOneWidget);
+    expect(find.text('Из структуры'), findsOneWidget);
+    await tester.tap(find.text('Отмена'));
+    await tester.pumpAndSettle();
 
     tester.view.physicalSize = const Size(1400, 1000);
     await pumpShell(tester);
-    expect(hierarchy, findsOneWidget);
+    expect(canvases, findsOneWidget);
     expect(tester.takeException(), isNull);
     await disposeTestApp(tester, app);
   });

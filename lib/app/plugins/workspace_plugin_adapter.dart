@@ -17,7 +17,7 @@ import 'package:life_os/features/workspace/presentation/workspace_habits.dart';
 import 'package:life_os/features/workspace/presentation/workspace_project_tasks.dart';
 import 'package:lifegraph_plugin/lifegraph_plugin.dart';
 import 'package:life_os/features/lifegraph/presentation/pulse_screen.dart';
-import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
+import 'package:life_os/features/lifegraph/presentation/widgets/canvases_panel.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/create_sphere_dialog.dart';
 import 'package:life_os/features/workspace/presentation/workspace_hierarchy.dart';
 import 'package:life_os/features/tasks/presentation/components/task_calendar.dart';
@@ -194,30 +194,14 @@ AppPlugin createWorkspacePlugin({
                               );
                             }
                           },
-                          onOpenSphere: (sphere) async {
+                          onOpenSphere: (sphere) {
                             if (!active()) return;
-                            try {
-                              final graph = await pulseModel.openGraph(
-                                sphere.id,
-                              );
-                              if (active() && context.mounted) {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) =>
-                                        LifeGraphScreen(viewModel: graph),
-                                  ),
-                                );
-                              }
-                            } catch (_) {
-                              if (active()) {
-                                ui.notify(
-                                  const PluginNotice(
-                                    'Не удалось открыть сферу',
-                                    isError: true,
-                                  ),
-                                );
-                              }
-                            }
+                            showRelatedCanvases(
+                              context,
+                              pulseModel,
+                              sourceId: sphere.id,
+                              title: sphere.name,
+                            );
                           },
                         ),
                       ),

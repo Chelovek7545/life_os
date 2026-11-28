@@ -1,10 +1,12 @@
 import 'package:graph_ui/graph_ui.dart';
 import 'package:graph_api/graph_api.dart'
-    show GraphLinkType, graphPredecessorIds;
+    show GraphLinkType, GraphNodeData, graphPredecessorIds;
 import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:path/path.dart' as p;
 import 'package:life_os/core/ui/hierarchy/build_note_hierarchy.dart';
 import 'package:life_os/core/theme/app_colors.dart';
@@ -12,7 +14,7 @@ import 'package:life_os/core/theme/app_text_styles.dart';
 import 'package:life_os/features/lifegraph/data/android_graph_files.dart';
 import 'package:graph_canvas/graph_canvas.dart' as graph;
 import 'package:lifegraph_plugin/lifegraph_plugin.dart'
-    show LifeGraphViewModel, GraphSaveStatus, GraphDisconnection;
+    show CanvasSummary, LifeGraphViewModel, GraphSaveStatus, GraphDisconnection;
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_node_sizes.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
 import 'package:spheres_api/spheres_api.dart';
@@ -26,6 +28,11 @@ import 'widgets/markdown_note_dialog.dart';
 import 'widgets/graph_note_creation_dialog.dart';
 import 'widgets/graph_note_context_menu.dart';
 import 'widgets/graph_directory_picker.dart';
+import 'widgets/canvas_add_dialog.dart';
+import 'widgets/canvas_visuals.dart';
+import 'widgets/canvas_editor_chrome.dart';
+import 'widgets/canvas_editor_panels.dart';
+import 'canvas_export.dart';
 
 /// Экран графа жизни: сфера -> цель -> проект -> задача.
 ///
@@ -40,8 +47,10 @@ class LifeGraphScreen extends StatefulWidget {
     super.key,
     required this.viewModel,
     this.pickDirectory = pickGraphDirectory,
+    this.canvasChoices = const [],
   });
   final Future<String?> Function() pickDirectory;
+  final List<CanvasSummary> canvasChoices;
 
   @override
   State<LifeGraphScreen> createState() => _LifeGraphScreenState();
@@ -49,7 +58,9 @@ class LifeGraphScreen extends StatefulWidget {
 
 enum _SelectionMenuAction { disconnect, delete }
 
-enum _BackgroundMenuAction { placeTask }
+enum _BackgroundMenuAction { placeTask, placeEntity }
+
+enum _CanvasMoreAction { focus, branch, disconnect, copyTitle }
 
 class _LifeGraphScreenState extends State<LifeGraphScreen> {
   final graph.GraphViewCamera _camera = graph.GraphViewCamera();
@@ -58,6 +69,58 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   bool _closing = false;
   bool _exporting = false;
   bool _arranging = false;
+  bool _frameSelection = false;
+  CanvasDisplayOptions _display = const CanvasDisplayOptions();
+  final _filters = BehaviorSubject.seeded(const CanvasFilters());
+  final _nodeScale = BehaviorSubject.seeded(1.0);
+
+  late final _visibleNodes = Rx.combineLatest3(
+    widget.viewModel.graphStream,
+    _filters.stream,
+    _nodeScale.stream,
+    (nodes, filters, scale) => [
+      for (final node in nodes)
+        if (_includesNode(filters, node.id))
+          if (scale == 1)
+            node
+          else
+            graph.GraphNode(
+              id: node.id,
+              label: node.label,
+              index: node.index,
+              depth: node.depth,
+              parentId: node.parentId,
+              predecessorIds: node.predecessorIds,
+              size: node.size * scale,
+              position: node.position,
+            ),
+    ],
+  ).shareReplay(maxSize: 1);
+
+  late final _visibleNotes = Rx.combineLatest2(
+    widget.viewModel.notesStream,
+    _filters.stream,
+    (notes, filters) =>
+        filters.includesKind('note') ? notes : const <graph.GraphNote>[],
+  ).shareReplay(maxSize: 1);
+
+  late final _visibleCount = Rx.combineLatest2(
+    _visibleNodes,
+    _visibleNotes,
+    (nodes, notes) => nodes.length + notes.length,
+  ).distinct();
+
+  bool _includesNode(CanvasFilters filters, String id) {
+    if (!filters.active) return true;
+    final node = widget.viewModel.canvasEntityData(id);
+    return node != null &&
+        filters.includesCard(
+          node,
+          filters.projects.isEmpty
+              ? null
+              : widget.viewModel.canvasProjectFor(id)?.id,
+        );
+  }
 
   Future<void> _arrangeNodes() async {
     if (_arranging) return;
@@ -167,6 +230,8 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   @override
   void dispose() {
     super.dispose();
+    unawaited(_filters.close());
+    unawaited(_nodeScale.close());
     unawaited(
       widget.viewModel.dispose().catchError((Object error, StackTrace stack) {
         FlutterError.reportError(
@@ -178,7 +243,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
+    return PopScope<CanvasSummary>(
       canPop: _allowPop,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop || _closing) return;
@@ -188,15 +253,16 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           if (!mounted) return;
           setState(() => _allowPop = true);
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) Navigator.of(context).pop(result);
+            if (context.mounted) Navigator.of(context).pop(result);
           });
         } catch (_) {
-          if (mounted)
+          if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('Не удалось сохранить граф. Повторите выход.'),
               ),
             );
+          }
         } finally {
           _closing = false;
         }
@@ -204,20 +270,33 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       child: Scaffold(
         backgroundColor: AppColors.surfaceDim,
         body: SafeArea(
-          child: Stack(
-            children: [
-              Positioned.fill(child: _buildContent(context)),
-              Positioned(
-                top: 16,
-                left: 16,
-                child: graph.ControlButton(
-                  theme: AppGraphThemes.dark,
-                  icon: Icons.arrow_back_rounded,
-                  tooltip: 'Назад',
-                  onTap: () => Navigator.maybePop(context),
-                ),
-              ),
-            ],
+          child: CallbackShortcuts(
+            bindings: widget.viewModel.isIndependentCanvas
+                ? {
+                    const SingleActivator(
+                      LogicalKeyboardKey.keyF,
+                      control: true,
+                    ): _searchCanvas,
+                    const SingleActivator(LogicalKeyboardKey.keyF, meta: true):
+                        _searchCanvas,
+                  }
+                : const {},
+            child: Stack(
+              children: [
+                Positioned.fill(child: _buildContent(context)),
+                if (!widget.viewModel.isIndependentCanvas)
+                  Positioned(
+                    top: 16,
+                    left: 16,
+                    child: graph.ControlButton(
+                      theme: AppGraphThemes.dark,
+                      icon: Icons.arrow_back_rounded,
+                      tooltip: 'Назад',
+                      onTap: () => Navigator.maybePop(context),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -229,13 +308,16 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       stream: widget.viewModel.graphStream,
       builder: (context, snapshot) {
         final nodes = snapshot.data ?? const <graph.GraphNode>[];
-        final sphereId = widget.viewModel.currentSphereId;
+        final sphereId = widget.viewModel.currentGraphId;
         if (sphereId == null) {
           _syncedSphereId = null;
           return const _EmptyState();
         }
 
-        final ready = nodes.any((n) => n.parentId == null && n.id == sphereId);
+        final independent = widget.viewModel.isIndependentCanvas;
+        final ready =
+            independent ||
+            nodes.any((n) => n.parentId == null && n.id == sphereId);
         if (ready) _maybeFit(sphereId);
         final stale = _syncedSphereId != sphereId;
 
@@ -249,11 +331,22 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                 canStartConnection: _canStartConnection,
                 canConnect: _canConnect,
                 onConnect: _connectNodes,
-                nodes: widget.viewModel.graphStream,
-                notes: widget.viewModel.notesStream,
+                nodes: independent
+                    ? _visibleNodes
+                    : widget.viewModel.graphStream,
+                notes: independent
+                    ? _visibleNotes
+                    : widget.viewModel.notesStream,
                 onAction: _onAction,
                 camera: _camera,
                 theme: AppGraphThemes.dark,
+                showControls: !independent,
+                showGrid: !independent || _display.grid,
+                straightEdges: independent && _display.straight,
+                animateTransitions:
+                    !independent ||
+                    (_display.animations &&
+                        !MediaQuery.disableAnimationsOf(context)),
                 layout: appGraphLayout(
                   worldSize: widget.viewModel.canvasWorldSize,
                 ),
@@ -287,51 +380,479 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                   child: CircularProgressIndicator(color: AppColors.primary),
                 ),
               ),
-            Positioned(
-              left: 18,
-              bottom: 18,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _StatsChip(count: nodes.length),
-                  if (ready && nodes.length > 1)
-                    IconButton(
-                      tooltip: 'Разложить по веткам',
-                      icon: const Icon(Icons.account_tree_outlined),
-                      onPressed: _arranging ? null : _arrangeNodes,
-                    ),
-                  if (ready && widget.viewModel.hasCustomNodeSizes)
-                    IconButton(
-                      tooltip: 'Сбросить размеры узлов',
-                      icon: const Icon(Icons.aspect_ratio_rounded),
-                      onPressed: _resetNodeSizes,
-                    ),
-                ],
+            if (independent)
+              Positioned.fill(child: _editorChrome())
+            else ...[
+              Positioned(
+                left: 18,
+                bottom: 18,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _StatsChip(count: nodes.length),
+                    if (ready && nodes.length > 1)
+                      IconButton(
+                        tooltip: 'Разложить по веткам',
+                        icon: const Icon(Icons.account_tree_outlined),
+                        onPressed: _arranging ? null : _arrangeNodes,
+                      ),
+                    if (ready && widget.viewModel.hasCustomNodeSizes)
+                      IconButton(
+                        tooltip: 'Сбросить размеры узлов',
+                        icon: const Icon(Icons.aspect_ratio_rounded),
+                        onPressed: _resetNodeSizes,
+                      ),
+                  ],
+                ),
               ),
-            ),
-            Positioned(
-              right: 18,
-              top: 18,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  _SphereDropdown(viewModel: widget.viewModel),
-                  const SizedBox(width: 10),
-                  _SaveBadge(viewModel: widget.viewModel),
-                  if (widget.viewModel.canExportCanvas)
-                    IconButton(
-                      tooltip: 'Экспорт Canvas',
-                      onPressed: _exporting ? null : _exportCanvas,
-                      icon: const Icon(Icons.file_upload_outlined),
-                    ),
-                ],
+              Positioned(
+                right: 18,
+                top: 18,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _SphereDropdown(viewModel: widget.viewModel),
+                    const SizedBox(width: 10),
+                    _SaveBadge(viewModel: widget.viewModel),
+                    if (widget.viewModel.canExportCanvas)
+                      IconButton(
+                        tooltip: 'Экспорт Canvas',
+                        onPressed: _exporting ? null : _exportCanvas,
+                        icon: const Icon(Icons.file_upload_outlined),
+                      ),
+                  ],
+                ),
               ),
-            ),
+            ],
           ],
         );
       },
     );
+  }
+
+  Widget _editorChrome() => LayoutBuilder(
+    builder: (context, constraints) {
+      final wide = constraints.maxWidth >= 660;
+      final short = constraints.maxHeight < 450;
+      const toolSize = 38.0;
+      const gap = 7.0;
+      Widget tool(
+        IconData icon,
+        String title,
+        VoidCallback? action, {
+        bool active = false,
+      }) => graph.ControlButton(
+        theme: AppGraphThemes.dark,
+        icon: icon,
+        tooltip: title,
+        onTap: action,
+        active: active,
+        size: toolSize,
+      );
+      final status = _SaveBadge(viewModel: widget.viewModel, compact: !wide);
+      final actions = <Widget>[
+        tool(Icons.search, 'Поиск по канвасу', _searchCanvas),
+        tool(
+          Icons.filter_alt_outlined,
+          'Фильтры канваса',
+          _configureFilters,
+          active: _filters.value.active,
+        ),
+        tool(Icons.tune, 'Настройки отображения', _configureDisplay),
+        if (wide) status,
+        tool(
+          Icons.ios_share_rounded,
+          'Экспорт канваса',
+          _exporting ? null : _chooseCanvasExport,
+        ),
+      ];
+
+      final zoom = <Widget>[
+        SizedBox.square(
+          key: const ValueKey('canvas-zoom-indicator'),
+          //dimension: toolSize,
+          child: Container(
+            padding: EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainer.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.borderGlass),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x33000000),
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: ValueListenableBuilder<double>(
+                  valueListenable: _camera.scale,
+                  builder: (context, value, _) => Text(
+                    '${(value * 100).round()}%',
+                    style: const TextStyle(
+                      color: canvasToolInk,
+                      fontSize: 12,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        tool(Icons.add, 'Увеличить масштаб', () => _camera.zoomBy(1.25)),
+        tool(Icons.remove, 'Уменьшить масштаб', () => _camera.zoomBy(.8)),
+        tool(Icons.fit_screen, 'Вписать канвас', () => _camera.fitView()),
+      ];
+      List<Widget> spaced(List<Widget> children, Axis axis) => [
+        for (var index = 0; index < children.length; index++) ...[
+          if (index > 0)
+            axis == Axis.horizontal
+                ? const SizedBox(width: gap)
+                : const SizedBox(height: gap),
+          children[index],
+        ],
+      ];
+      return Stack(
+        children: [
+          Positioned(
+            top: 14,
+            left: 14,
+            right: wide ? 350 : 14,
+            child: Row(
+              children: [
+                tool(
+                  Icons.arrow_back_rounded,
+                  'Назад',
+                  () => Navigator.of(context).maybePop(),
+                ),
+                const SizedBox(width: gap),
+                Flexible(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 300),
+                    child: CanvasBreadcrumb(
+                      title: widget.viewModel.canvasTitle!,
+                      compact: !wide,
+                      onPressed: widget.canvasChoices.isEmpty
+                          ? null
+                          : _switchCanvas,
+                    ),
+                  ),
+                ),
+                if (!wide) ...[const SizedBox(width: gap), status],
+              ],
+            ),
+          ),
+          Positioned(
+            top: wide ? 14 : 14 + toolSize + gap,
+            right: 14,
+            child: Row(children: spaced(actions, Axis.horizontal)),
+          ),
+          Positioned(
+            top: 14 + toolSize + gap + (wide ? 9 : 0),
+            bottom: 14 + toolSize + gap,
+            left: 14,
+            child: SingleChildScrollView(
+              primary: false,
+              child: Column(
+                children: spaced([
+                  tool(
+                    Icons.sticky_note_2_outlined,
+                    'Заметки канваса',
+                    () => _searchCanvas(notesOnly: true),
+                  ),
+                  tool(
+                    Icons.layers_outlined,
+                    'Видимость слоёв',
+                    () => _configureFilters(layersOnly: true),
+                    active: _filters.value.kinds.isNotEmpty,
+                  ),
+                  tool(
+                    Icons.select_all,
+                    'Выделение рамкой',
+                    _toggleFrameSelection,
+                    active: _frameSelection,
+                  ),
+                  tool(Icons.add, 'Добавить карточку', _showAddCanvasObjects),
+                ], Axis.vertical),
+              ),
+            ),
+          ),
+          if (!short || wide)
+            Positioned(
+              bottom: 14,
+              left: 14,
+              right: wide ? null : 80,
+              child: Align(
+                alignment: Alignment.bottomLeft,
+                child: CanvasToolSurface(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: math.max(
+                        80,
+                        math.min(
+                          wide ? 385 : 290,
+                          constraints.maxWidth - (wide ? 334 : 94),
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: StreamBuilder<int>(
+                            stream: _visibleCount,
+                            initialData:
+                                widget.viewModel.graph.length +
+                                widget.viewModel.notes.length,
+                            builder: (_, snapshot) => Text(
+                              '${canvasCardCount(snapshot.data ?? 0)}${wide ? ' · ПКМ — действия' : ''}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: canvasToolInk,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        const SizedBox(
+                          height: 24,
+                          child: VerticalDivider(width: 1),
+                        ),
+                        tool(
+                          Icons.account_tree_outlined,
+                          'Разложить по веткам',
+                          _arranging || widget.viewModel.graph.length < 2
+                              ? null
+                              : _arrangeNodes,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Positioned(
+            bottom: 14,
+            right: 14,
+            child: short
+                ? Row(children: spaced(zoom, Axis.horizontal))
+                : Column(children: spaced(zoom, Axis.vertical)),
+          ),
+        ],
+      );
+    },
+  );
+
+  void _toggleFrameSelection() {
+    setState(() => _frameSelection = !_frameSelection);
+    _camera.setSelectionMode(_frameSelection);
+  }
+
+  Future<void> _switchCanvas() async {
+    final model = widget.viewModel;
+    final next = await showDialog<CanvasSummary>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Переключить канвас'),
+        children: [
+          for (final board in widget.canvasChoices)
+            SimpleDialogOption(
+              onPressed: board.id == model.currentCanvasId
+                  ? null
+                  : () => Navigator.pop(context, board),
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  board.id == model.currentCanvasId ? Icons.check : canvasIcon,
+                ),
+                title: Text(board.title),
+              ),
+            ),
+        ],
+      ),
+    );
+    if (next != null && mounted) await Navigator.of(context).maybePop(next);
+  }
+
+  Future<void> _searchCanvas({bool notesOnly = false}) async {
+    final model = widget.viewModel;
+    final cards = <CanvasSearchResult>[
+      if (!notesOnly)
+        for (final view in model.graph)
+          if (model.nodeById(view.id) case final node?)
+            (
+              id: node.id,
+              kind: node.kind,
+              title: node.title,
+              details: node.subtitle,
+            ),
+      for (final note in model.notes)
+        (
+          id: note.id,
+          kind: 'note',
+          details: note.text,
+          title: note.source != null
+              ? p.basenameWithoutExtension(note.source!.path)
+              : note.text
+                        .split('\n')
+                        .map((line) => line.trim())
+                        .where((line) => line.isNotEmpty)
+                        .firstOrNull ??
+                    'Пустой стикер',
+        ),
+    ];
+    final result = await showCanvasSearch(context, cards, notesOnly: notesOnly);
+    if (result == null || !mounted || model.isClosing) return;
+    final note = result.kind == 'note';
+    final included = note
+        ? _filters.value.includesKind('note')
+        : _includesNode(_filters.value, result.id);
+    if (!included) {
+      _applyFilters(const CanvasFilters());
+      await WidgetsBinding.instance.endOfFrame;
+    }
+    if (mounted) _camera.focusCard(result.id, note: note);
+  }
+
+  void _applyFilters(CanvasFilters filters) =>
+      setState(() => _filters.add(filters));
+
+  Future<void> _configureFilters({bool layersOnly = false}) async {
+    final model = widget.viewModel;
+    final kinds = <String>{if (model.notes.isNotEmpty) 'note'};
+    final projects = <String, String>{};
+    final tags = <String>{};
+    for (final view in model.graph) {
+      final node = model.nodeById(view.id);
+      if (node == null) continue;
+      kinds.add(canvasTaskKind(node.kind));
+      if (model.canvasProjectFor(node.id) case final project?)
+        projects[project.id] = project.title;
+      if (node.attributes['tagNames'] case final Iterable names)
+        tags.addAll(names.whereType<String>());
+    }
+    final selected = await showCanvasFilters(
+      context,
+      initial: _filters.value,
+      availableKinds: kinds,
+      availableProjects: projects,
+      availableTags: tags,
+      layersOnly: layersOnly,
+    );
+    if (selected != null && mounted) _applyFilters(selected);
+  }
+
+  Future<void> _configureDisplay() async {
+    final result = await showCanvasDisplayOptions(
+      context,
+      _display,
+      canResetSizes: widget.viewModel.hasCustomNodeSizes,
+      resetSizes: _resetNodeSizes,
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      if (_display.nodeScale != result.nodeScale)
+        _nodeScale.add(result.nodeScale);
+      _display = result;
+    });
+  }
+
+  Future<void> _showAddCanvasObjects() async {
+    final model = widget.viewModel;
+    if (model.isClosing) return;
+    final point =
+        _camera.viewportCenter ??
+        const Offset(
+          LifeGraphViewModel.worldCenter,
+          LifeGraphViewModel.worldCenter,
+        );
+    final dialogs = GraphNodeDialogs(
+      registry: model.nodeEditors,
+      commands: model.commands,
+    );
+    final action = await showCanvasAddDialog(
+      context,
+      editors: dialogs.standaloneEditors,
+    );
+    if (!mounted || widget.viewModel != model || model.isClosing) return;
+    if (action == CanvasAddAction.note) {
+      await _showCreateNoteOptions(context);
+    } else if (action == CanvasAddAction.existingObject) {
+      await _pickCanvasEntity(point);
+    } else if (action is GraphNodeEditor) {
+      await _showStandaloneCanvasForm(dialogs, action, point);
+    }
+  }
+
+  Future<void> _showStandaloneCanvasForm(
+    GraphNodeDialogs dialogs,
+    GraphNodeEditor editor,
+    Offset point,
+  ) {
+    final create = widget.viewModel.standaloneCreationAt(point);
+    return dialogs.createStandalone(context, editor, (draft, active) async {
+      final id = await create(draft, active);
+      if (!mounted) return id;
+      if (!_includesNode(_filters.value, id))
+        _applyFilters(const CanvasFilters());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _camera.revealNode(id);
+      });
+      return id;
+    });
+  }
+
+  Future<void> _chooseCanvasExport() async {
+    final format = await showDialog<CanvasExportFormat>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Экспорт канваса'),
+        children: [
+          for (final format in CanvasExportFormat.values)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, format),
+              child: Text(format.label),
+            ),
+        ],
+      ),
+    );
+    if (format == null || !mounted || _exporting) return;
+    if (format == CanvasExportFormat.pulse &&
+        widget.viewModel.canExportCanvas) {
+      await _exportCanvas();
+      return;
+    }
+    setState(() => _exporting = true);
+    try {
+      final model = widget.viewModel;
+      final result = await saveCanvasExport(
+        format,
+        model.canvasTitle!,
+        await model.snapshotCanvas(),
+        straight: _display.straight,
+      );
+      if (result != null && mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Канвас сохранён: $result')));
+      }
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Не удалось экспортировать канвас: $error')),
+        );
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
   }
 
   /// Как только пришли данные для текущей сферы — вписываем граф в канвас.
@@ -393,76 +914,89 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
 
   // ── Кастомный рендер ноды ─────────────────────────────────────────────────
 
-  Widget _nodeBuilder(BuildContext context, graph.NodeState state) =>
-      ListenableBuilder(
-        listenable: widget.viewModel.nodeEditors,
-        builder: (context, _) {
-          final node = widget.viewModel.nodeById(state.node.id);
-          if (node == null) return const SizedBox.shrink();
-          final actions = widget.viewModel.actionsFor(node.id);
-          final disconnections = state.selected
-              ? widget.viewModel.disconnectionsFor(node.id)
-              : const <GraphDisconnection>[];
-          final removeFromBoard =
-              widget.viewModel.canRemoveTaskFromBoard(node.id)
-              ? widget.viewModel.removeTaskFromBoard(node.id)
-              : null;
-          final dialogs = GraphNodeDialogs(
-            registry: widget.viewModel.nodeEditors,
-            commands: widget.viewModel.commands,
-          );
-          final canDelete = widget.viewModel.commands.canDelete(node.kind);
-          void showRemoveTaskDialog() => _showDeleteDialog(
-            count: 1,
-            hasNodes: true,
-            delete: canDelete ? actions.deleteNode : null,
-            removeFromGraph: removeFromBoard,
-          );
-          return GraphNodeView(
-            registry: widget.viewModel.nodePresentations,
-            node: node.toData(),
-            interaction: GraphNodeInteraction(
-              size: state.size,
-              selected: state.selected,
-              hasChildren: state.hasChildren,
-              collapsed: state.collapsed,
-              hiddenCount: state.hiddenCount,
-              accent: state.accent,
-              descendantProgress: widget.viewModel.taskProgressFor(node.id),
-              select: state.select,
-              toggleCollapse: state.toggleCollapse,
-              dragStart: state.dragStart,
-              dragUpdate: state.dragUpdate,
-              dragEnd: state.dragEnd,
-              startConnection: state.startConnection,
-              disconnect: disconnections.isEmpty
-                  ? null
-                  : () => _chooseDisconnection(disconnections),
-              edit: dialogs.canEdit(node.kind)
-                  ? () => dialogs.edit(context, actions)
-                  : null,
-              addChild: dialogs.canAddChild(node.kind)
-                  ? () => dialogs.addChild(context, actions)
-                  : null,
-              remove: removeFromBoard != null
-                  ? showRemoveTaskDialog
-                  : canDelete
-                  ? () => dialogs.remove(context, actions)
-                  : null,
-              createChild: actions.createChild,
-              updateNode: widget.viewModel.commands.canUpdate(node.kind)
-                  ? actions.updateNode
-                  : null,
-              deleteNode: widget.viewModel.commands.canDelete(node.kind)
-                  ? actions.deleteNode
-                  : null,
-            ),
-          );
-        },
+  Widget _nodeBuilder(
+    BuildContext context,
+    graph.NodeState state,
+  ) => ListenableBuilder(
+    listenable: widget.viewModel.nodeEditors,
+    builder: (context, _) {
+      final node = widget.viewModel.nodeById(state.node.id);
+      if (node == null) return const SizedBox.shrink();
+      final independent = widget.viewModel.isIndependentCanvas;
+      final live = widget.viewModel.canEditCanvasEntity(node.id);
+      final actions = widget.viewModel.actionsFor(node.id);
+      final disconnections = state.selected
+          ? widget.viewModel.disconnectionsFor(node.id)
+          : const <GraphDisconnection>[];
+      final removeFromBoard = widget.viewModel.canRemoveTaskFromBoard(node.id)
+          ? widget.viewModel.removeTaskFromBoard(node.id)
+          : null;
+      final dialogs = GraphNodeDialogs(
+        registry: widget.viewModel.nodeEditors,
+        commands: widget.viewModel.commands,
       );
+      final canDelete = widget.viewModel.commands.canDelete(node.kind);
+      void showRemoveTaskDialog() => _showDeleteDialog(
+        count: 1,
+        hasNodes: true,
+        delete: canDelete ? actions.deleteNode : null,
+        removeFromGraph: removeFromBoard,
+      );
+      return GraphNodeView(
+        registry: widget.viewModel.nodePresentations,
+        node: node.toData(),
+        interaction: GraphNodeInteraction(
+          size: state.size,
+          selected: state.selected,
+          hasChildren: state.hasChildren,
+          collapsed: state.collapsed,
+          hiddenCount: state.hiddenCount,
+          accent: state.accent,
+          showLabels: !independent || _display.labels,
+          showDetails: !independent || _display.details,
+          descendantProgress: widget.viewModel.taskProgressFor(node.id),
+          select: state.select,
+          toggleCollapse: state.toggleCollapse,
+          dragStart: state.dragStart,
+          dragUpdate: state.dragUpdate,
+          dragEnd: state.dragEnd,
+          startConnection: state.startConnection,
+          disconnect: disconnections.isEmpty
+              ? null
+              : () => _chooseDisconnection(disconnections),
+          edit: live && dialogs.canEdit(node.kind)
+              ? () => dialogs.edit(context, actions)
+              : null,
+          addChild: !independent && dialogs.canAddChild(node.kind)
+              ? () => dialogs.addChild(context, actions)
+              : null,
+          remove: independent
+              ? () => _changeBoardPlacement(
+                  () => widget.viewModel.removeCanvasSelection([
+                    node.id,
+                  ], const []),
+                )
+              : removeFromBoard != null
+              ? showRemoveTaskDialog
+              : canDelete
+              ? () => dialogs.remove(context, actions)
+              : null,
+          createChild: independent ? null : actions.createChild,
+          updateNode: live && widget.viewModel.commands.canUpdate(node.kind)
+              ? actions.updateNode
+              : null,
+          deleteNode:
+              (independent || widget.viewModel.commands.canDelete(node.kind))
+              ? actions.deleteNode
+              : null,
+        ),
+      );
+    },
+  );
 
   bool _canStartConnection(String id) {
     final model = widget.viewModel;
+    if (model.isIndependentCanvas) return model.nodeById(id) != null;
     final kind = model.nodeById(id)?.kind;
     return switch (kind) {
       ProjectsGraphContributor.kind => model.commands.canAttach(
@@ -476,6 +1010,9 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
   }
 
   bool _canConnect(String source, String target) {
+    if (widget.viewModel.isIndependentCanvas) {
+      return widget.viewModel.canConnectCanvasCards(source, target);
+    }
     final task = widget.viewModel.nodeById(target);
     if (task == null || source == target || !_canStartConnection(source)) {
       return false;
@@ -527,6 +1064,10 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     final model = widget.viewModel;
     try {
       if (!_canConnect(source, target)) return;
+      if (model.isIndependentCanvas) {
+        await model.connectCanvasCards(source, target);
+        return;
+      }
       if (model.nodeById(source)?.kind == ProjectsGraphContributor.kind) {
         await model.connectNodes(source, target);
         return;
@@ -598,7 +1139,11 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     if (!context.mounted) return;
 
     if (choice == GraphNoteCreation.sticker) {
-      widget.viewModel.createNote();
+      widget.viewModel.createNote(
+        position: widget.viewModel.isIndependentCanvas
+            ? _camera.viewportCenter
+            : null,
+      );
     } else if (choice == GraphNoteCreation.obsidian) {
       _showVaultNotePicker(context, markdown: false);
     } else if (choice == GraphNoteCreation.markdownLibrary) {
@@ -652,16 +1197,17 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
 
   Future<void> _showCreationMenu(Offset position, Offset canvasPoint) async {
     final model = widget.viewModel;
-    if (model.currentSphereId == null || model.isClosing) return;
+    if (model.currentGraphId == null || model.isClosing) return;
+    final independent = model.isIndependentCanvas;
     final dialogs = GraphNodeDialogs(
       registry: model.nodeEditors,
       commands: model.commands,
     );
     final editors = dialogs.standaloneEditors;
-    final canPlace = model.tasksRemovedFromBoard.isNotEmpty;
-    if (editors.isEmpty && !canPlace) return;
-    final create = model.standaloneCreationAt(canvasPoint);
-    final place = model.placeRemovedTaskAt(canvasPoint);
+    final canPlace = !independent && model.tasksRemovedFromBoard.isNotEmpty;
+    if (editors.isEmpty && !canPlace && !independent) return;
+    final create = independent ? null : model.standaloneCreationAt(canvasPoint);
+    final place = canPlace ? model.placeRemovedTaskAt(canvasPoint) : null;
     final overlay =
         Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
     final point = overlay.globalToLocal(position);
@@ -679,6 +1225,11 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         side: BorderSide(color: palette.border),
       ),
       items: [
+        if (independent)
+          const PopupMenuItem(
+            value: _BackgroundMenuAction.placeEntity,
+            child: Text('Добавить существующий объект'),
+          ),
         if (canPlace)
           const PopupMenuItem(
             value: _BackgroundMenuAction.placeTask,
@@ -694,11 +1245,17 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           ),
       ],
     );
-    if (!mounted || widget.viewModel != model) return;
-    if (action == _BackgroundMenuAction.placeTask) {
+    if (!mounted || widget.viewModel != model || model.isClosing) return;
+    if (action == _BackgroundMenuAction.placeTask && place != null) {
       await _showTaskPlacement(place);
+    } else if (action == _BackgroundMenuAction.placeEntity) {
+      await _pickCanvasEntity(canvasPoint);
     } else if (action is GraphNodeEditor) {
-      await dialogs.createStandalone(context, action, create);
+      if (create == null) {
+        await _showStandaloneCanvasForm(dialogs, action, canvasPoint);
+      } else {
+        await dialogs.createStandalone(context, action, create);
+      }
     }
   }
 
@@ -707,20 +1264,31 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     Offset position,
   ) async {
     final model = widget.viewModel;
-    final delete = model.deletionForSelection(
-      nodeIds: selection.nodeIds,
-      noteIds: selection.noteIds,
-    );
+    final independent = model.isIndependentCanvas;
+    if (independent && selection.length == 1 && selection.nodeIds.isNotEmpty) {
+      await _showCanvasNodeMenu(selection.nodeIds.single, position);
+      return;
+    }
+    final delete = independent
+        ? (_) =>
+              model.removeCanvasSelection(selection.nodeIds, selection.noteIds)
+        : model.deletionForSelection(
+            nodeIds: selection.nodeIds,
+            noteIds: selection.noteIds,
+          );
     final removeFromBoard =
-        selection.length == 1 &&
+        !independent &&
+            selection.length == 1 &&
             selection.nodeIds.isNotEmpty &&
             model.canRemoveTaskFromBoard(selection.nodeIds.single)
         ? model.removeTaskFromBoard(selection.nodeIds.single)
         : null;
-    final canDelete = selection.nodeIds.every((id) {
-      final node = model.nodeById(id);
-      return node != null && model.commands.canDelete(node.kind);
-    });
+    final canDelete =
+        independent ||
+        selection.nodeIds.every((id) {
+          final node = model.nodeById(id);
+          return node != null && model.commands.canDelete(node.kind);
+        });
     final disconnections = selection.length == 1 && selection.nodeIds.isNotEmpty
         ? model.disconnectionsFor(selection.nodeIds.single)
         : const <GraphDisconnection>[];
@@ -764,7 +1332,9 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                 const SizedBox(width: 10),
                 Flexible(
                   child: Text(
-                    removeFromBoard != null
+                    independent
+                        ? 'Убрать с канваса'
+                        : removeFromBoard != null
                         ? 'Удалить'
                         : selection.length == 1
                         ? 'Удалить объект'
@@ -785,12 +1355,123 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       return;
     }
     if (action != _SelectionMenuAction.delete) return;
+    if (independent) {
+      await _changeBoardPlacement(() => delete(false));
+      return;
+    }
     await _showDeleteDialog(
       count: selection.length,
       hasNodes: selection.nodeIds.isNotEmpty,
       delete: canDelete ? delete : null,
       removeFromGraph: removeFromBoard,
     );
+  }
+
+  Future<void> _showCanvasNodeMenu(String id, Offset pointer) async {
+    final model = widget.viewModel;
+    final node = model.nodeById(id);
+    if (node == null || model.isClosing) return;
+    final dialogs = GraphNodeDialogs(
+      registry: model.nodeEditors,
+      commands: model.commands,
+    );
+    final action = await showCanvasNodeActions(
+      context,
+      _camera.screenBoundsOfNode(id) ??
+          Rect.fromCenter(center: pointer, width: 1, height: 1),
+      canEdit: model.canEditCanvasEntity(id) && dialogs.canEdit(node.kind),
+      canLink: model.graph.any(
+        (candidate) => model.canConnectCanvasCards(id, candidate.id),
+      ),
+    );
+    if (!mounted || model.isClosing || model.nodeById(id) == null) return;
+    switch (action) {
+      case CanvasNodeAction.edit:
+        if (model.canEditCanvasEntity(id) &&
+            dialogs.canEdit(model.nodeById(id)!.kind)) {
+          await dialogs.edit(context, model.actionsFor(id));
+        }
+      case CanvasNodeAction.link:
+        final target = await showDialog<GraphNodeData>(
+          context: context,
+          builder: (_) => CanvasEntityPicker(
+            title: 'Связать с карточкой',
+            entities: [
+              for (final card in model.graph)
+                if (model.canConnectCanvasCards(id, card.id))
+                  if (model.nodeById(card.id) case final other?) other.toData(),
+            ],
+          ),
+        );
+        if (target != null && mounted && !model.isClosing) {
+          await _changeBoardPlacement(
+            () => model.connectCanvasCards(id, target.id),
+          );
+        }
+      case CanvasNodeAction.copy:
+        final view = model.graph.where((card) => card.id == id).firstOrNull;
+        if (view == null) return;
+        await _changeBoardPlacement(
+          () => model.createNoteWithText(
+            title: node.title,
+            text: node.subtitle == 'Нет описания' ? '' : node.subtitle,
+            position: view.position + Offset(view.size.width + 26, 24),
+          ),
+        );
+      case CanvasNodeAction.delete:
+        await _changeBoardPlacement(
+          () => model.removeCanvasSelection([id], const []),
+        );
+      case CanvasNodeAction.more:
+        await _showMoreCanvasActions(id);
+      case null:
+        break;
+    }
+  }
+
+  Future<void> _showMoreCanvasActions(String id) async {
+    final model = widget.viewModel;
+    final node = model.nodeById(id);
+    if (node == null) return;
+    final links = model.disconnectionsFor(id);
+    final hasChildren = model.graph.any((card) => card.parentId == id);
+    final action = await showDialog<_CanvasMoreAction>(
+      context: context,
+      builder: (context) {
+        Widget option(_CanvasMoreAction value, String title) =>
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, value),
+              child: Text(title),
+            );
+        return SimpleDialog(
+          title: Text(node.title),
+          children: [
+            option(_CanvasMoreAction.focus, 'Показать в центре'),
+            if (hasChildren)
+              option(
+                _CanvasMoreAction.branch,
+                _camera.isCollapsed(id) ? 'Развернуть ветку' : 'Свернуть ветку',
+              ),
+            if (links.isNotEmpty)
+              option(_CanvasMoreAction.disconnect, 'Отсоединить…'),
+            option(_CanvasMoreAction.copyTitle, 'Скопировать название'),
+          ],
+        );
+      },
+    );
+    if (!mounted || model.isClosing) return;
+    switch (action) {
+      case _CanvasMoreAction.focus:
+        _camera.focusCard(id);
+      case _CanvasMoreAction.branch:
+        _camera.toggleBranch(id);
+      case _CanvasMoreAction.disconnect:
+        await _chooseDisconnection(links);
+      case _CanvasMoreAction.copyTitle:
+        await Clipboard.setData(ClipboardData(text: node.title));
+      case null:
+        break;
+    }
   }
 
   Future<void> _showDeleteDialog({
@@ -831,6 +1512,32 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     );
     if (id == null || !mounted || widget.viewModel != model) return;
     await _changeBoardPlacement(() => place(id));
+  }
+
+  Future<void> _pickCanvasEntity([Offset? point]) async {
+    final model = widget.viewModel;
+    if (model.isClosing) return;
+    final entity = await showDialog<GraphNodeData>(
+      context: context,
+      builder: (_) =>
+          CanvasEntityPicker(entities: model.availableCanvasEntities),
+    );
+    if (!mounted || entity == null || model.isClosing) return;
+    final y = model.graph.fold<double>(
+      LifeGraphViewModel.worldCenter,
+      (bottom, node) =>
+          math.max(bottom, node.position.dy + node.size.height + 28),
+    );
+    await _changeBoardPlacement(() async {
+      await model.addCanvasEntity(
+        entity.id,
+        point ?? Offset(LifeGraphViewModel.worldCenter, y),
+      );
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _camera.revealNode(entity.id);
+      });
+    });
   }
 
   Future<void> _changeBoardPlacement(Future<void> Function() action) async {
@@ -901,7 +1608,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           widget.viewModel.hasCanvasBoard &&
           widget.viewModel.saveStatus.value == GraphSaveStatus.failed,
     );
-    if (!mounted || widget.viewModel.currentSphereId == null) return;
+    if (!mounted || widget.viewModel.currentGraphId == null) return;
     switch (action) {
       case GraphNoteMenuAction.edit:
         state.beginEdit();
@@ -1255,8 +1962,9 @@ class _SplashGraph extends CustomPainter {
 /// Бейдж автосохранения позиций: черновик / сохраняем… / сохранено.
 class _SaveBadge extends StatelessWidget {
   final LifeGraphViewModel viewModel;
+  final bool compact;
 
-  const _SaveBadge({required this.viewModel});
+  const _SaveBadge({required this.viewModel, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1275,6 +1983,17 @@ class _SaveBadge extends StatelessWidget {
           GraphSaveStatus.saving => 'сохраняем…',
           GraphSaveStatus.saved => 'сохранено',
         };
+        if (compact) {
+          return Tooltip(
+            message: label,
+            child: CanvasToolSurface(
+              child: SizedBox.square(
+                dimension: 38,
+                child: Icon(Icons.circle, size: 9, color: color),
+              ),
+            ),
+          );
+        }
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(

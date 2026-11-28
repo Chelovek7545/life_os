@@ -21,10 +21,13 @@ internal class GraphDocuments(private val activity: Activity, messenger: BinaryM
         messenger.makeBackgroundTaskQueue(),
     )
     private var pendingPick: MethodChannel.Result? = null
+    private data class Export(val name: String, val bytes: ByteArray, val result: MethodChannel.Result)
+    private var pendingExport: Export? = null
 
     init {
         picker.setMethodCallHandler { call, result ->
             when {
+                call.method == "saveExport" -> chooseExportDestination(call, result)
                 call.method != "pickFolder" -> result.notImplemented()
                 pendingPick != null -> result.error("busy", "Диалог выбора папки уже открыт.", null)
                 else -> {
@@ -51,7 +54,49 @@ internal class GraphDocuments(private val activity: Activity, messenger: BinaryM
         }
     }
 
+    private fun chooseExportDestination(call: MethodCall, result: MethodChannel.Result) {
+        if (pendingExport != null) {
+            result.error("busy", "Диалог сохранения уже открыт.", null)
+            return
+        }
+        try {
+            val name = requireNotNull(call.argument<String>("name"))
+            require(validName(name)) { "Недопустимое имя файла." }
+            val bytes = requireNotNull(call.argument<ByteArray>("bytes"))
+            val mime = requireNotNull(call.argument<String>("mime"))
+            pendingExport = Export(name, bytes, result)
+            activity.startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = mime
+                putExtra(Intent.EXTRA_TITLE, name)
+            }, exportRequestCode)
+        } catch (error: Exception) {
+            pendingExport = null
+            result.error("export_picker", error.localizedMessage, null)
+        }
+    }
+
     fun onActivityResult(request: Int, code: Int, data: Intent?): Boolean {
+        if (request == exportRequestCode) {
+            val export = pendingExport ?: return true
+            pendingExport = null
+            val uri = data?.data
+            if (code != Activity.RESULT_OK || uri == null) {
+                export.result.success(null)
+                return true
+            }
+            Thread {
+                try {
+                    val output = resolver.openOutputStream(uri, "wt")
+                        ?: throw IOException("Не удалось открыть выбранный файл.")
+                    output.use { it.write(export.bytes) }
+                    export.result.success(export.name)
+                } catch (error: Exception) {
+                    export.result.error("export_write", error.localizedMessage, null)
+                }
+            }.start()
+            return true
+        }
         if (request != requestCode) return false
         val result = pendingPick ?: return true
         pendingPick = null
@@ -78,6 +123,8 @@ internal class GraphDocuments(private val activity: Activity, messenger: BinaryM
     fun dispose() {
         pendingPick?.success(null)
         pendingPick = null
+        pendingExport?.result?.success(null)
+        pendingExport = null
         picker.setMethodCallHandler(null)
         files.setMethodCallHandler(null)
     }
@@ -255,6 +302,7 @@ internal class GraphDocuments(private val activity: Activity, messenger: BinaryM
 
     private companion object {
         const val requestCode = 4839
+        const val exportRequestCode = 4840
         const val grantFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         val columns = arrayOf(Document.COLUMN_DOCUMENT_ID, Document.COLUMN_DISPLAY_NAME, Document.COLUMN_MIME_TYPE, Document.COLUMN_LAST_MODIFIED)
     }

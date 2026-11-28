@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:habits_api/habits_api.dart';
@@ -11,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sync_plugin/sync_logic.dart';
 import 'package:sync_plugin/sync_native.dart';
 import 'package:tasks_api/tasks_api.dart';
+import 'package:path/path.dart' as p;
 
 class _Secrets implements SyncSecretStore {
   String? value;
@@ -28,6 +31,7 @@ class _Secrets implements SyncSecretStore {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   Iterable<String> syncPanels(DependencyContainer app) => app.ui
       .panelsFor(PulsePanelSlots.toolbar)
       .map((panel) => panel.id)
@@ -66,6 +70,65 @@ void main() {
       ['habit', 'habitEntry'],
     );
   });
+
+  test(
+    'a new independent canvas is discovered from the incoming journal',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final folder = await Directory.systemTemp.createTemp(
+        'pulse_canvas_sync_',
+      );
+      addTearDown(() async {
+        final resolved = await folder.resolveSymbolicLinks();
+        if (!p.isWithin(
+          await Directory.systemTemp.resolveSymbolicLinks(),
+          resolved,
+        )) {
+          throw StateError('Invalid test directory');
+        }
+        await Directory(resolved).delete(recursive: true);
+      });
+      Future<DependencyContainer> device(String name) async {
+        final app = DependencyContainer(
+          database: AppDatabase(NativeDatabase.memory()),
+          defaultGraphRoot: () async => p.join(folder.path, name),
+          experimentalSyncDatasetId: 'canvas-dataset',
+          enableTelegram: false,
+          enableObsidian: false,
+          enableSync: true,
+          syncSecrets: _Secrets(),
+        );
+        addTearDown(app.dispose);
+        await app.init();
+        return app;
+      }
+
+      final first = await device('first');
+      final second = await device('second');
+      final canvas = await first.pulseScreenViewModel.createCanvas(
+        title: 'Общая доска',
+      );
+      final editor = await first.pulseScreenViewModel.openCanvas(canvas);
+      await editor.createNoteWithText(
+        title: 'Заметка',
+        text: 'Для второго устройства',
+      );
+      await first.syncPlugin!.reconcileNotes!();
+      final batch = await first.taskSyncStore.readFeed();
+      expect(batch.entries.single.revision.entityType, 'canvasBoard');
+      expect(second.pulseScreenViewModel.canvases, isEmpty);
+      await second.taskSyncStore.receive(batch);
+      await second.syncPlugin!.applyNotes!();
+      final copied = second.pulseScreenViewModel.canvases.single;
+      expect(copied.id, canvas.id);
+      expect(copied.title, canvas.title);
+      expect(copied.cardCount, 1);
+      final reopened = await second.pulseScreenViewModel.openCanvas(copied);
+      expect(reopened.notes.single.text, contains('Для второго устройства'));
+      await second.syncPlugin!.applyNotes!();
+      expect((await second.taskSyncStore.readFeed()).entries, hasLength(1));
+    },
+  );
 
   test(
     'default application has no sync UI, listener or credential access',

@@ -41,7 +41,7 @@ void main() {
   });
 
   test(
-    'default Canvas root migrates unopened graphs and creates new boards',
+    'default Canvas root migrates saved sphere layouts and skips new spheres',
     () async {
       SharedPreferences.setMockInitialValues({});
       SettingsService.graphStorageTarget.value = const GraphStorageTarget();
@@ -86,7 +86,10 @@ void main() {
       );
 
       final pulse = container.lifeGraphPlugin.viewModel;
-      final graph = await pulse.openGraph(old.id);
+      final summary = pulse.canvases.single;
+      expect(summary.sourceId, old.id);
+      expect(summary.title, old.name);
+      final graph = await pulse.openCanvas(summary);
       await graph.graphStream.firstWhere((nodes) => nodes.isNotEmpty);
       await graph.flush();
       final session = await container.graphStorageRepository.openCanvasBoard(
@@ -130,8 +133,9 @@ void main() {
           .singleWhere((sphere) => sphere.id != old.id);
       expect(
         await File(p.join(root, 'Boards', '${fresh.id}.canvas')).exists(),
-        isTrue,
+        isFalse,
       );
+      expect(pulse.canvases.map((canvas) => canvas.id), [old.id]);
     },
   );
   test('Resources deletes only current Notes files without Obsidian', () async {

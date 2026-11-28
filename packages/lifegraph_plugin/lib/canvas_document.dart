@@ -23,6 +23,23 @@ Map<String, Object?> createSphereCanvas({
   required List<CanvasNote> notes,
   required String Function(String) filePath,
   Set<String> removedTaskIds = const {},
+}) => createCanvasDocument(
+  entities: entities,
+  notes: notes,
+  filePath: filePath,
+  metadata: {
+    'version': 1,
+    'sphereId': sphereId,
+    if (removedTaskIds.isNotEmpty)
+      'removedTaskIds': removedTaskIds.toList()..sort(),
+  },
+);
+
+Map<String, Object?> createCanvasDocument({
+  required List<CanvasEntity> entities,
+  required List<CanvasNote> notes,
+  required String Function(String) filePath,
+  required Map<String, Object?> metadata,
 }) {
   final ids = <String>{};
   final nodes = <Map<String, Object?>>[];
@@ -126,11 +143,6 @@ Map<String, Object?> createSphereCanvas({
               'pulse': {'kind': 'hierarchy'},
             },
     ],
-    'pulse': {
-      'version': 1,
-      'sphereId': sphereId,
-      if (removedTaskIds.isNotEmpty)
-        'removedTaskIds': removedTaskIds.toList()..sort(),
-    },
+    'pulse': metadata,
   };
 }

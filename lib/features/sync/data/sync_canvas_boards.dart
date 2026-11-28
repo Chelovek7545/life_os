@@ -101,6 +101,7 @@ class _BoardFile {
   bool get generatedOnly {
     final board = _local;
     return board != null &&
+        (board.data['pulse'] as Map?)?['canvasId'] == null &&
         board.data.keys.every(const {'nodes', 'edges', 'pulse'}.contains) &&
         board.nodes.every((node) => board.entityId(node) != null) &&
         board.edges.every(
@@ -198,7 +199,7 @@ class _BoardFile {
 
   Future<String> localize(SyncCanvasBoard incoming) async {
     if (incoming.sphereId != sphereId) {
-      throw const FormatException('Canvas belongs to another sphere.');
+      throw const FormatException('Неверный ID канваса.');
     }
     final board = CanvasBoardDocument(jsonEncode(incoming.document))
       ..validateScope(sphereId);

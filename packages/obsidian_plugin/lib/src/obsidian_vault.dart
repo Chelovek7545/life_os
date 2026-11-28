@@ -374,6 +374,26 @@ class ObsidianVault
     );
   }
 
+  Future<List<String>> listCanvasBoardIds() {
+    _checkActive();
+    return _enqueue(() async {
+      final root = state.vaultPath;
+      if (root.isEmpty) return const <String>[];
+      final directory = _folderPath(root, folders.boards);
+      if (await _files.type(directory) != FileSystemEntityType.directory) {
+        return const <String>[];
+      }
+      final validId = RegExp(r'^[a-zA-Z0-9_-]+$');
+      return [
+        for (final file in await _files.list(directory))
+          if (file.type == FileSystemEntityType.file &&
+              p.extension(file.name) == '.canvas' &&
+              validId.hasMatch(p.basenameWithoutExtension(file.name)))
+            p.basenameWithoutExtension(file.name),
+      ];
+    });
+  }
+
   @override
   String canvasNotePath(String absolutePath) {
     _checkActive();

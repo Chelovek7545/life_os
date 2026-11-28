@@ -24,7 +24,7 @@ GraphNodeEditor graphNodeEditor(GraphNodeComponentSpec spec) => GraphNodeEditor(
     node: actions.node,
     spec: spec,
     onSave: actions.updateNode,
-    onDelete: actions.deleteNode,
+    onDelete: actions.scope.isCanvas ? null : actions.deleteNode,
   ),
 );
 
