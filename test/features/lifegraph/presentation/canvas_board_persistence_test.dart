@@ -7,9 +7,9 @@ import 'package:graph_canvas/graph_canvas.dart' as graph;
 import 'package:graph_api/graph_api.dart';
 import 'package:graph_components/graph_components.dart';
 import 'package:life_os/app/dependency_container.dart';
+import 'package:life_os/core/theme/app_colors.dart';
 import 'package:life_os/features/lifegraph/data/graph_positions_repository.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
-import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
 import 'package:lifegraph_plugin/lifegraph_plugin.dart';
 import 'package:notes_api/notes_api.dart';
 import 'package:obsidian_plugin/obsidian_plugin.dart';
@@ -771,15 +771,30 @@ void main() {
     );
     await mouse.up();
     await tester.pumpAndSettle();
+    expect(find.text('Заметка'), findsOneWidget);
     expect(find.text('Редактировать'), findsOneWidget);
     expect(find.text('Удалить с доски'), findsOneWidget);
+    final menu = find.ancestor(
+      of: find.text('Редактировать'),
+      matching: find.byType(BackdropFilter),
+    );
+    final backdrop = tester.widget<BackdropFilter>(menu);
+    expect(backdrop.enabled, isTrue);
+    expect(
+      (backdrop.child as Material).color,
+      AppColors.surface.withValues(alpha: .60),
+    );
     expect(
       tester
-          .widgetList<Material>(find.byType(Material))
+          .widgetList<Material>(
+            find.ancestor(of: menu, matching: find.byType(Material)),
+          )
           .any(
             (material) =>
-                material.color == AppGraphThemes.dark.surface &&
-                material.shape is RoundedRectangleBorder,
+                material.color == Colors.transparent &&
+                material.shape is RoundedRectangleBorder &&
+                (material.shape! as RoundedRectangleBorder).side.color ==
+                    AppColors.borderGlass,
           ),
       isTrue,
     );

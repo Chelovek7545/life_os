@@ -13,7 +13,8 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show ValueListenable, listEquals;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, defaultTargetPlatform, kIsWeb, listEquals;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 
@@ -238,10 +239,16 @@ sealed class GraphAction {
   factory GraphAction.selectNote(String? id) = SelectNoteAction;
   
   // Ресайз заметок
-  factory GraphAction.resizeNote({required String id, required Size size}) =
-      ResizeNoteAction;
-  factory GraphAction.resizeNoteEnd({required String id, required Size size}) =
-      ResizeNoteEndAction;
+  factory GraphAction.resizeNote({
+    required String id,
+    required Size size,
+    Offset? position,
+  }) = ResizeNoteAction;
+  factory GraphAction.resizeNoteEnd({
+    required String id,
+    required Size size,
+    Offset? position,
+  }) = ResizeNoteEndAction;
 }
 
 /// Double-tap on empty canvas. [at] is a suggested top-left position.
@@ -340,14 +347,20 @@ class SelectNoteAction extends GraphAction {
 class ResizeNoteAction extends GraphAction {
   final String id;
   final Size size;
-  const ResizeNoteAction({required this.id, required this.size});
+  final Offset? position;
+  const ResizeNoteAction({required this.id, required this.size, this.position});
 }
 
 /// Ресайз завершён. Точка коммита.
 class ResizeNoteEndAction extends GraphAction {
   final String id;
   final Size size;
-  const ResizeNoteEndAction({required this.id, required this.size});
+  final Offset? position;
+  const ResizeNoteEndAction({
+    required this.id,
+    required this.size,
+    this.position,
+  });
 }
 
 /// What a custom node renderer receives.
@@ -438,6 +451,9 @@ class NoteState {
   /// Завершение изменения размера (коммит).
   final VoidCallback? onResizeEnd;
 
+  /// Starts a resize from the specified edge or corner of the note.
+  final Drag? Function(Alignment edge, Offset globalPosition)? startResize;
+
   const NoteState({
     required this.note,
     required this.size,
@@ -458,6 +474,7 @@ class NoteState {
     this.onSelectionContextMenu,
     this.onResize,
     this.onResizeEnd,
+    this.startResize,
   });
 }
 
@@ -546,6 +563,9 @@ class GraphView extends StatefulWidget {
   final bool straightEdges;
   final bool animateTransitions;
 
+  /// Allows the camera and cards to move past the bounds of [layout].
+  final bool unbounded;
+
   /// Lets the camera receive drags that start over cards and notes.
   final bool panTool;
   final bool doubleTapCreatesRoot;
@@ -581,6 +601,7 @@ class GraphView extends StatefulWidget {
     this.showGrid = true,
     this.straightEdges = false,
     this.animateTransitions = true,
+    this.unbounded = false,
     this.panTool = false,
     this.doubleTapCreatesRoot = true,
     this.longPressDeletes = true,
@@ -597,11 +618,37 @@ class GraphView extends StatefulWidget {
   State<GraphView> createState() => _GraphViewState();
 }
 
+class _CanvasTransformationController extends TransformationController {
+  ({Offset viewport, Offset scene})? _pinchAnchor;
+
+  void anchorPinch(Offset viewport) {
+    _pinchAnchor ??= (viewport: viewport, scene: toScene(viewport));
+  }
+
+  void clearPinchAnchor() => _pinchAnchor = null;
+
+  @override
+  set value(Matrix4 matrix) {
+    final anchor = _pinchAnchor;
+    if (anchor != null) {
+      // Keep the anchor during updates and InteractiveViewer's zoom inertia.
+      final delta =
+          anchor.viewport - MatrixUtils.transformPoint(matrix, anchor.scene);
+      matrix = Matrix4.translationValues(delta.dx, delta.dy, 0)..multiply(matrix);
+    }
+    super.value = matrix;
+  }
+}
+
 class _GraphViewState extends State<GraphView>
     with TickerProviderStateMixin
     implements _CameraDelegate {
-  final TransformationController _ctrl = TransformationController();
+  final _CanvasTransformationController _ctrl = _CanvasTransformationController();
   final GlobalKey _viewerKey = GlobalKey();
+  double _canvasMinScale = .01;
+  double get _minScale => widget.unbounded
+      ? math.min(widget.minScale, _canvasMinScale)
+      : widget.minScale;
   final Map<String, GraphNode> _nodes = {};
   String? _selectedId;
   final Set<String> _selectedNodes = {};
@@ -696,6 +743,7 @@ class _GraphViewState extends State<GraphView>
   @override
   void didUpdateWidget(covariant GraphView old) {
     super.didUpdateWidget(old);
+    if (old.unbounded && !widget.unbounded) _ctrl.clearPinchAnchor();
     if (widget.panTool && !old.panTool) {
       _selectionAnchor = null;
       _selectionPoint = null;
@@ -752,6 +800,7 @@ class _GraphViewState extends State<GraphView>
       _noteDrafts.clear();
       _selectedNoteId = null;
       _editingNoteId = null;
+      _resizingNoteId = null;
       _firstNotesEmit = false;
       _subscribeNotes(widget.notes);
     }
@@ -822,11 +871,14 @@ class _GraphViewState extends State<GraphView>
       _notes.remove(id);
       _noteDrafts.remove(id);
       if (_editingNoteId == id) _editingNoteId = null;
+      if (_resizingNoteId == id) _resizingNoteId = null;
       changed = true;
     }
 
     for (final fresh in byId.values) {
       final existing = _notes[fresh.id];
+      final resizing = fresh.id == _resizingNoteId;
+      final moving = _groupNotes.containsKey(fresh.id) || resizing;
       if (existing == null) {
         _notes[fresh.id] = fresh;
         changed = true;
@@ -835,15 +887,14 @@ class _GraphViewState extends State<GraphView>
           existing.source?.path != fresh.source?.path ||
           existing.isReadOnly != fresh.isReadOnly ||
           existing.index != fresh.index ||
-          (existing.size != fresh.size && fresh.id != _resizingNoteId)) {
+          (existing.size != fresh.size && !resizing)) {
         _notes[fresh.id] = fresh;
         // Пока идёт редактирование, текст из хоста не перекрывает драфт.
         if (fresh.id == _editingNoteId) fresh.text = existing.text;
-        if (_groupNotes.containsKey(fresh.id)) fresh.position = existing.position;
-        if (fresh.id == _resizingNoteId) fresh.size = existing.size;
+        if (moving) fresh.position = existing.position;
+        if (resizing) fresh.size = existing.size;
         changed = true;
-      } else if (existing.position != fresh.position &&
-          !_groupNotes.containsKey(fresh.id)) {
+      } else if (existing.position != fresh.position && !moving) {
         existing.position = fresh.position;
         changed = true;
       }
@@ -1257,7 +1308,7 @@ class _GraphViewState extends State<GraphView>
       return;
     }
     _commitNoteEdit();
-    menu(details.globalPosition, details.localPosition);
+    menu(details.globalPosition, _sceneFromGlobal(details.globalPosition));
   }
 
   bool _canStartConnection(String id) =>
@@ -1386,7 +1437,24 @@ class _GraphViewState extends State<GraphView>
 
   void _updateGroup(DragUpdateDetails details) {
     if (_groupNodes.isEmpty && _groupNotes.isEmpty) return;
-    var delta = _sceneFromGlobal(details.globalPosition) - _groupStart;
+    final requested = _sceneFromGlobal(details.globalPosition) - _groupStart;
+    final delta = widget.unbounded ? requested : _boundedDrag(requested);
+    for (final entry in _groupNodes.entries.toList()) {
+      final n = _nodes[entry.key];
+      if (n == null) continue;
+      n.position = entry.value + delta;
+      _act(GraphAction.move(id: n.id, to: n.position));
+    }
+    for (final entry in _groupNotes.entries.toList()) {
+      final n = _notes[entry.key];
+      if (n == null) continue;
+      n.position = entry.value + delta;
+      _act(GraphAction.moveNote(id: n.id, to: n.position));
+    }
+    setState(() {});
+  }
+
+  Offset _boundedDrag(Offset delta) {
     var minX = double.negativeInfinity, minY = double.negativeInfinity;
     var maxX = double.infinity, maxY = double.infinity;
     void constrain(Offset position, Size size) {
@@ -1410,20 +1478,7 @@ class _GraphViewState extends State<GraphView>
       final n = _notes[entry.key];
       if (n != null) constrain(entry.value, n.size);
     }
-    delta = Offset(delta.dx.clamp(minX, maxX), delta.dy.clamp(minY, maxY));
-    for (final entry in _groupNodes.entries.toList()) {
-      final n = _nodes[entry.key];
-      if (n == null) continue;
-      n.position = entry.value + delta;
-      _act(GraphAction.move(id: n.id, to: n.position));
-    }
-    for (final entry in _groupNotes.entries.toList()) {
-      final n = _notes[entry.key];
-      if (n == null) continue;
-      n.position = entry.value + delta;
-      _act(GraphAction.moveNote(id: n.id, to: n.position));
-    }
-    setState(() {});
+    return Offset(delta.dx.clamp(minX, maxX), delta.dy.clamp(minY, maxY));
   }
 
   void _endGroup() {
@@ -1445,6 +1500,7 @@ class _GraphViewState extends State<GraphView>
   void _dragEnd(GraphNode n) => _endGroup();
 
   Offset _clamp(Offset pos, [Size? size]) {
+    if (widget.unbounded) return pos;
     final w = widget.layout.worldSize;
     final ns = size ?? widget.layout.nodeSize;
     return Offset(
@@ -1502,16 +1558,33 @@ class _GraphViewState extends State<GraphView>
   void _noteDragUpdate(GraphNote n, DragUpdateDetails d) => _updateGroup(d);
   void _noteDragEnd(GraphNote n) => _endGroup();
 
-  void _noteResizeUpdate(GraphNote n, Size size) {
+  Drag? _startNoteResize(String id, Alignment edge, Offset globalPosition) {
+    final note = _notes[id];
+    if (note == null || _resizingNoteId != null) return null;
+    _resizingNoteId = id;
+    _selectObject(id, note: true, preserveGroup: true);
+    return _NoteResizeDrag(
+      this,
+      id,
+      edge,
+      note.position & note.size,
+      _sceneFromGlobal(globalPosition),
+    );
+  }
+
+  void _noteResizeUpdate(GraphNote n, Size size, {Offset? position}) {
     _resizingNoteId = n.id;
     n.size = size;
-    _act(GraphAction.resizeNote(id: n.id, size: size));
+    if (position != null) n.position = position;
+    _act(GraphAction.resizeNote(id: n.id, size: size, position: position));
     setState(() {});
   }
 
-  void _noteResizeEnd(GraphNote n) {
+  void _noteResizeEnd(GraphNote n, {Offset? position}) {
     if (_resizingNoteId == n.id) _resizingNoteId = null;
-    _act(GraphAction.resizeNoteEnd(id: n.id, size: n.size));
+    _act(
+      GraphAction.resizeNoteEnd(id: n.id, size: n.size, position: position),
+    );
   }
 
   // ── Camera math ────────────────────────────────────────────────────────────
@@ -1526,6 +1599,7 @@ class _GraphViewState extends State<GraphView>
   }
 
   void _flyTo(Matrix4 target) {
+    _ctrl.clearPinchAnchor();
     _flyAnim?.removeListener(_applyFly);
     if (!widget.animateTransitions) {
       _ctrl.value = target;
@@ -1542,7 +1616,12 @@ class _GraphViewState extends State<GraphView>
   @override
   void fitView({required bool animate}) {
     final box = _viewerBox;
-    if (box == null || (_nodes.isEmpty && _notes.isEmpty)) return;
+    if (box == null ||
+        !box.hasSize ||
+        box.size.isEmpty ||
+        (_nodes.isEmpty && _notes.isEmpty)) {
+      return;
+    }
 
     Rect? rect;
     for (final n in _nodes.values) {
@@ -1556,15 +1635,33 @@ class _GraphViewState extends State<GraphView>
     rect = rect!.inflate(150);
 
     final vp = box.size;
-    final s = math.min(vp.width / rect.width, vp.height / rect.height)
-        .clamp(widget.minScale, 1.1);
+    final padding = widget.unbounded
+        ? math.min(48.0, vp.shortestSide / 10)
+        : 0.0;
+    final fit = math.min(
+      (vp.width - 2 * padding) / rect.width,
+      (vp.height - 2 * padding) / rect.height,
+    );
+    if (!fit.isFinite || fit <= 0) return;
+    if (widget.unbounded && fit < _minScale) {
+      setState(() => _canvasMinScale = fit);
+    }
+    final s = fit.clamp(_minScale, 1.1);
     final m = Matrix4.identity()
-      ..scale(s, s)
-      ..translate(
+      ..scaleByDouble(s, s, s, 1)
+      ..translateByDouble(
         (vp.width / 2 - s * rect.center.dx) / s,
         (vp.height / 2 - s * rect.center.dy) / s,
+        0,
+        1,
       );
-    animate ? _flyTo(m) : _ctrl.value = m;
+    if (animate) {
+      _flyTo(m);
+    } else {
+      _ctrl.clearPinchAnchor();
+      _flyCtrl.stop();
+      _ctrl.value = m;
+    }
   }
 
   @override
@@ -1572,13 +1669,13 @@ class _GraphViewState extends State<GraphView>
     final box = _viewerBox;
     if (box == null) return;
     final s0 = _ctrl.value.getMaxScaleOnAxis();
-    final s1 = (s0 * f).clamp(widget.minScale, widget.maxScale);
+    final s1 = (s0 * f).clamp(_minScale, widget.maxScale);
     f = s1 / s0;
     final c = _ctrl.toScene(box.size.center(Offset.zero));
     final around = Matrix4.identity()
-      ..translate(c.dx, c.dy)
-      ..scale(f, f)
-      ..translate(-c.dx, -c.dy);
+      ..translateByDouble(c.dx, c.dy, 0, 1)
+      ..scaleByDouble(f, f, f, 1)
+      ..translateByDouble(-c.dx, -c.dy, 0, 1);
     _flyTo(_ctrl.value.clone()..multiply(around));
   }
 
@@ -1671,19 +1768,21 @@ class _GraphViewState extends State<GraphView>
 
   // ── Build ──────────────────────────────────────────────────────────────────
 
-  Widget _worldGestures({required Widget child}) => MouseRegion(
-    cursor: widget.panTool ? SystemMouseCursors.grab : MouseCursor.defer,
-    child: ExcludeFocus(
-      excluding: widget.panTool,
-      child: AbsorbPointer(
-        absorbing: widget.panTool,
-        child: SizedBox.fromSize(size: widget.layout.worldSize, child: child),
-      ),
-    ),
-  );
+  Widget _worldGestures({required Size size, required Widget child}) =>
+      MouseRegion(
+        cursor: widget.panTool ? SystemMouseCursors.grab : MouseCursor.defer,
+        child: ExcludeFocus(
+          excluding: widget.panTool,
+          child: AbsorbPointer(
+            absorbing: widget.panTool,
+            child: SizedBox.fromSize(size: size, child: child),
+          ),
+        ),
+      );
 
-  List<_EdgeSpec> _buildEdges(GraphViewTheme theme) {
+  List<_EdgeSpec> _buildEdges(GraphViewTheme theme, Rect? window) {
     final out = <_EdgeSpec>[];
+    final origin = window?.topLeft ?? Offset.zero;
     for (final n in _nodes.values) {
       for (final (id, sequence) in [
         (n.parentId, false),
@@ -1695,6 +1794,10 @@ class _GraphViewState extends State<GraphView>
         final vt = _visualOf(n);
         final alpha = math.min(vf.vis, vt.vis);
         if (alpha <= 0.01) continue;
+        if (window != null &&
+            !window.overlaps(vf.rect.expandToInclude(vt.rect).inflate(80))) {
+          continue;
+        }
         out.add(
           _EdgeSpec(
             from,
@@ -1703,8 +1806,8 @@ class _GraphViewState extends State<GraphView>
             theme.accentFor(n.depth),
             _reveals['${from.id}>${n.id}'] ?? 1,
             alpha,
-            vf.rect,
-            vt.rect,
+            vf.rect.shift(-origin),
+            vt.rect.shift(-origin),
             sequence,
           ),
         );
@@ -1713,40 +1816,121 @@ class _GraphViewState extends State<GraphView>
     return out;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = widget.theme;
-    final l = widget.layout;
-    final ns = l.nodeSize;
-    // Keep the recognizer until pointer-up/cancel even if a modifier is released.
-    final frameEnabled =
-        !widget.panTool &&
-        (_selectionMode || _selectionModifier || _selectionAnchor != null);
+  Widget _buildViewer(BuildContext context, bool frameEnabled) {
     final connection = _connection;
+    final panEnabled =
+        _editingNoteId == null && !frameEnabled && connection == null;
+    final scaleEnabled = _selectionAnchor == null && connection == null;
     final source = _nodes[connection?.sourceId];
     GraphNode? target;
     (Offset, Offset, Color)? preview;
     if (connection != null && source != null) {
-      final point = _sceneFromGlobal(connection.globalPosition);
       target = _connectionTarget(source.id, connection.globalPosition);
       preview = (
         _edgeStart(_visualOf(source).rect),
-        target == null ? point : _edgeEnd(_visualOf(target).rect),
-        theme.accentFor(source.depth),
+        target == null
+            ? _sceneFromGlobal(connection.globalPosition)
+            : _edgeEnd(_visualOf(target).rect),
+        widget.theme.accentFor(source.depth),
       );
     }
+    if (!widget.unbounded) {
+      return InteractiveViewer(
+        key: _viewerKey,
+        panEnabled: panEnabled,
+        transformationController: _ctrl,
+        constrained: false,
+        scaleEnabled: scaleEnabled,
+        minScale: _minScale,
+        maxScale: widget.maxScale,
+        child: _buildWorld(
+          context,
+          frameEnabled: frameEnabled,
+          target: target,
+          preview: preview,
+        ),
+      );
+    }
+
+    final viewer = InteractiveViewer.builder(
+      key: _viewerKey,
+      boundaryMargin: const EdgeInsets.all(double.infinity),
+      panEnabled: panEnabled,
+      transformationController: _ctrl,
+      scaleEnabled: scaleEnabled,
+      minScale: _minScale,
+      maxScale: widget.maxScale,
+      onInteractionStart: (details) {
+        _flyCtrl.stop();
+        if (details.kind != PointerDeviceKind.trackpad) {
+          _ctrl.clearPinchAnchor();
+        }
+      },
+      builder: (context, viewport) {
+        final scale = _ctrl.value.getMaxScaleOnAxis();
+        // Move the render window with the camera without moving stored cards.
+        final window = Rect.fromLTRB(
+          viewport.point0.x,
+          viewport.point0.y,
+          viewport.point2.x,
+          viewport.point2.y,
+        ).inflate(128 / scale);
+        return Transform.translate(
+          offset: window.topLeft,
+          child: _buildWorld(
+            context,
+            frameEnabled: frameEnabled,
+            target: target,
+            preview: preview,
+            window: window,
+            scale: scale,
+          ),
+        );
+      },
+    );
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) return viewer;
+    return Listener(
+      onPointerPanZoomStart: (_) => _ctrl.clearPinchAnchor(),
+      onPointerPanZoomUpdate: (event) {
+        // Windows includes the native zoom's translation in pan. The event
+        // position itself stays at the cursor where the gesture started.
+        if (scaleEnabled && event.scale != 1) {
+          _flyCtrl.stop();
+          _ctrl.anchorPinch(event.localPosition);
+        }
+      },
+      child: viewer,
+    );
+  }
+
+  Widget _buildWorld(
+    BuildContext context, {
+    required bool frameEnabled,
+    required GraphNode? target,
+    required (Offset, Offset, Color)? preview,
+    Rect? window,
+    double scale = 1,
+  }) {
+    final theme = widget.theme;
+    final ns = widget.layout.nodeSize;
+    final origin = window?.topLeft ?? Offset.zero;
 
     // Слой нод с учётом сворачивания: лерп позиции к центру свёрнутой ноды,
     // масштаб и прозрачность по прогрессу.
     final nodeLayer = <Widget>[];
     for (final n in _nodes.values) {
       final v = _visualOf(n);
+      if (window != null &&
+          !window.overlaps(v.rect) &&
+          !_groupNodes.containsKey(n.id)) {
+        continue;
+      }
       final isCollapsed = _collapsed.contains(n.id);
       nodeLayer.add(
         Positioned(
           key: ValueKey(n.id),
-          left: v.rect.left,
-          top: v.rect.top,
+          left: v.rect.left - origin.dx,
+          top: v.rect.top - origin.dy,
           width: n.size.width,
           height: n.size.height,
           child: IgnorePointer(
@@ -1807,6 +1991,179 @@ class _GraphViewState extends State<GraphView>
         ),
       );
     }
+
+    return _worldGestures(
+      size: window?.size ?? widget.layout.worldSize,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (_) => _selectionFocus.requestFocus(),
+              onTap: () {
+                _commitNoteEdit();
+                if (!_additive) _clearSelection();
+                setState(() {});
+              },
+              dragStartBehavior: DragStartBehavior.down,
+              onPanStart: frameEnabled ? _frameStart : null,
+              onPanUpdate: frameEnabled ? _frameUpdate : null,
+              onPanEnd: frameEnabled ? (_) => _frameEnd() : null,
+              onPanCancel: frameEnabled ? _frameEnd : null,
+              onSecondaryTapUp:
+                  widget.onBackgroundContextMenu == null &&
+                      widget.onSelectionContextMenu == null
+                  ? null
+                  : _contextBackground,
+              onDoubleTapDown: widget.doubleTapCreatesRoot
+                  ? (d) => _requestRoot(_sceneFromGlobal(d.globalPosition))
+                  : null,
+              child: widget.showGrid
+                  ? CustomPaint(
+                      painter: _GridPainter(
+                        theme,
+                        origin: window?.topLeft,
+                        scale: scale,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: _EdgesPainter(
+                  _buildEdges(theme, window),
+                  theme,
+                  preview == null
+                      ? null
+                      : (preview.$1 - origin, preview.$2 - origin, preview.$3),
+                  straight: widget.straightEdges,
+                  limitDashes: window != null,
+                ),
+              ),
+            ),
+          ),
+          // Ghosts sit under real nodes.
+          for (final g in _ghosts)
+            Positioned(
+              key: ValueKey(g.id),
+              left: g.position.dx - origin.dx,
+              top: g.position.dy - origin.dy,
+              width: ns.width,
+              height: ns.height,
+              child: _GhostNode(
+                ghost: g,
+                size: ns,
+                theme: theme,
+                timeout: widget.ghostTimeout,
+                onGone: () => _ghostGone(g),
+              ),
+            ),
+          ...nodeLayer,
+          // Заметки — под призраками и нодами.
+          for (final nt in _notes.values)
+            if (window == null ||
+                window.overlaps(nt.position & nt.size) ||
+                _groupNotes.containsKey(nt.id) ||
+                _editingNoteId == nt.id ||
+                _resizingNoteId == nt.id)
+              Positioned(
+                key: ValueKey(
+                  'note:${nt.id}',
+                ), // префикс, чтобы не collide с ключами нод
+                left: nt.position.dx - origin.dx,
+                top: nt.position.dy - origin.dy,
+                width: nt.size.width,
+                height: nt.size.height,
+                child: Listener(
+                  onPointerDown: (event) {
+                    if (event.buttons & kPrimaryMouseButton != 0) {
+                      _tapModifiers[(true, nt.id)] = _additive;
+                    }
+                  },
+                  child: _PopIn(
+                    enabled: widget.animateTransitions,
+                    delayMs: _booted ? 0 : math.min(nt.index * 90, 600),
+                    child: (widget.noteBuilder ?? _defaultNoteBuilder)(
+                      context,
+                      NoteState(
+                        note: nt,
+                        size: nt.size,
+                        text: _noteDrafts[nt.id] ?? nt.text,
+                        selected: _selectedNotes.contains(nt.id),
+                        selectionCount: _selection.length,
+                        onSelectionContextMenu:
+                            widget.onSelectionContextMenu == null
+                            ? null
+                            : (position) =>
+                                  _contextSelection(position, note: nt.id),
+                        editing: _editingNoteId == nt.id,
+                        canDelete: widget.notesDeletable,
+                        accent: theme.accentFor(nt.index),
+                        select: () => _noteSelect(nt),
+                        beginEdit: () => _beginNoteEdit(nt),
+                        endEdit: _commitNoteEdit,
+                        updateText: (t) => _updateNoteDraft(nt, t),
+                        remove: () {
+                          HapticFeedback.mediumImpact();
+                          _act(GraphAction.removeNote(id: nt.id));
+                        },
+                        dragStart: (d) => _noteDragStart(nt, d),
+                        dragUpdate: (d) => _noteDragUpdate(nt, d),
+                        dragEnd: (_) => _noteDragEnd(nt),
+                        onResize: (size) => _noteResizeUpdate(nt, size),
+                        onResizeEnd: () => _noteResizeEnd(nt),
+                        startResize: (edge, position) =>
+                            _startNoteResize(nt.id, edge, position),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          if (target != null)
+            Positioned.fromRect(
+              rect: _visualOf(target).rect.inflate(3).shift(-origin),
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(
+                      color: theme.accentFor(target.depth),
+                      width: 2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (_selectionAnchor != null && _selectionPoint != null)
+            Positioned.fromRect(
+              rect: Rect.fromPoints(
+                _selectionAnchor! - origin,
+                _selectionPoint! - origin,
+              ),
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  key: const ValueKey('graph-selection-rectangle'),
+                  decoration: BoxDecoration(
+                    color: theme.accentFor(0).withValues(alpha: .12),
+                    border: Border.all(color: theme.accentFor(0)),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    // Keep the recognizer until pointer-up/cancel even if a modifier is released.
+    final frameEnabled =
+        !widget.panTool &&
+        (_selectionMode || _selectionModifier || _selectionAnchor != null);
 
     return Focus(
       focusNode: _selectionFocus,
@@ -1876,164 +2233,7 @@ class _GraphViewState extends State<GraphView>
                 ),
               ),
             ),
-            InteractiveViewer(
-              key: _viewerKey,
-              panEnabled:
-                  _editingNoteId == null && !frameEnabled && connection == null,
-              transformationController: _ctrl,
-              constrained: false,
-              scaleEnabled: _selectionAnchor == null && connection == null,
-              minScale: widget.minScale,
-              maxScale: widget.maxScale,
-              child: _worldGestures(
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTapDown: (_) => _selectionFocus.requestFocus(),
-                        onTap: () {
-                          _commitNoteEdit();
-                          if (!_additive) _clearSelection();
-                          setState(() {});
-                        },
-                        dragStartBehavior: DragStartBehavior.down,
-                        onPanStart: frameEnabled ? _frameStart : null,
-                        onPanUpdate: frameEnabled ? _frameUpdate : null,
-                        onPanEnd: frameEnabled ? (_) => _frameEnd() : null,
-                        onPanCancel: frameEnabled ? _frameEnd : null,
-                        onSecondaryTapUp:
-                            widget.onBackgroundContextMenu == null &&
-                                widget.onSelectionContextMenu == null
-                            ? null
-                            : _contextBackground,
-                        onDoubleTapDown: widget.doubleTapCreatesRoot
-                            ? (d) => _requestRoot(d.localPosition)
-                            : null,
-                        child: widget.showGrid
-                            ? CustomPaint(painter: _GridPainter(theme))
-                            : null,
-                      ),
-                    ),
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: CustomPaint(
-                          painter: _EdgesPainter(
-                            _buildEdges(theme),
-                            theme,
-                            preview,
-                            straight: widget.straightEdges,
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Ghosts sit under real nodes.
-                    for (final g in _ghosts)
-                      Positioned(
-                        key: ValueKey(g.id),
-                        left: g.position.dx,
-                        top: g.position.dy,
-                        width: ns.width,
-                        height: ns.height,
-                        child: _GhostNode(
-                          ghost: g,
-                          size: ns,
-                          theme: theme,
-                          timeout: widget.ghostTimeout,
-                          onGone: () => _ghostGone(g),
-                        ),
-                      ),
-                    ...nodeLayer,
-                    // Заметки — под призраками и нодами.
-                    for (final nt in _notes.values)
-                      Positioned(
-                        key: ValueKey(
-                          'note:${nt.id}',
-                        ), // префикс, чтобы не collide с ключами нод
-                        left: nt.position.dx,
-                        top: nt.position.dy,
-                        width: nt.size.width,
-                        height: nt.size.height,
-                        child: Listener(
-                          onPointerDown: (event) {
-                            if (event.buttons & kPrimaryMouseButton != 0) {
-                              _tapModifiers[(true, nt.id)] = _additive;
-                            }
-                          },
-                          child: _PopIn(
-                            enabled: widget.animateTransitions,
-                            delayMs: _booted ? 0 : math.min(nt.index * 90, 600),
-                            child: (widget.noteBuilder ?? _defaultNoteBuilder)(
-                              context,
-                              NoteState(
-                                note: nt,
-                                size: nt.size,
-                                text: _noteDrafts[nt.id] ?? nt.text,
-                                selected: _selectedNotes.contains(nt.id),
-                                selectionCount: _selection.length,
-                                onSelectionContextMenu:
-                                    widget.onSelectionContextMenu == null
-                                    ? null
-                                    : (position) => _contextSelection(
-                                        position,
-                                        note: nt.id,
-                                      ),
-                                editing: _editingNoteId == nt.id,
-                                canDelete: widget.notesDeletable,
-                                accent: theme.accentFor(nt.index),
-                                select: () => _noteSelect(nt),
-                                beginEdit: () => _beginNoteEdit(nt),
-                                endEdit: _commitNoteEdit,
-                                updateText: (t) => _updateNoteDraft(nt, t),
-                                remove: () {
-                                  HapticFeedback.mediumImpact();
-                                  _act(GraphAction.removeNote(id: nt.id));
-                                },
-                                dragStart: (d) => _noteDragStart(nt, d),
-                                dragUpdate: (d) => _noteDragUpdate(nt, d),
-                                dragEnd: (_) => _noteDragEnd(nt),
-                                onResize: (size) => _noteResizeUpdate(nt, size),
-                                onResizeEnd: () => _noteResizeEnd(nt),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (target != null)
-                      Positioned.fromRect(
-                        rect: _visualOf(target).rect.inflate(3),
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(15),
-                              border: Border.all(
-                                color: theme.accentFor(target.depth),
-                                width: 2,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (_selectionAnchor != null && _selectionPoint != null)
-                      Positioned.fromRect(
-                        rect: Rect.fromPoints(
-                          _selectionAnchor!,
-                          _selectionPoint!,
-                        ),
-                        child: IgnorePointer(
-                          child: DecoratedBox(
-                            key: const ValueKey('graph-selection-rectangle'),
-                            decoration: BoxDecoration(
-                              color: theme.accentFor(0).withValues(alpha: .12),
-                              border: Border.all(color: theme.accentFor(0)),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
+            _buildViewer(context, frameEnabled),
             if (widget.showControls)
               Positioned(
                 right: 16,
@@ -2371,6 +2571,8 @@ class DefaultNoteCard extends StatefulWidget {
 class _DefaultNoteCardState extends State<DefaultNoteCard> {
   bool _hovered = false;
   bool _titleEditing = false;
+  Alignment? _hoveredEdge;
+  Drag? _resizeDrag;
   final TextEditingController _textCtrl = TextEditingController();
   final FocusNode _focus = FocusNode();
 
@@ -2399,6 +2601,88 @@ class _DefaultNoteCardState extends State<DefaultNoteCard> {
     super.dispose();
   }
 
+  Alignment? _edgeAt(Offset point) {
+    final state = widget.state;
+    if (state.startResize == null || state.editing || _titleEditing) {
+      return null;
+    }
+    final box = context.findRenderObject()! as RenderBox;
+    final scale = (box.localToGlobal(const Offset(1, 0)) -
+            box.localToGlobal(Offset.zero))
+        .distance;
+    final extent = math.min(8 / scale, state.size.shortestSide / 4);
+    final x = point.dx <= extent
+        ? -1.0
+        : point.dx >= state.size.width - extent
+        ? 1.0
+        : 0.0;
+    final y = point.dy <= extent
+        ? -1.0
+        : point.dy >= state.size.height - extent
+        ? 1.0
+        : 0.0;
+    return x == 0 && y == 0 ? null : Alignment(x, y);
+  }
+
+  void _hover(Offset position) {
+    final edge = _edgeAt(position);
+    if (_hovered && edge == _hoveredEdge) return;
+    setState(() {
+      _hovered = true;
+      _hoveredEdge = edge;
+    });
+  }
+
+  MouseCursor get _cursor => switch (_hoveredEdge) {
+    Alignment.topLeft || Alignment.bottomRight =>
+      SystemMouseCursors.resizeUpLeftDownRight,
+    Alignment.topRight || Alignment.bottomLeft =>
+      SystemMouseCursors.resizeUpRightDownLeft,
+    Alignment.topCenter || Alignment.bottomCenter =>
+      SystemMouseCursors.resizeUpDown,
+    Alignment.centerLeft || Alignment.centerRight =>
+      SystemMouseCursors.resizeLeftRight,
+    _ => SystemMouseCursors.grab,
+  };
+
+  void _dragStart(DragStartDetails details) {
+    final edge = _edgeAt(details.localPosition);
+    if (edge == null) {
+      widget.state.dragStart(details);
+    } else {
+      _resizeDrag = widget.state.startResize!(edge, details.globalPosition);
+    }
+  }
+
+  void _dragUpdate(DragUpdateDetails details) {
+    final resize = _resizeDrag;
+    if (resize == null) {
+      widget.state.dragUpdate(details);
+    } else {
+      resize.update(details);
+    }
+  }
+
+  void _dragEnd(DragEndDetails details) {
+    final resize = _resizeDrag;
+    _resizeDrag = null;
+    if (resize == null) {
+      widget.state.dragEnd(details);
+    } else {
+      resize.end(details);
+    }
+  }
+
+  void _dragCancel() {
+    final resize = _resizeDrag;
+    _resizeDrag = null;
+    if (resize == null) {
+      widget.state.dragEnd(DragEndDetails());
+    } else {
+      resize.cancel();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.state;
@@ -2406,31 +2690,41 @@ class _DefaultNoteCardState extends State<DefaultNoteCard> {
     final tilt = ((s.note.index % 5) - 2) * 0.008; // лёгкий наклон «от руки»
 
     return MouseRegion(
-      cursor: (s.editing || _titleEditing) ? SystemMouseCursors.text : SystemMouseCursors.grab,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: s.select,
-            onDoubleTap: s.editing || _titleEditing ? null : s.beginEdit,
-            onSecondaryTapDown: widget.onContextMenu == null ? null
-                : (details) => widget.onContextMenu!(details.globalPosition),
-            onLongPress: widget.onContextMenu == null && s.canDelete ? s.remove : null,
-            onLongPressStart: widget.onContextMenu == null ? null
-                : (details) => widget.onContextMenu!(details.globalPosition),
-            // Пока идёт редактирование, жесты отданы TextField.
-            dragStartBehavior: DragStartBehavior.down,
-            onPanStart: s.editing || _titleEditing ? null : s.dragStart,
-            onPanUpdate: s.editing || _titleEditing ? null : s.dragUpdate,
-            onPanEnd: s.editing || _titleEditing ? null : s.dragEnd,
-            onPanCancel: s.editing || _titleEditing ? null : () => s.dragEnd(DragEndDetails()),
-            child: Transform.rotate(
+      cursor: (s.editing || _titleEditing) ? SystemMouseCursors.text : _cursor,
+      onEnter: (event) => _hover(event.localPosition),
+      onHover: (event) => _hover(event.localPosition),
+      onExit: (_) => setState(() {
+        _hovered = false;
+        _hoveredEdge = null;
+      }),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: s.select,
+        onDoubleTap: s.editing || _titleEditing ? null : s.beginEdit,
+        onSecondaryTapDown: widget.onContextMenu == null
+            ? null
+            : (details) => widget.onContextMenu!(details.globalPosition),
+        onLongPress: widget.onContextMenu == null && s.canDelete
+            ? s.remove
+            : null,
+        onLongPressStart: widget.onContextMenu == null
+            ? null
+            : (details) => widget.onContextMenu!(details.globalPosition),
+        // Пока идёт редактирование, жесты отданы TextField.
+        dragStartBehavior: DragStartBehavior.down,
+        onPanStart: s.editing || _titleEditing ? null : _dragStart,
+        onPanUpdate: s.editing || _titleEditing ? null : _dragUpdate,
+        onPanEnd: s.editing || _titleEditing ? null : _dragEnd,
+        onPanCancel: s.editing || _titleEditing ? null : _dragCancel,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Transform.rotate(
               angle: s.editing ? 0 : tilt,
               child: AnimatedScale(
-                scale: _hovered && !s.editing ? 1.02 : 1,
+                scale: _hovered && !s.editing && _hoveredEdge == null
+                    ? 1.02
+                    : 1,
                 duration: const Duration(milliseconds: 160),
                 curve: Curves.easeOut,
                 child: AnimatedContainer(
@@ -2532,72 +2826,72 @@ class _DefaultNoteCardState extends State<DefaultNoteCard> {
                 ),
               ),
             ),
-          ),
-          if (s.canDelete)
+            if (s.canDelete)
+              Positioned(
+                top: -9,
+                right: -9,
+                child: IgnorePointer(
+                  ignoring: !_hovered || s.editing,
+                  child: AnimatedOpacity(
+                    opacity: _hovered && !s.editing ? 1 : 0,
+                    duration: const Duration(milliseconds: 150),
+                    child: GestureDetector(
+                      onTap: s.remove,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: t.surfaceHover,
+                            border: Border.all(color: t.border),
+                          ),
+                          child: Icon(Icons.close, size: 11, color: t.textDim),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            // Ручка изменения размера (Resize grip)
             Positioned(
-              top: -9,
-              right: -9,
+              right: -8,
+              bottom: -8,
               child: IgnorePointer(
-                ignoring: !_hovered || s.editing,
+                ignoring: s.startResize != null || !_hovered || s.editing,
                 child: AnimatedOpacity(
                   opacity: _hovered && !s.editing ? 1 : 0,
                   duration: const Duration(milliseconds: 150),
-                  child: GestureDetector(
-                    onTap: s.remove,
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.resizeDownRight,
+                    child: GestureDetector(
+                      onPanUpdate: (d) {
+                        final w = (s.size.width + d.delta.dx).clamp(120.0, 800.0);
+                        final h = (s.size.height + d.delta.dy).clamp(80.0, 800.0);
+                        s.onResize?.call(Size(w, h));
+                      },
+                      onPanEnd: (_) => s.onResizeEnd?.call(),
                       child: Container(
-                        width: 20,
-                        height: 20,
+                        width: 16,
+                        height: 16,
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
                           color: t.surfaceHover,
+                          borderRadius: BorderRadius.circular(4),
                           border: Border.all(color: t.border),
                         ),
-                        child: Icon(Icons.close, size: 11, color: t.textDim),
+                        child: CustomPaint(
+                          size: const Size(16, 16),
+                          painter: _ResizeGripPainter(color: t.textDim),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          // Ручка изменения размера (Resize grip)
-          Positioned(
-            right: -8,
-            bottom: -8,
-            child: IgnorePointer(
-              ignoring: !_hovered || s.editing,
-              child: AnimatedOpacity(
-                opacity: _hovered && !s.editing ? 1 : 0,
-                duration: const Duration(milliseconds: 150),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.resizeDownRight,
-                  child: GestureDetector(
-                    onPanUpdate: (d) {
-                      final w = (s.size.width + d.delta.dx).clamp(120.0, 800.0);
-                      final h = (s.size.height + d.delta.dy).clamp(80.0, 800.0);
-                      s.onResize?.call(Size(w, h));
-                    },
-                    onPanEnd: (_) => s.onResizeEnd?.call(),
-                    child: Container(
-                      width: 16,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: t.surfaceHover,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: t.border),
-                      ),
-                      child: CustomPaint(
-                        size: const Size(16, 16),
-                        painter: _ResizeGripPainter(color: t.textDim),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2821,47 +3115,129 @@ class _ResizeGripPainter extends CustomPainter {
 
 class _GridPainter extends CustomPainter {
   final GraphViewTheme theme;
-  const _GridPainter(this.theme);
+  final Offset? origin;
+  final double scale;
+  const _GridPainter(this.theme, {this.origin, this.scale = 1});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final s = theme.gridSpacing;
-    final fine = <Offset>[];
-    for (var x = s; x < size.width; x += s) {
-      for (var y = s; y < size.height; y += s) {
-        fine.add(Offset(x, y));
+    var spacing = theme.gridSpacing;
+    // Keep the visible grid sparse enough to draw when fitting a large canvas.
+    if (origin != null) {
+      while (spacing * scale < 8) {
+        spacing *= 4;
       }
     }
-    canvas.drawPoints(
-      ui.PointMode.points,
-      fine,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = 1.7
-        ..color = theme.gridMinor,
-    );
+    void dots(double step, double width, Color color) {
+      final start = origin;
+      final x0 = start == null ? step : (-start.dx) % step;
+      final y0 = start == null ? step : (-start.dy) % step;
+      final points = <Offset>[];
+      for (var x = x0; x < size.width; x += step) {
+        for (var y = y0; y < size.height; y += step) {
+          points.add(Offset(x, y));
+        }
+      }
+      canvas.drawPoints(
+        ui.PointMode.points,
+        points,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = spacing == theme.gridSpacing
+              ? width
+              : math.max(width, 0.8 / scale)
+          ..color = color,
+      );
+    }
 
-    final coarse = <Offset>[];
-    final cs = s * 4;
-    for (var x = cs; x < size.width; x += cs) {
-      for (var y = cs; y < size.height; y += cs) {
-        coarse.add(Offset(x, y));
-      }
-    }
-    canvas.drawPoints(
-      ui.PointMode.points,
-      coarse,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = 3
-        ..color = theme.gridMajor,
-    );
+    dots(spacing, 1.7, theme.gridMinor);
+    dots(spacing * 4, 3, theme.gridMajor);
   }
 
   @override
-  bool shouldRepaint(covariant _GridPainter old) => old.theme != theme;
+  bool shouldRepaint(covariant _GridPainter old) =>
+      old.theme != theme || old.origin != origin || old.scale != scale;
+}
+
+class _NoteResizeDrag extends Drag {
+  _NoteResizeDrag(this.view, this.id, this.edge, this.initial, this.start);
+
+  final _GraphViewState view;
+  final String id;
+  final Alignment edge;
+  final Rect initial;
+  final Offset start;
+  bool _changed = false;
+
+  @override
+  void update(DragUpdateDetails details) {
+    if (!view.mounted || view._resizingNoteId != id) return;
+    final note = view._notes[id];
+    if (note == null) return;
+    final delta = view._sceneFromGlobal(details.globalPosition) - start;
+    final world = view.widget.layout.worldSize;
+    final (left, right) = _resizeAxis(
+      initial.left,
+      initial.right,
+      edge.x,
+      delta.dx,
+      120,
+      world.width,
+    );
+    final (top, bottom) = _resizeAxis(
+      initial.top,
+      initial.bottom,
+      edge.y,
+      delta.dy,
+      80,
+      world.height,
+    );
+    final bounds = Rect.fromLTRB(left, top, right, bottom);
+    if (bounds == (note.position & note.size)) return;
+    _changed = true;
+    view._noteResizeUpdate(note, bounds.size, position: bounds.topLeft);
+  }
+
+  (double, double) _resizeAxis(
+    double low,
+    double high,
+    double direction,
+    double delta,
+    double minSize,
+    double worldExtent,
+  ) {
+    if (direction == 0) return (low, high);
+    final initialSize = high - low;
+    var maxSize = math.max(800.0, initialSize);
+    if (!view.widget.unbounded) {
+      final available = direction < 0
+          ? high - math.min(low, 24.0)
+          : math.max(high, worldExtent - 24) - low;
+      maxSize = math.min(maxSize, available);
+    }
+    final size = (initialSize + direction * delta).clamp(
+      math.min(minSize, initialSize),
+      maxSize,
+    );
+    return direction < 0 ? (high - size, high) : (low, low + size);
+  }
+
+  @override
+  void end(DragEndDetails details) => _finish();
+
+  @override
+  void cancel() => _finish();
+
+  void _finish() {
+    if (!view.mounted || view._resizingNoteId != id) return;
+    final note = view._notes[id];
+    if (note != null && _changed) {
+      view._noteResizeEnd(note, position: note.position);
+    } else {
+      view._resizingNoteId = null;
+    }
+  }
 }
 
 class _ConnectionDrag extends Drag {
@@ -2925,11 +3301,13 @@ class _EdgesPainter extends CustomPainter {
   final GraphViewTheme theme;
   final (Offset, Offset, Color)? preview;
   final bool straight;
+  final bool limitDashes;
   const _EdgesPainter(
     this.edges,
     this.theme,
     this.preview, {
     required this.straight,
+    required this.limitDashes,
   });
 
   @override
@@ -2947,8 +3325,12 @@ class _EdgesPainter extends CustomPainter {
           ..strokeWidth = 2.4
           ..style = PaintingStyle.stroke;
         final metric = metrics;
-        for (double offset = 0; offset < metric.length; offset += 14) {
-          canvas.drawPath(metric.extractPath(offset, offset + 8), paint);
+        final step = limitDashes ? math.max(14.0, metric.length / 512) : 14.0;
+        for (double offset = 0; offset < metric.length; offset += step) {
+          canvas.drawPath(
+            metric.extractPath(offset, offset + step * (8 / 14)),
+            paint,
+          );
         }
         canvas.drawPath(
           Path()

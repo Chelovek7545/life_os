@@ -1,16 +1,23 @@
 import 'dart:convert';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:goals_api/goals_api.dart';
 import 'package:graph_canvas/graph_canvas.dart' as graph;
+import 'package:life_os/core/theme/app_colors.dart';
+import 'package:life_os/core/ui/app_scroll_behavior.dart';
 import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/features/lifegraph/data/preferences_canvas_session.dart';
 import 'package:life_os/features/lifegraph/presentation/canvas_export.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
+import 'package:life_os/features/lifegraph/presentation/widgets/canvas_context_menu.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/canvases_panel.dart';
+import 'package:life_os/features/lifegraph/presentation/widgets/graph_note_context_menu.dart';
 import 'package:life_os/features/lifegraph/presentation/widgets/graph_theme.dart';
+import 'package:life_os/features/settings/settings_service.dart';
 import 'package:lifegraph_plugin/canvas_board.dart';
 import 'package:projects_api/projects_api.dart';
 import 'package:spheres_api/spheres_api.dart';
@@ -35,6 +42,138 @@ Future<void> _until(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('card and note menus blur the canvas when they open', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 520);
+    addTearDown(tester.view.reset);
+    final oldBlur = SettingsService.hasBlur.value;
+    SettingsService.hasBlur.value = true;
+    addTearDown(() => SettingsService.hasBlur.value = oldBlur);
+    const frame = ValueKey('context-menu-preview');
+    late BuildContext anchorContext;
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: frame,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          scrollBehavior: const AppScrollBehavior(),
+          home: Builder(
+            builder: (context) {
+              anchorContext = context;
+              return const Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: ColoredBox(color: Colors.white)),
+                  Expanded(child: ColoredBox(color: Colors.black)),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    final result = showCanvasNodeActions(
+      anchorContext,
+      const Rect.fromLTWH(260, 235, 280, 106),
+      canEdit: true,
+      canLink: true,
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 64));
+
+    final toolbar = find.byKey(const ValueKey('canvas-node-actions'));
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(frame),
+    );
+    Future<void> expectBlurredEdge(
+      int sampleY, {
+      int minimumContrast = 80,
+    }) async {
+      final samples = (await tester.runAsync(() async {
+        final picture = await boundary.toImage();
+        try {
+          final pixels = (await picture.toByteData(
+            format: ui.ImageByteFormat.rawRgba,
+          ))!;
+          int redAt(int x) =>
+              pixels.getUint8((sampleY * picture.width + x) * 4);
+          return (near: redAt(396) - redAt(404), far: redAt(350) - redAt(450));
+        } finally {
+          picture.dispose();
+        }
+      }))!;
+      expect(samples.far, greaterThan(minimumContrast), reason: '$samples');
+      expect(samples.near.abs(), lessThan(samples.far * .65));
+    }
+
+    final sampleY = tester.getTopLeft(toolbar).dy.round() + 10;
+    await expectBlurredEdge(sampleY);
+    await tester.pumpAndSettle();
+    await expectBlurredEdge(sampleY);
+    Navigator.of(anchorContext).pop();
+    await tester.pumpAndSettle();
+    expect(await result, isNull);
+
+    final noteAction = showGraphNoteContextMenu(
+      anchorContext,
+      const Offset(288, 164),
+      canEdit: true,
+      canConvert: true,
+      canDelete: true,
+      canSaveCopy: true,
+    );
+    await tester.pump();
+    await expectBlurredEdge(169, minimumContrast: 55);
+    await tester.pumpAndSettle();
+    await expectBlurredEdge(169, minimumContrast: 55);
+    final noteMenu = find.ancestor(
+      of: find.text('Заметка'),
+      matching: find.byType(BackdropFilter),
+    );
+    expect(tester.getSize(noteMenu).width, lessThanOrEqualTo(272));
+    await tester.tap(find.text('Редактировать'));
+    await tester.pumpAndSettle();
+    expect(await noteAction, GraphNoteMenuAction.edit);
+  });
+
+  testWidgets('anchored actions fit above a button at the bottom edge', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 220);
+    addTearDown(tester.view.reset);
+    late BuildContext canvasContext;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            canvasContext = context;
+            return const SizedBox.expand();
+          },
+        ),
+      ),
+    );
+    const button = Rect.fromLTRB(300, 184, 316, 212);
+    final action = showCanvasContextMenu<int>(
+      canvasContext,
+      button,
+      title: 'Карточка',
+      actions: const [CanvasContextOption(1, 'Действие', Icons.edit_outlined)],
+    );
+    await tester.pumpAndSettle();
+    final item = find.text('Действие');
+    final menu = tester.getRect(
+      find.ancestor(of: item, matching: find.byType(BackdropFilter)),
+    );
+    expect(menu.bottom, closeTo(button.top - 4, .5));
+    expect(menu.right, closeTo(312, .5));
+    await tester.tap(item);
+    await tester.pumpAndSettle();
+    expect(await action, 1);
+  });
 
   testWidgets('canvas chrome and context menu work in a wide viewport', (
     tester,
@@ -211,10 +350,62 @@ void main() {
       ),
     );
     expect(contextButtons, hasLength(5));
+    final toolbarFinder = find.byKey(const ValueKey('canvas-node-actions'));
+    final toolbar = tester.getRect(toolbarFinder);
+    expect(toolbar.bottom, lessThan(bounds.top));
+    expect(toolbar.center.dx, closeTo(bounds.center.dx, .5));
+    final blurFinder = find.descendant(
+      of: toolbarFinder,
+      matching: find.byType(BackdropFilter),
+    );
+    final blurSetting = SettingsService.hasBlur.value;
+    addTearDown(() => SettingsService.hasBlur.value = blurSetting);
+    expect(tester.widget<BackdropFilter>(blurFinder).enabled, isTrue);
+    SettingsService.hasBlur.value = false;
+    await tester.pump();
+    final withoutBlur = tester.widget<BackdropFilter>(blurFinder);
+    expect(withoutBlur.enabled, isFalse);
+    expect(
+      (withoutBlur.child as Material).color,
+      AppColors.surfaceContainer.withValues(alpha: .90),
+    );
+    SettingsService.hasBlur.value = blurSetting;
+    await tester.pump();
     for (final button in contextButtons) {
       expect(button.style?.backgroundColor?.resolve({}), Colors.transparent);
       expect(button.style?.shape?.resolve({}), isA<RoundedRectangleBorder>());
+      expect(
+        button.style?.side?.resolve({WidgetState.focused})?.color,
+        AppColors.primaryContainer,
+      );
+      expect(tester.getSize(find.byTooltip(button.tooltip!)).height, 48);
     }
+    expect(
+      contextButtons
+          .firstWhere((button) => button.tooltip == 'Связать с карточкой')
+          .onPressed,
+      isNull,
+    );
+
+    final moreButton = find.byTooltip('Другие действия');
+    final moreBounds = tester.getRect(moreButton);
+    await tester.tap(moreButton);
+    await tester.pumpAndSettle();
+    final focusAction = find.text('Показать в центре');
+    expect(focusAction, findsOneWidget);
+    final moreMenu = tester.getRect(
+      find.ancestor(of: focusAction, matching: find.byType(BackdropFilter)),
+    );
+    expect(moreMenu.top, closeTo(moreBounds.bottom + 4, .5));
+    expect(moreMenu.right, closeTo(moreBounds.right, .5));
+    await tester.tap(focusAction);
+    await tester.pumpAndSettle();
+    await tester.tapAt(
+      bounds.center,
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pumpAndSettle();
     await tester.runAsync(
       () => tester.tap(find.byTooltip('Дублировать как стикер')),
     );
@@ -552,6 +743,186 @@ void main() {
       await disposeTestApp(tester, app);
     },
   );
+
+  testWidgets('unbounded canvas fits and edits distant cards', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 720);
+    addTearDown(tester.view.reset);
+    final near = Task.blank().copyWith(title: 'Далеко слева');
+    final far = Task.blank().copyWith(title: 'Далеко справа');
+    final (app, editor) = (await tester.runAsync(() async {
+      final app = await createTestApp(enableObsidian: false);
+      await app.tasksRepository.addTask(near);
+      await app.tasksRepository.addTask(far);
+      final pulse = app.pulseScreenViewModel;
+      final canvas = await pulse.createCanvas(title: 'Большая доска');
+      final editor = await pulse.openCanvas(canvas);
+      await editor.addCanvasEntity(near.id, const Offset(-120000, -50000));
+      await editor.addCanvasEntity(far.id, const Offset(210000, 80000));
+      return (app, editor);
+    }))!;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        home: LifeGraphScreen(viewModel: editor),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final graphView = find.byType(graph.GraphView);
+    final viewport = tester.getRect(graphView);
+    final camera = tester.widget<graph.GraphView>(graphView).camera!;
+    expect(camera.scale.value, lessThan(.01));
+    for (final task in [near, far]) {
+      expect(
+        viewport.contains(camera.screenBoundsOfNode(task.id)!.center),
+        isTrue,
+      );
+    }
+
+    final center = camera.viewportCenter!;
+    await tester.dragFrom(
+      viewport.center,
+      const Offset(140, 100),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+    expect(camera.viewportCenter!.dx, lessThan(center.dx - 4200));
+
+    camera.focusCard(near.id);
+    await tester.pumpAndSettle();
+    camera.zoomBy(1 / camera.scale.value);
+    await tester.pumpAndSettle();
+    expect(find.text(far.title), findsNothing);
+    expect(find.text(near.title).hitTestable(), findsOneWidget);
+
+    final nearPosition = editor.graph
+        .firstWhere((node) => node.id == near.id)
+        .position;
+    await tester.dragFrom(
+      camera.screenBoundsOfNode(near.id)!.center,
+      const Offset(-80, -50),
+    );
+    await tester.pumpAndSettle();
+    final moved = editor.graph
+        .firstWhere((node) => node.id == near.id)
+        .position;
+    expect(moved.dx, lessThan(nearPosition.dx - 50));
+    expect(moved.dy, lessThan(nearPosition.dy - 30));
+
+    final point = viewport.center + const Offset(180, 120);
+    final expected =
+        camera.viewportCenter! + (point - viewport.center) / camera.scale.value;
+    await tester.tapAt(
+      point,
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Создать задачу'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Новая за краем');
+    await tester.runAsync(() => tester.tap(find.text('Создать')));
+    await _until(
+      tester,
+      find.descendant(of: graphView, matching: find.text('Новая за краем')),
+    );
+    final created = editor.graph.singleWhere(
+      (node) => node.label == 'Новая за краем',
+    );
+    expect(created.position.dx, closeTo(expected.dx, 1));
+    expect(created.position.dy, closeTo(expected.dy, 1));
+    expect(tester.takeException(), isNull);
+    await disposeTestApp(tester, app);
+  });
+
+  testWidgets('note edge resize preserves opposite edges and saves geometry', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(1000, 720);
+    addTearDown(tester.view.reset);
+    final (app, canvas, editor) = (await tester.runAsync(() async {
+      final app = await createTestApp(enableObsidian: false);
+      final pulse = app.pulseScreenViewModel;
+      final canvas = await pulse.createCanvas(title: 'Размер заметки');
+      final editor = await pulse.openCanvas(canvas);
+      await editor.createNote(position: const Offset(-120, 80));
+      await editor.flush();
+      return (app, canvas, editor);
+    }))!;
+    await tester.pumpWidget(
+      MaterialApp(home: LifeGraphScreen(viewModel: editor)),
+    );
+    await tester.pumpAndSettle();
+    final camera = tester
+        .widget<graph.GraphView>(find.byType(graph.GraphView))
+        .camera!;
+    camera.zoomBy(.5 / camera.scale.value);
+    await tester.pumpAndSettle();
+
+    final note = find.byType(graph.DefaultNoteCard);
+    final initial = editor.notes.single.position & editor.notes.single.size;
+    final edge = tester.getRect(note).centerRight - const Offset(3, 0);
+    await tester.dragFrom(
+      edge,
+      const Offset(40, 0),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+    final wider = editor.notes.single.position & editor.notes.single.size;
+    expect(wider.topLeft, initial.topLeft);
+    expect(wider.width, closeTo(initial.width + 80, .01));
+    expect(wider.height, initial.height);
+
+    final corner = tester.getTopLeft(note) + const Offset(3, 3);
+    await tester.dragFrom(corner, const Offset(-30, -25));
+    await tester.pumpAndSettle();
+    final larger = editor.notes.single.position & editor.notes.single.size;
+    expect(larger.bottomRight, wider.bottomRight);
+    expect(larger.left, closeTo(wider.left - 60, .01));
+    expect(larger.top, closeTo(wider.top - 50, .01));
+
+    final topRight = tester.getTopRight(note) + const Offset(-3, 3);
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.moveTo(topRight);
+    await tester.pumpAndSettle();
+    await mouse.down(topRight);
+    await mouse.moveBy(const Offset(20, -15));
+    await mouse.up();
+    await mouse.removePointer();
+    await tester.pumpAndSettle();
+    final resized = editor.notes.single.position & editor.notes.single.size;
+    expect(resized.bottomLeft, larger.bottomLeft);
+    expect(resized.width, closeTo(larger.width + 40, .01));
+    expect(resized.height, closeTo(larger.height + 30, .01));
+
+    await tester.pumpWidget(const SizedBox());
+    var closed = false;
+    final closing = editor.dispose().whenComplete(() => closed = true);
+    for (var i = 0; i < 100 && !closed; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 1)),
+      );
+    }
+    expect(closed, isTrue);
+    await closing;
+    final reopened = (await tester.runAsync(
+      () => app.pulseScreenViewModel.openCanvas(canvas),
+    ))!;
+    expect(reopened.notes.single.position, const Offset(-180, 0));
+    expect(reopened.notes.single.size, const Size(392, 230));
+    await tester.pumpWidget(
+      MaterialApp(home: LifeGraphScreen(viewModel: reopened)),
+    );
+    await tester.pumpAndSettle();
+    await tester.dragFrom(tester.getCenter(note), const Offset(60, 30));
+    await tester.pumpAndSettle();
+    expect(reopened.notes.single.position.dx, greaterThan(-180));
+    expect(reopened.notes.single.position.dy, greaterThan(0));
+    expect(reopened.notes.single.size, const Size(392, 230));
+    await disposeTestApp(tester, app);
+  });
 
   testWidgets('compact editor saves project, goal and sphere fields', (
     tester,

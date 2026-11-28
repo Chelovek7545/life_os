@@ -236,7 +236,6 @@ class LifeGraphViewModel {
   }
 
   void _readBoardLayout(CanvasBoardDocument document) {
-    double minX = 0, minY = 0, maxX = worldSize, maxY = worldSize;
     final removed = document.removedTaskIds;
     final removalChanged =
         removed.length != _removedTaskIds.length ||
@@ -246,26 +245,33 @@ class LifeGraphViewModel {
       ..addAll(removed);
     final geometry = document.entityGeometry
       ..removeWhere((id, _) => removed.contains(id));
-    for (final (x: x, y: y, width: width, height: height) in [
-      ...geometry.values,
-      for (final node in document.nodes)
-        if (document.entityId(node) == null)
-          (
-            x: (node['x'] as num).toDouble(),
-            y: (node['y'] as num).toDouble(),
-            width: (node['width'] as num).toDouble(),
-            height: (node['height'] as num).toDouble(),
-          ),
-    ]) {
-      if (x - worldMargin < minX) minX = x - worldMargin;
-      if (y - worldMargin < minY) minY = y - worldMargin;
-      final right = x + width + worldMargin;
-      final bottom = y + height + worldMargin;
-      if (right > maxX) maxX = right;
-      if (bottom > maxY) maxY = bottom;
+    _boardOrigin = Offset.zero;
+    _boardWorldSize = worldSize;
+    if (!isIndependentCanvas) {
+      double minX = 0, minY = 0, maxX = worldSize, maxY = worldSize;
+      for (final (x: x, y: y, width: width, height: height) in [
+        ...geometry.values,
+        for (final node in document.nodes)
+          if (document.entityId(node) == null)
+            (
+              x: (node['x'] as num).toDouble(),
+              y: (node['y'] as num).toDouble(),
+              width: (node['width'] as num).toDouble(),
+              height: (node['height'] as num).toDouble(),
+            ),
+      ]) {
+        if (x - worldMargin < minX) minX = x - worldMargin;
+        if (y - worldMargin < minY) minY = y - worldMargin;
+        final right = x + width + worldMargin;
+        final bottom = y + height + worldMargin;
+        if (right > maxX) maxX = right;
+        if (bottom > maxY) maxY = bottom;
+      }
+      _boardOrigin = Offset(minX, minY);
+      _boardWorldSize = (maxX - minX) > (maxY - minY)
+          ? maxX - minX
+          : maxY - minY;
     }
-    _boardOrigin = Offset(minX, minY);
-    _boardWorldSize = (maxX - minX) > (maxY - minY) ? maxX - minX : maxY - minY;
     _positions.clear();
     _restoreStandalonePositions();
     _boardSizes.clear();
@@ -415,11 +421,12 @@ class LifeGraphViewModel {
   });
 
   void _placeCanvasEntity(GraphNodeData node, Offset point) {
-    _canvasCards!.snapshots[node.id] = node;
-    _positions[node.id] = _clampPosition(
+    final position = _clampPosition(
       point,
       nodePresentations.sizeFor(node.kind),
     );
+    _canvasCards!.snapshots[node.id] = node;
+    _positions[node.id] = position;
     _projectCanvas();
     _scheduleBoard();
   }
@@ -1084,6 +1091,12 @@ class LifeGraphViewModel {
 
   /// Клампит позицию внутрь мирового канваса с учётом размера ноды.
   Offset _clampPosition(Offset pos, Size size) {
+    if (isIndependentCanvas) {
+      if (!pos.isFinite) {
+        throw ArgumentError.value(pos, 'pos', 'Invalid canvas position');
+      }
+      return pos;
+    }
     return Offset(
       pos.dx.clamp(worldMargin, canvasWorldSize - size.width - worldMargin),
       pos.dy.clamp(worldMargin, canvasWorldSize - size.height - worldMargin),
@@ -1675,27 +1688,35 @@ class LifeGraphViewModel {
     _scheduleSaveNotes();
   }
 
-  /// Live-курсор ресайза заметки: обновляет size в памяти без персиста.
-  /// Границы синхронизированы с clamp в DefaultNoteCard (120..800 / 80..800).
-  void resizeNote(String id, double width, double height) {
+  /// Обновляет геометрию в памяти. При перетягивании края канвас передаёт
+  /// размеры и положение вместе, чтобы противоположный край остался на месте.
+  void resizeNote(String id, double width, double height, {Offset? position}) {
     if (!_accepting) return;
     if (_graphId == null) return;
-    final clampedWidth = width.clamp(120.0, 800.0);
-    final clampedHeight = height.clamp(80.0, 800.0);
+    final size = position == null
+        ? Size(width.clamp(120.0, 800.0), height.clamp(80.0, 800.0))
+        : Size(width, height);
+    if (!size.isFinite || size.isEmpty) return;
     final updatedNotes = notes.map((n) {
       if (n.id != id) return n;
       final cloned = n.clone();
-      cloned.size = Size(clampedWidth, clampedHeight);
+      cloned.size = size;
+      if (position != null) cloned.position = _clampPosition(position, size);
       return cloned;
     }).toList();
     _notesSubject.add(updatedNotes);
   }
 
-  /// Точка коммита ресайза заметки: сохраняет размер (с debounce).
-  void commitNoteResize(String id, double width, double height) {
+  /// Сохраняет геометрию после изменения размера.
+  void commitNoteResize(
+    String id,
+    double width,
+    double height, {
+    Offset? position,
+  }) {
     if (!_accepting) return;
     if (_graphId == null) return;
-    resizeNote(id, width, height);
+    resizeNote(id, width, height, position: position);
     _scheduleSaveNotes();
   }
 

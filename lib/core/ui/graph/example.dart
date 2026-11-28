@@ -90,10 +90,10 @@ class GraphNodeStore {
         _removeNote(id);
       case SelectNoteAction():
         return; // selection lives in the view; nothing to store
-      case ResizeNoteAction(:final id, :final size):
-        _resizeNote(id, size);
-      case ResizeNoteEndAction(:final id, :final size):
-        _resizeNote(id, size);
+      case ResizeNoteAction(:final id, :final size, :final position):
+        _resizeNote(id, size, position);
+      case ResizeNoteEndAction(:final id, :final size, :final position):
+        _resizeNote(id, size, position);
     }
     _emit();
   }
@@ -267,7 +267,7 @@ class GraphNodeStore {
     );
   }
 
-  void _resizeNote(String id, Size size) {
+  void _resizeNote(String id, Size size, Offset? position) {
     final i = _notes.indexWhere((n) => n.id == id);
     if (i == -1) return;
     final n = _notes[i];
@@ -276,7 +276,7 @@ class GraphNodeStore {
       index: n.index,
       size: size,
       text: n.text,
-      position: n.position,
+      position: position ?? n.position,
     );
   }
 

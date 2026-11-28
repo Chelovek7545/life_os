@@ -116,6 +116,37 @@ void main() {
     expect(pulse.canvases.single.cardCount, 0);
   });
 
+  test(
+    'canvases preserve coordinates beyond both sides of the old bounds',
+    () async {
+      final app = await createTestApp(enableObsidian: false);
+      addTearDown(app.dispose);
+      final pulse = app.pulseScreenViewModel;
+      final task = Task.blank().copyWith(title: 'Дальняя задача');
+      await app.tasksRepository.addTask(task);
+      final board = await pulse.createCanvas(title: 'Свободное пространство');
+      final model = await pulse.openCanvas(board);
+      await model.addCanvasEntity(task.id, const Offset(-18000, -9000));
+      await model.createNoteWithText(
+        title: '',
+        text: 'Стикер далеко справа',
+        position: const Offset(32000, 17000),
+      );
+      expect(model.graph.single.position, const Offset(-18000, -9000));
+      expect(model.notes.single.position, const Offset(32000, 17000));
+
+      model.commitMove(task.id, 26000, -11000);
+      model.commitNoteMove(model.notes.single.id, -14000, 22000);
+      await model.dispose();
+      await pulse.reloadCanvases();
+
+      final reopened = await pulse.openCanvas(pulse.canvases.single);
+      expect(reopened.graph.single.position, const Offset(26000, -11000));
+      expect(reopened.notes.single.position, const Offset(-14000, 22000));
+      await reopened.dispose();
+    },
+  );
+
   testWidgets('Pulse panel creates a canvas with selected branches', (
     tester,
   ) async {

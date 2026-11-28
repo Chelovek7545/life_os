@@ -30,6 +30,7 @@ import 'widgets/graph_note_creation_dialog.dart';
 import 'widgets/graph_note_context_menu.dart';
 import 'widgets/graph_directory_picker.dart';
 import 'widgets/canvas_add_dialog.dart';
+import 'widgets/canvas_context_menu.dart';
 import 'widgets/canvas_switch_menu.dart';
 import 'widgets/canvas_visuals.dart';
 import 'widgets/canvas_editor_chrome.dart';
@@ -365,6 +366,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                 showControls: !independent,
                 showGrid: !independent || _display.grid,
                 straightEdges: independent && _display.straight,
+                unbounded: independent,
                 panTool: independent && _canvasTool == _CanvasTool.hand,
                 animateTransitions:
                     !independent ||
@@ -925,12 +927,22 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       case graph.SelectNoteAction():
         break;
       // ── Resize actions ────────────────────────────────────────────────────
-      case graph.ResizeNoteAction(:final id, :final size):
+      case graph.ResizeNoteAction(:final id, :final size, :final position):
         // Live-курсор ресайза: обновляем в памяти, без персиста.
-        widget.viewModel.resizeNote(id, size.width, size.height);
-      case graph.ResizeNoteEndAction(:final id, :final size):
+        widget.viewModel.resizeNote(
+          id,
+          size.width,
+          size.height,
+          position: position,
+        );
+      case graph.ResizeNoteEndAction(:final id, :final size, :final position):
         // Точка коммита — сохраняем финальный размер с debounce.
-        widget.viewModel.commitNoteResize(id, size.width, size.height);
+        widget.viewModel.commitNoteResize(
+          id,
+          size.width,
+          size.height,
+          position: position,
+        );
     }
   }
 
@@ -1232,40 +1244,29 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     if (editors.isEmpty && !canPlace && !independent) return;
     final create = independent ? null : model.standaloneCreationAt(canvasPoint);
     final place = canPlace ? model.placeRemovedTaskAt(canvasPoint) : null;
-    final overlay =
-        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
-    final point = overlay.globalToLocal(position);
-    final palette = AppGraphThemes.dark;
-    final action = await showMenu<Object>(
-      context: context,
-      position: RelativeRect.fromSize(
-        Rect.fromLTWH(point.dx, point.dy, 0, 0),
-        overlay.size,
-      ),
-      color: palette.surface,
-      surfaceTintColor: Colors.transparent,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: palette.border),
-      ),
-      items: [
+    final action = await showCanvasContextMenu<Object>(
+      context,
+      position & Size.zero,
+      title: independent ? 'Добавить на канвас' : 'Добавить на доску',
+      actions: [
+        for (final editor in editors)
+          CanvasContextOption(
+            editor,
+            editor.standaloneForm!.label,
+            canvasKindIcon(editor.kind),
+            accented: true,
+          ),
         if (independent)
-          const PopupMenuItem(
-            value: _BackgroundMenuAction.placeEntity,
-            child: Text('Добавить существующий объект'),
+          const CanvasContextOption(
+            _BackgroundMenuAction.placeEntity,
+            'Добавить существующий объект',
+            Icons.dashboard_customize_outlined,
           ),
         if (canPlace)
-          const PopupMenuItem(
-            value: _BackgroundMenuAction.placeTask,
-            child: Text('Добавить существующую задачу'),
-          ),
-        for (final editor in editors)
-          PopupMenuItem(
-            value: editor,
-            child: Text(
-              editor.standaloneForm!.label,
-              style: TextStyle(color: palette.text, fontSize: 13),
-            ),
+          const CanvasContextOption(
+            _BackgroundMenuAction.placeTask,
+            'Добавить существующую задачу',
+            Icons.add_task_outlined,
           ),
       ],
     );
@@ -1317,59 +1318,31 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         ? model.disconnectionsFor(selection.nodeIds.single)
         : const <GraphDisconnection>[];
     if (!canDelete && disconnections.isEmpty && removeFromBoard == null) return;
-    final palette = AppGraphThemes.dark;
-    final overlay =
-        Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
-    final point = overlay.globalToLocal(position);
-    final action = await showMenu<_SelectionMenuAction>(
-      context: context,
-      position: RelativeRect.fromSize(
-        Rect.fromLTWH(point.dx, point.dy, 0, 0),
-        overlay.size,
-      ),
-      color: palette.surface,
-      surfaceTintColor: Colors.transparent,
-      constraints: const BoxConstraints(minWidth: 240, maxWidth: 320),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: palette.border),
-      ),
-      items: [
+    final action = await showCanvasContextMenu<_SelectionMenuAction>(
+      context,
+      position & Size.zero,
+      title: selection.length == 1
+          ? 'Действия с карточкой'
+          : 'Выбрано ${canvasCardCount(selection.length)}',
+      actions: [
         if (disconnections.isNotEmpty)
-          const PopupMenuItem(
-            value: _SelectionMenuAction.disconnect,
-            child: Row(
-              children: [
-                Icon(Icons.link_off, size: 18),
-                SizedBox(width: 10),
-                Text('Отсоединить…'),
-              ],
-            ),
+          const CanvasContextOption(
+            _SelectionMenuAction.disconnect,
+            'Отсоединить…',
+            Icons.link_off_outlined,
           ),
         if (canDelete || removeFromBoard != null)
-          PopupMenuItem(
-            value: _SelectionMenuAction.delete,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.delete_outline, color: palette.textDim, size: 18),
-                const SizedBox(width: 10),
-                Flexible(
-                  child: Text(
-                    independent
-                        ? 'Убрать с канваса'
-                        : removeFromBoard != null
-                        ? 'Удалить'
-                        : selection.length == 1
-                        ? 'Удалить объект'
-                        : 'Удалить выбранные (${selection.length})',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: palette.text, fontSize: 13),
-                  ),
-                ),
-              ],
-            ),
+          CanvasContextOption(
+            _SelectionMenuAction.delete,
+            independent
+                ? 'Убрать с канваса'
+                : removeFromBoard != null
+                ? 'Удалить'
+                : selection.length == 1
+                ? 'Удалить объект'
+                : 'Удалить выбранные (${selection.length})',
+            Icons.delete_outline,
+            destructive: true,
           ),
       ],
     );
@@ -1419,7 +1392,7 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       registry: model.nodeEditors,
       commands: model.commands,
     );
-    final action = await showCanvasNodeActions(
+    final selection = await showCanvasNodeActions(
       context,
       _camera.screenBoundsOfNode(id) ??
           Rect.fromCenter(center: pointer, width: 1, height: 1),
@@ -1428,13 +1401,14 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
         (candidate) => model.canConnectCanvasCards(id, candidate.id),
       ),
     );
-    if (!mounted ||
+    if (selection == null ||
+        !mounted ||
         widget.viewModel != model ||
         model.isClosing ||
         model.nodeById(id) == null) {
       return;
     }
-    switch (action) {
+    switch (selection.action) {
       case CanvasNodeAction.edit:
         await _openEntityEditor(id);
       case CanvasNodeAction.link:
@@ -1469,43 +1443,48 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
           () => model.removeCanvasSelection([id], const []),
         );
       case CanvasNodeAction.more:
-        await _showMoreCanvasActions(id);
-      case null:
-        break;
+        await _showMoreCanvasActions(id, selection.button);
     }
   }
 
-  Future<void> _showMoreCanvasActions(String id) async {
+  Future<void> _showMoreCanvasActions(String id, Rect button) async {
     final model = widget.viewModel;
     final node = model.nodeById(id);
     if (node == null) return;
     final links = model.disconnectionsFor(id);
     final hasChildren = model.graph.any((card) => card.parentId == id);
-    final action = await showDialog<_CanvasMoreAction>(
-      context: context,
-      builder: (context) {
-        Widget option(_CanvasMoreAction value, String title) =>
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(context, value),
-              child: Text(title),
-            );
-        return SimpleDialog(
-          title: Text(node.title),
-          children: [
-            option(_CanvasMoreAction.focus, 'Показать в центре'),
-            if (hasChildren)
-              option(
-                _CanvasMoreAction.branch,
-                _camera.isCollapsed(id) ? 'Развернуть ветку' : 'Свернуть ветку',
-              ),
-            if (links.isNotEmpty)
-              option(_CanvasMoreAction.disconnect, 'Отсоединить…'),
-            option(_CanvasMoreAction.copyTitle, 'Скопировать название'),
-          ],
-        );
-      },
+    final collapsed = _camera.isCollapsed(id);
+    final action = await showCanvasContextMenu<_CanvasMoreAction>(
+      context,
+      button,
+      title: node.title,
+      actions: [
+        const CanvasContextOption(
+          _CanvasMoreAction.focus,
+          'Показать в центре',
+          Icons.center_focus_strong_outlined,
+          accented: true,
+        ),
+        if (hasChildren)
+          CanvasContextOption(
+            _CanvasMoreAction.branch,
+            collapsed ? 'Развернуть ветку' : 'Свернуть ветку',
+            collapsed ? Icons.expand_more : Icons.expand_less,
+          ),
+        if (links.isNotEmpty)
+          const CanvasContextOption(
+            _CanvasMoreAction.disconnect,
+            'Отсоединить…',
+            Icons.link_off_outlined,
+          ),
+        const CanvasContextOption(
+          _CanvasMoreAction.copyTitle,
+          'Скопировать название',
+          Icons.content_copy_outlined,
+        ),
+      ],
     );
-    if (!mounted || model.isClosing) return;
+    if (!mounted || widget.viewModel != model || model.isClosing) return;
     switch (action) {
       case _CanvasMoreAction.focus:
         _camera.focusCard(id);
@@ -1644,7 +1623,6 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     final action = await showGraphNoteContextMenu(
       context,
       position,
-      accent: state.accent,
       canEdit: !state.note.isReadOnly,
       canConvert:
           state.note.source == null && widget.viewModel.canCreateMarkdown,

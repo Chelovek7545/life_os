@@ -62,7 +62,11 @@ void main() {
     await notes.close();
   });
 
-  Future<void> mount(WidgetTester tester, {bool delayedTaps = false}) async {
+  Future<void> mount(
+    WidgetTester tester, {
+    bool delayedTaps = false,
+    bool unbounded = false,
+  }) async {
     await tester.binding.setSurfaceSize(const Size(800, 600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
@@ -74,6 +78,7 @@ void main() {
             onAction: actions.add,
             onSelectionContextMenu: (selection, _) => menu = selection,
             layout: const GraphLayout(worldSize: Size(2000, 2000)),
+            unbounded: unbounded,
             nodeBuilder: (context, state) {
               nodeStates[state.node.id] = state;
               return GestureDetector(
@@ -122,6 +127,111 @@ void main() {
         Matrix4.identity();
     await tester.pump();
   }
+
+  testWidgets(
+    'Windows trackpad pinch keeps the point under the cursor fixed',
+    (tester) async {
+      await mount(tester, unbounded: true);
+      final controller = tester
+          .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+          .transformationController!;
+      const localCursor = Offset(510, 170);
+      final cursor =
+          tester.getTopLeft(find.byType(InteractiveViewer)) + localCursor;
+      final trackpad = TestPointer(1, PointerDeviceKind.trackpad);
+      final point = controller.toScene(localCursor);
+
+      await tester.sendEventToBinding(trackpad.panZoomStart(cursor));
+      for (var i = 1; i <= 6; i++) {
+        final scale = 1 + .09 * i;
+        await tester.sendEventToBinding(
+          trackpad.panZoomUpdate(
+            cursor,
+            scale: scale,
+            pan: const Offset(440, 305) * (1 - scale),
+            timeStamp: Duration(milliseconds: 16 * i),
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(controller.value.getMaxScaleOnAxis(), greaterThan(1.1));
+      expect(
+        (controller.toScene(localCursor) - point).distance,
+        lessThan(1e-7),
+      );
+      await tester.sendEventToBinding(
+        trackpad.panZoomEnd(timeStamp: const Duration(milliseconds: 112)),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        (controller.toScene(localCursor) - point).distance,
+        lessThan(1e-7),
+      );
+
+      final scale = controller.value.getMaxScaleOnAxis();
+      await tester.sendEventToBinding(trackpad.panZoomStart(cursor));
+      await tester.sendEventToBinding(
+        trackpad.panZoomUpdate(cursor, pan: const Offset(32, 0)),
+      );
+      await tester.sendEventToBinding(
+        trackpad.panZoomUpdate(cursor, pan: const Offset(92, 0)),
+      );
+      await tester.sendEventToBinding(trackpad.panZoomEnd());
+      await tester.pumpAndSettle();
+      expect(controller.value.getMaxScaleOnAxis(), scale);
+      expect(controller.toScene(localCursor).dx, lessThan(point.dx));
+    },
+    variant: const TargetPlatformVariant({TargetPlatform.windows}),
+  );
+
+  testWidgets('wheel and touchscreen pinch zoom around their focal points', (
+    tester,
+  ) async {
+    await mount(tester, unbounded: true);
+    final view = find.byType(InteractiveViewer);
+    final controller = tester
+        .widget<InteractiveViewer>(view)
+        .transformationController!;
+    final origin = tester.getTopLeft(view);
+
+    const cursor = Offset(540, 160);
+    final wheelAnchor = controller.toScene(cursor);
+    final mouse = TestPointer(1, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(mouse.hover(origin + cursor));
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, -60)));
+    await tester.pumpAndSettle();
+    final wheelScale = controller.value.getMaxScaleOnAxis();
+    expect(wheelScale, greaterThan(1));
+    expect((controller.toScene(cursor) - wheelAnchor).distance, lessThan(1e-7));
+
+    const localMidpoint = Offset(340, 300);
+    final midpoint = origin + localMidpoint;
+    final left = await tester.startGesture(midpoint - const Offset(45, 0));
+    final right = await tester.startGesture(midpoint + const Offset(45, 0));
+    // Accept the scale gesture before measuring its anchor. The recognizer
+    // can start on either finger's first move past the gesture slop.
+    await left.moveTo(midpoint - const Offset(75, 0));
+    await right.moveTo(midpoint + const Offset(75, 0));
+    await left.moveTo(midpoint - const Offset(83, 0));
+    await right.moveTo(midpoint + const Offset(83, 0));
+    final touchAnchor = controller.toScene(localMidpoint);
+    final touchScale = controller.value.getMaxScaleOnAxis();
+    expect(touchScale, greaterThan(wheelScale));
+    for (var i = 1; i <= 3; i++) {
+      final span = Offset(83 + 8.0 * i, 0);
+      await left.moveTo(midpoint - span);
+      await right.moveTo(midpoint + span);
+      await tester.pump();
+    }
+    expect(controller.value.getMaxScaleOnAxis(), greaterThan(touchScale));
+    expect(
+      (controller.toScene(localMidpoint) - touchAnchor).distance,
+      lessThan(1e-7),
+    );
+    await left.up();
+    await right.up();
+    await tester.pumpAndSettle();
+  });
 
   Future<void> selectMixed(WidgetTester tester) async {
     await tester.tap(find.byKey(const ValueKey('hit:a')));
