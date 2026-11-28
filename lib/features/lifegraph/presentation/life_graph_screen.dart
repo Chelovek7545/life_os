@@ -30,6 +30,7 @@ import 'widgets/graph_note_creation_dialog.dart';
 import 'widgets/graph_note_context_menu.dart';
 import 'widgets/graph_directory_picker.dart';
 import 'widgets/canvas_add_dialog.dart';
+import 'widgets/canvas_switch_menu.dart';
 import 'widgets/canvas_visuals.dart';
 import 'widgets/canvas_editor_chrome.dart';
 import 'widgets/canvas_editor_panels.dart';
@@ -68,6 +69,7 @@ enum _CanvasTool { pointer, hand, frame }
 
 class _LifeGraphScreenState extends State<LifeGraphScreen> {
   final graph.GraphViewCamera _camera = graph.GraphViewCamera();
+  final MenuController _canvasSwitchMenu = MenuController();
   String? _syncedSphereId;
   bool _allowPop = false;
   bool _closing = false;
@@ -252,6 +254,10 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
       canPop: _allowPop,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop || _closing) return;
+        if (result == null && _canvasSwitchMenu.isOpen) {
+          _canvasSwitchMenu.close();
+          return;
+        }
         if (result == null && _entityEditor != null) {
           setState(() => _entityEditor = null);
           return;
@@ -292,7 +298,13 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                 : const {},
             child: Stack(
               children: [
-                Positioned.fill(child: _buildContent(context)),
+                Positioned.fill(
+                  child: Listener(
+                    onPointerSignal: (_) => _closeCanvasSwitchMenu(),
+                    onPointerPanZoomStart: (_) => _closeCanvasSwitchMenu(),
+                    child: _buildContent(context),
+                  ),
+                ),
                 if (!widget.viewModel.isIndependentCanvas)
                   Positioned(
                     top: 16,
@@ -561,12 +573,13 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
                 Flexible(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 300),
-                    child: CanvasBreadcrumb(
+                    child: CanvasSwitchMenu(
                       title: widget.viewModel.canvasTitle!,
                       compact: !wide,
-                      onPressed: widget.canvasChoices.isEmpty
-                          ? null
-                          : _switchCanvas,
+                      canvases: widget.canvasChoices,
+                      currentId: widget.viewModel.currentCanvasId,
+                      controller: _canvasSwitchMenu,
+                      onSelected: _switchCanvas,
                     ),
                   ),
                 ),
@@ -684,31 +697,13 @@ class _LifeGraphScreenState extends State<LifeGraphScreen> {
     _camera.setSelectionMode(_canvasTool == _CanvasTool.frame);
   }
 
-  Future<void> _switchCanvas() async {
-    final model = widget.viewModel;
-    final next = await showDialog<CanvasSummary>(
-      context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('Переключить канвас'),
-        children: [
-          for (final board in widget.canvasChoices)
-            SimpleDialogOption(
-              onPressed: board.id == model.currentCanvasId
-                  ? null
-                  : () => Navigator.pop(context, board),
-              child: ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  board.id == model.currentCanvasId ? Icons.check : canvasIcon,
-                ),
-                title: Text(board.title),
-              ),
-            ),
-        ],
-      ),
-    );
-    if (next != null && mounted) await Navigator.of(context).maybePop(next);
+  void _closeCanvasSwitchMenu() {
+    if (_canvasSwitchMenu.isOpen) _canvasSwitchMenu.close();
+  }
+
+  Future<void> _switchCanvas(CanvasSummary next) async {
+    if (!mounted || _closing || widget.viewModel.isClosing) return;
+    await Navigator.of(context).maybePop(next);
   }
 
   Future<void> _searchCanvas({bool notesOnly = false}) async {

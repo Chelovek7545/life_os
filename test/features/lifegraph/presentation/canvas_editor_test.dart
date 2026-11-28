@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:goals_api/goals_api.dart';
 import 'package:graph_canvas/graph_canvas.dart' as graph;
+import 'package:life_os/core/ui/pill_switcher.dart';
 import 'package:life_os/features/lifegraph/data/preferences_canvas_session.dart';
 import 'package:life_os/features/lifegraph/presentation/canvas_export.dart';
 import 'package:life_os/features/lifegraph/presentation/life_graph_screen.dart';
@@ -272,13 +273,50 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData.dark(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(1.3)),
+          child: child!,
+        ),
         home: Scaffold(body: CanvasesPanel(model: app.pulseScreenViewModel)),
       ),
     );
     await tester.runAsync(() => tester.tap(find.text('Первая доска')));
-    await _until(tester, find.byTooltip('Переключить канвас'));
+    final switcher = find.byTooltip('Переключить канвас');
+    await _until(tester, switcher);
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Переключить канвас'));
+    final anchor = tester.getRect(switcher);
+    await tester.tap(switcher);
+    await tester.pumpAndSettle();
+    final menu = tester.getRect(
+      find.byKey(const ValueKey('canvas-switch-surface')),
+    );
+    expect(menu.top, closeTo(anchor.bottom + 8, .1));
+    expect(menu.left, closeTo(anchor.left, .1));
+    expect(menu.right, lessThan(360));
+    final current = find.widgetWithText(OutlinedButton, 'Первая доска');
+    expect(tester.widget<OutlinedButton>(current).onPressed, isNull);
+    expect(find.text('Текущий канвас'), findsOneWidget);
+    expect(find.byTooltip('Закрыть').hitTestable(), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
+    await tester.pumpAndSettle();
+    expect(find.text('Текущий канвас'), findsNothing);
+    await tester.tap(switcher);
+    await tester.pumpAndSettle();
+    final camera = tester
+        .widget<graph.GraphView>(find.byType(graph.GraphView))
+        .camera!;
+    final beforeDrag = camera.viewportCenter;
+    await tester.dragFrom(
+      const Offset(180, 475),
+      const Offset(-70, -50),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('canvas-switch-surface')), findsNothing);
+    expect(camera.viewportCenter, isNot(beforeDrag));
+    await tester.tap(switcher);
     await tester.pumpAndSettle();
     await tester.runAsync(() => tester.tap(find.text('Вторая доска')));
     final header = find.descendant(
@@ -448,6 +486,24 @@ void main() {
       expect(camera.scale.value, greaterThan(scale));
       expect(title, findsOneWidget);
 
+      final statusSwitcher = find.byType(PillSwitcher);
+      expect(tester.widget<PillSwitcher>(statusSwitcher).options, hasLength(4));
+      expect(
+        tester.widget<PillSwitcher>(statusSwitcher).selectedIndex,
+        task.status.index,
+      );
+      final done = find.descendant(
+        of: statusSwitcher,
+        matching: find.byTooltip('Выполнено'),
+      );
+      await tester.ensureVisible(done);
+      await tester.tap(done);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<PillSwitcher>(statusSwitcher).selectedIndex,
+        TaskStatus.done.index,
+      );
+
       final priority = find.byType(DropdownButtonFormField<int>);
       await tester.ensureVisible(priority);
       await tester.tap(priority);
@@ -485,6 +541,7 @@ void main() {
         () => app.tasksRepository.getById(task.id),
       ))!;
       expect(saved.priority, 2);
+      expect(saved.status, TaskStatus.done);
       expect(saved.projectId, project.id);
       expect(saved.startsAt, task.startsAt);
       expect(saved.endsAt?.day, 13);

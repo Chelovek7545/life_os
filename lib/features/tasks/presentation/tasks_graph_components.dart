@@ -89,47 +89,28 @@ class _TaskCanvasFields extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final priority = attributes['priority'] as int? ?? 0;
-    final statusField = graphEditSelect(
-      label: 'Статус',
-      value: taskStatusFromStorage(
-        attributes['taskStatus'] as String? ?? 'open',
-      ),
-      options: {
-        for (final status in TaskStatus.values) status: _statusLabel(status),
-      },
-      onChanged: (status) => onChanged({'taskStatus': status.name}),
-    );
-    final priorityField = graphEditSelect(
-      label: 'Приоритет',
-      value: priority,
-      options: {
-        0: 'Низкий',
-        1: 'Обычный',
-        2: 'Высокий',
-        if (priority < 0 || priority > 2) priority: '$priority',
-      },
-      onChanged: (value) => onChanged({'priority': value}),
-    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: AppSpacing.md,
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) =>
-              constraints.maxWidth >= 360 &&
-                  MediaQuery.textScalerOf(context).scale(16) <= 20
-              ? Row(
-                  spacing: AppSpacing.md,
-                  children: [
-                    Expanded(child: statusField),
-                    Expanded(child: priorityField),
-                  ],
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: AppSpacing.md,
-                  children: [statusField, priorityField],
-                ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: AppSpacing.xs,
+          children: [
+            Text('Статус', style: AppTypography.bodySm),
+            _taskStatusSwitcher(attributes, onChanged),
+          ],
+        ),
+        graphEditSelect(
+          label: 'Приоритет',
+          value: priority,
+          options: {
+            0: 'Низкий',
+            1: 'Обычный',
+            2: 'Высокий',
+            if (priority < 0 || priority > 2) priority: '$priority',
+          },
+          onChanged: (value) => onChanged({'priority': value}),
         ),
         if (projects case final queries?)
           _TaskProjectField(
@@ -302,24 +283,44 @@ Widget _statusFields(
   BuildContext context,
   Map<String, Object?> attributes,
   ValueChanged<Map<String, Object?>> onChanged,
+) => Column(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    const SizedBox(height: 12),
+    const Text('Status:', style: TextStyle(color: AppColors.onSurface)),
+    const SizedBox(height: 8),
+    _taskStatusSwitcher(attributes, onChanged),
+  ],
+);
+
+Widget _taskStatusSwitcher(
+  Map<String, Object?> attributes,
+  ValueChanged<Map<String, Object?>> onChanged,
 ) {
   final value = attributes['taskStatus'];
   final status = value is String
       ? taskStatusFromStorage(value)
       : TaskStatus.open;
-  return Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      const SizedBox(height: 12),
-      const Text('Status:', style: TextStyle(color: AppColors.onSurface)),
-      const SizedBox(height: 8),
-      PillSwitcher(
-        options: TaskStatus.values.map((e) => Icon(e.icon)).toList(),
-        colors: TaskStatus.values.map((e) => e.color).toList(),
-        onSelectionChanged: (index) =>
-            onChanged({'taskStatus': TaskStatus.values[index].name}),
-        selectedIndex: TaskStatus.values.indexOf(status),
-      ),
+  return PillSwitcher(
+    options: [
+      for (final option in TaskStatus.values)
+        Semantics(
+          selected: option == status,
+          child: Tooltip(
+            message: _statusLabel(option),
+            child: Icon(
+              option.icon,
+              size: 20,
+              color: option == status
+                  ? AppColors.surfaceDim
+                  : AppColors.onSurface,
+            ),
+          ),
+        ),
     ],
+    colors: [for (final option in TaskStatus.values) option.color],
+    onSelectionChanged: (index) =>
+        onChanged({'taskStatus': TaskStatus.values[index].name}),
+    selectedIndex: status.index,
   );
 }
